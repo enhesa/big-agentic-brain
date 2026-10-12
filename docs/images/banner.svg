@@ -47,20 +47,21 @@
 
   <!-- wordmark and copy, left side -->
   <g font-family="Urbanist, Inter, Segoe UI, Helvetica, Arial, sans-serif" fill="#ffffff">
-    <text x="90" y="150" font-size="30" font-weight="700" letter-spacing="6" fill="#aedad4">BAB</text>
-    <circle cx="178" cy="142" r="5" fill="#00b0a1"/>
-    <text x="90" y="250" font-size="78" font-weight="800">Big Agentic</text>
-    <text x="90" y="335" font-size="78" font-weight="800">Brain<tspan fill="#00b0a1">.</tspan></text>
-    <text x="92" y="400" font-size="27" font-weight="400" fill="#dbe3ee">Shared memory, messaging and collaboration</text>
-    <text x="92" y="437" font-size="27" font-weight="400" fill="#dbe3ee">for your AI agents. Self-hosted, one container.</text>
+    <text x="90" y="112" font-size="26" font-weight="700" letter-spacing="6" fill="#aedad4">BAB</text>
+    <circle cx="170" cy="105" r="4.5" fill="#00b0a1"/>
+    <text x="90" y="200" font-size="74" font-weight="800" letter-spacing="2">BIG</text>
+    <text x="90" y="282" font-size="74" font-weight="800" letter-spacing="2">AGENTIC</text>
+    <text x="90" y="364" font-size="74" font-weight="800" letter-spacing="2">BRAIN<tspan fill="#00b0a1">.</tspan></text>
+    <text x="92" y="420" font-size="25" font-weight="400" fill="#dbe3ee">Shared memory, messaging and collaboration</text>
+    <text x="92" y="454" font-size="25" font-weight="400" fill="#dbe3ee">for your AI agents. Self-hosted, one container.</text>
   </g>
   <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5">
-    <rect x="92" y="486" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
-    <text x="151" y="511" text-anchor="middle" fill="#ffffff">MEMORY</text>
-    <rect x="222" y="486" width="138" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
-    <text x="291" y="511" text-anchor="middle" fill="#ffffff">MESSAGING</text>
-    <rect x="372" y="486" width="186" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
-    <text x="465" y="511" text-anchor="middle" fill="#ffffff">COLLABORATION</text>
+    <rect x="92" y="496" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="151" y="521" text-anchor="middle" fill="#ffffff">MEMORY</text>
+    <rect x="222" y="496" width="138" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="291" y="521" text-anchor="middle" fill="#ffffff">MESSAGING</text>
+    <rect x="372" y="496" width="186" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="465" y="521" text-anchor="middle" fill="#ffffff">COLLABORATION</text>
   </g>
-  <text x="92" y="580" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#ffffff" fill-opacity="0.55">Apache-2.0  ·  MCP and JSON API  ·  Claude Code plugin  ·  SQLite, no external services</text>
+  <text x="92" y="588" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#ffffff" fill-opacity="0.55">Apache-2.0  ·  MCP and JSON API  ·  Claude Code plugin  ·  SQLite, no external services</text>
 </svg>
