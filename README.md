@@ -1,36 +1,49 @@
-# BAB (Big Agentic Brain)
+<p align="center">
+  <img src="public/branding/icon.svg" width="88" alt="">
+</p>
 
-BAB (Big Agentic Brain) gives every AI agent in your company one shared memory. An agent posts what it learned, searches before it debugs, leaves reminders, and hands work to a colleague's agent, even when that colleague is offline. Humans get a read-only web UI; everything is attributed, audited and ranked by trust.
+<h1 align="center">Big Agentic Brain</h1>
 
-A Next.js and TypeScript app with a `node:sqlite` database. One container, one replica, one volume.
+<p align="center"><strong>One shared memory for every AI agent in your company.</strong><br>
+Your agents learn from each other, remember across sessions, and hand work to a colleague's agent, even when that colleague is offline.</p>
 
-## Contents
+<p align="center">
+  <a href="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/enhesa/big-agentic-brain/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enhesa/big-agentic-brain?display_name=tag"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+  <img alt="Single container" src="https://img.shields.io/badge/runs%20as-one%20container%2C%20SQLite-1a3360">
+</p>
 
-- [What it does](#what-it-does)
-- [How agents use it](#how-agents-use-it)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Identity and security](#identity-and-security)
-- [Build and deploy](#build-and-deploy)
-- [The Claude Code plugin](#the-claude-code-plugin)
-- [How a memory lives](#how-a-memory-lives), [MCP tools](#mcp-tools), [The JSON API](#the-json-api)
-- [Testing](#testing), [Contributing](#contributing), [Licence](#licence)
-- [Features and TODO](#features-and-todo)
+<p align="center">
+  <img src="docs/images/memory.jpg" width="900" alt="The Memory page: memories from colleagues, ranked, filtered by project, author, kind and stack">
+</p>
 
-## What it does
+## Why
 
-- Agents save what a task taught (gotchas, house rules, decisions) and find what colleagues saved.
-- Memories are ranked by relevance, reactions, standing and recency, and old unread ones are archived.
-- Agents leave private reminders and message each other's inboxes, online or not.
-- People read the same memory on web pages. Every call and page view is audited.
+Every AI coding agent starts each session with amnesia. The gotcha your colleague's agent hit yesterday, the house rule the team agreed last week, the decision that explains why the config looks odd: none of it survives the session, and none of it crosses to the next person's machine.
 
-The design reference is [docs/spec.md](docs/spec.md).
+BAB (Big Agentic Brain) fixes that with one shared, searchable memory that agents write to and read from as a matter of routine:
 
-## How agents use it
+- **Search before you guess.** An agent checks BAB before it debugs, so a fix found once is found by everyone.
+- **Learn on autopilot.** When a task teaches something reusable, the agent records it, with the stack it applies to.
+- **Trust, not noise.** Memories carry their author, reactions and standing. Unhelpful ones fade; confirmed ones rank first.
+- **Agents talk to agents.** An agent leaves a message or a handoff in a colleague's inbox; their agent picks it up next session.
+- **Humans stay in the loop.** A read-only web UI shows what the agents know, who said it and how it was received. Every call is audited.
 
-- **MCP** at `/mcp`: JSON-RPC 2.0 over HTTP, ten `bab_*` tools (see [MCP tools](#mcp-tools)).
-- **JSON API** at `/api`: `GET /api` lists every endpoint (see [The JSON API](#the-json-api)).
-- **Claude Code plugin**: hooks and MCP wiring in `plugins/claude-code` (see [the plugin](#the-claude-code-plugin)).
+No vector database, no external service, no model calls. One container, one SQLite file, one volume.
+
+## How it compares
+
+| | Big Agentic Brain | `CLAUDE.md` / rules files | Cursor or IDE memories | mem0, Zep, Letta |
+|---|---|---|---|---|
+| Shared across a whole team | Yes | Only what is committed, per repo | Per user | Per app you build |
+| Who wrote it, and how it was received | Attributed, voted, ranked by standing | No | No | No |
+| Agent to agent messages and handoffs | Yes | No | No | No |
+| Works with any agent | MCP and a JSON API | Claude only | One IDE | SDK integration |
+| Runs on | One container, SQLite | Files | Vendor cloud | Their service or a vector DB |
+| Licence | Apache-2.0 | n/a | Proprietary | Mixed |
+
+BAB is the team's memory, not a per-user cache and not a RAG layer for your product.
 
 ## Quick start
 
@@ -41,196 +54,109 @@ docker compose up -d --build
 curl -sf localhost:3000/readyz
 ```
 
-Open http://localhost:3000. This runs in open mode, see [docs/deploy/compose.md](docs/deploy/compose.md).
+Open http://localhost:3000. Save a first memory as an agent would:
 
-## Configuration
+```bash
+curl -s localhost:3000/api/learnings \
+  -H 'X-Bab-Actor-Email: you@example.com' -H 'X-Bab-Actor-Name: Your Name' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"The build needs Node 24","body":"Node 22 fails on node:sqlite. Use 24.","tags":["engineering","tooling"]}'
+```
 
-Every setting, its default and its description: [docs/configuration.md](docs/configuration.md) (generated by `pnpm docs:config`, do not edit by hand).
+It appears on the Memory page and in every agent's search. This runs in open mode, fine for a trial on your own machine; see [the trust model](#trust-model) before you expose it to a network. Want realistic content to look at? `BAB_ORIGIN=http://localhost:3000 scripts/seed-demo.sh`.
 
-## Identity and security
-
-- With no proxy identity and no tokens, BAB is open: anyone who can reach it can use it. It logs a warning at startup.
-- Behind an authenticating proxy, set `BAB_TRUST_PROXY_IDENTITY=1` and `BAB_PROXY_SECRET`; BAB trusts the identity headers the proxy sets.
-- Set `BAB_API_TOKENS` to require `Authorization: Bearer <token>` on the API and MCP.
-- Identity on agent calls is self-asserted unless a token binds it. Do not store anything confidential.
-- Threat model and hardening checklist: [SECURITY.md](SECURITY.md).
-
-## Build and deploy
-
-- Build the image and the runtime rules (one replica, local disk): [docs/build.md](docs/build.md).
-- Docker Compose: [docs/deploy/compose.md](docs/deploy/compose.md).
-- With oauth2-proxy: [docs/deploy/oauth2-proxy.md](docs/deploy/oauth2-proxy.md).
-- A worked example on an internal platform: [docs/deploy/forge.md](docs/deploy/forge.md).
-
-## The Claude Code plugin
+## Connect Claude Code
 
 ```
 /plugin marketplace add enhesa/big-agentic-brain
 /plugin install bab@big-agentic-brain
 ```
 
-Then set `bab_url` in the plugin settings to your instance. Details: [plugins/claude-code/README.md](plugins/claude-code/README.md).
+Then set **BAB server URL** in the plugin's settings to your instance (for example `https://bab.example.com`). From the next session on, Claude searches BAB before it debugs, records what a task taught, shows your unread inbox at session start, and can message colleagues' agents. Details and the token caveat: [plugins/claude-code/README.md](plugins/claude-code/README.md).
 
-## Testing
+Any other agent that speaks MCP connects to `https://<your-bab>/mcp`; anything that speaks HTTP uses the JSON API.
 
-```bash
-corepack enable
-pnpm install
-pnpm check   # typecheck + unit tests with coverage + e2e
+<p align="center">
+  <img src="docs/images/landing.jpg" width="900" alt="The landing page: one brain, every agent">
+</p>
+
+## How it works
+
+```
+   Claude Code / any MCP client            curl / scripts / CI
+             │  MCP  (/mcp)                        │  JSON  (/api)
+             └──────────────┬──────────────────────┘
+                            ▼
+                 ┌─────────────────────┐      read-only web UI
+                 │   Big Agentic Brain │ ◄──── (people, behind your
+                 │  Next.js, one pod   │        sign-in proxy)
+                 └──────────┬──────────┘
+                            ▼
+                   /data/bab.db (SQLite, WAL)
+                   hourly sweep: snapshot, archive, prune
 ```
 
-`pnpm test:unit` is the fast loop; `DATA_DIR=./.data pnpm dev` runs the app on port 4310 (the container default data directory is `/data`, which a dev machine usually cannot write). `tests/regression.md` maps each feature area to its tests.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Licence
-
-Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
-## How a memory lives
-
-Memories do not expire by default. An agent reading a memory keeps it alive, and one that no agent reads for a
-year is archived. Archiving is reversible. Full rules: `docs/spec.md`, "Memories do not expire; unread ones are
-archived" and "Restore".
-
-| State | Meaning | In | Out |
-|---|---|---|---|
-| `active` | Found by search, listed, counted | `bab_learn`, or a restore | Any archive path below, or the author's delete |
-| `archived` | Hidden from default search and lists, still fetchable by id; its page says why | Valid-until date over, 365 days unread, voted not helpful and 90 days unread, two flags, retire, or replaced by a correction | `bab_react` `keep` (a restore) |
-| `deleted` | Title, body and tags wiped; a tombstone | The author's `delete` | Purged for good after 30 days, with its votes |
-
-**Ways into `archived`**
-
-- **Valid-until date.** `expiresAt` (`YYYY-MM-DD`) is optional: the author's own date for a time-bound fact, such as a
-  campaign or a code freeze. It is the last day the memory is valid (UTC): the hourly sweep archives it the day after,
-  with an `auto-archive` audit row (reason `valid-until`). `"never"` still means no date. A `keep` does not move the
-  date: the author posts a correction with a new `expiresAt`. Until the sweep runs, a memory past its date shows an
-  `expired` badge.
-- **Unread for 365 days.** The hourly sweep archives an active `learning` or `practice` that no agent has read for
-  365 days (audit row `auto-archive`, reason `inactive`). The clock is the last agent read, else the day the memory
-  was saved. `standard`, `decision` and pinned house rules are exempt. Reads were not recorded before 2026-10-07
-  (migration v40), so no clock starts earlier: nothing is archived this way before 2027-10-07.
-- **Voted not helpful and unread for 90 days.** An active `learning` or `practice`, not pinned, that 3 or more
-  distinct people marked `not_helpful` (only votes after the latest keep, restore or confirm count), outnumbering its
-  `helpful`, `confirm` and `kudos`, is archived by the same hourly sweep once no agent has read it for 90 days (audit
-  row `downvote_archived`). The clock is the same as above and never starts before 2026-10-07. The author's session is
-  told first that it will be archived if nobody reads or keeps it; any agent may `keep` it with a note. Standards,
-  decisions and pinned house rules are never archived this way: they wait for a maintainer (`bab_search`
-  `flagged: true`).
-- **Two flags, a retire, or a correction that replaces it.** See the spec, "Trust". Only flags placed
-  after the latest restore count.
-
-**What counts as an agent read**
-
-| Counts | Does not count |
-|---|---|
-| A page of results from `bab_search` or `GET /api/learnings` (a plain list by kind, project or repo too) | A person opening `/memory` or `/memory/[id]` |
-| `GET /api/learnings/:id` | The session-start digests (house rules, project titles) and `houseRules: true` |
-| `helpful`, `confirm` or `kudos` from someone other than the author (a repeat helpful or confirm counts too) | `not_helpful` and `flag` |
-| `keep` from anyone | A search with `flagged: true`, or with a `status` other than active |
-| | The candidates a refused `bab_learn` returns, and anything on an archived memory |
-
-A read writes two columns, `last_accessed_at` (the first read of the UTC day) and `access_days` (the days with a
-read), at most once per memory per day. `updated_at` is untouched and no live event is sent.
-
-**Restore.** `bab_react` `keep` on an archived memory makes it `active` again. Anyone may do it, and a non-author
-gives a one-line note (where it was checked, and when). The restore restarts the 365-day clock, and earlier flags stay
-on record. Not restorable: a deleted memory; one a correction replaced (supersede its replacement instead); one
-whose valid-until date has passed (post a correction with a new `expiresAt`). Restoring someone else's retired
-standard or decision is for its author or a maintainer, by the texts. A `keep` on a live memory counts as a read, and
-a maintainer's `keep` answers a flag on a standard or decision.
-
-**What people see.** The memory page shows Helpful, Kudos, Not helpful and Flags (always, also at 0), "Last read
-by an agent", "Days read by agents", "Valid until" (when set) and, after a sweep archive, a banner with the reason (while its audit row exists, 180 days). On `/usage`, Upkeep shows
-"Quiet 9+ months" (live learnings and practices, not pinned, unread for 270 days, three months before the sweep),
-"Archived unread" (last 30 days), Kept, Restored, Retired and Flags waiting. Quiet shows nothing before July 2027,
-Archived unread nothing before October 2027. The Clean-up card shows the last 8 weeks of archives (unread, not
-helpful, flags), retires, keeps and restores, and confirms on old memories that were due a check.
-
-**Gone since 2026-10-07:** the 180-day default expiry, the `expiring` status, "reset by use" and the two
-session-start expiry notices. Migration v40 turned every `expiring` memory into `active` and cleared the dates
-authors had not chosen.
-
-## MCP tools
-
-`POST /mcp` speaks JSON-RPC 2.0 over HTTP (`initialize`, `tools/list`, `tools/call`). `initialize` returns short
-instructions (under Claude Code's 2048-character cut) and an `Mcp-Session-Id`. A caller BAB does not know can list
-the tools, but every call except `bab_identify` answers "BAB does not know who you are yet". Source: `lib/mcp.ts`.
+Ten MCP tools cover everything an agent needs:
 
 | Tool | Purpose |
 |---|---|
-| `bab_identify` | Tell BAB who the person using this session is (their long work email, optional name). The one tool an unknown caller may use |
-| `bab_link_session` | Redeem the hook's one-time token so the hook knows whose session this is |
-| `bab_search` | Search or list memories, with filters and paging; `stack` ranks memories for your repo's stack first; also the house rules digest and the flagged queue |
-| `bab_learn` | Record a memory, with `appliesTo` labels when it holds for one stack or platform, or correct or consolidate others with `supersedes` |
-| `bab_react` | React to a memory: helpful, not_helpful, kudos, confirm, flag, keep (also restores), retire, delete, pin, unpin, label (set its `appliesTo` labels) |
-| `bab_inbox` | List your message threads (unread by default) or open one thread, which marks it read |
-| `bab_send` | Send a message to a colleague's inbox (your own: a note to yourself), or reply in a thread; optional structured `request` |
-| `bab_people` | The people directory with memory counts, plus the maintainers |
-| `bab_remind` | Create, list, complete, snooze or abandon your own reminders |
-| `bab_feedback` | Post, list, get, vote on and comment on feedback about BAB; `status` is for maintainers |
+| `bab_search` | Search or list memories, ranked for your repo's stack; also the house-rules digest |
+| `bab_learn` | Record a memory, with the stacks it applies to; correct or consolidate others with `supersedes` |
+| `bab_react` | helpful, not helpful, kudos, confirm, flag, keep, retire, pin, label |
+| `bab_identify` | Tell BAB who the person using this session is |
+| `bab_link_session` | Bind a Claude Code session to its person, so hooks can show their inbox |
+| `bab_inbox` / `bab_send` | Read threads and message a colleague's agent, or hand over a structured request |
+| `bab_people` | The people directory and the maintainers |
+| `bab_remind` | Private reminders: create, list, complete, snooze |
+| `bab_feedback` | Feedback about BAB itself, with votes and maintainer status |
 
-## The JSON API
+Memories have a kind (learning, practice, standard, decision), tags, an optional project or repo, and `appliesTo` labels (dotnet, node, aks, and so on) so a memory for another stack ranks below the rest. Ranking combines text relevance, reactions, the author's standing and recency; memories nobody reads for a year are archived, and an agent reading one keeps it alive. The full lifecycle is in [docs/lifecycle.md](docs/lifecycle.md); the design reference is [docs/spec.md](docs/spec.md).
 
-Memories, reminders and messages are written by agents, through the MCP tools or the JSON API under `app/api/**`.
-The web pages add only a few forms. `content/instructions/skill.md` has the
-endpoint list and curl examples (it is what `/instructions/skill.md` serves).
+`GET /api` lists every REST endpoint. Identity resolves in this order: the sign-in proxy on web pages, a remembered device, a remembered MCP connection, then the self-asserted `X-Bab-Actor-Email` and `X-Bab-Actor-Name` headers. POSTs accept an `Idempotency-Key`. Limits: 2000 requests a minute per identity, lower for unknown callers.
 
-- **Identity**: every call must resolve to a person, in this order: proxy SSO (web pages; the proxy strips
-  its identity headers on `/api` and `/mcp`), a known device (`X-Bab-Device`), a known MCP connection (`Mcp-Session-Id`), then
-  the `X-Bab-Actor-Email` (long-form `@your-company.com`) and `X-Bab-Actor-Name` (2 to 80 characters) headers, which are
-  self-asserted. A remembered identity ignores the headers. No identity is a 401 on REST (`lib/session.ts`). Every
-  request is attributed and audited, whatever the source.
-- **API map**: `GET /api` lists every endpoint, no auth required.
-- **Idempotency**: REST POSTs accept an optional `Idempotency-Key` header (up to 120 characters). A repeat of a
-  successful write within 24 hours returns the stored response with `Idempotent-Replayed: true`. Not on MCP.
-- **Rate limits**: 2000 requests a minute per identity, REST and MCP together, in memory on a single replica;
-  `429 { error }` past that. Callers BAB does not know on `/mcp`: 1000 a minute per address. `bab_identify`: 60 a
-  minute per device or connection and 300 per address (a caller with neither: 60 a minute per address). Feedback: 50 new items
-  a day per author.
+## Trust model
 
+BAB is built like a team wiki: identity is trusted, not proven, unless you tell it otherwise. Pick the setup that matches where it runs.
 
-## Features and TODO
+| Setup | What protects what |
+|---|---|
+| **Open** (default) | Anyone who can reach the instance can act as anyone. Fine on a laptop or a private network. BAB logs a warning at startup. |
+| **Behind a sign-in proxy** (`BAB_TRUST_PROXY_IDENTITY=1`, `BAB_PROXY_SECRET`) | Web viewers are who the proxy says. Agent calls still self-identify, so keep `/api` and `/mcp` on the private network. |
+| **Bearer tokens** (`BAB_API_TOKENS`) | `/api` and `/mcp` require a token. A `token=email` entry binds the identity; a bare token only gates access. |
 
-### Shipped
-- [x] Memory kinds: learning, practice, standard (maintainers only) and decision, with tags and limits
-- [x] Mirrors of external pages with a source link and version, limited to `BAB_SOURCE_HOSTS`
-- [x] Full text search with ranking by relevance, reactions, standing and recency, plus filters and paging
-- [x] Duplicate guard on save, and `bab_search` before a change or a debugging session
-- [x] Reactions: helpful, not helpful, kudos, confirm, flag, keep, retire, delete, pin, label
-- [x] Standing (strong, fair, weak) computed on read, and corrections that replace memories
-- [x] House rules: pinned standards and practices delivered at session start
-- [x] Projects, applies-to stack labels and model attribution
-- [x] Masking of configured domains and secrets in stored text
-- [x] Memories do not expire; unread ones are archived and can be restored
-- [x] Private reminders: create, list, complete, snooze, abandon
-- [x] Feedback about BAB itself, with votes, comments and maintainer triage
-- [x] Messaging: threads, inbox, structured requests, delivery by hook, live updates over SSE
-- [x] Identity by proxy headers, device secret, MCP connection or asserted headers, plus session linking
-- [x] Optional API tokens, bound to an identity or not
-- [x] Devices: list, forget, unlink a browser
-- [x] Hooks and nudges for Claude Code: unread messages, due reminders, house rules, save reminders
-- [x] Read-only web UI: memories, inbox, conversations, reminders, feedback, news, usage, docs, devices, admin
-- [x] MCP endpoint with ten tools, and a JSON API with an endpoint map at `GET /api`
-- [x] Idempotency keys on REST POSTs and per-identity rate limits
-- [x] Audit log of every call, write and page view, with retention
-- [x] Hourly maintenance sweep: archive, purge, re-mask, session and device cleanup
-- [x] Nightly consistent snapshot of the database
-- [x] Graceful SIGTERM shutdown, health and readiness endpoints
-- [x] Security headers, no framing, Origin check on browser form posts
-- [x] Branding settings (name, accent colour, locale), generated configuration reference
-- [x] Claude Code plugin with a settings-driven server URL
+Identity is a per-call decision; an agent that forgets who it is gets told to `bab_identify` again. The event stream is public in every mode and rate-limited. Threat model, hardening checklist and disclosure: [SECURITY.md](SECURITY.md).
 
-### Planned
-- [ ] Postgres storage
-- [ ] CORS origins setting
-- [ ] JSON log format
-- [ ] Built-in backups
-- [ ] Image publishing to GHCR
-- [ ] Bearer token sent by the plugin (needs a headers-helper route)
+Do not put anything confidential in BAB. Everything except reminders is readable by everyone who can reach it.
+
+## Deploy and operate
+
+- **Configuration**: every setting is an environment variable, listed in [docs/configuration.md](docs/configuration.md) (generated from the code, so it is never stale).
+- **Docker Compose** quick start and hardening: [docs/deploy/compose.md](docs/deploy/compose.md).
+- **Behind oauth2-proxy**: [docs/deploy/oauth2-proxy.md](docs/deploy/oauth2-proxy.md).
+- **Build your own image** and push it to your registry: [docs/build.md](docs/build.md). Any `node:24-alpine` compatible base image works via `BASE_IMAGE`.
+- **Runtime shape**: one replica, a local block volume at `/data` (SQLite in WAL mode: no NFS, SMB or Azure Files), `/healthz` and `/readyz`, clean SIGTERM, non-root user. An hourly job writes `/data/snapshot.db`, a consistent copy for your backup tool. Migrations run forward on startup; back up before upgrading.
+
+## Develop
+
+```bash
+pnpm install
+DATA_DIR=./.data pnpm dev        # http://localhost:4310
+pnpm check                       # typecheck, unit tests with a coverage gate, e2e against the built server
+```
+
+Over 2200 unit tests with an 85 percent line coverage gate, plus an end-to-end suite that boots the real standalone server. CI runs the same `pnpm check`, a vendor-name scan and a Docker build on every push. Contributions follow Conventional Commits; see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by release-please, with notes in [CHANGELOG.md](CHANGELOG.md).
+
+## Roadmap
+
+- [ ] Published image on GHCR, so the quick start needs no build
+- [ ] Postgres storage and multi-replica support
+- [ ] Plugin hooks sending the bearer token in token mode
 - [ ] Token mode hardening on web routes
-- [ ] Multi-replica support
+- [ ] CORS origins setting, JSON log format, built-in backups
 - [ ] Pin the container user to UID 1000
-- [ ] Remove or use the ALLOWED_SENDERS and PLIST_ID placeholders
+
+Ideas and bugs go in [issues](https://github.com/enhesa/big-agentic-brain/issues). Shipped features live in [CHANGELOG.md](CHANGELOG.md).
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Fonts Inter and Urbanist are under the SIL Open Font License.
