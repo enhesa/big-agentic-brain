@@ -1,0 +1,10 @@
+title = "bab gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures with obviously fake values"
+paths = [
+  '''tests/proxy-identity\.test\.ts''',
+]

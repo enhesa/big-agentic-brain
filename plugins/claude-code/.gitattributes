@@ -1,0 +1,3 @@
+# The helpers run under sh; CRLF would break them on Windows clones.
+scripts/*.sh text eol=lf
+scripts/*.cmd text eol=lf

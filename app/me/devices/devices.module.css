@@ -1,0 +1,81 @@
+.h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.muted {
+  color: var(--steel);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.error {
+  color: #b42318;
+  font-size: 0.95rem;
+  margin: 0 0 12px;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 0;
+}
+
+.form label {
+  font-size: 0.85rem;
+  color: var(--steel);
+}
+
+.form input[type="text"],
+.form input[type="email"] {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--navy);
+  border-radius: 8px;
+  min-width: 16rem;
+  max-width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mist);
+  vertical-align: middle;
+}
+
+.table th {
+  font-family: var(--font-head);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+.expired {
+  color: #b42318;
+}
+
+.unlink {
+  margin-top: 28px;
+  color: var(--steel);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.unlink p {
+  margin: 0 0 6px;
+}

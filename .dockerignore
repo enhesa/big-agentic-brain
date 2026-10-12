@@ -1,0 +1,27 @@
+# --- Node ---
+node_modules
+dist
+build
+.next
+.turbo
+npm-debug.log*
+pnpm-debug.log*
+
+# --- Env / secrets: never bake into an image ---
+.env
+.env.*
+!.env.example
+
+# --- VCS / editor / docs ---
+.git
+.gitignore
+.dockerignore
+.vscode
+.idea
+docs/
+README.md
+
+# --- SQLite data ---
+*.sqlite
+*.sqlite3
+*.db

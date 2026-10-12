@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "bab": {
+      "type": "http",
+      "url": "${user_config.bab_url}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.bab_token}",
+        "X-Bab-Actor-Email": "${user_config.bab_email}",
+        "X-Bab-Actor-Name": "${user_config.bab_name}"
+      },
+      "headersHelper": "\"${CLAUDE_PLUGIN_ROOT}/scripts/bab-headers.cmd\" \"${CLAUDE_PLUGIN_DATA}\""
+    }
+  }
+}

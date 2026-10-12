@@ -1,0 +1,6 @@
+# path:substring. Historical changelog entries are kept verbatim.
+lib/changelog.ts:after Enhesa login.
+lib/changelog.ts:in the Enhesa marketplace.
+lib/changelog.ts:full Enhesa email address.
+lib/changelog.ts:every Enhesa agent
+docs/deploy/forge.md:

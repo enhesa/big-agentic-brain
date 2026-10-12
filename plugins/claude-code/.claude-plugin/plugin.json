@@ -1,0 +1,39 @@
+{
+  "name": "bab",
+  "description": "Shared memory for AI agents: learnings, reminders and messages between colleagues' agents",
+  "version": "0.8.7",
+  "author": {
+    "name": "BAB maintainers"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/enhesa/big-agentic-brain",
+  "homepage": "https://github.com/enhesa/big-agentic-brain",
+  "userConfig": {
+    "bab_url": {
+      "type": "string",
+      "title": "BAB server URL",
+      "description": "Origin of your BAB instance, for example https://bab.example.com, no trailing slash",
+      "required": true
+    },
+    "bab_token": {
+      "type": "string",
+      "title": "API token (optional)",
+      "description": "Only when your instance sets BAB_API_TOKENS",
+      "sensitive": true,
+      "default": ""
+    },
+    "bab_email": {
+      "type": "string",
+      "title": "Fallback: your work address (optional)",
+      "description": "Optional. Leave empty: Claude tells BAB who you are by itself. Set it only if BAB keeps asking. Your work address, long form, first.last@example.com.",
+      "default": ""
+    },
+    "bab_name": {
+      "type": "string",
+      "title": "Fallback: your display name (optional)",
+      "description": "Used only together with the fallback address, for example \"Jane Doe\".",
+      "default": ""
+    }
+  },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,205 @@
+.h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+
+.group {
+  margin-bottom: 28px;
+}
+
+.groupTitle {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--steel);
+  margin: 0 0 10px;
+}
+
+.groupTitleOverdue {
+  color: color-mix(in srgb, var(--coral) 75%, black);
+}
+
+/* The Done group is a native <details>: the summary is the clickable heading. */
+.summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary::before {
+  content: "\25B8";
+  color: var(--steel);
+  font-size: 0.8rem;
+  transition: transform 0.15s;
+}
+
+details[open] > .summary::before {
+  transform: rotate(90deg);
+}
+
+.summary:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.summary .groupTitle {
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  padding: 18px 20px;
+}
+
+.title {
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--navy);
+  margin: 0;
+}
+
+.done .title {
+  color: var(--steel);
+  text-decoration: line-through;
+  text-decoration-color: var(--steel);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--steel);
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Tint of the brand colour as the fill, a darkened mix of it as the text, so the
+   label keeps contrast on white (raw amber or coral text would not). */
+.chipOverdue {
+  background: color-mix(in srgb, var(--coral) 14%, white);
+  border-color: color-mix(in srgb, var(--coral) 45%, white);
+  color: color-mix(in srgb, var(--coral) 70%, black);
+}
+
+.chipToday {
+  background: color-mix(in srgb, var(--amber) 22%, white);
+  border-color: color-mix(in srgb, var(--amber) 60%, white);
+  color: color-mix(in srgb, var(--amber) 40%, black);
+}
+
+.chipSoon {
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  border-color: color-mix(in srgb, var(--teal) 40%, white);
+  color: color-mix(in srgb, var(--teal) 55%, black);
+}
+
+.chipLater,
+.chipDone {
+  background: var(--mist);
+  color: var(--steel);
+}
+
+.body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mist);
+  color: var(--navy);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.body p {
+  margin: 0 0 10px;
+}
+
+.body > :last-child {
+  margin-bottom: 0;
+}
+
+.steps,
+.bullets {
+  margin: 0 0 10px;
+  padding-left: 1.4rem;
+}
+
+.steps li,
+.bullets li {
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.steps li::marker {
+  color: var(--steel);
+  font-weight: 600;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84em;
+  background: var(--mist);
+  color: var(--navy);
+  padding: 1px 6px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--navy);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--steel);
+}
+
+.empty {
+  color: var(--steel);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.empty p {
+  margin: 0 0 6px;
+}
+
+.emptyTitle {
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.privacy {
+  color: var(--steel);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}

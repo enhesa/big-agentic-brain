@@ -1,0 +1,155 @@
+/* The inner-page bar mirrors the landing page's top bar (app/landing.module.css's
+   `.topbar` block) so the two never look like two different products. Keep the two in
+   sync by hand if either changes: they are separate files because the landing page is a
+   CSS module of its own and importing across them would couple the pages. */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  /* Solid, not translucent: the page scrolls under this bar and must not show through it
+     (owner, 2026-10-07). */
+  background: #fff;
+  border-bottom: 1px solid var(--mist);
+}
+
+.topbarInner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  transition: padding 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.topbarSmall .topbarInner {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  transform-origin: left center;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.topbarSmall .brand {
+  transform: scale(0.9);
+}
+
+.wordmark {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+
+.brandSep {
+  width: 1px;
+  height: 22px;
+  background: var(--mist);
+}
+
+.brandName {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px 26px;
+  flex-wrap: wrap;
+}
+
+.navLink {
+  position: relative;
+  font-size: 0.92rem;
+  color: var(--steel);
+  transition: color 0.18s ease;
+  white-space: nowrap;
+}
+
+.navLink:hover {
+  color: var(--navy);
+}
+
+/* The page you are on. A landing page has no such state, so this is the one addition:
+   weight plus a teal underline, never colour alone. */
+.navLinkOn {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.navLinkOn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--teal);
+}
+
+.btnNavy {
+  display: inline-block;
+  background: var(--navy);
+  color: #fff;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.btnNavy:hover {
+  background: #12294f;
+  box-shadow: 0 10px 26px rgba(26, 51, 96, 0.22);
+}
+
+.btnNavy:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.content {
+  background: #fff;
+  min-height: calc(100vh - 68px);
+  padding: 32px 0 64px;
+}
+
+@media (max-width: 640px) {
+  .brandName {
+    display: none;
+  }
+
+  .nav {
+    gap: 8px 16px;
+  }
+
+  .navLink {
+    font-size: 0.86rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbarInner,
+  .brand,
+  .btnNavy {
+    transition: none;
+  }
+}

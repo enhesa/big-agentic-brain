@@ -1,0 +1,23 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+}
+
+.dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+.live {
+  background: var(--teal, #00b0a1);
+}
+
+.reconnecting {
+  background: var(--amber, #ffb700);
+}

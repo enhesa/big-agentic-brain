@@ -1,0 +1,287 @@
+.header {
+  margin-bottom: 18px;
+}
+
+.h1 {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.subline {
+  margin: 0;
+  color: var(--steel);
+  font-size: 0.9rem;
+}
+
+.live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--steel);
+}
+
+.liveDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--amber);
+}
+
+.live_live {
+  background: var(--teal);
+}
+
+.live_connecting,
+.live_reconnecting {
+  background: var(--amber);
+}
+
+.live_stopped {
+  background: var(--coral);
+}
+
+.notice {
+  max-width: 640px;
+  padding: 20px;
+  border: 1px solid var(--mist);
+  border-radius: 16px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------- list */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--mist);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.row:hover {
+  border-color: rgba(0, 176, 161, 0.5);
+}
+
+.rowOn {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.14);
+}
+
+.rowUnread .rowTitle {
+  font-weight: 700;
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.rowTitle {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when {
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  color: var(--steel);
+}
+
+.snippet {
+  font-size: 0.8rem;
+  color: var(--steel);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.who {
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.unread {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------- thread */
+
+.detail {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.placeholder {
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed var(--mist);
+  border-radius: 16px;
+  color: var(--steel);
+}
+
+.threadHeader {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mist);
+}
+
+.threadTitle {
+  font-size: 1.35rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.people {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 10px;
+  font-size: 0.86rem;
+}
+
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.arrow {
+  color: var(--steel);
+  margin-right: 4px;
+}
+
+.readForm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.readText {
+  font-size: 0.84rem;
+  color: var(--steel);
+}
+
+.delivery {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--steel);
+}
+
+.handoff {
+  margin: 0 0 20px;
+  padding: 14px;
+  border: 1px solid var(--mist);
+  border-radius: 16px;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btn {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--navy);
+  background: #fff;
+  color: var(--navy);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--mist);
+}
+
+.btnPrimary {
+  background: var(--navy);
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  background: #12294f;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--steel);
+}
+
+.details {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--steel);
+}
+
+.command {
+  display: block;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--mist);
+  border-radius: 10px;
+  color: var(--navy);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
