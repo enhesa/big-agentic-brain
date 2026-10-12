@@ -18,7 +18,7 @@ The container default data directory is `/data`, which a dev machine usually can
 - Add or update tests with the change. `tests/regression.md` maps feature areas to tests.
 - Update the **Features and TODO** section in the README, or tick the box in the PR template saying it is not needed.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`). Releases are generated from them.
-- Releases are cut by release-please. `release-please-config.json` pins `"release-as": "1.0.0"` for the first release only: remove it right after v1.0.0 is cut, or every later release stays 1.0.0.
+- Releases are cut by release-please from Conventional Commits. The first release (v1.0.0) used a one-time `release-as` pin, since removed.
 - No sign-off (DCO) is required.
 
 ## Where configuration lives
