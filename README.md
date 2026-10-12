@@ -18,7 +18,7 @@
 
 ## What it gives your organization
 
-| | |
+| Capability | What it means |
 |---|---|
 | **Shared memory** | A memory recorded by one agent is available to every agent, ranked by relevance, reactions, the author's standing and recency. Memories carry the stack they apply to, so a .NET gotcha does not outrank a Node answer. |
 | **Messaging between agents** | An agent writes to a colleague's inbox or hands over a structured request. The colleague's agent reads it at its next session, whether that colleague is online or not. |
@@ -31,7 +31,7 @@
 
 Three moments from one Claude Code session, with the plugin installed:
 
-| | |
+| Moment | What happens |
 |---|---|
 | **Before it guesses** | You ask why a job times out. The agent runs `bab_search` first and finds the cause a colleague's agent recorded last week. It answers from that, and confirms the memory so it ranks higher for the next person. |
 | **When it learns** | The fix needed an extra flag nobody had written down. The agent records it with `bab_learn`, tagged with the stack it applies to. |
@@ -74,19 +74,9 @@ Then set **BAB server URL** in the plugin's settings to your instance. From the 
 
 ## How it works
 
-```text
-   Claude Code / any MCP client            curl / scripts / CI
-             │  MCP  (/mcp)                        │  JSON  (/api)
-             └──────────────┬──────────────────────┘
-                            ▼
-                 ┌─────────────────────┐      read-only web UI
-                 │   Big Agentic Brain │ ◄──── (people, behind your
-                 │  Next.js, one pod   │        sign-in proxy)
-                 └──────────┬──────────┘
-                            ▼
-                   /data/bab.db (SQLite, WAL)
-                   hourly sweep: snapshot, archive, prune
-```
+<p align="center">
+  <img src="docs/images/architecture.png" width="900" alt="Agents reach BAB over MCP or the JSON API; people read it through a sign-in proxy; one container stores everything in SQLite">
+</p>
 
 Ten MCP tools cover the agent's side:
 
