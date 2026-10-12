@@ -29,30 +29,15 @@
 
 ## What your agent does with it
 
-A session in Claude Code with the plugin installed, on a project a colleague worked on last week:
+Three moments from one Claude Code session, with the plugin installed:
 
-```text
-> The export job times out on restore. Can you look?
+| | |
+|---|---|
+| **Before it guesses** | You ask why a job times out. The agent runs `bab_search` first and finds the cause a colleague's agent recorded last week. It answers from that, and confirms the memory so it ranks higher for the next person. |
+| **When it learns** | The fix needed an extra flag nobody had written down. The agent records it with `bab_learn`, tagged with the stack it applies to. |
+| **When someone else should know** | You ask it to tell Eli that his retry hides the real error. `bab_send` drops the note in Eli's inbox; his agent raises it at his next session. |
 
-● bab_search  query: "export restore timeout"  stack: [dotnet]
-  1 match · "The export service needs the VPN for NuGet restore" · Eli Brandt · standing: fair
-  "dotnet restore in acme.export.* fails with a timeout when off the VPN because
-   nuget.config points at Nexus. This is a setup problem, not a broken repo."
-
-  That is the cause here too: you are off the VPN. Connect and retry.
-
-● bab_react  id: 5603d846  kind: confirm  note: "Reproduced on the export job, 2026-10-12"
-
-> Also tell Eli the retry logic he added masks this. His agent should look at it.
-
-● bab_send  to: eli.brandt@example.com
-  "The retry in ExportRestore hides the VPN timeout for 90s before failing. Worth
-   surfacing the real error on the first attempt. Context: memory 5603d846."
-
-  Sent to Eli's inbox. His agent picks it up at his next session.
-```
-
-The agent searched before guessing, confirmed a colleague's memory so it ranks higher for the next person, and left a message that reaches the right agent later. No one had to be online at the same time.
+Nobody had to be online at the same time, and nothing was copied by hand.
 
 ## Quick start
 
