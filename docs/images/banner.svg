@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-labelledby="t d">
+  <title id="t">Big Agentic Brain</title>
+  <desc id="d">Shared memory, messaging and collaboration for AI agents</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14294d"/>
+      <stop offset="1" stop-color="#1a3360"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.45" r="0.45">
+      <stop offset="0" stop-color="#00b0a1" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#00b0a1" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+
+  <!-- node graph, right side -->
+  <g stroke="#ffffff" stroke-opacity="0.22" stroke-width="2" fill="none">
+    <path d="M840 300 L930 215 L1040 190 L1130 250 L1170 350 L1100 450 L985 490 L880 430 Z"/>
+    <path d="M930 215 L985 320 L1100 450"/>
+    <path d="M840 300 L985 320 L1130 250"/>
+    <path d="M985 320 L985 490"/>
+    <path d="M880 430 L985 320 L1170 350"/>
+  </g>
+  <g>
+    <circle cx="985" cy="320" r="26" fill="#00b0a1"/>
+    <circle cx="840" cy="300" r="13" fill="#ffffff"/>
+    <circle cx="930" cy="215" r="15" fill="#ffb700"/>
+    <circle cx="1040" cy="190" r="11" fill="#ff4423"/>
+    <circle cx="1130" cy="250" r="13" fill="#aedad4"/>
+    <circle cx="1170" cy="350" r="14" fill="#ffb700"/>
+    <circle cx="1100" cy="450" r="12" fill="#ffffff"/>
+    <circle cx="985" cy="490" r="15" fill="#00b0a1"/>
+    <circle cx="880" cy="430" r="11" fill="#ff4423"/>
+  </g>
+  <g fill="#ffffff" fill-opacity="0.7" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="15">
+    <text x="985" y="366" text-anchor="middle">you</text>
+    <text x="840" y="330" text-anchor="middle">memory</text>
+    <text x="930" y="196" text-anchor="middle">learn</text>
+    <text x="1040" y="171" text-anchor="middle">flag</text>
+    <text x="1130" y="230" text-anchor="middle">colleague</text>
+    <text x="1170" y="383" text-anchor="middle">inbox</text>
+    <text x="1100" y="482" text-anchor="middle">handoff</text>
+    <text x="985" y="522" text-anchor="middle">search</text>
+    <text x="880" y="462" text-anchor="middle">reminder</text>
+  </g>
+
+  <!-- wordmark and copy, left side -->
+  <g font-family="Urbanist, Inter, Segoe UI, Helvetica, Arial, sans-serif" fill="#ffffff">
+    <text x="90" y="150" font-size="30" font-weight="700" letter-spacing="6" fill="#aedad4">BAB</text>
+    <circle cx="178" cy="142" r="5" fill="#00b0a1"/>
+    <text x="90" y="250" font-size="78" font-weight="800">Big Agentic</text>
+    <text x="90" y="335" font-size="78" font-weight="800">Brain<tspan fill="#00b0a1">.</tspan></text>
+    <text x="92" y="400" font-size="27" font-weight="400" fill="#dbe3ee">Shared memory, messaging and collaboration</text>
+    <text x="92" y="437" font-size="27" font-weight="400" fill="#dbe3ee">for your AI agents. Self-hosted, one container.</text>
+  </g>
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5">
+    <rect x="92" y="486" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="151" y="511" text-anchor="middle" fill="#ffffff">MEMORY</text>
+    <rect x="222" y="486" width="138" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="291" y="511" text-anchor="middle" fill="#ffffff">MESSAGING</text>
+    <rect x="372" y="486" width="186" height="38" rx="19" fill="#ffffff" fill-opacity="0.12"/>
+    <text x="465" y="511" text-anchor="middle" fill="#ffffff">COLLABORATION</text>
+  </g>
+  <text x="92" y="580" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#ffffff" fill-opacity="0.55">Apache-2.0  ·  MCP and JSON API  ·  Claude Code plugin  ·  SQLite, no external services</text>
+</svg>
