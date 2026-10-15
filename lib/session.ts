@@ -1,28 +1,28 @@
 import { headers } from "next/headers";
 import { config } from "./config";
-import { currentUser, type ForgeUser } from "./user";
+import { currentUser, type ProxyUser } from "./user";
 import { getUser, upsertUser } from "./users";
 import { checkRateLimit, checkAnonNewIdentity, RATE_LIMIT_PER_MINUTE } from "./rate-limit";
 import { clientIp, clientIpVerified } from "./client-ip";
-import { tokenIdentityFor } from "./gate";
+import { isTokenBoundEmail, tokenBoundMessage, tokenIdentityFor } from "./gate";
 import { scheduleMaintenance } from "./maintenance";
 import {
   derivedNameFromEmail,
-  forgeNameMatchesEmail,
+  proxyNameMatchesEmail,
   identityHint,
   identityRejectionText,
   isAliasEmail,
   isValidIdentityEmail,
 } from "./identity";
-import { getLinkedUserId } from "./forge-links";
+import { getLinkedUserId } from "./proxy-links";
 import { devicesEnabled, hashSecret, lookupDevice, DEVICE_HEADER } from "./devices";
 import { lookupConnection, MCP_SESSION_HEADER, isSessionId } from "./mcp-connections";
 
-export type IdentitySource = "forge" | "declared" | "device" | "connection";
+export type IdentitySource = "proxy" | "declared" | "device" | "connection";
 
-export interface SessionUser extends ForgeUser {
+export interface SessionUser extends ProxyUser {
   /**
-   * "forge" = came from proxy identity headers; "declared" = X-Bab-Actor-* agent headers,
+   * "proxy" = came from proxy identity headers; "declared" = X-Bab-Actor-* agent headers,
    * self-asserted; "device" = a device secret an earlier bab_identify bound to a person
    * (lib/devices.ts); "connection" = an MCP connection (Mcp-Session-Id) bab_identify bound.
    * Device and connection are also the person's own word, remembered: BAB's identity is an honour
@@ -30,8 +30,8 @@ export interface SessionUser extends ForgeUser {
    * authenticating proxy, or use bound tokens.
    */
   source: IdentitySource;
-  /** Only for source "forge": the SSO proxy id, kept because `id` is the linked long-form email. */
-  forgeUserId?: string;
+  /** Only for source "proxy": the SSO proxy id, kept because `id` is the linked long-form email. */
+  proxyUserId?: string;
   /** Only for source "device": the devices row id (never the secret or its hash). */
   deviceId?: string;
 }
@@ -43,7 +43,7 @@ export interface SessionUser extends ForgeUser {
 type AgentMode = "off" | "api";
 
 /** True only when the operator has explicitly declared that the sign-in proxy fronts this app. */
-export function trustForgeHeaders(): boolean {
+export function trustProxyHeaders(): boolean {
   return config().proxy.trustIdentity;
 }
 
@@ -89,7 +89,7 @@ async function fromAgentHeaders(mode: AgentMode): Promise<SessionUser | null> {
   if (mode === "off") {
     // Behind a trusting proxy, web viewers are who the proxy says; a viewer it did not identify
     // (wrong secret, unlinked) must not be able to declare a person instead.
-    if (trustForgeHeaders()) return null;
+    if (trustProxyHeaders()) return null;
     const c = config();
     if ((c.tokens?.size ?? 0) > 0 || c.tokenIdentities.size > 0) return null;
   }
@@ -195,14 +195,21 @@ export async function connectionState(): Promise<ConnectionState | null> {
 
 /**
  * Resolves the acting identity for this request. Source order:
- *   1. Sign-in proxy identity headers, when trusted: see lib/user.ts.
- *   2. A known device (X-Bab-Device), then a known connection (Mcp-Session-Id), only when the
- *      caller passes an AgentMode (the agent API and /mcp do; pages and proxy-identity routes never do).
- *      See fromDevice and fromConnection.
- *   3. Agent headers (X-Bab-Actor-Email / X-Bab-Actor-Name), self-asserted. An
- *      Authorization header is not read for identity: old plugin configs that still send a bearer
- *      are simply ignored, never refused. (The API-token gate in lib/gate.ts reads it, upstream
- *      of this.) The client address only keys the per-IP caps, and only when verified.
+ *   Web pages (mode "off"): the sign-in proxy identity headers first, when trusted (see lib/user.ts).
+ *   Never a token, device or connection there; declared headers only in open mode (no trusted
+ *   proxy, no API tokens).
+ *   /api and /mcp (an AgentMode):
+ *     1. A bearer configured as token=email (fromToken): that person, whatever else the request says.
+ *     2. Sign-in proxy identity headers, when trusted. An address bound to a token (token=email)
+ *        is dropped here without its token.
+ *     3. A known device (X-Bab-Device), then a known connection (Mcp-Session-Id): fromDevice and
+ *        fromConnection.
+ *     4. Agent headers (X-Bab-Actor-Email / X-Bab-Actor-Name), self-asserted.
+ *   An address bound to a token is never accepted from a device, a connection or agent headers
+ *   without its token. Any other Authorization header is not read for identity: a bare token only
+ *   gates access (lib/gate.ts reads it, upstream of this) and old plugin configs that still send
+ *   one are simply ignored, never refused. The client address only keys the per-IP caps, and only
+ *   when verified.
  * The web UI is read-only and needs no identity of its own; only the agent
  * API (requireActorForApi) requires this to resolve.
  * Upserts the resolved user's row on every hit.
@@ -213,23 +220,23 @@ export async function connectionState(): Promise<ConnectionState | null> {
  * stored under it, and a proxy id would be a second, empty person on the Usage page
  * (the web UI shows your own reminders). A proxy email that is not
  * long-form is treated as no identity rather than a new user — UNLESS this proxy id has
- * already been linked (forge_links, lib/forge-links.ts): a proxy may send only a short alias
+ * already been linked (proxy_links, lib/proxy-links.ts): a proxy may send only a short alias
  * in the email header, so the one-time browser link is the only way most viewers ever
  * get an identity here at all. The link is checked first: it must win even for someone
  * whose proxy email happens to be long-form, since a confirmed link is what the person
  * actually asserted.
  */
-function fromForge(user: ForgeUser | null): SessionUser | null {
+function fromProxy(user: ProxyUser | null): SessionUser | null {
   if (!user) return null;
 
   const linkedUserId = getLinkedUserId(user.id);
   if (linkedUserId) {
     // Links made in the old "latest link wins" era were never name-checked. The SSO name
     // cannot be edited by the user, so a link it does not fit is not trusted.
-    if (forgeNameMatchesEmail(user.name, linkedUserId)) {
-      return { ...user, id: linkedUserId, email: linkedUserId, source: "forge", forgeUserId: user.id };
+    if (proxyNameMatchesEmail(user.name, linkedUserId)) {
+      return { ...user, id: linkedUserId, email: linkedUserId, source: "proxy", proxyUserId: user.id };
     }
-    console.warn(`bab: stored link for forge id ${user.id} does not fit the SSO name; treating as unlinked`);
+    console.warn(`bab: stored link for proxy id ${user.id} does not fit the SSO name; treating as unlinked`);
     return null;
   }
 
@@ -241,20 +248,20 @@ function fromForge(user: ForgeUser | null): SessionUser | null {
     );
     return null;
   }
-  return { ...user, id: email, email, source: "forge", forgeUserId: user.id };
+  return { ...user, id: email, email, source: "proxy", proxyUserId: user.id };
 }
 
 /**
  * For app/reminders/page.tsx only: a trusted proxy viewer who resolves to no identity
- * (fromForge returned null — no forge_links row, and their proxy email isn't long-form)
+ * (fromProxy returned null — no proxy_links row, and their proxy email isn't long-form)
  * is still a real signed-in person the page can point at /me/devices. Returns their
- * proxy user only in exactly that case; null whenever fromForge would already resolve
+ * proxy user only in exactly that case; null whenever fromProxy would already resolve
  * an identity (linked, or a long-form email) or there's no trusted proxy viewer at all —
  * so the page never nudges someone who needs nothing, nor someone already linked.
  * Returns the whole proxy user (for /notify/identity, whose one-click suggestion checks its SSO email and name).
  */
-export async function pendingForgeLinkUser(): Promise<ForgeUser | null> {
-  if (!trustForgeHeaders()) return null;
+export async function pendingProxyLinkUser(): Promise<ProxyUser | null> {
+  if (!trustProxyHeaders()) return null;
   const user = await currentUser();
   if (!user) return null;
   if (getLinkedUserId(user.id)) return null;
@@ -269,17 +276,48 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return (await resolveIdentity("off")).user;
 }
 
+/** At most one warning a minute, whoever the caller and whichever address: never the address itself. */
+let lastBoundWarnAt = 0;
+function warnBoundEmailClaimed(): void {
+  const now = Date.now();
+  if (now - lastBoundWarnAt < 60_000) return;
+  lastBoundWarnAt = now;
+  console.warn("bab: a request claimed an address that is bound to an API token without presenting that token; treated as no identity");
+}
+
 async function resolveIdentity(mode: AgentMode): Promise<{ user: SessionUser | null }> {
-  // proxy identity headers are only trustworthy when the sign-in proxy is the sole way in,
-  // because the proxy strips any incoming copy before adding its own. With SSO off the
-  // app is reachable directly, so anyone who can reach it could forge them. Flag semantics:
-  // unset means "do not trust" (the safe state); set BAB_TRUST_PROXY_IDENTITY=1 together
-  // with sso.enabled: true.
-  const forgeUser = trustForgeHeaders() ? fromForge(await currentUser()) : null;
-  let resolved: SessionUser | null = forgeUser;
+  // On /api and /mcp a bearer configured as token=email IS that person, so it wins over everything
+  // below, trusted proxy headers included, whoever they name. Web pages (mode "off") carry no token
+  // (fromToken returns null there) and keep the proxy first.
+  let resolved: SessionUser | null = await fromToken(mode);
 
   if (!resolved) {
-    resolved = (await fromToken(mode)) ?? (await fromDevice(mode)) ?? (await fromConnection(mode)) ?? (await fromAgentHeaders(mode));
+    // proxy identity headers are only trustworthy when the sign-in proxy is the sole way in,
+    // because the proxy strips any incoming copy before adding its own. With SSO off the
+    // app is reachable directly, so anyone who can reach it could fake them. Flag semantics:
+    // unset means "do not trust" (the safe state); set BAB_TRUST_PROXY_IDENTITY=1 together
+    // with sso.enabled: true.
+    let proxyUser = trustProxyHeaders() ? fromProxy(await currentUser()) : null;
+    // On /api and /mcp the proxy's word is not enough for an address bound to a token (token=email):
+    // without the proxy secret anyone who reaches those paths can send the identity headers, so only the
+    // request that presents that very token acts as that person, and that request never gets here
+    // (fromToken above). Web pages (mode "off") carry no token and stay as the proxy says, or a
+    // token-bound person would be locked out of their own inbox.
+    if (proxyUser && mode !== "off" && isTokenBoundEmail(proxyUser.id)) {
+      warnBoundEmailClaimed();
+      proxyUser = null;
+    }
+    resolved = proxyUser;
+
+    if (!resolved) {
+      resolved = (await fromDevice(mode)) ?? (await fromConnection(mode)) ?? (await fromAgentHeaders(mode));
+      // An address bound to a token (token=email) is that token's holder, so a device, a connection
+      // or declared headers cannot claim it. (A token path never gets here; the proxy path is checked above.)
+      if (resolved && isTokenBoundEmail(resolved.id)) {
+        warnBoundEmailClaimed();
+        resolved = null;
+      }
+    }
   }
 
   if (!resolved) return { user: null };
@@ -333,6 +371,9 @@ async function resolveIdentityOrThrow(mode: Exclude<AgentMode, "off">): Promise<
       throw unauthorized(
         "Identity required: send X-Bab-Actor-Email and X-Bab-Actor-Name",
       );
+    }
+    if (isTokenBoundEmail(email)) {
+      throw unauthorized(tokenBoundMessage(email));
     }
     if (isAliasEmail(email.trim())) {
       throw unauthorized("Identity rejected: " + identityRejectionText(email.trim()));

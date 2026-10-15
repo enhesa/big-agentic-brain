@@ -175,13 +175,13 @@ describe("SSO paths never take a device", () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockHeaders({
       "x-bab-device": secret("a"),
-      "x-auth-request-user": "forge-oid",
+      "x-auth-request-user": "proxy-oid",
       "x-auth-request-email": "marie.curie@example.com",
       "x-auth-request-preferred-username": "Marie Curie",
     });
     const { getSessionUser } = await import("../lib/session");
     const user = await getSessionUser();
-    expect(user?.source).toBe("forge");
+    expect(user?.source).toBe("proxy");
     expect(user?.id).toBe(MARIE);
   });
 
@@ -282,12 +282,12 @@ describe("requireActorForApi with an identified connection (Mcp-Session-Id)", ()
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockHeaders({
       "mcp-session-id": SESSION("c"),
-      "x-auth-request-user": "forge-oid",
+      "x-auth-request-user": "proxy-oid",
       "x-auth-request-email": "marie.curie@example.com",
       "x-auth-request-preferred-username": "Marie Curie",
     });
     const { getSessionUser } = await import("../lib/session");
-    expect((await getSessionUser())?.source).toBe("forge");
+    expect((await getSessionUser())?.source).toBe("proxy");
   });
 
   it("ownerIdFor treats a connection user like a declared agent, never a browser viewer", async () => {

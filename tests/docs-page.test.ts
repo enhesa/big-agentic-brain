@@ -123,11 +123,13 @@ describe("/docs", () => {
     }
   });
 
-  it("states the two things people get wrong: no daemon or listener (only the optional inbox pill polls), nothing is private", async () => {
+  it("states the two things people get wrong: no daemon or listener (only the optional inbox pill polls), and who can read what", async () => {
     const html = await render();
     expect(html).toContain("No daemon, no listener");
     expect(html).toContain("only the optional inbox pill polls, every 15 seconds");
-    expect(html).toContain("readable by everyone at Acme");
+    expect(html).toContain("Memories are readable by everyone at Acme");
+    expect(html).toContain("Messages are visible to the people in the thread and to maintainers");
+    expect(html).toContain("Only your reminders are private");
   });
 
   it("describes messaging as inbox only: no sessions to address, no presence, no long-poll", async () => {
@@ -375,7 +377,7 @@ describe("/docs", () => {
 
     it("does not draw tables a migration dropped", async () => {
       const label = await labelOf("The data");
-      for (const dropped of ["api_tokens", "forge_link_codes", "device_connects", "push_subscriptions"]) {
+      for (const dropped of ["api_tokens", "device_connects", "push_subscriptions"]) {
         expect(label, dropped).not.toContain(dropped);
       }
     });

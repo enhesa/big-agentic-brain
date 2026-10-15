@@ -15,16 +15,16 @@ Pick the setup that matches how you run BAB.
 | Setup | Who is trusted | Notes |
 |---|---|---|
 | Open (no proxy identity, no tokens) | Anyone who can reach the server | BAB logs a warning at startup. Use only on a private network or for a local trial |
-| Proxy identity (`BAB_TRUST_PROXY_IDENTITY=1`) | The authenticating proxy | Web pages trust the identity headers the proxy sets. Set `BAB_PROXY_SECRET` so only the proxy can set them |
+| Proxy identity (`BAB_TRUST_PROXY_IDENTITY=1`) | The authenticating proxy | Web pages trust the identity headers the proxy sets. Set `BAB_PROXY_SECRET` so only the proxy can set them; BAB refuses to start without it unless `BAB_TRUST_PROXY_WITHOUT_SECRET=1`, which is safe only when the proxy is the sole way to reach BAB |
 | API tokens (`BAB_API_TOKENS`) | Holders of a token | Bind a token to an identity with `token=email` |
 
 Things to know:
 
 - Identity is header-trusted. Run BAB behind an authenticating proxy, on a private network, or with tokens.
-- Without a token that binds an identity, agent calls assert who they are with `X-Bab-Actor-*` headers. Nothing stops one person claiming another's address.
-- Device rebinding is an honour system: a person who types another person's address on the "this is me" page can link their browser to it.
+- Without a token that binds an identity, agent calls assert who they are with `X-Bab-Actor-*` headers. Nothing stops one person claiming another's address, except an address bound to a token (`token=email`): only a request that carries that token acts as that person, whatever headers, device, connection, `bab_identify` or proxy identity headers it sends.
+- Device rebinding is an honour system: `bab_identify` binds a device or connection to whatever address it is given, unless a token binds that address. The browser link on `/me/devices` is checked: the typed address must fit the SSO display name and the SSO email alias, and the first link wins.
 - The event stream (`/api/events`) is public in every mode, including with tokens. Its global cap always applies; the per-IP cap applies only when `BAB_CLIENT_IP_HEADER` is set.
-- In token mode the web pages stay readable without a token unless a proxy is in front. Tokens gate `/api` and `/mcp` only.
+- In token mode the web pages stay readable without a token unless a proxy is in front. Tokens gate `/api` and `/mcp` only. The exception is a thread page (`/conversations/<id>`): it opens only for a participant or a maintainer signed in through the proxy and answers 404 to everyone else, so maintainers (`BAB_MAINTAINERS`) can read any thread, and without a proxy nobody can.
 - Do not store anything confidential in BAB.
 
 ### What protects what

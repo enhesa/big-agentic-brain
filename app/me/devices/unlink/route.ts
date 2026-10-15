@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /me/devices/unlink: a signed-in viewer unlinks their own browser. Devices connected
- * through this browser are revoked with the link (lib/forge-links.ts). Shared logic, own
+ * through this browser are revoked with the link (lib/proxy-links.ts). Shared logic, own
  * redirect.
  */
 export async function POST(request: Request) {

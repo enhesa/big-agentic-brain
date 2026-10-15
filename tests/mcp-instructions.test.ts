@@ -11,7 +11,7 @@ import { mcpInstructions } from "../lib/mcp";
  * matter most first.
  */
 const LIVE = "https://bab.example.com";
-const TEST = "https://bab-test.forge.example.com";
+const TEST = "https://bab-test.example.com";
 const CUT = 2048;
 
 describe("MCP instructions length", () => {

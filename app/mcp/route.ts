@@ -10,7 +10,7 @@ import { DEVICE_ERROR_RE, identify, identifyRequiredText } from "@/lib/identify"
 import { identityHint } from "@/lib/identity";
 import { callerKey } from "@/lib/caller-key";
 import { createConnection } from "@/lib/mcp-connections";
-import { tokenIdentityFor } from "@/lib/gate";
+import { isTokenBoundEmail, tokenBoundMessage, tokenIdentityFor } from "@/lib/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +158,10 @@ export async function POST(req: Request): Promise<Response> {
       return rpcError(id, RATE_LIMIT_ERROR_CODE, message);
     }
     const sentActorHeaders = !!(h.get("x-bab-actor-email") || h.get("x-bab-actor-name"));
-    if (sentActorHeaders && !device && !connection) return rpcError(id, -32001, identityErrorMessage());
+    if (sentActorHeaders && !device && !connection) {
+      const claimed = h.get("x-bab-actor-email") ?? "";
+      return rpcError(id, -32001, isTokenBoundEmail(claimed) ? tokenBoundMessage(claimed) : identityErrorMessage());
+    }
     anonymous = true;
   }
 

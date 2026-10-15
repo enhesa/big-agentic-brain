@@ -3,7 +3,7 @@ import { globSync, readFileSync } from "node:fs";
 import { sep } from "node:path";
 import { isPublicPath } from "../lib/public-paths";
 
-const IDENTITY_HELPERS = ["requireActorForApi", "getSessionUser", "requireUser", "currentUser", "pendingForgeLinkUser", "getViewer"];
+const IDENTITY_HELPERS = ["requireActorForApi", "getSessionUser", "requireUser", "currentUser", "pendingProxyLinkUser", "getViewer"];
 
 /**
  * Routes and pages that deliberately resolve no identity. Each needs a one-line reason; a new
@@ -16,7 +16,6 @@ const ANONYMOUS_OK: Record<string, string> = {
   "/board/:id": "redirect to /memory/:id, reads nothing",
   "/connect/:nonce": "retired link, static explanation, reads nothing",
   "/handoff/:threadId": "redirect to /inbox, which decides who may see the thread",
-  "/conversations/:threadId": "read-only web page by design (the web UI needs no identity); the thread is shown through threadForViewer",
   "/instructions": "agent-facing instructions document, no user data (public on the reverse proxy)",
   "/inbox/manifest": "web app manifest: names and icons only, fetched without credentials by the browser",
   "/me/devices/claim": "identity is the SSO viewer, resolved with currentUser inside lib/devices-web.ts",

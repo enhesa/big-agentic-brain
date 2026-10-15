@@ -92,15 +92,15 @@ const lettersOnly = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g
  * surname ("Smithson" for smith) or a different first name is not a match. Tokens are
  * whitespace-separated and compared letters-only, so "Jean Luc" matches jean-luc.
  */
-export function forgeNameMatchesEmail(forgeName: string | null | undefined, email: string): boolean {
-  if (!forgeName) return false;
+export function proxyNameMatchesEmail(proxyName: string | null | undefined, email: string): boolean {
+  if (!proxyName) return false;
   const local = email.split("@")[0] ?? "";
   const [firstPart, ...rest] = local.split(".");
   const first = lettersOnly(firstPart ?? "");
   const last = lettersOnly(rest.join(""));
   if (!first || !last) return false;
 
-  const tokens = forgeName
+  const tokens = proxyName
     .replace(/\([^)]*\)/g, " ")
     .split(/\s+/)
     .map(lettersOnly)

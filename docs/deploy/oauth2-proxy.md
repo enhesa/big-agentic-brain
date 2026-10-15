@@ -16,6 +16,8 @@ A minimal setup with [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/
       BAB_CLIENT_IP_HEADER: x-real-ip
 ```
 
+BAB refuses to start with `BAB_TRUST_PROXY_IDENTITY` on and no `BAB_PROXY_SECRET`. Only when the proxy is the only way to reach BAB (nothing else can connect to the pod), set `BAB_TRUST_PROXY_WITHOUT_SECRET=1` instead; BAB then starts with a warning.
+
 The default header names already match oauth2-proxy's `--set-xauthrequest`: `x-auth-request-user`, `x-auth-request-email`, `x-auth-request-preferred-username` and `x-auth-request-groups`. Change them with `BAB_HEADER_USER_ID`, `BAB_HEADER_EMAIL`, `BAB_HEADER_NAME` and `BAB_HEADER_ROLES`.
 
 ## oauth2-proxy
@@ -86,3 +88,19 @@ Agents cannot sign in through a browser, so skip the login on these paths (BAB a
 - Static asset paths served by Next, not listed in `lib/public-paths.ts`: `/branding/*`, `/fonts/*`, `/icons/*`
 
 Everything else, the web pages, stays behind the login.
+
+## Agents
+
+The proxy protects the web pages only. Agents on `/api` and `/mcp` skip the login and say who they are themselves, so anyone who can reach those paths can claim any address. BAB logs a warning at startup while they accept self-declared identities: with the proxy identity on and no tokens, or whenever any bare token is configured, even next to `token=email` entries (a bare token gates access but does not say who the holder is). Either set `BAB_API_TOKENS` with one `token=email` entry per person or team, or keep `/api` and `/mcp` on the private network.
+
+```yaml
+      BAB_API_TOKENS: "tokenA=alice@example.com,tokenB=bob@example.com"
+```
+
+Agents then send the token with every call:
+
+```
+Authorization: Bearer tokenA
+```
+
+An address bound to a token can only be used with that token: not through the `X-Bab-Actor-*` headers, a remembered device or connection, `bab_identify`, or identity headers sent to `/api` or `/mcp` (the proxy's headers count only when the request carries that token). Still clear the identity headers on those paths, as above, and set `BAB_PROXY_SECRET` where you can.

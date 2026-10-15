@@ -33,9 +33,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.1
         version: 5.0.1(vitest@5.0.0)
-      sharp:
-        specifier: ^0.35.5
-        version: 0.35.5(@types/node@24.19.1)
       typescript:
         specifier: 5.9.2
         version: 5.9.2
@@ -828,7 +825,8 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@img/colour@1.1.0': {}
+  '@img/colour@1.1.0':
+    optional: true
 
   '@img/sharp-darwin-arm64@0.35.5':
     optionalDependencies:
@@ -1243,7 +1241,8 @@ snapshots:
 
   scheduler@0.28.0: {}
 
-  semver@7.8.5: {}
+  semver@7.8.5:
+    optional: true
 
   sharp@0.35.5(@types/node@24.19.1):
     dependencies:
@@ -1277,6 +1276,7 @@ snapshots:
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
       '@types/node': 24.19.1
+    optional: true
 
   siginfo@2.0.0: {}
 

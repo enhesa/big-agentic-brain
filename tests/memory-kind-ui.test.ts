@@ -51,7 +51,7 @@ async function seed() {
     title: "Kafka over REST between services",
     body: "Services talk through events, chosen for decoupling.",
     kind: "decision",
-    project: "forge2",
+    project: "proxy2",
     source: "confluence",
     sourceUrl: SOURCE_URL,
     sourceVersion: 3,

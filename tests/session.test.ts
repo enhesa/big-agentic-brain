@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 /** Mocks next/headers so both lib/user.ts's currentUser() and lib/session.ts's
- *  agent-header fallback see the same request headers. No x-forge-* headers
+ *  agent-header fallback see the same request headers. No x-proxy-* headers
  *  here, so the the sign-in proxy source never fires in these tests. */
 function mockRequest(headersMap: Record<string, string>) {
   vi.doMock("next/headers", () => ({
@@ -226,7 +226,7 @@ describe("getSessionUser: identity proxy headers are only trusted behind the SSO
     mockRequest({ "x-auth-request-user": "oid-1", "x-auth-request-email": "real.person@example.com", "x-auth-request-preferred-username": "Real Person" });
     const { getSessionUser } = await import("../lib/session");
     const user = await getSessionUser();
-    expect(user?.source).toBe("forge");
+    expect(user?.source).toBe("proxy");
     expect(user?.id).toBe("real.person@example.com");
   });
 
@@ -238,37 +238,37 @@ describe("getSessionUser: identity proxy headers are only trusted behind the SSO
   });
 });
 
-describe("getSessionUser / fromForge: a redeemed browser link", () => {
+describe("getSessionUser / fromProxy: a redeemed browser link", () => {
   afterEach(() => {
     delete process.env.BAB_TRUST_PROXY_IDENTITY;
   });
 
   it("makes getSessionUser return the linked user for that proxy id", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await linkForTests("forge-oid-linked", "jean.dupont@example.com");
+    await linkForTests("proxy-oid-linked", "jean.dupont@example.com");
 
     // Production shape: a short alias in the proxy email header, which alone would resolve
-    // to no identity — the forge_links row is what makes this viewer resolvable at all.
+    // to no identity — the proxy_links row is what makes this viewer resolvable at all.
     mockRequest({
-      "x-auth-request-user": "forge-oid-linked",
+      "x-auth-request-user": "proxy-oid-linked",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
     const { getSessionUser } = await import("../lib/session");
     const user = await getSessionUser();
-    expect(user?.source).toBe("forge");
+    expect(user?.source).toBe("proxy");
     expect(user?.id).toBe("jean.dupont@example.com");
     expect(user?.email).toBe("jean.dupont@example.com");
   });
 
   it("never resolves the linked identity for a different proxy id", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await linkForTests("forge-oid-linked", "jean.dupont@example.com");
+    await linkForTests("proxy-oid-linked", "jean.dupont@example.com");
 
     // A different proxy id, also with a short alias, must resolve to no identity —
     // the link is keyed on the proxy id, not on anything guessable from the email.
     mockRequest({
-      "x-auth-request-user": "forge-oid-someone-else",
+      "x-auth-request-user": "proxy-oid-someone-else",
       "x-auth-request-email": "someone@example.com",
       "x-auth-request-preferred-username": "Someone Else",
     });
@@ -277,14 +277,14 @@ describe("getSessionUser / fromForge: a redeemed browser link", () => {
   });
 });
 
-describe("fromForge: a stored link must still fit the SSO name (review fix)", () => {
+describe("fromProxy: a stored link must still fit the SSO name (review fix)", () => {
   afterEach(() => {
     delete process.env.BAB_TRUST_PROXY_IDENTITY;
   });
 
-  async function seedLink(forgeId: string, userId: string) {
+  async function seedLink(proxyId: string, userId: string) {
     const { getDb } = await import("../lib/db");
-    getDb().prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES (?, ?)").run(forgeId, userId);
+    getDb().prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES (?, ?)").run(proxyId, userId);
   }
 
   it("treats a legacy link whose SSO name does not fit the linked email as unlinked, and warns without PII", async () => {
@@ -292,10 +292,10 @@ describe("fromForge: a stored link must still fit the SSO name (review fix)", ()
     vi.spyOn(console, "warn").mockImplementation(() => {});
     (await import("../lib/config")).config(); // load now: the no-secret startup warning is not under test
     vi.restoreAllMocks();
-    await seedLink("forge-oid-legacy", "jean.dupont@example.com");
+    await seedLink("proxy-oid-legacy", "jean.dupont@example.com");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockRequest({
-      "x-auth-request-user": "forge-oid-legacy",
+      "x-auth-request-user": "proxy-oid-legacy",
       "x-auth-request-email": "mmallory@example.com",
       "x-auth-request-preferred-username": "Mallory Mallet",
     });
@@ -303,16 +303,16 @@ describe("fromForge: a stored link must still fit the SSO name (review fix)", ()
     await expect(getSessionUser()).resolves.toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
     const msg = String(warn.mock.calls[0][0]);
-    expect(msg).toContain("forge-oid-legacy");
+    expect(msg).toContain("proxy-oid-legacy");
     expect(msg).not.toMatch(/dupont|mallory|mallet/i);
     warn.mockRestore();
   });
 
   it("still resolves a link whose SSO name fits", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await seedLink("forge-oid-ok", "jean.dupont@example.com");
+    await seedLink("proxy-oid-ok", "jean.dupont@example.com");
     mockRequest({
-      "x-auth-request-user": "forge-oid-ok",
+      "x-auth-request-user": "proxy-oid-ok",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -321,7 +321,7 @@ describe("fromForge: a stored link must still fit the SSO name (review fix)", ()
   });
 });
 
-describe("pendingForgeLinkUser", () => {
+describe("pendingProxyLinkUser", () => {
   afterEach(() => {
     delete process.env.BAB_TRUST_PROXY_IDENTITY;
   });
@@ -329,13 +329,13 @@ describe("pendingForgeLinkUser", () => {
   it("returns the proxy user (id, email, name) for a trusted, unlinked viewer with a short-alias email", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
-    const { pendingForgeLinkUser } = await import("../lib/session");
-    await expect(pendingForgeLinkUser()).resolves.toMatchObject({
-      id: "forge-oid-pending",
+    const { pendingProxyLinkUser } = await import("../lib/session");
+    await expect(pendingProxyLinkUser()).resolves.toMatchObject({
+      id: "proxy-oid-pending",
       email: "jdupont@example.com",
       name: "Jean Dupont",
     });
@@ -343,43 +343,43 @@ describe("pendingForgeLinkUser", () => {
 
   it("returns null once that proxy id is linked", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await linkForTests("forge-oid-pending", "jean.dupont@example.com");
+    await linkForTests("proxy-oid-pending", "jean.dupont@example.com");
 
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
-    const { pendingForgeLinkUser } = await import("../lib/session");
-    await expect(pendingForgeLinkUser()).resolves.toBeNull();
+    const { pendingProxyLinkUser } = await import("../lib/session");
+    await expect(pendingProxyLinkUser()).resolves.toBeNull();
   });
 
   it("returns null for a long-form proxy email (already resolvable without linking)", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-longform",
+      "x-auth-request-user": "proxy-oid-longform",
       "x-auth-request-email": "real.person@example.com",
       "x-auth-request-preferred-username": "Real Person",
     });
-    const { pendingForgeLinkUser } = await import("../lib/session");
-    await expect(pendingForgeLinkUser()).resolves.toBeNull();
+    const { pendingProxyLinkUser } = await import("../lib/session");
+    await expect(pendingProxyLinkUser()).resolves.toBeNull();
   });
 
-  it("returns null when BAB_TRUST_PROXY_IDENTITY is unset, even with forge headers present", async () => {
+  it("returns null when BAB_TRUST_PROXY_IDENTITY is unset, even with proxy headers present", async () => {
     mockRequest({
-      "x-auth-request-user": "forge-oid-untrusted",
+      "x-auth-request-user": "proxy-oid-untrusted",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
-    const { pendingForgeLinkUser } = await import("../lib/session");
-    await expect(pendingForgeLinkUser()).resolves.toBeNull();
+    const { pendingProxyLinkUser } = await import("../lib/session");
+    await expect(pendingProxyLinkUser()).resolves.toBeNull();
   });
 
   it("returns null with no proxy viewer at all", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({});
-    const { pendingForgeLinkUser } = await import("../lib/session");
-    await expect(pendingForgeLinkUser()).resolves.toBeNull();
+    const { pendingProxyLinkUser } = await import("../lib/session");
+    await expect(pendingProxyLinkUser()).resolves.toBeNull();
   });
 });
 
@@ -436,13 +436,13 @@ describe("Authorization is ignored (personal tokens are gone)", () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
       authorization: bearer(),
-      "x-auth-request-user": "forge-1",
+      "x-auth-request-user": "proxy-1",
       "x-auth-request-email": "bob.b@example.com",
       "x-auth-request-preferred-username": "Bob B",
     });
     const { requireActorForApi } = await import("../lib/session");
     const user = await requireActorForApi();
-    expect(user.source).toBe("forge");
+    expect(user.source).toBe("proxy");
     expect(user.id).toBe("bob.b@example.com");
   });
 

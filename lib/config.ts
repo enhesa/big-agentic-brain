@@ -39,6 +39,8 @@ export interface BabConfig {
   redact: { pii: boolean; domains: string[] };
   sourceHosts: string[] | null;
   projectKeyPrefixes: string[];
+  /** Extra platform labels for applies-to (BAB_EXTRA_APPLIES_TO), lowercase, validated. */
+  extraAppliesTo: string[];
   branding: {
     orgName: string;
     accentColor: string;
@@ -108,6 +110,19 @@ function regex(env: Env, name: string, def: string | null): RegExp | null {
   }
 }
 
+/** Lowercase letters, with single hyphens between words: what the built-in labels look like, and safe in SQL literals. */
+const LABEL_SHAPE = /^[a-z]+(?:-[a-z]+)*$/;
+
+function extraLabels(env: Env, name: string): string[] {
+  const labels = csv(env, name).map((v) => v.toLowerCase());
+  for (const label of labels) {
+    if (!LABEL_SHAPE.test(label) || label === "everywhere") {
+      throw new ConfigError(name + ' holds a label that is not lowercase letters and hyphens (or is reserved), got "' + label + '"');
+    }
+  }
+  return [...new Set(labels)];
+}
+
 function origin(env: Env, name: string): string | null {
   const v = read(env, name)?.trim();
   if (!v) return null;
@@ -159,6 +174,10 @@ function parse(env: Env): BabConfig {
     console.warn("[config] BAB_MAINTAINERS is unset: anyone can pin a house rule, and nobody can change a feedback status or open /admin");
   }
   if (trustIdentity && optStr(env, "BAB_PROXY_SECRET") === null) {
+    // Fail closed: without the secret, anyone who can reach the app directly can send the identity headers.
+    if (!bool(env, "BAB_TRUST_PROXY_WITHOUT_SECRET", false)) {
+      throw new ConfigError("BAB_TRUST_PROXY_IDENTITY needs BAB_PROXY_SECRET, or BAB_TRUST_PROXY_WITHOUT_SECRET=1 when the proxy is the only way to reach BAB");
+    }
     console.warn("[config] proxy identity trusted without a shared secret; make sure the pod is reachable only through the proxy");
   }
   const locale = str(env, "BAB_LOCALE", "en");
@@ -228,6 +247,7 @@ function parse(env: Env): BabConfig {
     redact: { pii: bool(env, "BAB_REDACT_PII", true), domains: csv(env, "BAB_REDACT_DOMAINS").map((v) => v.toLowerCase()) },
     sourceHosts: hosts.length ? hosts : null,
     projectKeyPrefixes: csv(env, "BAB_PROJECT_KEY_PREFIXES"),
+    extraAppliesTo: extraLabels(env, "BAB_EXTRA_APPLIES_TO"),
     branding: {
       orgName: str(env, "BAB_ORG_NAME", "BAB"),
       accentColor: accent,
@@ -284,5 +304,11 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage);
   if (isOpen(c)) {
     log("[config] WARN: open mode, no proxy identity and no API tokens configured, callers are not authenticated");
+  } else if (c.tokens !== null) {
+    // A bare token only gates access: its holder still says who they are, for any address no token=email entry binds.
+    log("[config] WARN: API tokens gate access but do not bind identity: /api and /mcp accept self-declared identities; use token=email entries in BAB_API_TOKENS");
+  } else if (c.tokenIdentities.size === 0) {
+    // Only reachable with the proxy trusted (otherwise isOpen). The proxy protects the web pages; agents on /api and /mcp still say who they are.
+    log("[config] WARN: /api and /mcp accept self-declared identities; bind tokens to people with token=email entries in BAB_API_TOKENS, or keep those paths off the public network");
   }
 }

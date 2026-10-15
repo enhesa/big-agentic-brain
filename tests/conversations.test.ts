@@ -16,6 +16,8 @@ afterEach(async () => {
   _resetDbForTests();
   rmSync(dataDir, { recursive: true, force: true });
   delete process.env.DATA_DIR;
+  delete process.env.BAB_TRUST_PROXY_IDENTITY;
+  delete process.env.BAB_MAINTAINERS;
   vi.doUnmock("next/headers");
   vi.resetModules();
 });
@@ -136,7 +138,7 @@ describe("threadForViewer", () => {
     const { thread: t } = send({ fromId: "alice@example.com", to: "bob@example.com", subject: "Hi", body: "First" });
     send({ fromId: "bob@example.com", to: "alice@example.com", threadId: t.id, body: "Second" });
 
-    const result = threadForViewer(t.id)!;
+    const result = threadForViewer(t.id, "alice@example.com")!;
     expect(result.messages.length).toBe(2);
     expect(result.messages[0].body).toBe("First");
     expect(result.messages[1].body).toBe("Second");
@@ -146,43 +148,71 @@ describe("threadForViewer", () => {
     expect(result.messages[0].toEmail).toBe("bob@example.com");
   });
 
-  it("has no participant restriction: any thread id resolves for any viewer", async () => {
+  it("shows the thread to both participants (the sender and the recipient)", async () => {
     await seedUsers();
     const { send, threadForViewer } = await import("../lib/messages");
     const { thread: t } = send({ fromId: "alice@example.com", to: "bob@example.com", subject: "Hi", body: "First" });
+    expect(threadForViewer(t.id, "alice@example.com")?.messages.length).toBe(1);
+    expect(threadForViewer(t.id, "bob@example.com")?.messages.length).toBe(1);
+  });
 
-    // carol never sent/received a message in this thread, yet threadForViewer
-    // (unlike thread()/requireThreadForActor) still returns it.
-    const result = threadForViewer(t.id);
-    expect(result).toBeTruthy();
+  it("refuses a viewer who is not a participant with the same ForbiddenError the inbox uses", async () => {
+    await seedUsers();
+    const { send, threadForViewer } = await import("../lib/messages");
+    const { ForbiddenError } = await import("../lib/errors");
+    const { thread: t } = send({ fromId: "alice@example.com", to: "bob@example.com", subject: "Hi", body: "First" });
+
+    expect(() => threadForViewer(t.id, "carol@example.com")).toThrow(ForbiddenError);
+    expect(() => threadForViewer(t.id, "carol@example.com")).toThrow("Not a participant of this thread");
+  });
+
+  it("lets a maintainer read any thread", async () => {
+    process.env.BAB_MAINTAINERS = "Carol@example.com";
+    await seedUsers();
+    const { send, threadForViewer } = await import("../lib/messages");
+    const { thread: t } = send({ fromId: "alice@example.com", to: "bob@example.com", subject: "Hi", body: "First" });
+    expect(threadForViewer(t.id, "carol@example.com")?.messages.length).toBe(1);
   });
 
   it("returns undefined for a missing thread", async () => {
     const { threadForViewer } = await import("../lib/messages");
-    expect(threadForViewer("nope")).toBeUndefined();
+    expect(threadForViewer("nope", "alice@example.com")).toBeUndefined();
   });
 });
 
 describe("Conversation thread page (render)", () => {
-  it("app/conversations/[threadId]/page.tsx escapes message bodies while preserving them as text", async () => {
-    vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
-    await seedUsers();
-    const { send } = await import("../lib/messages");
-    const { thread: t } = send({
-      fromId: "alice@example.com",
-      to: "bob@example.com",
-      subject: "Hi",
-      body: "<script>alert(1)</script>",
-    });
+  const A = "alice.a@example.com";
+  const B = "bob.b@example.com";
+  const C = "carl.c@example.com";
 
+  /** The page reads the SSO viewer, so each test is signed in as `email` (or nobody). */
+  function signedInAs(email: string | null) {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    const h: Record<string, string> = email
+      ? { "x-auth-request-user": `proxy-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": email.split("@")[0] }
+      : {};
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers(h) }));
+  }
+
+  async function seedThread(body: string) {
+    const { upsertUser } = await import("../lib/users");
+    for (const [id, name] of [[A, "Alice A"], [B, "Bob B"], [C, "Carl C"]]) upsertUser({ id, email: id, name, roles: [] });
+    const { send } = await import("../lib/messages");
+    return send({ fromId: A, to: B, subject: "Hi", body }).thread;
+  }
+
+  async function render(threadId: string): Promise<string> {
     const { renderToReadableStream } = await import("react-dom/server.edge");
     const { default: ConversationDetailPage } = await import("../app/conversations/[threadId]/page");
-
-    const html = await new Response(
-      await renderToReadableStream(
-        ConversationDetailPage({ params: Promise.resolve({ threadId: t.id }) }) as never,
-      ),
+    return new Response(
+      await renderToReadableStream((await ConversationDetailPage({ params: Promise.resolve({ threadId }) })) as never),
     ).text();
+  }
+
+  it("app/conversations/[threadId]/page.tsx escapes message bodies while preserving them as text", async () => {
+    signedInAs(A);
+    const t = await seedThread("<script>alert(1)</script>");
+    const html = await render(t.id);
 
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
@@ -191,24 +221,99 @@ describe("Conversation thread page (render)", () => {
   });
 
   it("app/conversations/[threadId]/page.tsx tags a legacy auto-reply message", async () => {
-    vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
-    await seedUsers();
+    signedInAs(A);
+    const t = await seedThread("First");
     const { send } = await import("../lib/messages");
     const { getDb } = await import("../lib/db");
-    const { thread: t } = send({ fromId: "alice@example.com", to: "bob@example.com", subject: "Hi", body: "First" });
     // kind:"auto" can no longer be created via send(); insert a legacy row directly
     // to exercise the read-only rendering of historic auto-reply messages.
-    const { message } = send({ fromId: "bob@example.com", threadId: t.id, body: "auto reply" }, "mcp");
+    const { message } = send({ fromId: B, threadId: t.id, body: "auto reply" }, "mcp");
     getDb().prepare("UPDATE messages SET kind = 'auto' WHERE id = ?").run(message.id);
 
-    const { renderToReadableStream } = await import("react-dom/server.edge");
-    const { default: ConversationDetailPage } = await import("../app/conversations/[threadId]/page");
-
-    const html = await new Response(
-      await renderToReadableStream(ConversationDetailPage({ params: Promise.resolve({ threadId: t.id }) }) as never),
-    ).text();
+    const html = await render(t.id);
 
     expect(html).toContain("auto-reply");
     expect(html).not.toContain("listeningDot");
+  });
+
+  it("shows the thread to its recipient", async () => {
+    signedInAs(B);
+    const t = await seedThread("secret plans");
+    expect(await render(t.id)).toContain("secret plans");
+  });
+
+  it("answers 404, like an unknown thread, to a signed-in viewer who is not a participant", async () => {
+    signedInAs(C);
+    const t = await seedThread("secret plans");
+    await expect(render(t.id)).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+    await expect(render("no-such-thread")).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("answers 404 to a visitor with no signed-in identity", async () => {
+    signedInAs(null);
+    const t = await seedThread("secret plans");
+    await expect(render(t.id)).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("answers 404 to a participant who only sends agent headers, with proxy identity off (open mode)", async () => {
+    const t = await seedThread("secret plans");
+    vi.doMock("next/headers", () => ({
+      headers: async () => new Headers({ "x-bab-actor-email": A, "x-bab-actor-name": "Alice A" }),
+    }));
+    await expect(render(t.id)).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("answers 404 to a signed-in viewer whose SSO email is a short alias and who has not linked a browser", async () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    vi.doMock("next/headers", () => ({
+      headers: async () =>
+        new Headers({
+          "x-auth-request-user": "proxy-alias-a",
+          "x-auth-request-email": "aalice@example.com",
+          "x-auth-request-preferred-username": "Alice A",
+        }),
+    }));
+    const t = await seedThread("secret plans");
+    await expect(render(t.id)).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("shows the thread to a participant who signs in with a short alias and has linked their browser", async () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    vi.doMock("next/headers", () => ({
+      headers: async () =>
+        new Headers({
+          "x-auth-request-user": "proxy-alias-a",
+          "x-auth-request-email": "aalice@example.com",
+          // The SSO name has to fit the linked address, or the link is not trusted.
+          "x-auth-request-preferred-username": "Alice A",
+        }),
+    }));
+    const t = await seedThread("secret plans");
+    const { linkForTests } = await import("./link-helper");
+    await linkForTests("proxy-alias-a", A);
+    expect(await render(t.id)).toContain("secret plans");
+  });
+
+  it("keeps a linked viewer who is not in the thread out", async () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    vi.doMock("next/headers", () => ({
+      headers: async () =>
+        new Headers({
+          "x-auth-request-user": "proxy-alias-c",
+          "x-auth-request-email": "ccarl@example.com",
+          "x-auth-request-preferred-username": "Carl C",
+        }),
+    }));
+    const t = await seedThread("secret plans");
+    const { linkForTests } = await import("./link-helper");
+    await linkForTests("proxy-alias-c", C);
+    await expect(render(t.id)).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("shows any thread to a maintainer", async () => {
+    process.env.BAB_MAINTAINERS = C;
+    signedInAs(C);
+    const t = await seedThread("secret plans");
+    expect(await render(t.id)).toContain("secret plans");
   });
 });

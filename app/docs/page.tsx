@@ -429,7 +429,7 @@ export default async function DocsPage() {
       </DocsSection>
 
       <p className={styles.footnote}>
-        Memories and messages are readable by everyone at {orgName}. There is no private corner, except your reminders.
+        Memories are readable by everyone at {orgName}. Messages are visible to the people in the thread and to maintainers. Only your reminders are private.
       </p>
     </Shell>
   );

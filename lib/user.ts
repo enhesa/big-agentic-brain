@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { headers } from "next/headers";
 import { config } from "./config";
 
-export interface ForgeUser {
+export interface ProxyUser {
   id: string;
   email: string | null;
   name: string | null;
@@ -23,7 +23,7 @@ function secretMatches(expected: string, got: string | null): boolean {
  * Reads the signed-in user from the identity proxy headers (names come from config). Never trust a client-supplied
  * author id/email/name — this is the only source of truth for "who is acting".
  */
-export async function currentUser(): Promise<ForgeUser | null> {
+export async function currentUser(): Promise<ProxyUser | null> {
   const h = await headers();
   // The sign-in proxy percent-encodes any byte that is not safe ASCII, so a
   // name like "João" arrives as "Jo%C3%A3o". Decoding a plain value is a no-op.
@@ -53,7 +53,7 @@ export async function currentUser(): Promise<ForgeUser | null> {
  * Same as currentUser(), but throws a 401 Response when there is no signed-in user.
  * Intended for route handlers / server actions that require authentication.
  */
-export async function requireUser(): Promise<ForgeUser> {
+export async function requireUser(): Promise<ProxyUser> {
   const user = await currentUser();
   if (!user) {
     throw new Response("Unauthorized", { status: 401 });

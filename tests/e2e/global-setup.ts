@@ -97,6 +97,7 @@ export async function bootServer(extraEnv: Record<string, string> = {}): Promise
       // act as a signed-in viewer; every other e2e file sends none, and X-Bab-Actor-* still
       // resolves identity for them.
       BAB_TRUST_PROXY_IDENTITY: "1",
+      BAB_TRUST_PROXY_WITHOUT_SECRET: "1",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],

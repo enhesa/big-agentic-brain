@@ -1,3 +1,4 @@
+import { config } from "./config";
 import { ValidationError } from "./errors";
 
 /**
@@ -28,14 +29,34 @@ export const STACK_LABELS = [
   "terraform",
 ] as const;
 
-export const PLATFORM_LABELS = ["aks", "forge", "azure", "aws", "windows", "linux", "macos"] as const;
+/** The built-in platform labels. A deployment may add its own with BAB_EXTRA_APPLIES_TO (see platformLabels). */
+export const PLATFORM_LABELS = ["aks", "azure", "aws", "windows", "linux", "macos"] as const;
 
+/** The built-in labels, without BAB_EXTRA_APPLIES_TO (see appliesToLabels for the ones in force). */
 export const APPLIES_TO_LABELS: readonly string[] = [...STACK_LABELS, ...PLATFORM_LABELS];
 
 /** Only a filter value (never stored, never a stack): matches memories with no label. */
 export const EVERYWHERE = "everywhere";
 
-const LABEL_SET = new Set<string>(APPLIES_TO_LABELS);
+const BUILT_IN = new Set<string>(APPLIES_TO_LABELS);
+
+/**
+ * The platform labels in force: the built-in ones plus BAB_EXTRA_APPLIES_TO. Only WRITES and filters
+ * are checked against this list. A label already stored on a memory that is no longer in it (the
+ * variable was unset) still reads, lists and searches: readAppliesTo never validates.
+ */
+export function platformLabels(): readonly string[] {
+  return [...PLATFORM_LABELS, ...config().extraAppliesTo.filter((l) => !BUILT_IN.has(l))];
+}
+
+/** Every label a write or filter accepts: the built-in ones plus BAB_EXTRA_APPLIES_TO. */
+export function appliesToLabels(): readonly string[] {
+  return [...STACK_LABELS, ...platformLabels()];
+}
+
+function labelSet(): Set<string> {
+  return new Set(appliesToLabels());
+}
 
 // Alias -> label. Keys are lowercase with spaces and underscores already folded to hyphens (see
 // canonicalLabel). k8s and kubernetes mean aks (Azure Kubernetes Service).
@@ -84,14 +105,14 @@ const ALIASES: Record<string, string> = {
 export function canonicalLabel(raw: string): string | null {
   const key = raw.trim().toLowerCase().replace(/[\s_]+/g, "-");
   if (!key) return null;
-  if (LABEL_SET.has(key)) return key;
+  if (labelSet().has(key)) return key;
   return ALIASES[key] ?? null;
 }
 
 function unknownMessage(bad: string[]): string {
   return (
     `Unknown appliesTo value${bad.length > 1 ? "s" : ""}: ${bad.map((b) => JSON.stringify(b)).join(", ")}. ` +
-    `Valid: stack: ${STACK_LABELS.join(", ")}; platform: ${PLATFORM_LABELS.join(", ")}. ` +
+    `Valid: stack: ${STACK_LABELS.join(", ")}; platform: ${platformLabels().join(", ")}. ` +
     `To suggest a new label, use bab_feedback.`
   );
 }
@@ -220,9 +241,9 @@ export function mergeAppliesTo(lists: readonly (readonly string[])[]): string[] 
 }
 
 // The SQL below inlines labels as literals. That is safe only because every label reaching it went
-// through canonicalLabel (a closed vocabulary of [a-z]+); the guard makes a slip fail loudly.
+// through canonicalLabel (a closed vocabulary of lowercase letters and hyphens); the guard makes a slip fail loudly.
 function literal(label: string): string {
-  if (!LABEL_SET.has(label)) throw new Error(`not an appliesTo label: ${label}`);
+  if (!labelSet().has(label)) throw new Error(`not an appliesTo label: ${label}`);
   return `'%"${label}"%'`;
 }
 

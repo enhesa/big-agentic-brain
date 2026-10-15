@@ -33,6 +33,15 @@ export async function api(
   });
 }
 
+/** The headers the sign-in proxy adds for a signed-in browser viewer (the e2e server trusts them on pages). */
+export function ssoHeaders(actor: { email: string; name: string }): Record<string, string> {
+  return {
+    "x-auth-request-user": `e2e-sso-${actor.email}`,
+    "x-auth-request-email": actor.email,
+    "x-auth-request-preferred-username": actor.name,
+  };
+}
+
 export function uniqueTitle(prefix: string): string {
   return `${prefix} ${Date.now()} ${Math.random().toString(36).slice(2, 8)}`;
 }

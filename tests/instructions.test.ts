@@ -54,10 +54,8 @@ describe("lib/instructions", () => {
       expect(doc).not.toContain("<origin>");
       expect(doc).not.toContain("__BAB_ORIGIN__");
     }
-    // install.md (2026-09-25, task 3: retire the legacy install path) no longer talks to
-    // <origin> at all — it just points a colleague at the plugin marketplace — so only
-    // skill.md (still the bare-curl API reference) is expected to carry the substituted
-    // origin.
+    // install.md only points at the plugin marketplace, so only skill.md (the curl API
+    // reference) is expected to carry the substituted origin.
     expect(skill).toContain(ORIGIN);
   });
 
@@ -71,11 +69,6 @@ describe("lib/instructions", () => {
   });
 });
 
-// The write guard is a permission RULE now, not a Node script (2026-09-21). The rule can
-// only match the text of a command, never the URL or method inside it, so the skill's
-// write examples and the rule in install.md have to agree character for character. If
-// they drift, nothing errors: the rule silently stops matching and writes stop being
-// asked about. Hence these assertions.
 // Three times in one session an edit written through a shell heredoc turned an escape
 // like the b in a Windows path into a literal control byte, silently corrupting a path
 // colleagues were told to type. The damage is invisible in a diff and in most editors.
@@ -100,17 +93,6 @@ describe("hosted instruction files contain no control characters", () => {
 });
 
 describe("the write guard is a permission rule, not a script", () => {
-  // CHANGED (2026-09-25, task 3: retire the legacy install path): install.md no longer
-  // sets up the permissions.ask rule itself — a fresh install is the plugin, whose
-  // per-tool ask rules live in managed settings, not per-colleague setup. It still tells
-  // anyone cleaning up an old hand-install which rule to remove, in the exact same text,
-  // so the cleanup instructions match what a real settings.json has.
-  it("install.md names the old permission rule to remove, in the exact text a real settings.json has", () => {
-    const { install } = getInstructions(ORIGIN);
-    expect(install).toContain("Bash(curl -X POST *)");
-    expect(install).toContain("Bash(curl --request POST *)");
-  });
-
   it("every write example in skill.md starts with the exact prefix the rule matches", () => {
     const { skill } = getInstructions(ORIGIN);
     const lines = skill.split(String.fromCharCode(10));
@@ -291,7 +273,7 @@ describe("skill.md: identifying yourself", () => {
 });
 
 describe("instructions render organisation placeholders", () => {
-  const KEYS = ["BAB_ORG_NAME", "BAB_IDENTITY_HINT", "BAB_PLUGIN_MARKETPLACE", "BAB_PLUGIN_MARKETPLACE_NAME"] as const;
+  const KEYS = ["BAB_ORG_NAME", "BAB_IDENTITY_HINT", "BAB_PLUGIN_MARKETPLACE", "BAB_PLUGIN_MARKETPLACE_NAME", "BAB_EXTRA_APPLIES_TO"] as const;
   const saved: Record<string, string | undefined> = {};
 
   function setEnv(env: Record<string, string>) {
@@ -325,6 +307,17 @@ describe("instructions render organisation placeholders", () => {
     expect(install).toContain("/plugin marketplace add zeta/plugins");
     expect(install).toContain("bab@zeta-plugins");
     expect(skill).toContain("Zeta");
+  });
+
+  it("names the platform labels in force, so an extra label from BAB_EXTRA_APPLIES_TO reaches the agent text", () => {
+    setEnv(ACME);
+    const plain = getInstructions(ORIGIN);
+    expect(plain.skill).toContain("platform aks, azure, aws, windows, linux, macos (aliases");
+    expect(plain.skill).not.toContain("{{PLATFORM_LABELS}}");
+    setEnv({ ...ACME, BAB_EXTRA_APPLIES_TO: "forge" });
+    const extra = getInstructions(ORIGIN);
+    expect(extra.skill).toContain("platform aks, azure, aws, windows, linux, macos, forge (aliases");
+    expect(extra.version).not.toBe(plain.version);
   });
 
   it("version changes when BAB_ORG_NAME changes", () => {

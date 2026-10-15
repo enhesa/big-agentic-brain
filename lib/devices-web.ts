@@ -2,8 +2,8 @@ import { identityHint } from "./identity";
 import { auditRequest } from "./request-audit";
 import { notifyJson } from "./notify-auth";
 import { currentUser } from "./user";
-import { trustForgeHeaders } from "./session";
-import { claimTypedIdentity } from "./forge-links";
+import { trustProxyHeaders } from "./session";
+import { claimTypedIdentity } from "./proxy-links";
 import { ConflictError, ForbiddenError, toApiError } from "./errors";
 import { forbiddenResponse, redirectTo, sameOrigin } from "./feedback-web";
 import { readFields, wantsJson } from "./me-web";
@@ -29,20 +29,20 @@ export function claimErrorCode(err: unknown): "mismatch" | "taken" | "invalid" {
 
 /**
  * The typed-claim POST. The proxy user comes from the SSO headers; the typed address is only a
- * claim that lib/forge-links.ts checks against the SSO name. A plain HTML form is answered with
+ * claim that lib/proxy-links.ts checks against the SSO name. A plain HTML form is answered with
  * a redirect to `backTo` (refusals as `?claim=<code>`), a JSON caller with JSON.
  */
 export async function claimResponse(request: Request, path: string, backTo: string): Promise<Response> {
   if (!sameOrigin(request)) return forbiddenResponse();
-  if (!trustForgeHeaders()) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
-  const forge = await currentUser();
-  if (!forge) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
+  if (!trustProxyHeaders()) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
+  const proxy = await currentUser();
+  if (!proxy) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
 
   const json = wantsJson(request);
   const { email } = await readFields(request);
   try {
-    const claimed = claimTypedIdentity(forge.id, forge.email, forge.name, email ?? "");
-    await auditRequest({ actor: { id: claimed.email, name: forge.name, email: claimed.email }, method: "POST", path, via: "ui" });
+    const claimed = claimTypedIdentity(proxy.id, proxy.email, proxy.name, email ?? "");
+    await auditRequest({ actor: { id: claimed.email, name: proxy.name, email: claimed.email }, method: "POST", path, via: "ui" });
     return json ? notifyJson({ ok: true, email: claimed.email }) : redirectTo(request, backTo);
   } catch (err) {
     if (json) {

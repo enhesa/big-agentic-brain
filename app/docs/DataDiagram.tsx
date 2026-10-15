@@ -6,7 +6,7 @@ import styles from "./docs.module.css";
  * between the main ones. Drawn from lib/db.ts (CREATE TABLE in the migrations) and checked against
  * the code that still writes each table. Left out on purpose:
  *
- * - api_tokens, forge_link_codes, device_connects, push_subscriptions: dropped again by later
+ * - api_tokens, the browser-link code table, device_connects, push_subscriptions: dropped again by later
  *   migrations (`DROP TABLE IF EXISTS` in runMigrationV30, V29, V34 and V26 in lib/db.ts), and
  *   nothing writes them.
  * - learnings_fts and feedback_fts are drawn as a note on their table, not as boxes: they are
@@ -65,7 +65,7 @@ export default function DataDiagram({
       row: 0,
       title: "PEOPLE AND IDENTITY",
       tables: [
-        { name: "forge_links", sub: "browser to person" },
+        { name: "proxy_links", sub: "browser to person" },
         { name: "users", sub: "one row per person", main: true },
         { name: "devices", sub: "computers, secrets hashed" },
         { name: "mcp_connections", sub: "Mcp-Session-Id, 7 days" },
@@ -139,7 +139,7 @@ export default function DataDiagram({
   const fk = (d: string) => <path className={styles.edge} d={d} markerEnd={`url(#${marker})`} />;
 
   const aria =
-    "The data, one SQLite file, bab.db, in five groups of tables. Memory: learnings with a learnings_fts full-text index, votes and supersession_links. People and identity: users, forge_links, devices, mcp_connections, sessions and session_links. Messages: threads and messages. Reminders: todos and reminder_deliveries. Feedback: feedback with a feedback_fts index, feedback_votes, feedback_comments and maintainer_feedback_seen. Bookkeeping: " +
+    "The data, one SQLite file, bab.db, in five groups of tables. Memory: learnings with a learnings_fts full-text index, votes and supersession_links. People and identity: users, proxy_links, devices, mcp_connections, sessions and session_links. Messages: threads and messages. Reminders: todos and reminder_deliveries. Feedback: feedback with a feedback_fts index, feedback_votes, feedback_comments and maintainer_feedback_seen. Bookkeeping: " +
     `audit_log, kept ${auditDays} days; migrations, numbered 1 to ${migrations}; idempotency; session_nudges; session_deliveries and session_learning_deliveries. ` +
     "Foreign keys, drawn as arrows: votes point at learnings, supersession_links point at learnings, messages point at threads, and learnings point at users as their author.";
 

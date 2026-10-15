@@ -31,14 +31,14 @@ afterEach(async () => {
   (await import("../lib/config"))._resetConfigForTests();
 });
 
-/** Binds the device behind secret `c` to `who`; `forgeId` stands for a device an earlier release connected through a browser. */
-async function connect(c: string, who: string, label = "Dev", forgeId?: string) {
+/** Binds the device behind secret `c` to `who`; `proxyId` stands for a device an earlier release connected through a browser. */
+async function connect(c: string, who: string, label = "Dev", proxyId?: string) {
   const d = await import("../lib/devices");
   const h = d.hashSecret(secret(c))!;
   d.bindDevice(h, who, label, null);
-  if (forgeId) {
+  if (proxyId) {
     const { getDb } = await import("../lib/db");
-    getDb().prepare("UPDATE devices SET bound_via_forge_id = ? WHERE secret_hash = ?").run(forgeId, h);
+    getDb().prepare("UPDATE devices SET bound_via_proxy_id = ? WHERE secret_hash = ?").run(proxyId, h);
   }
   return h;
 }
@@ -189,10 +189,10 @@ describe("listDevices / revokeDevice (Forget)", () => {
 describe("unlinking a browser forgets the devices an earlier release connected through it", () => {
   async function seed() {
     const d = await import("../lib/devices");
-    await linkForTests("forge-oid-1", ALICE);
-    await connect("a", ALICE, "Via link", "forge-oid-1");
-    await connect("b", ALICE, "Other browser", "forge-oid-other");
-    await connect("c", MARIE, "Hers", "forge-oid-2");
+    await linkForTests("proxy-oid-1", ALICE);
+    await connect("a", ALICE, "Via link", "proxy-oid-1");
+    await connect("b", ALICE, "Other browser", "proxy-oid-other");
+    await connect("c", MARIE, "Hers", "proxy-oid-2");
     await connect("d", ALICE, "Identified, no browser");
     return d;
   }
@@ -202,8 +202,8 @@ describe("unlinking a browser forgets the devices an earlier release connected t
     const c = await import("../lib/mcp-connections");
     const conn = c._insertConnectionForTests();
     c.bindConnection(conn, ALICE);
-    const { unlinkOwnBrowser } = await import("../lib/forge-links");
-    unlinkOwnBrowser("forge-oid-1");
+    const { unlinkOwnBrowser } = await import("../lib/proxy-links");
+    unlinkOwnBrowser("proxy-oid-1");
     expect(d.listDevices(ALICE).map((x) => x.label).sort()).toEqual(["Identified, no browser", "Other browser"]);
     expect(d.listDevices(MARIE)).toHaveLength(1);
     const { getDb } = await import("../lib/db");
@@ -216,7 +216,7 @@ describe("unlinking a browser forgets the devices an earlier release connected t
     process.env.BAB_MAINTAINERS = "mia.maint@example.com";
     try {
       const d = await seed();
-      const { unlinkBrowser } = await import("../lib/forge-links");
+      const { unlinkBrowser } = await import("../lib/proxy-links");
       const c = await import("../lib/mcp-connections");
       const mine = c._insertConnectionForTests();
       c.bindConnection(mine, ALICE);

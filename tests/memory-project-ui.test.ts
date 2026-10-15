@@ -31,14 +31,14 @@ async function seed() {
   upsertUser({ id: "alice@example.com", email: "alice@example.com", name: "Alice", roles: [] });
   const { create } = await import("../lib/learnings");
   const bab = create({ authorId: "alice@example.com", title: "Bab deploy notes", body: "Deploy steps for bab.", project: "bab" });
-  const forge = create({
+  const proxyMemory = create({
     authorId: "alice@example.com",
     title: "Deploy notes",
-    body: "Deploy steps for forge2.",
-    project: "forge2",
+    body: "Deploy steps for proxy2.",
+    project: "proxy2",
     confirmNotDuplicate: true,
   });
-  return { bab, forge };
+  return { bab, proxyMemory };
 }
 
 /** Two authors, two projects, two tags: enough spread to exercise every filter and
@@ -56,15 +56,15 @@ async function seedFilterBar() {
     project: "bab",
     tags: ["engineering"],
   });
-  const forgeBob = create({
+  const proxyBob = create({
     authorId: "bob@example.com",
     title: "Deploy notes",
-    body: "Deploy steps for forge2.",
-    project: "forge2",
+    body: "Deploy steps for proxy2.",
+    project: "proxy2",
     tags: ["marketing"],
     confirmNotDuplicate: true,
   });
-  return { babAlice, forgeBob };
+  return { babAlice, proxyBob };
 }
 
 /** Inserts a learning straight into the DB (bypassing create(), which always writes
@@ -115,16 +115,16 @@ describe("/memory shows project as its own chip, distinct from tags", () => {
     expect(html).toContain(`id="memory-filter-project"`);
     expect(html).toContain("All projects");
     expect(html).toContain(`<option value="bab">bab (1)</option>`);
-    expect(html).toContain(`<option value="forge2">forge2 (1)</option>`);
+    expect(html).toContain(`<option value="proxy2">proxy2 (1)</option>`);
   });
 
   it("filters the list to one project via ?project=", async () => {
-    const { bab, forge } = await seed();
+    const { bab, proxyMemory } = await seed();
     const { default: MemoryPage } = await import("../app/memory/page");
     const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({ project: "bab" }) }));
 
     expect(html).toContain(bab.title);
-    expect(html).not.toContain(forge.title);
+    expect(html).not.toContain(proxyMemory.title);
   });
 });
 
@@ -253,41 +253,41 @@ describe("/memory/[id] shows project in the byline", () => {
 
 describe("/memory filter bar", () => {
   it("narrows the list by project", async () => {
-    const { babAlice, forgeBob } = await seedFilterBar();
+    const { babAlice, proxyBob } = await seedFilterBar();
     const { default: MemoryPage } = await import("../app/memory/page");
     const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({ project: "bab" }) }));
 
     expect(html).toContain(babAlice.title);
-    expect(html).not.toContain(forgeBob.title);
+    expect(html).not.toContain(proxyBob.title);
   });
 
   it("narrows the list by author", async () => {
-    const { babAlice, forgeBob } = await seedFilterBar();
+    const { babAlice, proxyBob } = await seedFilterBar();
     const { default: MemoryPage } = await import("../app/memory/page");
     const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({ author: "bob@example.com" }) }));
 
-    expect(html).toContain(forgeBob.title);
+    expect(html).toContain(proxyBob.title);
     expect(html).not.toContain(babAlice.title);
   });
 
   it("narrows the list by tag", async () => {
-    const { babAlice, forgeBob } = await seedFilterBar();
+    const { babAlice, proxyBob } = await seedFilterBar();
     const { default: MemoryPage } = await import("../app/memory/page");
     const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({ tag: "marketing" }) }));
 
-    expect(html).toContain(forgeBob.title);
+    expect(html).toContain(proxyBob.title);
     expect(html).not.toContain(babAlice.title);
   });
 
   it("combines project and author filters (AND, not OR)", async () => {
-    const { babAlice, forgeBob } = await seedFilterBar();
+    const { babAlice, proxyBob } = await seedFilterBar();
     const { default: MemoryPage } = await import("../app/memory/page");
 
     const matching = await renderHtml(
       MemoryPage({ searchParams: Promise.resolve({ project: "bab", author: "alice@example.com" }) }),
     );
     expect(matching).toContain(babAlice.title);
-    expect(matching).not.toContain(forgeBob.title);
+    expect(matching).not.toContain(proxyBob.title);
 
     // bab's author is Alice, not Bob: crossing project and author from different
     // learnings must match nothing, proving the filters AND together.
@@ -295,7 +295,7 @@ describe("/memory filter bar", () => {
       MemoryPage({ searchParams: Promise.resolve({ project: "bab", author: "bob@example.com" }) }),
     );
     expect(crossed).not.toContain(babAlice.title);
-    expect(crossed).not.toContain(forgeBob.title);
+    expect(crossed).not.toContain(proxyBob.title);
     expect(crossed).toContain("Nothing matches.");
   });
 

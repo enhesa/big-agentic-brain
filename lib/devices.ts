@@ -71,7 +71,7 @@ export interface DeviceRow {
   label: string;
   createdAt: number;
   lastSeenAt: number | null;
-  boundViaForgeId: string | null;
+  boundViaProxyId: string | null;
 }
 
 interface RawDevice {
@@ -80,7 +80,7 @@ interface RawDevice {
   label: string;
   created_at: number;
   last_seen_at: number | null;
-  bound_via_forge_id: string | null;
+  bound_via_proxy_id: string | null;
 }
 
 /**
@@ -91,7 +91,7 @@ export function lookupDevice(secretHash: string): DeviceRow | null {
   const db = getDb();
   const row = db
     .prepare(
-      "SELECT id, user_id, label, created_at, last_seen_at, bound_via_forge_id FROM devices WHERE secret_hash = ? AND revoked_at IS NULL",
+      "SELECT id, user_id, label, created_at, last_seen_at, bound_via_proxy_id FROM devices WHERE secret_hash = ? AND revoked_at IS NULL",
     )
     .get(secretHash) as RawDevice | undefined;
   if (!row) return null;
@@ -109,7 +109,7 @@ export function lookupDevice(secretHash: string): DeviceRow | null {
     label: row.label,
     createdAt: row.created_at,
     lastSeenAt,
-    boundViaForgeId: row.bound_via_forge_id,
+    boundViaProxyId: row.bound_via_proxy_id,
   };
 }
 
@@ -133,7 +133,7 @@ export function bindDevice(secretHash: string, userId: string, label: string, ip
     | undefined;
   if (existing) {
     db.prepare(
-      `UPDATE devices SET user_id = ?, label = ?, revoked_at = NULL, connected_ip = ?, bound_via_forge_id = NULL,
+      `UPDATE devices SET user_id = ?, label = ?, revoked_at = NULL, connected_ip = ?, bound_via_proxy_id = NULL,
          created_at = CASE WHEN user_id = ? AND revoked_at IS NULL THEN created_at ELSE ? END
        WHERE id = ?`,
     ).run(userId, label, ip, userId, now, existing.id);
@@ -223,10 +223,10 @@ export function revokeDevicesForUser(userId: string): number {
  * Forgets every live device that an earlier release connected through one browser link (called
  * when that link is removed). New devices are bound by bab_identify and carry no browser link.
  */
-export function revokeDevicesBoundVia(forgeUserId: string): number {
+export function revokeDevicesBoundVia(proxyUserId: string): number {
   const res = getDb()
-    .prepare("UPDATE devices SET revoked_at = ? WHERE bound_via_forge_id = ? AND revoked_at IS NULL")
-    .run(clock(), forgeUserId);
+    .prepare("UPDATE devices SET revoked_at = ? WHERE bound_via_proxy_id = ? AND revoked_at IS NULL")
+    .run(clock(), proxyUserId);
   return Number(res.changes ?? 0);
 }
 

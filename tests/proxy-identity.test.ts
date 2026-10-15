@@ -90,11 +90,11 @@ describe("currentUser proxy identity", () => {
     expect((await who())?.name).toBe("João");
   });
 
-  it("trustForgeHeaders follows BAB_TRUST_PROXY_IDENTITY", async () => {
-    const { trustForgeHeaders } = await import("@/lib/session");
-    expect(trustForgeHeaders()).toBe(false);
+  it("trustProxyHeaders follows BAB_TRUST_PROXY_IDENTITY", async () => {
+    const { trustProxyHeaders } = await import("@/lib/session");
+    expect(trustProxyHeaders()).toBe(false);
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     _resetConfigForTests();
-    expect(trustForgeHeaders()).toBe(true);
+    expect(trustProxyHeaders()).toBe(true);
   });
 });

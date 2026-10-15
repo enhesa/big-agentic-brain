@@ -3,7 +3,7 @@ import Shell from "@/app/components/shell/Shell";
 import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { isMaintainer } from "@/lib/feedback";
-import { listLinks } from "@/lib/forge-links";
+import { listLinks } from "@/lib/proxy-links";
 import { listAllDevices } from "@/lib/devices";
 import { describeIp } from "@/lib/client-ip";
 import { formatDate } from "@/lib/me-web";
@@ -46,14 +46,14 @@ export default async function AdminLinksPage() {
           </thead>
           <tbody>
             {links.map((l) => (
-              <tr key={l.forgeUserId}>
-                <td>{l.forgeEmail ?? "-"}</td>
-                <td>{l.forgeName ?? "-"}</td>
-                <td>{l.forgeUserId}</td>
+              <tr key={l.proxyUserId}>
+                <td>{l.proxyEmail ?? "-"}</td>
+                <td>{l.proxyName ?? "-"}</td>
+                <td>{l.proxyUserId}</td>
                 <td>{l.userId}</td>
                 <td>{l.linkedAt}</td>
                 <td>
-                  <UnlinkButton forgeUserId={l.forgeUserId} />
+                  <UnlinkButton proxyUserId={l.proxyUserId} />
                 </td>
               </tr>
             ))}

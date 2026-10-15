@@ -3,7 +3,7 @@ services:
     build: .
     image: bab:local
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - bab-data:/data
     environment:

@@ -1,5 +1,5 @@
 import Shell from "@/app/components/shell/Shell";
-import { getSessionUser, pendingForgeLinkUser } from "@/lib/session";
+import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
 import ReminderBody from "./ReminderBody";
 import { auditRequest } from "@/lib/request-audit";
 import {
@@ -25,9 +25,9 @@ import styles from "./reminders.module.css";
  * A viewer with an identity sees the list and nothing about browsers or devices: devices
  * handle identity now, and linking, unlinking and the device list live on /me/devices.
  * A trusted proxy viewer who is signed in but not yet linked
- * (production's short alias email, no forge_links row) is a real person with no reminders
+ * (production's short alias email, no proxy_links row) is a real person with no reminders
  * identity yet, not an absent one — that viewer is pointed at /me/devices to confirm who
- * they are, alongside the privacy line (see lib/session.ts's pendingForgeLinkUser()). The
+ * they are, alongside the privacy line (see lib/session.ts's pendingProxyLinkUser()). The
  * one-click "Yes, that's me" is on /me/devices, not here.
  */
 export default async function RemindersPage() {
@@ -35,7 +35,7 @@ export default async function RemindersPage() {
   await auditRequest({ actor, method: "GET", path: "/reminders", via: "ui" });
 
   const ownerId = ownerIdFor(actor);
-  const forge = ownerId ? null : await pendingForgeLinkUser();
+  const proxy = ownerId ? null : await pendingProxyLinkUser();
 
   return (
     <Shell>
@@ -44,7 +44,7 @@ export default async function RemindersPage() {
         <RemindersList groups={remindersFor(ownerId)} />
       ) : (
         <div className={`card ${styles.privacy}`}>
-          {forge ? (
+          {proxy ? (
             <p>
               Confirm who you are on <a href="/me/devices">/me/devices</a> to see your reminders here.
             </p>

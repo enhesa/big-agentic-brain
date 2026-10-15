@@ -470,6 +470,44 @@ describe("bab_identify on a token-bound connection", () => {
     expect(row.actor_id).toBe(ALICE);
   });
 
+  it("refuses a bound email from a connection that does not carry the token, and writes nothing", async () => {
+    await bindTokenToAlice();
+    process.env.BAB_API_TOKENS = `tok=${ALICE},bare`;
+    (await import("../lib/config"))._resetConfigForTests();
+    const out = await call("bab_identify", { email: ALICE, name: "Alice Example" }, { Authorization: "Bearer bare", ...DEVICE("t"), ...SESS("t") });
+    expect(out.result.isError).toBe(true);
+    expect(text(out)).toBe(`${ALICE} is bound to an API token; connect with that token to act as them`);
+
+    const { getDb } = await import("../lib/db");
+    expect(getDb().prepare("SELECT id FROM users WHERE id = ?").get(ALICE)).toBeUndefined();
+    expect(await count("devices")).toBe(0);
+    expect(await count("mcp_connections")).toBe(0);
+    expect(getDb().prepare("SELECT details FROM audit_log WHERE action = 'identify_refused'").all()).toHaveLength(1);
+  });
+
+  it("refuses a bound email with the address in different case", async () => {
+    await bindTokenToAlice();
+    const out = await call("bab_identify", { email: ALICE.toUpperCase(), name: "Alice Example" }, { ...SESS("t") });
+    expect(out.result.isError).toBe(true);
+    expect(text(out)).toContain("is bound to an API token");
+  });
+
+  it("refuses a bound email declared through the X-Bab-Actor-* headers", async () => {
+    process.env.BAB_API_TOKENS = `tok=${ALICE},bare`;
+    (await import("../lib/config"))._resetConfigForTests();
+    const out = await call("bab_inbox", {}, { Authorization: "Bearer bare", "X-Bab-Actor-Email": ALICE, "X-Bab-Actor-Name": "Alice Example" });
+    expect(out.error?.code).toBe(-32001);
+    expect(out.error.message).toBe(`${ALICE} is bound to an API token; connect with that token to act as them`);
+  });
+
+  it("leaves another person alone", async () => {
+    process.env.BAB_API_TOKENS = `tok=${ALICE},bare`;
+    (await import("../lib/config"))._resetConfigForTests();
+    const out = await call("bab_identify", { email: MARIE, name: "Marie Curie" }, { Authorization: "Bearer bare", ...SESS("t") });
+    expect(out.result.isError).toBeFalsy();
+    expect(JSON.parse(text(out)).identifiedAs.email).toBe(MARIE);
+  });
+
   it("without a bound token, bab_identify works as before", async () => {
     const out = await call("bab_identify", { email: MARIE, name: "Marie Curie" }, SESS("t"));
     expect(out.result.isError).toBeFalsy();

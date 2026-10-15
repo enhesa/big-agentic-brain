@@ -6,7 +6,7 @@ import path from "node:path";
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "bab-round3-test-"));
+  dataDir = mkdtempSync(path.join(tmpdir(), "bab-project-consolidate-test-"));
   process.env.DATA_DIR = dataDir;
   vi.resetModules();
 });

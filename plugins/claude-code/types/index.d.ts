@@ -122,6 +122,8 @@ declare module 'claude-code' {
       showLater: boolean
       /** The reminder whose full text is open under its row, if any. */
       openReminder: string | null
+      /** Why BAB's MCP server is not connected in this session, in words a person can act on; null while it is. */
+      connectProblem: string | null
       /** Null until the first load of the list. */
       unreadCount: UnreadCount | null
     }

@@ -6,7 +6,7 @@
  *
  * `beginShutdown()` flips a flag and wakes every registered waiter; an open Inbox stream
  * (app/inbox/events/route.ts) closes at once and the page reconnects to the new pod.
- * `instrumentation.ts` wires it to SIGTERM.
+ * `instrumentation-node.ts` wires it to SIGTERM.
  */
 
 let shuttingDown = false;
@@ -40,7 +40,7 @@ export function beginShutdown(): void {
     }
   }
   // The database is NOT closed here: requests still in flight during the drain need it.
-  // instrumentation.ts closes it right before process.exit.
+  // instrumentation-node.ts closes it right before process.exit.
 }
 
 /** Test hook. */

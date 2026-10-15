@@ -7,7 +7,7 @@ import Avatar from "@/app/components/shell/Avatar";
 import ThreadTimeline from "@/app/conversations/ThreadTimeline";
 import { auditRequest } from "@/lib/request-audit";
 import { getViewer, type Viewer } from "@/lib/notify-auth";
-import { pendingForgeLinkUser } from "@/lib/session";
+import { pendingProxyLinkUser } from "@/lib/session";
 import { buildHandoffLinks } from "@/lib/handoff";
 import { publicOrigin } from "@/lib/origin";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -100,7 +100,7 @@ export default async function InboxPage({
 async function SignedOut() {
   // A signed-in proxy viewer with no identity yet (a short alias email, no link) is a real
   // person who needs /me/devices, unlike a visitor with no session or an agent header.
-  const pending = await pendingForgeLinkUser();
+  const pending = await pendingProxyLinkUser();
   return (
     <Shell>
       <h1 className={styles.h1}>Inbox</h1>

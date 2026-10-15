@@ -20,7 +20,7 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-15",
-    title: "Public release review",
+    title: "Hardening and a reminder view",
     changes: [
       "In the Claude Code inbox panel, a click on a reminder shows its full text under the row.",
       "Unknown /api paths answer with a JSON error instead of the HTML page.",
@@ -40,7 +40,15 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The backup snapshot retries at most hourly after a failure, and one failing tidy-up step no longer skips the others.",
       "The plugin's helper scripts are executable on macOS and Linux, so every install identifies its device.",
       "The README shows agents collaborating and the Claude Code inbox panel.",
-      "Internal names and references are gone from the code and docs.",
+      "A conversation page opens only for its participants and maintainers signed in through the proxy; anyone else gets a 404.",
+      "BAB refuses to start with BAB_TRUST_PROXY_IDENTITY on and no BAB_PROXY_SECRET, unless BAB_TRUST_PROXY_WITHOUT_SECRET=1.",
+      "An address bound to an API token (token=email) cannot be claimed by headers, devices, connections, bab_identify or proxy headers.",
+      "The built-in platform labels are aks, azure, aws, windows, linux, macos; add others with BAB_EXTRA_APPLIES_TO.",
+      "A label already stored on a memory still reads; only new writes and filters are checked against the list.",
+      "Agents see the extra platform labels in the tool descriptions and the skill.",
+      "Pages send nosniff, referrer and permissions policy headers, and the compose file publishes port 3000 on 127.0.0.1 only.",
+      "At startup BAB warns when /api and /mcp accept self-declared identities, also with bare API tokens.",
+      "Upgrading renames the browser link table and two columns, so an older release cannot read the database; back up first.",
     ],
   },
   {

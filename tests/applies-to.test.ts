@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import { _resetConfigForTests } from "../lib/config";
 import {
   APPLIES_TO_LABELS,
   STACK_LABELS,
@@ -13,6 +14,8 @@ import {
   readAppliesTo,
   stackRankSql,
   appliesToFilterSql,
+  platformLabels,
+  appliesToLabels,
 } from "../lib/applies-to";
 
 /** The vocabulary and its parsers (lib/applies-to.ts): pure, no database. */
@@ -23,8 +26,8 @@ describe("vocabulary", () => {
       "dotnet", "node", "typescript", "python", "angular", "react", "java", "go", "sql", "postgres",
       "sqlite", "elasticsearch", "kafka", "docker", "helm", "terraform",
     ]);
-    expect([...PLATFORM_LABELS]).toEqual(["aks", "forge", "azure", "aws", "windows", "linux", "macos"]);
-    expect(APPLIES_TO_LABELS).toHaveLength(23);
+    expect([...PLATFORM_LABELS]).toEqual(["aks", "azure", "aws", "windows", "linux", "macos"]);
+    expect(APPLIES_TO_LABELS).toHaveLength(22);
   });
 });
 
@@ -76,6 +79,45 @@ describe("parseAppliesTo (writes)", () => {
 
   it('refuses "everywhere" as a label: that is an empty list', () => {
     expect(() => parseAppliesTo(["everywhere"])).toThrow(/Unknown/);
+  });
+});
+
+describe("BAB_EXTRA_APPLIES_TO", () => {
+  afterEach(() => {
+    delete process.env.BAB_EXTRA_APPLIES_TO;
+    _resetConfigForTests();
+  });
+
+  it("is unset by default: only the built-in labels are valid", () => {
+    _resetConfigForTests();
+    expect([...platformLabels()]).toEqual([...PLATFORM_LABELS]);
+    expect([...appliesToLabels()]).toEqual([...APPLIES_TO_LABELS]);
+    expect(canonicalLabel("forge")).toBeNull();
+    expect(() => parseAppliesTo(["forge"])).toThrow(/Unknown appliesTo value: "forge"/);
+    expect(() => parseAppliesToFilter("forge")).toThrow(/Unknown/);
+  });
+
+  it("adds platform labels to the vocabulary for writes, filters and the stack", () => {
+    process.env.BAB_EXTRA_APPLIES_TO = "forge,Windows";
+    _resetConfigForTests();
+    expect([...platformLabels()]).toEqual([...PLATFORM_LABELS, "forge"]);
+    expect(parseAppliesTo(["Forge", "aks"])).toEqual(["forge", "aks"]);
+    expect(parseAppliesToFilter("forge,everywhere")).toEqual(["forge", "everywhere"]);
+    expect(parseStack("forge,python")).toEqual(["forge", "python"]);
+    expect(appliesToFilterSql(["forge"])).toContain('"forge"');
+    let message = "";
+    try {
+      parseAppliesTo(["rust"]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("forge");
+  });
+
+  it("never validates what is stored", () => {
+    _resetConfigForTests();
+    expect(readAppliesTo('["forge","aks"]')).toEqual(["forge", "aks"]);
+    expect(appliesToFields({ applies_to: '["forge"]' }, ["python"])).toMatchObject({ appliesTo: ["forge"], stackMismatch: true });
   });
 });
 

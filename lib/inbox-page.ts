@@ -65,9 +65,9 @@ export function inboxSummary(viewerId: string): InboxSummary {
 }
 
 /**
- * The thread with names, for a participant only. threadForViewer has no such restriction
- * (/conversations is open to all staff by design), so the gate is thread(), which returns
- * undefined to a non-participant. A malformed id is undefined too: callers answer 404.
+ * The thread with names, for a participant only. thread() returns undefined to a non-participant
+ * (threadForViewer would also let a maintainer in, which the Inbox must not: it is the viewer's
+ * own threads). A malformed id is undefined too: callers answer 404.
  */
 export function threadForParticipant(
   threadId: string,
@@ -75,7 +75,7 @@ export function threadForParticipant(
 ): { thread: ThreadRow; messages: ViewerMessage[] } | undefined {
   if (!THREAD_ID_RE.test(threadId)) return undefined;
   if (!thread(threadId, viewerId)) return undefined;
-  return threadForViewer(threadId);
+  return threadForViewer(threadId, viewerId);
 }
 
 export interface InboxLiveEvent {

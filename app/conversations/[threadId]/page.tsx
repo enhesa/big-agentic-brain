@@ -6,6 +6,8 @@ import Shell from "@/app/components/shell/Shell";
 import LiveUpdates from "@/app/components/shell/LiveUpdates";
 import Avatar from "@/app/components/shell/Avatar";
 import { auditRequest } from "@/lib/request-audit";
+import { getViewer } from "@/lib/notify-auth";
+import { ForbiddenError } from "@/lib/errors";
 import { threadForViewer } from "@/lib/messages";
 import { formatRelativeTime } from "@/lib/relative-time";
 import styles from "../conversations.module.css";
@@ -15,10 +17,19 @@ import { formatDate, DATE_TIME } from "@/lib/branding";
  *  right, consecutive messages from the same sender grouped under one name. */
 export default async function ConversationDetailPage({ params }: { params: Promise<{ threadId: string }> }) {
   const { threadId } = await params;
-  // Read-only, human-facing browser: no identity required, see app/memory/page.tsx.
-  await auditRequest({ actor: null, method: "GET", path: `/conversations/${threadId}`, via: "ui" });
+  // Participants and maintainers only. The same 404 for "no such thread", "not yours" and "not
+  // signed in", so the page cannot be used to probe thread ids (as /inbox does).
+  const viewer = await getViewer();
+  await auditRequest({ actor: viewer?.actor ?? null, method: "GET", path: `/conversations/${threadId}`, via: "ui" });
+  if (!viewer) notFound();
 
-  const result = threadForViewer(threadId);
+  let result: ReturnType<typeof threadForViewer>;
+  try {
+    result = threadForViewer(threadId, viewer.ownerId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) notFound();
+    throw err;
+  }
   if (!result) notFound();
   const { thread, messages } = result;
 

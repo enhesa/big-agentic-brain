@@ -1,3 +1,4 @@
+import { useLegacyProxyNames } from "./db-legacy-names";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -95,6 +96,7 @@ describe("migration v22", () => {
     ins.run("l-git", "x/y.git", "y.git");
     ins.run("l-ok", null, "bab");
     ins.run("l-null", "acmecorp/acme.bab", null);
+    useLegacyProxyNames(db);
     db.prepare("DELETE FROM migrations WHERE version >= 22").run();
     _resetDbForTests();
 

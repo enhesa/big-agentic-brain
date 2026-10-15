@@ -3,7 +3,7 @@ import { audit } from "./audit";
 import { derivedNameFromEmail, namesMatchLoosely, isValidIdentityEmail } from "./identity";
 import { redact } from "./redact";
 import type { AuditVia, PublicUser, UserRow } from "./types";
-import type { ForgeUser } from "./user";
+import type { ProxyUser } from "./user";
 
 /**
  * Upsert the user row on each request that has an id. Identity is the email
@@ -14,7 +14,7 @@ import type { ForgeUser } from "./user";
  * nowhere. To actually rename, call `renameUser` (POST /api/me), which is
  * the one deliberate, audited path.
  */
-export function upsertUser(user: ForgeUser, via: AuditVia = "mcp"): UserRow {
+export function upsertUser(user: ProxyUser, via: AuditVia = "mcp"): UserRow {
   const db = getDb();
   const existing = getUser(user.id);
 

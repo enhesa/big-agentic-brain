@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { useLegacyProxyNames } from "./db-legacy-names";
+
 let dataDir: string;
 
 beforeEach(() => {
@@ -39,6 +41,7 @@ describe("migration v10 (drop sensitivity) on a populated database", () => {
     // Put the schema back to v9: re-add the column and rewind the migrations row, so
     // opening the database again runs v10 for real against these rows.
     db.exec("ALTER TABLE learnings ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'internal'");
+    useLegacyProxyNames(db);
     db.prepare("DELETE FROM migrations WHERE version >= 10").run();
 
     _resetDbForTests();
@@ -135,7 +138,7 @@ describe("getDb", () => {
     // 15: session_learning_deliveries for per-session memory nudge dedup,
     // 16: nulls out learnings.project rows literally 'null'/'undefined'/'none',
     // 17: reminder_deliveries for per-owner due-reminder dedup,
-    // 18: forge_links for the one-time proxy-id-to-user browser link, and on up to
+    // 18: the browser-link table (now proxy_links) for the one-time proxy-id-to-user browser link, and on up to
     // 36: learnings.expires_explicit for expiries the author chose on purpose,
     // 37: learnings.model for the model id an author declares,
     // 38: audit_log indexes for /admin/usage,
@@ -143,9 +146,10 @@ describe("getDb", () => {
     // 40: learnings.last_accessed_at + access_days for agent reads, the default expiry cleared and
     //     the `expiring` status turned into `active`,
     // 41: learnings.applies_to for the stack or platform labels,
-    // 42: clears the old session titles, folders and host names, and
-    // 43: learnings.pinned_by + pinned_at for who pinned a house rule).
-    expect(migrations.n).toBe(43);
+    // 42: clears the old session titles, folders and host names,
+    // 43: learnings.pinned_by + pinned_at for who pinned a house rule, and
+    // 44: the sign-in proxy renames: proxy_links, proxy_user_id, bound_via_proxy_id and their indexes).
+    expect(migrations.n).toBe(44);
   });
 });
 
@@ -287,6 +291,7 @@ it("migration v16 nulls out a literal 'null'/'undefined'/'none' project on a pop
   ).run();
 
   // Rewind past v16 so re-opening runs it for real against these rows.
+  useLegacyProxyNames(db);
   db.prepare("DELETE FROM migrations WHERE version >= 16").run();
   _resetDbForTests();
   const after = (await import("../lib/db")).getDb();
@@ -311,21 +316,21 @@ it("migration v16 nulls out a literal 'null'/'undefined'/'none' project on a pop
   expect(stillReal.project).toBe("bab");
 });
 
-it("migration v18 creates forge_links keyed on forge_user_id", async () => {
+it("the browser-link table is proxy_links keyed on proxy_user_id (made by v18, renamed by v44)", async () => {
   const { getDb } = await import("../lib/db");
   const db = getDb();
-  const cols = db.prepare("PRAGMA table_info(forge_links)").all() as { name: string }[];
-  expect(cols.map((c) => c.name).sort()).toEqual(["forge_user_id", "linked_at", "user_id"].sort());
+  const cols = db.prepare("PRAGMA table_info(proxy_links)").all() as { name: string }[];
+  expect(cols.map((c) => c.name).sort()).toEqual(["proxy_user_id", "linked_at", "user_id"].sort());
 
-  db.prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES (?, ?)").run(
-    "forge-oid-1",
+  db.prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES (?, ?)").run(
+    "proxy-oid-1",
     "jean.dupont@example.com",
   );
-  // forge_user_id is the primary key: a second row for the same proxy id is a conflict,
-  // not a second, competing link (relinking replaces the row instead, see lib/forge-links.ts).
+  // proxy_user_id is the primary key: a second row for the same proxy id is a conflict,
+  // not a second, competing link (relinking replaces the row instead, see lib/proxy-links.ts).
   expect(() =>
-    db.prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES (?, ?)").run(
-      "forge-oid-1",
+    db.prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES (?, ?)").run(
+      "proxy-oid-1",
       "marie.curie@example.com",
     ),
   ).toThrow();
@@ -400,6 +405,7 @@ describe("v21: plugin capture nudges", () => {
 
   it("boots again when the column exists but the migrations row is missing", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
+    useLegacyProxyNames(getDb());
     getDb().prepare("DELETE FROM migrations WHERE version >= 21").run();
     _resetDbForTests();
     const { getDb: again } = await import("../lib/db");
@@ -415,6 +421,7 @@ describe("v23: supersession_links", () => {
     db.prepare("INSERT INTO learnings (id, author_id, title, body, tags, status) VALUES ('old','u','t','b','[]','archived')").run();
     db.prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, supersedes_id) VALUES ('new','u','t2','b2','[]','active','old')").run();
     db.prepare("DELETE FROM supersession_links").run();
+    useLegacyProxyNames(db);
     db.prepare("DELETE FROM migrations WHERE version >= 23").run();
     _resetDbForTests();
     const { getDb: again } = await import("../lib/db");
@@ -423,19 +430,20 @@ describe("v23: supersession_links", () => {
 });
 
 describe("v29: browser link codes are gone", () => {
-  it("drops forge_link_codes on an existing database and keeps forge_links", async () => {
+  it("drops forge_link_codes on an existing database and keeps proxy_links", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     const db = getDb();
     // Put the database back to how v28 left it: the codes table exists, v29 not yet applied.
     db.exec("CREATE TABLE forge_link_codes (code TEXT PRIMARY KEY, forge_user_id TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, minted_at INTEGER NOT NULL, forge_email TEXT, forge_name TEXT)");
     db.prepare("INSERT INTO forge_link_codes (code, forge_user_id, expires_at, minted_at) VALUES ('ABC234', 'f1', 1, 1)").run();
+    useLegacyProxyNames(db);
     db.prepare("DELETE FROM migrations WHERE version >= 29").run();
     _resetDbForTests();
 
     const { getDb: again } = await import("../lib/db");
     const tables = (again().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name);
     expect(tables).not.toContain("forge_link_codes");
-    expect(tables).toContain("forge_links");
+    expect(tables).toContain("proxy_links");
     expect(again().prepare("SELECT 1 FROM migrations WHERE version = 29").get()).toBeTruthy();
   });
 });
@@ -448,7 +456,7 @@ describe("v30: devices replace personal tokens", () => {
     db.exec("DROP TABLE devices; DROP TABLE mcp_connections");
     db.exec("CREATE TABLE api_tokens (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL, scope TEXT NOT NULL DEFAULT 'full', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER, last_used_at INTEGER, issued_via_forge_id TEXT)");
     db.prepare("INSERT INTO api_tokens (id, user_id, token_hash, label, created_at, expires_at) VALUES ('t1', 'u', 'h', 'default', 1, 2)").run();
-    db.prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES ('f1', 'a.b@example.com')").run();
+    db.prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES ('f1', 'a.b@example.com')").run();
     db.prepare("DELETE FROM migrations WHERE version >= 30").run();
     _resetDbForTests();
 
@@ -458,7 +466,7 @@ describe("v30: devices replace personal tokens", () => {
     expect(tables).toContain("devices");
     // v30 made device_connects; v34 (below) drops it again with the SSO connect flow.
     expect(tables).not.toContain("device_connects");
-    expect(again().prepare("SELECT user_id FROM forge_links WHERE forge_user_id = 'f1'").get()).toEqual({ user_id: "a.b@example.com" });
+    expect(again().prepare("SELECT user_id FROM proxy_links WHERE proxy_user_id = 'f1'").get()).toEqual({ user_id: "a.b@example.com" });
     expect(again().prepare("SELECT 1 FROM migrations WHERE version = 30").get()).toBeTruthy();
   });
 
@@ -635,16 +643,16 @@ describe("v42: old session titles and folders are cleared", () => {
   });
 });
 
-describe("migration order: v40, then v41, v42, then v43", () => {
-  it("a fresh database gets all four, in order", async () => {
+describe("migration order: v40, then v41, v42, v43, then v44", () => {
+  it("a fresh database gets all five, in order", async () => {
     const db = (await import("../lib/db")).getDb();
     const versions = (db.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY rowid").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43]);
+    expect(versions).toEqual([40, 41, 42, 43, 44]);
     const cols = new Set((db.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     for (const c of ["last_accessed_at", "access_days", "applies_to", "pinned_by", "pinned_at"]) expect(cols.has(c)).toBe(true);
   });
 
-  it("a database at v40 gets v41, v42 and v43 on the next boot", async () => {
+  it("a database at v40 gets v41 to v44 on the next boot", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     const db = getDb();
     db.prepare("INSERT INTO users (id, email, name) VALUES ('u1', 'a.b@example.com', 'A B')").run();
@@ -655,7 +663,7 @@ describe("migration order: v40, then v41, v42, then v43", () => {
 
     const again = (await import("../lib/db")).getDb();
     const versions = (again.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY version").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43]);
+    expect(versions).toEqual([40, 41, 42, 43, 44]);
     const cols = new Set((again.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     expect(cols.has("applies_to")).toBe(true);
     expect({ ...again.prepare("SELECT title FROM sessions WHERE id = 's1'").get() }).toEqual({ title: null });
@@ -735,5 +743,98 @@ describe("resolveDataDir", () => {
     const { resolveDataDir } = await import("../lib/db");
     delete process.env.DATA_DIR;
     expect(resolveDataDir()).toBe("/data");
+  });
+});
+
+describe("v44: sign-in proxy renames", () => {
+  // Puts a current database back to how v43 left it: the old table, column and index names, one
+  // link, one bound device, and memories carrying a label that is not built in.
+  async function rewindToV43() {
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    useLegacyProxyNames(db);
+    db.prepare("INSERT INTO users (id, email, name) VALUES ('u', 'a.b@example.com', 'A B')").run();
+    db.prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES ('oid-1', 'a.b@example.com')").run();
+    db.prepare(
+      "INSERT INTO devices (id, user_id, secret_hash, label, created_at, bound_via_forge_id) VALUES ('d1', 'a.b@example.com', 'h1', 'L', 1, 'oid-1')",
+    ).run();
+    const ins = db.prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, applies_to) VALUES (?, 'u', ?, 'b', '[]', 'active', ?)");
+    ins.run("l-both", "both", '["aks","forge","azure"]');
+    ins.run("l-only", "only", '["forge"]');
+    ins.run("l-none", "none", '["aks"]');
+    ins.run("l-bad", "bad", "not json forge");
+    db.prepare("DELETE FROM migrations WHERE version >= 44").run();
+    return db;
+  }
+
+  const namesIn = (db: import("node:sqlite").DatabaseSync, type: string) =>
+    (db.prepare("SELECT name FROM sqlite_master WHERE type = ?").all(type) as { name: string }[]).map((r) => r.name);
+
+  it("renames the table, both columns and the indexes, and keeps every row", async () => {
+    const { _resetDbForTests } = await import("../lib/db");
+    await rewindToV43();
+    _resetDbForTests();
+    const { getDb: again } = await import("../lib/db");
+    const db = again();
+
+    expect(db.prepare("SELECT proxy_user_id, user_id FROM proxy_links").all()).toEqual([
+      { proxy_user_id: "oid-1", user_id: "a.b@example.com" },
+    ]);
+    expect(db.prepare("SELECT bound_via_proxy_id FROM devices WHERE id = 'd1'").get()).toEqual({ bound_via_proxy_id: "oid-1" });
+    const tables = namesIn(db, "table");
+    expect(tables).not.toContain("forge_links");
+    const indexes = namesIn(db, "index");
+    expect(indexes).toEqual(expect.arrayContaining(["idx_proxy_links_user", "idx_devices_proxy"]));
+    expect(indexes).not.toContain("idx_forge_links_user");
+    expect(indexes).not.toContain("idx_devices_forge");
+    // Nothing in the schema keeps the old name.
+    const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").all() as { sql: string }[]).map((r) => r.sql).join("\n");
+    expect(sql.toLowerCase()).not.toContain("forge");
+    expect(db.prepare("SELECT 1 FROM migrations WHERE version = 44").get()).toBeTruthy();
+  });
+
+  it("finishes a rename that died half way (table renamed, column, device column and indexes not yet)", async () => {
+    const { _resetDbForTests } = await import("../lib/db");
+    const before = await rewindToV43();
+    before.exec("ALTER TABLE forge_links RENAME TO proxy_links");
+    const half = (before.prepare("PRAGMA table_info(proxy_links)").all() as Array<{ name: string }>).map((c) => c.name);
+    expect(half).toContain("forge_user_id");
+    expect(namesIn(before, "index")).toContain("idx_forge_links_user");
+    _resetDbForTests();
+    const { getDb: again } = await import("../lib/db");
+    const db = again();
+
+    expect(db.prepare("SELECT proxy_user_id, user_id FROM proxy_links").all()).toEqual([
+      { proxy_user_id: "oid-1", user_id: "a.b@example.com" },
+    ]);
+    expect(db.prepare("SELECT bound_via_proxy_id FROM devices WHERE id = 'd1'").get()).toEqual({ bound_via_proxy_id: "oid-1" });
+    const indexes = namesIn(db, "index");
+    expect(indexes).toEqual(expect.arrayContaining(["idx_proxy_links_user", "idx_devices_proxy"]));
+    expect(indexes).not.toContain("idx_forge_links_user");
+    expect(indexes).not.toContain("idx_devices_forge");
+    expect(db.prepare("SELECT 1 FROM migrations WHERE version = 44").get()).toBeTruthy();
+  });
+
+  it("leaves applies_to alone: a stored label the app no longer lists is kept", async () => {
+    const { _resetDbForTests } = await import("../lib/db");
+    await rewindToV43();
+    _resetDbForTests();
+    const { getDb: again } = await import("../lib/db");
+    const rows = again().prepare("SELECT id, applies_to FROM learnings ORDER BY id").all();
+    expect(rows).toEqual([
+      { id: "l-bad", applies_to: "not json forge" },
+      { id: "l-both", applies_to: '["aks","forge","azure"]' },
+      { id: "l-none", applies_to: '["aks"]' },
+      { id: "l-only", applies_to: '["forge"]' },
+    ]);
+  });
+
+  it("boots again when it ran but the migrations row is missing, and on a database that never had the old names", async () => {
+    const { getDb, _resetDbForTests } = await import("../lib/db");
+    getDb().prepare("DELETE FROM migrations WHERE version >= 44").run();
+    _resetDbForTests();
+    const { getDb: again } = await import("../lib/db");
+    expect(again().prepare("SELECT 1 FROM migrations WHERE version = 44").get()).toBeTruthy();
+    expect(namesIn(again(), "table")).toContain("proxy_links");
   });
 });

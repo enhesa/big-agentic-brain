@@ -1,8 +1,7 @@
 # Next.js standalone build on node:24-alpine, pnpm, non-root.
 #
-# This build assumes a Next.js (App Router) repo with `output: "standalone"` set in next.config.
-# Without that setting, `.next/standalone` never gets produced and the runtime stage below has
-# nothing to copy.
+# Needs `output: "standalone"` in next.config.ts: without it `.next/standalone` is not
+# produced and the runtime stage has nothing to copy.
 #
 # The base image is a build argument so a registry mirror can be used:
 #   docker build --build-arg BASE_IMAGE=registry.example.com/node:24-alpine .
@@ -18,8 +17,7 @@ RUN corepack enable
 # ---- deps: install with full lockfile, cached separately from source ----
 FROM base AS deps
 WORKDIR /app
-# Globs: a freshly bootstrapped repo has no lockfile/workspace file yet; pnpm 10+
-# needs pnpm-workspace.yaml when it declares onlyBuiltDependencies (e.g. esbuild).
+# pnpm-workspace.yaml carries the build-script approvals that `pnpm install` needs.
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
 RUN pnpm install --frozen-lockfile
 
@@ -28,9 +26,7 @@ FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Guarantee a public/ dir exists even if this repo doesn't ship one (a headless/API-only
-# Next.js app, or an existing app migrated without static assets) — the runtime stage
-# below copies it unconditionally, and a missing source dir fails that COPY outright.
+# The runtime stage copies public/ unconditionally, so make sure it exists.
 RUN mkdir -p public
 RUN pnpm run build
 
@@ -54,8 +50,7 @@ ENV DATA_DIR=/data
 VOLUME /data
 EXPOSE 3000
 
-# Bare /healthz, not /api/healthz: matches the app/healthz/route.ts handler
-# and README.md require, and what container readiness/liveness probes expect.
+# Bare /healthz, served by app/healthz/route.ts.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { origin, api, ALICE, uniqueTitle } from "./helpers";
+import { origin, api, ALICE, uniqueActor, registerActor, ssoHeaders, uniqueTitle } from "./helpers";
 
 describe("e2e: read-only UI", () => {
   it("/ returns 200 and contains expected landing text", async () => {
@@ -39,17 +39,46 @@ describe("e2e: read-only UI", () => {
     expect(res.headers.get("location")).toContain("/inbox");
   });
 
-  it("/conversations/<threadId> returns 200 for a real thread", async () => {
-    const sent = await api("/api/messages", {
-      method: "POST",
-      actor: ALICE,
-      body: { to: "bob.example@example.com", subject: uniqueTitle("UI thread"), body: "Visible in Conversations." },
-    });
-    const { threadId, thread } = await sent.json();
-    const tid = threadId ?? thread?.id;
+  describe("/conversations/<threadId> is for the people in the thread", () => {
+    const BODY = "Visible only to the participants.";
 
-    const res = await fetch(`${origin()}/conversations/${tid}`);
-    expect(res.status).toBe(200);
+    async function newThread() {
+      const alice = uniqueActor("Alice");
+      const bob = uniqueActor("Bob");
+      const carl = uniqueActor("Carl");
+      for (const a of [alice, bob, carl]) await registerActor(a);
+      const sent = await api("/api/messages", {
+        method: "POST",
+        actor: alice,
+        body: { to: bob.email, subject: uniqueTitle("UI thread"), body: BODY },
+      });
+      expect(sent.status).toBe(201);
+      const { thread } = await sent.json();
+      return { alice, bob, carl, tid: thread.id as string };
+    }
+
+    it("returns 200 with the messages to the sender and to the recipient, signed in through the proxy", async () => {
+      const { alice, bob, tid } = await newThread();
+      for (const who of [alice, bob]) {
+        const res = await fetch(`${origin()}/conversations/${tid}`, { headers: ssoHeaders(who) });
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain(BODY);
+      }
+    });
+
+    it("returns 404 to a signed-in person who is not in the thread, without the message text", async () => {
+      const { carl, tid } = await newThread();
+      const res = await fetch(`${origin()}/conversations/${tid}`, { headers: ssoHeaders(carl) });
+      expect(res.status).toBe(404);
+      expect(await res.text()).not.toContain(BODY);
+    });
+
+    it("returns 404 to a visitor the proxy did not identify, without the message text", async () => {
+      const { tid } = await newThread();
+      const res = await fetch(`${origin()}/conversations/${tid}`);
+      expect(res.status).toBe(404);
+      expect(await res.text()).not.toContain(BODY);
+    });
   });
 
   it("/people redirects to the Users section of /usage", async () => {

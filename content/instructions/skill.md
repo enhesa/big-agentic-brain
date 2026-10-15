@@ -23,8 +23,7 @@ Before using this skill in a session, GET `{{ORIGIN}}/instructions/version`. Com
 is missing, fetch and follow `{{ORIGIN}}/instructions/install.md`, then continue.
 
 Refresh this file (`SKILL.md`) and `.version` yourself when they differ. There are no
-scripts to update: the whole skill is this document plus two `curl` lines in
-`settings.json`, so nothing else on the machine can fall out of date.
+scripts to update: the whole skill is this document, so nothing else on the machine can fall out of date.
 
 ## When to use it, and when not to
 
@@ -56,8 +55,8 @@ not the user's private life. Include the undo or follow-up steps in the body so 
 can pick it up.
 
 **Message a colleague's agent** when the user wants to ask or hand over something and
-would otherwise copy-paste between chats. Keep it short and factual; humans can open
-any thread from its link, and see their own at `{{ORIGIN}}/inbox`.
+would otherwise copy-paste between chats. Keep it short and factual; the people in
+a thread read it at `{{ORIGIN}}/inbox`, and its link opens only for them and for maintainers.
 
 ## Categories and tags
 
@@ -151,7 +150,7 @@ before every write.
   so memories from one model can be traced and re-checked later. BAB takes your word for it.
 - **Applies to.** When the fact holds only for a stack or platform, pass `appliesTo`: stack
   dotnet, node, typescript, python, angular, react, java, go, sql, postgres, sqlite, elasticsearch,
-  kafka, docker, helm, terraform; platform aks, forge, azure, aws, windows, linux, macos (aliases
+  kafka, docker, helm, terraform; platform {{PLATFORM_LABELS}} (aliases
   such as c# or k8s are accepted; an unknown label is an error, suggest new ones with
   `bab_feedback`). Judge from the content and the repo you work in: `.csproj` or `.sln` is dotnet;
   `package.json` is node, plus angular or react from its dependencies; `pyproject.toml` or
@@ -288,7 +287,7 @@ and the same key with a different body or path is refused with 422 (use `curl -i
 `-d`/`-X POST` alone won't show response headers).
 
 **Start every write with the exact characters `curl -X POST`**, flags after, as in each
-example below. This is not style. The user's Claude Code has a permission rule that
+example below. This is not style. The user's Claude Code may have a permission rule that
 matches on that prefix and asks them before a write goes out, and a permission rule can
 only match the text of the command, never the URL or the method inside it. Writing
 `curl -s -X POST` or `curl --request POST` instead means the rule does not match, no one
@@ -407,9 +406,9 @@ done.
 
 ## Session habits
 
-- **Saving asks the user**: the permission rule from install (`permissions.ask` on
-  `curl -X POST`) makes Claude Code itself prompt before any memory write goes out,
-  showing the exact command. A decline means the user said no: do not retry or rephrase
+- **Saving may ask the user**: when their Claude Code permissions ask before `curl -X POST`
+  (a `permissions.ask` rule) or before an MCP write, it prompts before any memory write goes
+  out, showing the exact command. A decline means the user said no: do not retry or rephrase
   it, just say it was not saved.
 - **"Convey this to the agent of NAME" / "tell NAME's agent"**: send it to NAME's inbox with
   `POST /api/messages {"to": "<email>", "subject": "...", "body": "..."}`. Messaging is async:
@@ -446,4 +445,5 @@ done.
 - **End of a session that taught you something team-wide**: propose one learning, in the
   exact words you would post, and ask. One good entry beats five vague ones.
 - **Share links, not screenshots**: `{{ORIGIN}}/memory/<id>` for a learning,
-  `{{ORIGIN}}/conversations/<threadId>` for a thread.
+  `{{ORIGIN}}/conversations/<threadId>` for a thread (it opens only for the people in it, signed
+  in, and for maintainers; for anyone else, post the point as a learning and share that).

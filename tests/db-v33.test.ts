@@ -98,7 +98,7 @@ describe("migration v33: the fake test user", () => {
     ["a reminder it owns", (db) => db.prepare("INSERT INTO todos (id, owner_id, title) VALUES ('d1', ?, 't')").run(FAKE)],
     ["a session", (db) => db.prepare("INSERT INTO sessions (id, owner_id) VALUES ('s1', ?)").run(FAKE)],
     ["a device", (db) => db.prepare("INSERT INTO devices (id, user_id, secret_hash, label, created_at) VALUES ('d1', ?, 'h', 'L', 1)").run(FAKE)],
-    ["a browser link", (db) => db.prepare("INSERT INTO forge_links (forge_user_id, user_id) VALUES ('f1', ?)").run(FAKE)],
+    ["a browser link", (db) => db.prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES ('f1', ?)").run(FAKE)],
     ["feedback it wrote", (db) => db.prepare("INSERT INTO feedback (id, author_id, source, kind, area, title, body) VALUES ('f1', ?, 'agent', 'bug', 'web', 't', 'b')").run(FAKE)],
     [
       "a feedback vote",

@@ -115,21 +115,53 @@ describe("config", () => {
     expect(() => config()).toThrow(/BAB_PUBLIC_ORIGIN/);
   });
 
+  it("BAB_EXTRA_APPLIES_TO is empty by default and is lowercased, trimmed and de-duplicated", () => {
+    expect(config().extraAppliesTo).toEqual([]);
+    process.env.BAB_EXTRA_APPLIES_TO = " Forge, my-platform ,forge";
+    _resetConfigForTests();
+    expect(config().extraAppliesTo).toEqual(["forge", "my-platform"]);
+  });
+
+  it("BAB_EXTRA_APPLIES_TO refuses a label that is not lowercase letters and hyphens, or is reserved", () => {
+    for (const bad of ["bad label", "x'y", "UPPER_CASE", "a--b", "-a", "everywhere"]) {
+      process.env.BAB_EXTRA_APPLIES_TO = bad;
+      _resetConfigForTests();
+      expect(() => config(), bad).toThrow(/BAB_EXTRA_APPLIES_TO/);
+    }
+  });
+
   it("the removed BAB_TRUST_FORGE_HEADERS alias no longer enables proxy identity", () => {
     process.env.BAB_TRUST_FORGE_HEADERS = "1";
     expect(config().proxy.trustIdentity).toBe(false);
   });
 
-  it("warns when proxy identity is trusted without BAB_PROXY_SECRET, and not when it is set", () => {
+  it("refuses to start when proxy identity is trusted without BAB_PROXY_SECRET", () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    expect(() => config()).toThrow(ConfigError);
+    expect(() => config()).toThrow(
+      "BAB_TRUST_PROXY_IDENTITY needs BAB_PROXY_SECRET, or BAB_TRUST_PROXY_WITHOUT_SECRET=1 when the proxy is the only way to reach BAB",
+    );
+  });
+
+  it("only warns when BAB_TRUST_PROXY_WITHOUT_SECRET=1 acknowledges it", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    config();
+    process.env.BAB_TRUST_PROXY_WITHOUT_SECRET = "1";
+    expect(config().proxy.trustIdentity).toBe(true);
     expect(warn.mock.calls.some((c) => String(c[0]).includes("without a shared secret"))).toBe(true);
-    warn.mockClear();
-    _resetConfigForTests();
+  });
+
+  it("neither throws nor warns about the secret when BAB_PROXY_SECRET is set", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     process.env.BAB_PROXY_SECRET = "s";
-    config();
+    expect(config().proxy.trustIdentity).toBe(true);
     expect(warn.mock.calls.some((c) => String(c[0]).includes("without a shared secret"))).toBe(false);
+  });
+
+  it("BAB_TRUST_PROXY_WITHOUT_SECRET alone changes nothing when the proxy is not trusted", () => {
+    process.env.BAB_TRUST_PROXY_WITHOUT_SECRET = "1";
+    expect(config().proxy.trustIdentity).toBe(false);
   });
 
   it("BAB_API_TOKENS rejects a token=email whose email fails the identity pattern", () => {
@@ -239,7 +271,7 @@ describe("config", () => {
     expect(text).toContain("secret=set(16 chars, masked)");
     expect(text).toContain("bare=1 (masked)");
     expect(text).toContain("withIdentity=1 (masked)");
-    expect(text).not.toContain("WARN");
+    expect(text).not.toContain("open mode");
   });
 
   it("logEffectiveConfig prints WARN when open", () => {
@@ -256,8 +288,50 @@ describe("config", () => {
     expect(c.tokenIdentities.size).toBe(1);
   });
 
-  it("logEffectiveConfig prints no WARN with proxy identity on", () => {
+  it("logEffectiveConfig prints no WARN with proxy identity on and tokens set", () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    process.env.BAB_PROXY_SECRET = "s";
+    process.env.BAB_API_TOKENS = "tok=alice.example@example.com";
     expect(logged().join("\n")).not.toContain("WARN");
+  });
+
+  const SELF_DECLARED_NO_TOKENS =
+    "[config] WARN: /api and /mcp accept self-declared identities; bind tokens to people with token=email entries in BAB_API_TOKENS, or keep those paths off the public network";
+  const SELF_DECLARED_BARE =
+    "[config] WARN: API tokens gate access but do not bind identity: /api and /mcp accept self-declared identities; use token=email entries in BAB_API_TOKENS";
+
+  it("logEffectiveConfig warns that /api and /mcp accept self-declared identities with proxy identity on and no tokens", () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    process.env.BAB_PROXY_SECRET = "s";
+    expect(logged()).toContain(SELF_DECLARED_NO_TOKENS);
+  });
+
+  it("logEffectiveConfig warns when only bare tokens are set, with or without proxy identity", () => {
+    process.env.BAB_API_TOKENS = "bare";
+    expect(logged()).toContain(SELF_DECLARED_BARE);
+    expect(logged().join("\n")).not.toContain("open mode");
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    process.env.BAB_PROXY_SECRET = "s";
+    _resetConfigForTests();
+    expect(logged()).toContain(SELF_DECLARED_BARE);
+    expect(logged()).not.toContain(SELF_DECLARED_NO_TOKENS);
+  });
+
+  it("logEffectiveConfig warns when a bare token sits next to bound ones, since its holder can still declare an unbound address", () => {
+    process.env.BAB_API_TOKENS = "bare,tok=alice.example@example.com";
+    expect(logged()).toContain(SELF_DECLARED_BARE);
+  });
+
+  it("logEffectiveConfig does not warn when every token is bound to a person, or when the app is open", () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    process.env.BAB_PROXY_SECRET = "s";
+    process.env.BAB_API_TOKENS = "tok=alice.example@example.com";
+    expect(logged()).not.toContain(SELF_DECLARED_NO_TOKENS);
+    expect(logged()).not.toContain(SELF_DECLARED_BARE);
+    delete process.env.BAB_TRUST_PROXY_IDENTITY;
+    delete process.env.BAB_API_TOKENS;
+    _resetConfigForTests();
+    expect(logged()).not.toContain(SELF_DECLARED_NO_TOKENS);
+    expect(logged()).not.toContain(SELF_DECLARED_BARE);
   });
 });
