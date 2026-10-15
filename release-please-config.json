@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugins/claude-code/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

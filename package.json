@@ -1,0 +1,39 @@
+{
+  "name": "bab",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev -p 4310",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "vitest run -c vitest.e2e.config.mts",
+    "test:changed": "node scripts/test-changed.mjs",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run docs:config:check && pnpm run typecheck && pnpm run coverage && pnpm run test:e2e && pnpm run check:vendor",
+    "check:vendor": "bash scripts/check-vendor-names.sh",
+    "docs:config": "node scripts/docs-config.mjs",
+    "docs:config:check": "node scripts/docs-config.mjs --check"
+  },
+  "dependencies": {
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitest/coverage-v8": "^5.0.1",
+    "sharp": "^0.35.5",
+    "typescript": "5.9.2",
+    "vitest": "5.0.0"
+  }
+}

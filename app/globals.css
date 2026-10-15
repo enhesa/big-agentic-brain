@@ -1,0 +1,131 @@
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Urbanist";
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url("/fonts/urbanist-latin.woff2") format("woff2");
+}
+
+:root {
+  --navy: var(--accent, #1a3360);
+  --steel: #3f5175;
+  --mist: #eaedf1;
+  --teal: #00b0a1;
+  --amber: #ffb700;
+  --coral: #ff4423;
+  --sage: #aedad4;
+
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-head: "Urbanist", var(--font-body);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  font-weight: 300;
+  color: var(--navy);
+  background: #fff;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-head);
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Keyboard focus: one brand treatment everywhere (landing buttons set their own). */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.container {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.btn-primary {
+  display: inline-block;
+  background: var(--teal);
+  color: #fff;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 14px 22px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 176, 161, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+}
+
+.btn-ghost {
+  display: inline-block;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 14px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+}
+
+.btn-ghost.on-light {
+  border-color: var(--mist);
+}
+
+.kicker {
+  display: inline-block;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.card {
+  background: #fff;
+  border: 1px solid var(--mist);
+  border-radius: 16px;
+  padding: 20px;
+}

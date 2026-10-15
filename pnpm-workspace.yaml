@@ -1,0 +1,24 @@
+# Required so `pnpm install` doesn't prompt to approve build scripts interactively,
+# which breaks a non-interactive CI run. Dockerfile.node already COPYs this file via a
+# glob (`pnpm-workspace.yaml*`), so it just needs to exist.
+#
+# Both keys below are needed, not just one, because pnpm changed how this is
+# declared between major versions and silently IGNORES the key it doesn't
+# recognize (no error, no warning about the other key — it just still prompts):
+#   - `onlyBuiltDependencies` — pnpm 10.5 through 10.x. Removed entirely in pnpm 11.
+#   - `allowBuilds`           — pnpm 11+. Doesn't exist before pnpm 11.
+# A pnpm older than 10.5 recognizes neither in this file (only in package.json) and
+# will still prompt — see templates/app/CLAUDE.md's package-manager section for the
+# non-interactive fallback (`pnpm approve-builds --all`, pnpm ≥10.32).
+#
+# Pre-approved here: `esbuild` (a transitive dep of most tooling) and `sharp` (Next.js
+# image optimization — common enough in real apps that it earns a permanent entry
+# rather than every app owner rediscovering the same prompt). Adding a genuinely new
+# dependency with its own postinstall script? Add it to BOTH lists below, or run `pnpm
+# approve-builds --all` in this app's repo and commit the regenerated file.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+allowBuilds:
+  esbuild: true
+  sharp: true

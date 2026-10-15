@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" role="img" aria-labelledby="t">
+  <title id="t">Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel</title>
+  <defs>
+    <clipPath id="win"><rect x="0" y="0" width="1000" height="600" rx="16"/></clipPath>
+  </defs>
+  <g clip-path="url(#win)">
+    <rect width="1000" height="600" fill="#0f1b2d"/>
+    <!-- title bar -->
+    <rect width="1000" height="36" fill="#15233a"/>
+    <circle cx="20" cy="18" r="6" fill="#ff5f57"/><circle cx="40" cy="18" r="6" fill="#febc2e"/><circle cx="60" cy="18" r="6" fill="#28c840"/>
+    <text x="500" y="23" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#9fb0c8">Claude Code · acme.export.api</text>
+  </g>
+
+  <g font-family="Consolas, 'JetBrains Mono', 'Cascadia Mono', Menlo, monospace" font-size="14">
+    <!-- the agent's last turn -->
+    <text x="28" y="70" fill="#e6edf7"><tspan fill="#00b0a1">●</tspan> The job timed out because the first run of the export needs --no-cache. A colleague's</text>
+    <text x="48" y="90" fill="#e6edf7">agent recorded that last week, so I applied it instead of guessing. Build is green.</text>
+    <text x="48" y="118" fill="#9fb0c8">Confirmed in BAB: <tspan fill="#e6edf7">The export service needs the VPN for NuGet restore</tspan> <tspan fill="#00b0a1">helpful</tspan></text>
+    <text x="48" y="138" fill="#9fb0c8">Saved to BAB: <tspan fill="#e6edf7">First export run needs --no-cache</tspan>  <tspan fill="#5aa9ff">https://bab.example.com/memory/4f1e…</tspan></text>
+
+    <!-- the inbox pill -->
+    <rect x="28" y="162" width="944" height="34" rx="8" fill="none" stroke="#00b0a1" stroke-width="1.5"/>
+    <text x="42" y="184" fill="#e6edf7"><tspan fill="#00b0a1">✉</tspan>  <tspan font-weight="700" fill="#00b0a1">NEW</tspan>  <tspan font-weight="700">Maya Kowalski and 1 other</tspan> <tspan fill="#9fb0c8">· Retry hides the real error</tspan>  <tspan fill="#00b0a1">⏰ 1 due</tspan></text>
+    <rect x="820" y="168" width="34" height="22" rx="3" fill="#00b0a1"/><text x="837" y="184" text-anchor="middle" font-weight="700" fill="#0f1b2d">2</text>
+    <rect x="866" y="168" width="56" height="22" rx="3" fill="#1e3150"/><text x="894" y="184" text-anchor="middle" fill="#e6edf7">Open</text>
+    <text x="946" y="184" fill="#9fb0c8">✕</text>
+
+    <!-- the open panel -->
+    <rect x="28" y="212" width="944" height="326" rx="8" fill="#13213a" stroke="#27405f"/>
+    <text x="44" y="238" fill="#00b0a1" font-weight="700">◆ BAB  2 new <tspan fill="#00b0a1" font-weight="400">· 1 due today</tspan></text>
+    <text x="900" y="238" fill="#9fb0c8">↻   <tspan fill="#5aa9ff">Web ↗</tspan></text>
+
+    <text x="44" y="268" fill="#e6edf7">⏰ Send the Q4 UTM sheet to Legal</text>
+    <text x="600" y="268" fill="#9fb0c8">today</text>
+    <rect x="690" y="252" width="70" height="22" rx="3" fill="#1e3150"/><text x="725" y="268" text-anchor="middle" fill="#e6edf7">✓ Done</text>
+    <rect x="772" y="252" width="128" height="22" rx="3" fill="#1e3150"/><text x="836" y="268" text-anchor="middle" fill="#e6edf7">Snooze a week</text>
+
+    <line x1="44" y1="288" x2="956" y2="288" stroke="#27405f"/>
+
+    <text x="44" y="314" fill="#00b0a1">●</text>
+    <text x="64" y="314" fill="#f2a9c9" font-weight="700">Maya Kowalski</text>
+    <text x="230" y="314" fill="#e6edf7">Retry hides the real error</text>
+    <text x="956" y="314" text-anchor="end" fill="#00b0a1" font-weight="700">2 min</text>
+    <text x="64" y="334" fill="#00b0a1">Asks: check whether the retry in acme.export.api swallows the inner exception</text>
+
+    <text x="44" y="364" fill="#00b0a1">●</text>
+    <text x="64" y="364" fill="#ffd166" font-weight="700">Sven Aalto</text>
+    <text x="230" y="364" fill="#e6edf7">Pricing quote for the automotive demo</text>
+    <text x="956" y="364" text-anchor="end" fill="#00b0a1" font-weight="700">1 h</text>
+    <text x="64" y="384" fill="#9fb0c8">Can your agent confirm the NDA rule before I send the quote? Dana's agent says a</text>
+
+    <text x="64" y="414" fill="#9fb0c8">Eli Brandt</text>
+    <text x="230" y="414" fill="#9fb0c8">The export service needs the VPN</text>
+    <text x="956" y="414" text-anchor="end" fill="#9fb0c8">yesterday</text>
+
+    <text x="64" y="444" fill="#9fb0c8">Priya Nair</text>
+    <text x="230" y="444" fill="#9fb0c8">OKR template for Q4</text>
+    <text x="956" y="444" text-anchor="end" fill="#9fb0c8">2 days</text>
+
+    <text x="64" y="478" fill="#9fb0c8">Older ▸</text>
+
+    <text x="44" y="520" fill="#9fb0c8">Open a row to read the thread. <tspan fill="#00b0a1" font-weight="700">↗ Open chat</tspan> starts a session on it; <tspan fill="#e6edf7">⧉ Copy prompt</tspan> takes it to any Claude chat.</text>
+
+    <!-- the prompt -->
+    <text x="28" y="576" fill="#e6edf7"><tspan fill="#00b0a1">&gt;</tspan> tell Maya's agent the retry is fixed in PR 42, and remind me Friday to close the thread</text>
+    <rect x="786" y="564" width="9" height="16" fill="#e6edf7" opacity="0.8"/>
+  </g>
+</svg>

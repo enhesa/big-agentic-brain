@@ -1,0 +1,19 @@
+{
+  "name": "big-agentic-brain",
+  "description": "Big Agentic Brain: memory, messaging and collaboration for AI agents.",
+  "owner": {
+    "name": "BAB maintainers"
+  },
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "bab",
+      "displayName": "Big Agentic Brain",
+      "source": "./plugins/claude-code",
+      "description": "Memory, messaging and collaboration for AI agents: shared learnings, reminders and agent-to-agent messages.",
+      "category": "engineering"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+import { headers } from "next/headers";
+import { getDb } from "./db";
+import { audit } from "./audit";
+import { scheduleMaintenance } from "./maintenance";
+import { clientIp } from "./client-ip";
+import type { AuditVia } from "./types";
+import type { SessionUser } from "./session";
+
+export interface AuditRequestInput {
+  /** null for the read-only UI, which needs no identity of its own. */
+  actor: (Pick<SessionUser, "id" | "name" | "email"> & { source?: SessionUser["source"] }) | null;
+  method: string;
+  path: string;
+  via: AuditVia;
+  /**
+   * For high-frequency polls that say nothing new (the inbox list, polled every 15 seconds per open
+   * session by a Claude Code mod): write the row only if this identity has no such row for this path
+   * in the last `minutes`. The row carries `coalesce: 1` so only other coalesced rows count; an
+   * ordinary call to the same path is always written. Never for an anonymous caller.
+   */
+  coalesce?: { minutes: number };
+  /** Extra audit details, merged with the identity source (for example a device error code). */
+  details?: Record<string, unknown>;
+}
+
+const ANONYMOUS_ACTOR = { id: "anonymous", name: null, email: null };
+
+/**
+ * Writes one audit_log row per data page render / server action / API call.
+ * Never throws: a logging failure must not break the request it describes.
+ */
+export async function auditRequest(input: AuditRequestInput): Promise<void> {
+  // Page views trigger the hourly sweeps and the daily backup copy too, not only agent
+  // traffic, so a day with no agent calls still gets them (review, 2026-09-25).
+  scheduleMaintenance();
+  try {
+    const h = await headers();
+    // The same definition of "the caller's address" the rate limits and the device list use (lib/client-ip.ts).
+    const ip = clientIp(h);
+
+    const actor = input.actor
+      ? { id: input.actor.id, name: input.actor.name, email: input.actor.email }
+      : ANONYMOUS_ACTOR;
+
+    const db = getDb();
+    if (input.coalesce && input.actor) {
+      const recent = db
+        .prepare(
+          `SELECT 1 FROM audit_log WHERE actor_id = ? AND path = ? AND entity = 'request'
+             AND json_extract(details, '$.coalesce') = 1 AND at > datetime('now', ?) LIMIT 1`,
+        )
+        .get(actor.id, input.path, `-${input.coalesce.minutes} minutes`);
+      if (recent) return;
+    }
+    // details.source tells header callers from device callers, for the P1.4 admin page.
+    const merged = { ...(input.actor?.source ? { source: input.actor.source } : {}), ...(input.coalesce && input.actor ? { coalesce: 1 } : {}), ...input.details };
+    const details = Object.keys(merged).length > 0 ? merged : undefined;
+    audit(db, actor, input.method, "request", input.path, input.via, { ip, path: input.path, details });
+  } catch (err) {
+    console.error("auditRequest failed", err);
+  }
+}

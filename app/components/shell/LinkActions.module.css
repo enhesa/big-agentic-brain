@@ -1,0 +1,48 @@
+/* Buttons for the browser-link flows (/reminders suggestion, /admin/links unlink). */
+.btn {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--navy);
+  background: #fff;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--mist);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.primary {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: #fff;
+  cursor: pointer;
+}
+
+.primary:hover {
+  opacity: 0.9;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.panelError {
+  margin: 8px 0 0;
+  color: var(--coral);
+  font-size: 0.8rem;
+}

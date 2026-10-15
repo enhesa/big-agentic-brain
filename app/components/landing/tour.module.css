@@ -1,0 +1,276 @@
+.tour {
+  background: #fff;
+  border: 1px solid var(--mist);
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(26, 51, 96, 0.1);
+  padding: 16px 18px 18px;
+  min-width: 0;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.line {
+  fill: none;
+  stroke: var(--steel);
+  stroke-width: 1.5;
+  opacity: 0.28;
+  transition:
+    opacity 0.4s ease,
+    stroke 0.4s ease,
+    stroke-width 0.4s ease;
+}
+
+.lineOn {
+  stroke: var(--teal);
+  stroke-width: 3;
+  opacity: 1;
+  stroke-dasharray: 6 8;
+  stroke-linecap: round;
+  animation: dash 0.9s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.actor {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.55;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.actorOn {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.traveller {
+  filter: drop-shadow(0 4px 8px rgba(26, 51, 96, 0.22));
+}
+
+.glow {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.8);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+}
+
+.glowOn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.brainRing {
+  transition:
+    stroke 0.3s ease,
+    stroke-width 0.3s ease;
+}
+
+.node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+.pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pop 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ring {
+  transform-box: fill-box;
+  transform-origin: 50% 20%;
+  animation: ring 0.5s ease-in-out infinite;
+}
+
+@keyframes ring {
+  0%,
+  100% {
+    transform: rotate(-14deg);
+  }
+  50% {
+    transform: rotate(14deg);
+  }
+}
+
+/* ----------------------------------------------------------- caption */
+
+.caption {
+  margin: 14px 0 4px;
+  text-align: center;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: var(--navy);
+  min-height: 1.6em;
+}
+
+/* ------------------------------------------------------------- steps */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--steel);
+  font: inherit;
+  border-radius: 8px;
+}
+
+.step:hover {
+  color: var(--navy);
+}
+
+.stepOn {
+  color: var(--navy);
+}
+
+.stepLabel {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--mist);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+  border-radius: 4px;
+}
+
+@media (max-width: 640px) {
+  .tour {
+    padding: 10px 10px 8px;
+    border-radius: 18px;
+  }
+
+  .stepLabel {
+    font-size: 0.68rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node,
+  .pop,
+  .ring {
+    animation: none;
+  }
+
+  .line,
+  .glow,
+  .brainRing,
+  .actor {
+    transition: none;
+  }
+
+  .lineOn {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}
+
+/* ---------------------------------------------------- scene transitions */
+
+/* The caption is re-keyed per scene, so this plays on every scene change. */
+.caption {
+  animation: captionIn 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes captionIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A ring that spreads out of the brain when something lands in it. */
+.ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ripple 1.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  pointer-events: none;
+}
+
+@keyframes ripple {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption,
+  .ripple {
+    animation: none;
+  }
+
+  .ripple {
+    display: none;
+  }
+}

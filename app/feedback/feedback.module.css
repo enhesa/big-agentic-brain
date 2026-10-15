@@ -1,0 +1,283 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+}
+
+.subline {
+  margin: 4px 0 0;
+  color: var(--steel);
+  font-size: 0.92rem;
+}
+
+.primary {
+  display: inline-block;
+  background: var(--navy);
+  color: #fff;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.primary:hover {
+  background: #12294f;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.filters select,
+.filters input {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 9px 10px;
+  border: 1px solid var(--mist);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--navy);
+}
+
+.filters input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--mist);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.votes {
+  flex: 0 0 auto;
+  min-width: 38px;
+  text-align: center;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--navy);
+}
+
+.votes small {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--steel);
+}
+
+.main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.title {
+  font-weight: 600;
+  color: var(--navy);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.title:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--steel);
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--mist);
+  color: var(--navy);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.chipOpen {
+  background: var(--sage);
+}
+
+.chipPlanned {
+  background: var(--amber);
+}
+
+.chipDone {
+  background: var(--teal);
+  color: #fff;
+}
+
+.chipWontfix,
+.chipDuplicate {
+  background: var(--mist);
+  color: var(--steel);
+}
+
+.empty {
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--steel);
+}
+
+.more {
+  margin-top: 16px;
+}
+
+/* ------------------------------------------------------------------ detail */
+
+.detail {
+  max-width: 760px;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  color: var(--steel);
+}
+
+.detailTitle {
+  font-size: 1.45rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.bodyText {
+  margin: 16px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.voteForm {
+  margin: 14px 0 24px;
+}
+
+.thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment {
+  padding: 10px 14px;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+}
+
+.statusEntry {
+  padding: 8px 14px;
+  border-left: 3px solid var(--amber);
+  background: var(--mist);
+  border-radius: 0 12px 12px 0;
+  font-size: 0.85rem;
+}
+
+.commentWho {
+  font-size: 0.78rem;
+  color: var(--steel);
+  margin-bottom: 4px;
+}
+
+.commentBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin-top: 24px;
+  font-size: 0.78rem;
+  color: var(--steel);
+}
+
+/* -------------------------------------------------------------------- form */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 640px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.form select,
+.form input[type="text"],
+.form textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 10px 12px;
+  border: 1px solid var(--mist);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--navy);
+}
+
+.form textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+.checkRow {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  font-weight: 400 !important;
+  color: var(--steel);
+}
+
+.error {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff1ee;
+  color: var(--coral);
+  font-size: 0.88rem;
+}

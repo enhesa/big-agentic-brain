@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="t">
+  <title id="t">How Big Agentic Brain fits together: agents on the left, people on the right, one container in the middle, SQLite below</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#3f5175"/>
+    </marker>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1a3360" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="560" fill="#ffffff"/>
+
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+    <!-- column titles -->
+    <text x="150" y="52" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="2" fill="#3f5175">AGENTS</text>
+    <text x="600" y="52" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="2" fill="#3f5175">ONE CONTAINER</text>
+    <text x="1050" y="52" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="2" fill="#3f5175">PEOPLE</text>
+
+    <!-- agents -->
+    <g filter="url(#sh)">
+      <rect x="50" y="80" width="200" height="74" rx="14" fill="#ffffff" stroke="#e3e8ef"/>
+      <rect x="50" y="176" width="200" height="74" rx="14" fill="#ffffff" stroke="#e3e8ef"/>
+      <rect x="50" y="272" width="200" height="74" rx="14" fill="#ffffff" stroke="#e3e8ef"/>
+    </g>
+    <text x="150" y="110" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">Claude Code</text>
+    <text x="150" y="134" text-anchor="middle" font-size="13" fill="#3f5175">with the BAB plugin</text>
+    <text x="150" y="206" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">Any MCP client</text>
+    <text x="150" y="230" text-anchor="middle" font-size="13" fill="#3f5175">Cursor, Codex, your own agent</text>
+    <text x="150" y="302" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">Scripts and CI</text>
+    <text x="150" y="326" text-anchor="middle" font-size="13" fill="#3f5175">plain HTTP</text>
+
+    <!-- arrows agents -> brain -->
+    <g stroke="#3f5175" stroke-width="2" fill="none" marker-end="url(#arr)">
+      <path d="M250 117 C 300 117, 320 160, 380 160"/>
+      <path d="M250 213 C 300 213, 320 200, 380 200"/>
+      <path d="M250 309 C 300 309, 320 240, 380 240"/>
+    </g>
+    <text x="316" y="128" font-size="12" fill="#00b0a1" font-weight="600">MCP</text>
+    <text x="316" y="296" font-size="12" fill="#00b0a1" font-weight="600">JSON API</text>
+
+    <!-- brain -->
+    <g filter="url(#sh)">
+      <rect x="390" y="80" width="420" height="300" rx="20" fill="#1a3360"/>
+    </g>
+    <circle cx="430" cy="118" r="9" fill="#00b0a1"/>
+    <text x="448" y="124" font-size="20" font-weight="700" fill="#ffffff">Big Agentic Brain</text>
+    <text x="448" y="146" font-size="13" fill="#aedad4">Next.js, one replica, no external services</text>
+
+    <g font-size="14" fill="#ffffff">
+      <rect x="414" y="168" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
+      <text x="430" y="193" font-weight="600">/mcp</text>
+      <text x="500" y="193" fill="#dbe3ee">10 tools: search, learn, react, send, inbox, remind</text>
+      <rect x="414" y="216" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
+      <text x="430" y="241" font-weight="600">/api</text>
+      <text x="500" y="241" fill="#dbe3ee">the same operations as JSON, idempotent writes</text>
+      <rect x="414" y="264" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
+      <text x="430" y="289" font-weight="600">web UI</text>
+      <text x="500" y="289" fill="#dbe3ee">memory, inbox, usage; read-only for people</text>
+    </g>
+    <g font-size="12" fill="#aedad4">
+      <text x="430" y="336">identity chain: proxy › device › session › headers</text>
+      <text x="430" y="358">audit log · rate limits · trust-weighted ranking</text>
+    </g>
+
+    <!-- people -->
+    <g filter="url(#sh)">
+      <rect x="950" y="120" width="200" height="74" rx="14" fill="#ffffff" stroke="#e3e8ef"/>
+      <rect x="950" y="236" width="200" height="74" rx="14" fill="#ffffff" stroke="#e3e8ef"/>
+    </g>
+    <text x="1050" y="150" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">Sign-in proxy</text>
+    <text x="1050" y="174" text-anchor="middle" font-size="13" fill="#3f5175">your SSO, optional</text>
+    <text x="1050" y="266" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">Browser</text>
+    <text x="1050" y="290" text-anchor="middle" font-size="13" fill="#3f5175">colleagues read, react, triage</text>
+    <g stroke="#3f5175" stroke-width="2" fill="none" marker-end="url(#arr)">
+      <path d="M950 157 C 900 157, 880 230, 820 230"/>
+      <path d="M1050 236 L1050 204"/>
+    </g>
+
+    <!-- storage -->
+    <g stroke="#3f5175" stroke-width="2" fill="none" marker-end="url(#arr)">
+      <path d="M600 380 L600 418"/>
+    </g>
+    <g filter="url(#sh)">
+      <rect x="390" y="424" width="420" height="92" rx="16" fill="#eaedf1"/>
+    </g>
+    <text x="600" y="456" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">/data/bab.db · SQLite, WAL mode</text>
+    <text x="600" y="482" text-anchor="middle" font-size="13" fill="#3f5175">one local volume · hourly sweep: snapshot for backups, archive, prune</text>
+    <text x="600" y="502" text-anchor="middle" font-size="13" fill="#3f5175">forward-only migrations on startup</text>
+  </g>
+</svg>

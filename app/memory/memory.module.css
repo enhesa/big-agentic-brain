@@ -1,0 +1,858 @@
+/* ------------------------------------------------------------------ header */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+}
+
+.subline {
+  margin: 4px 0 0;
+  color: var(--steel);
+  font-size: 0.92rem;
+}
+
+/* ------------------------------------------------------------------ search */
+
+/* One form holds the search box and the filters; they apply as they change, so there are no
+   buttons. While the list refreshes the results fade a little and a thin line runs under the
+   filters. Both are paint-only, so nothing moves. */
+.filters {
+  position: relative;
+}
+
+.filters ~ * {
+  transition: opacity 0.2s ease;
+}
+
+.filters[data-pending="true"] ~ * {
+  opacity: 0.55;
+  transition-delay: 0.15s;
+}
+
+.filters::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filters[data-pending="true"]::after {
+  opacity: 1;
+  transition: opacity 0.2s ease 0.15s;
+  animation: filtersSweep 1s ease-in-out infinite;
+}
+
+@keyframes filtersSweep {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
+/* Visually hidden, still reachable by keyboard and screen readers (the no-JavaScript submit). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.searchForm {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  color: var(--steel);
+  pointer-events: none;
+}
+
+.search {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 12px 14px 12px 40px;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  color: var(--navy);
+  background: #fff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.18);
+}
+
+/* ---------------------------------------------------------------- filters */
+
+.filterBar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.filterLabel {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  padding: 12px 30px 12px 12px;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  color: var(--navy);
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%233f5175' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.18);
+}
+
+.resultsCount {
+  color: var(--steel);
+  font-size: 0.82rem;
+  margin: 0 0 8px;
+}
+
+.activeFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--mist);
+  color: var(--navy);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.pill:hover {
+  background: rgba(255, 68, 35, 0.12);
+  color: var(--coral);
+}
+
+.clearAll {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--steel);
+  text-decoration: underline;
+}
+
+.clearAll:hover {
+  color: var(--navy);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 20px 0;
+  font-size: 0.82rem;
+  color: var(--steel);
+}
+
+.pageLink {
+  font-weight: 600;
+  color: var(--navy);
+  text-decoration: underline;
+}
+
+.pageLink:hover {
+  color: var(--coral);
+}
+
+.pageDisabled {
+  font-weight: 600;
+  color: var(--steel);
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--mist);
+  background: #fff;
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--teal);
+}
+
+.chipOn {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.chipDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.chipN {
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 0.72rem;
+}
+
+/* Project filter chips reuse .chip's mechanics but read as a scope, not a
+   label: squared corners instead of a pill, so they never look like tags. */
+.chipProject {
+  border-radius: 6px;
+}
+
+/* -------------------------------------------------------------------- list */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  opacity: 0;
+  animation: rowIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+@keyframes rowIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rowLink {
+  /* Positioning context for .title::after's stretched overlay below — the
+     row itself is a plain div now, not a link (see app/memory/page.tsx),
+     so a real, independently-clickable element like .project can live
+     inside it without nesting an <a> inside an <a>. */
+  position: relative;
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid var(--mist);
+  border-radius: 14px;
+  padding: 12px 14px 12px 0;
+  overflow: hidden;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.rowLink:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 176, 161, 0.5);
+  box-shadow: 0 10px 28px rgba(26, 51, 96, 0.08);
+}
+
+.accent {
+  display: block;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  margin: -12px 0;
+}
+
+.rowMain {
+  min-width: 0;
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  color: var(--navy);
+  text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Stretches the title's own link to cover the whole (positioned) row card,
+   so the row stays fully clickable with only one real <a> in the DOM. */
+.title::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.snippet {
+  color: var(--steel);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 3px 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet mark {
+  background: var(--sage);
+  color: var(--navy);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: var(--steel);
+}
+
+.author {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.dot {
+  opacity: 0.5;
+}
+
+.repo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+.tags {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: var(--mist);
+  color: var(--navy);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* A project is a scope, not a label: squared (not pill) badge, uppercase,
+   outlined rather than filled, deliberately different from .tag. Raised
+   (position + z-index) above .title::after's stretched overlay so it stays
+   its own clickable link on a row instead of a dead span like the tags. */
+.project {
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  background: rgba(26, 51, 96, 0.06);
+  color: var(--navy);
+  border: 1px solid rgba(26, 51, 96, 0.2);
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+}
+
+.project:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.signals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+}
+
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--teal);
+}
+
+.signal svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+.signalKudos {
+  color: #b08000;
+}
+
+.score {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--navy);
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.notes {
+  margin: 18px 0 0;
+}
+
+.notes h2 {
+  font-family: var(--font-head);
+  font-size: 0.85rem;
+  color: var(--navy);
+  margin: 0 0 8px;
+}
+
+.notes ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.88rem;
+  color: var(--steel);
+  overflow-wrap: anywhere;
+}
+
+.notes li + li {
+  margin-top: 4px;
+}
+
+/* The latest retire or restore: its own line above the confirmations and flags. */
+.notes .retired {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  color: var(--steel);
+  overflow-wrap: anywhere;
+}
+
+/* Standing replaces the raw score chip in the list: a word is clearer than a number. */
+.standing {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.standing_strong {
+  background: rgba(0, 176, 161, 0.14);
+  color: var(--teal);
+}
+
+.standing_fair {
+  background: rgba(26, 51, 96, 0.08);
+  color: var(--navy);
+}
+
+.standing_weak {
+  background: rgba(255, 183, 0, 0.16);
+  color: #8a5c00;
+}
+
+/* ------------------------------------------------------------------- badges */
+
+.badge {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badgeActive {
+  background: rgba(0, 176, 161, 0.14);
+  color: var(--teal);
+}
+
+.badgeExpired,
+.badgeArchived {
+  background: rgba(63, 81, 117, 0.12);
+  color: var(--steel);
+}
+
+/* -------------------------------------------------------------------- empty */
+
+.empty {
+  text-align: center;
+  padding: 56px 0;
+}
+
+.emptyTitle {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--navy);
+  margin: 0;
+}
+
+.emptyBody {
+  color: var(--steel);
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+}
+
+.emptyBody a {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- detail */
+
+.detail {
+  max-width: 760px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--steel);
+  margin-bottom: 14px;
+}
+
+.back:hover {
+  color: var(--navy);
+}
+
+.banner {
+  background: rgba(63, 81, 117, 0.08);
+  color: var(--steel);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+}
+
+.detailTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.detailTop h1 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.byline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--steel);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+.byline strong {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--navy);
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  background: var(--mist);
+  border-radius: 14px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.fact {
+  /* A grid item will not shrink below its content: a long repo name or model id would spill
+     out of the tile without this. */
+  min-width: 0;
+  border: 1px solid var(--mist);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.factK {
+  display: block;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+.factV {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--navy);
+  margin-top: 2px;
+  /* "anywhere" only breaks inside a word when the word cannot fit its line, so a model id like
+     claude-sonnet-5-5 is not split at a hyphen while the tile is wide enough. */
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.related {
+  font-size: 0.9rem;
+  color: var(--steel);
+  margin: 6px 0;
+}
+
+.apiNote {
+  color: var(--steel);
+  font-size: 0.78rem;
+  margin-top: 28px;
+}
+
+.apiNote code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--mist);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .rowLink {
+    grid-template-columns: 4px minmax(0, 1fr);
+  }
+
+  .signals {
+    display: none;
+  }
+
+  .title,
+  .snippet {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .filterField {
+    flex: 1 1 100%;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    animation: none;
+    opacity: 1;
+  }
+
+  .rowLink,
+  .chip,
+  .search,
+  .select,
+  .pill,
+  .filters ~ * {
+    transition: none;
+  }
+
+  .filters[data-pending="true"]::after {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------- kind and source */
+
+.kindBadge {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(26, 51, 96, 0.08);
+  color: var(--navy);
+}
+
+.sourceChip {
+  display: inline-block;
+  flex: 0 0 auto;
+  border: 1px solid var(--mist);
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-size: 0.7rem;
+  color: var(--steel);
+}
+
+/* Applies-to labels (lib/applies-to.ts): which stack or platform a memory holds for. */
+.appliesTo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: var(--steel);
+}
+
+.appliesToLabel {
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.appliesChip {
+  background: var(--navy);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.appliesEverywhere {
+  background: var(--mist);
+  color: var(--navy);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}

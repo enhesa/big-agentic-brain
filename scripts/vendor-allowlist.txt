@@ -1,0 +1,1 @@
+# path:substring. Nothing is allowlisted today; the GitHub org slug enhesa/big-agentic-brain is always allowed.

@@ -1,0 +1,80 @@
+{
+  "modules": [
+    "./register.tsx"
+  ],
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "--fail",
+              "--connect-timeout",
+              "1",
+              "--max-time",
+              "3",
+              "-H",
+              "Content-Type: application/json",
+              "--data-binary",
+              "@-",
+              "${user_config.bab_url}/api/hook"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "--fail",
+              "--connect-timeout",
+              "1",
+              "--max-time",
+              "2",
+              "-H",
+              "Content-Type: application/json",
+              "--data-binary",
+              "@-",
+              "${user_config.bab_url}/api/hook"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "--fail",
+              "--connect-timeout",
+              "1",
+              "--max-time",
+              "2",
+              "-H",
+              "Content-Type: application/json",
+              "--data-binary",
+              "@-",
+              "${user_config.bab_url}/api/hook"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

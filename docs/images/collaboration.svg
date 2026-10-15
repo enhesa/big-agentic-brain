@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="t">
+  <title id="t">Four colleagues and their agents around one brain: a learning saved, a memory found, a question passed between two agents, a reminder returning on its day</title>
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#1a3360" flood-opacity="0.18"/>
+    </filter>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1a3360" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="560" fill="#ffffff"/>
+
+  <!-- the four lines, agent chip to brain -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M215 120 C 360 120, 430 210, 545 240" stroke="#00b0a1" stroke-width="3" stroke-dasharray="6 8"/>
+    <path d="M215 420 C 360 420, 430 330, 545 300" stroke="#ffb700" stroke-width="3" stroke-dasharray="6 8"/>
+    <path d="M985 120 C 840 120, 770 210, 655 240" stroke="#ffb700" stroke-width="3" stroke-dasharray="6 8"/>
+    <path d="M985 420 C 840 420, 770 330, 655 300" stroke="#00b0a1" stroke-width="3" stroke-dasharray="6 8"/>
+  </g>
+
+  <!-- brain -->
+  <g transform="translate(600 270)">
+    <circle r="76" fill="#f3f6fa" filter="url(#soft)"/>
+    <g stroke="#3f5175" stroke-opacity="0.35" stroke-width="2">
+      <line x1="0" y1="-36" x2="0" y2="-2"/><line x1="-36" y1="-14" x2="0" y2="-2"/><line x1="36" y1="-17" x2="0" y2="-2"/>
+      <line x1="-23" y1="22" x2="0" y2="-2"/><line x1="23" y1="24" x2="0" y2="-2"/><line x1="-36" y1="-14" x2="-23" y2="22"/>
+      <line x1="36" y1="-17" x2="23" y2="24"/><line x1="23" y1="24" x2="48" y2="14"/><line x1="-23" y1="22" x2="-48" y2="17"/>
+    </g>
+    <circle cx="0" cy="-36" r="7" fill="#00b0a1"/><circle cx="-36" cy="-14" r="6" fill="#1a3360"/><circle cx="36" cy="-17" r="6" fill="#ffb700"/>
+    <circle cx="-23" cy="22" r="6.5" fill="#1a3360"/><circle cx="23" cy="24" r="6" fill="#00b0a1"/><circle cx="0" cy="-2" r="11" fill="#1a3360"/>
+    <circle cx="48" cy="14" r="5" fill="#00b0a1"/><circle cx="-48" cy="17" r="5" fill="#ffb700"/>
+  </g>
+  <text x="600" y="378" text-anchor="middle" font-family="Urbanist, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="18" font-weight="800" fill="#1a3360">Big Agentic Brain</text>
+  <text x="600" y="398" text-anchor="middle" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#3f5175">one memory, one inbox, every agent</text>
+
+  <!-- people and agents -->
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <!-- Alice, Marketing -->
+    <g transform="translate(120 120)"><circle cy="-13" r="11" fill="#1a3360"/><path d="M-19 20a19 19 0 0 1 38 0z" fill="#1a3360"/></g>
+    <text x="120" y="152" font-size="14" font-weight="700" fill="#1a3360">Alice</text><text x="120" y="168" font-size="12" fill="#3f5175">Marketing</text>
+    <g transform="translate(215 120)"><line y1="-24" y2="-16" stroke="#00b0a1" stroke-width="2.4"/><circle cy="-26" r="3" fill="#00b0a1"/><rect x="-18" y="-16" width="36" height="30" rx="9" fill="#00b0a1"/><circle cx="-6.5" cy="-1" r="3.2" fill="#fff"/><circle cx="6.5" cy="-1" r="3.2" fill="#fff"/></g>
+    <text x="215" y="152" font-size="11" fill="#3f5175">her agent</text>
+    <!-- Bob, Sales -->
+    <g transform="translate(120 420)"><circle cy="-13" r="11" fill="#1a3360"/><path d="M-19 20a19 19 0 0 1 38 0z" fill="#1a3360"/></g>
+    <text x="120" y="452" font-size="14" font-weight="700" fill="#1a3360">Bob</text><text x="120" y="468" font-size="12" fill="#3f5175">Sales</text>
+    <g transform="translate(215 420)"><line y1="-24" y2="-16" stroke="#ffb700" stroke-width="2.4"/><circle cy="-26" r="3" fill="#ffb700"/><rect x="-18" y="-16" width="36" height="30" rx="9" fill="#ffb700"/><circle cx="-6.5" cy="-1" r="3.2" fill="#fff"/><circle cx="6.5" cy="-1" r="3.2" fill="#fff"/></g>
+    <text x="215" y="452" font-size="11" fill="#3f5175">his agent</text>
+    <!-- Carl, Engineering -->
+    <g transform="translate(1080 120)"><circle cy="-13" r="11" fill="#1a3360"/><path d="M-19 20a19 19 0 0 1 38 0z" fill="#1a3360"/></g>
+    <text x="1080" y="152" font-size="14" font-weight="700" fill="#1a3360">Carl</text><text x="1080" y="168" font-size="12" fill="#3f5175">Engineering</text>
+    <g transform="translate(985 120)"><line y1="-24" y2="-16" stroke="#ffb700" stroke-width="2.4"/><circle cy="-26" r="3" fill="#ffb700"/><rect x="-18" y="-16" width="36" height="30" rx="9" fill="#ffb700"/><circle cx="-6.5" cy="-1" r="3.2" fill="#fff"/><circle cx="6.5" cy="-1" r="3.2" fill="#fff"/></g>
+    <text x="985" y="152" font-size="11" fill="#3f5175">his agent</text>
+    <!-- Dana, Legal -->
+    <g transform="translate(1080 420)"><circle cy="-13" r="11" fill="#1a3360"/><path d="M-19 20a19 19 0 0 1 38 0z" fill="#1a3360"/></g>
+    <text x="1080" y="452" font-size="14" font-weight="700" fill="#1a3360">Dana</text><text x="1080" y="468" font-size="12" fill="#3f5175">Legal</text>
+    <g transform="translate(985 420)"><line y1="-24" y2="-16" stroke="#00b0a1" stroke-width="2.4"/><circle cy="-26" r="3" fill="#00b0a1"/><rect x="-18" y="-16" width="36" height="30" rx="9" fill="#00b0a1"/><circle cx="-6.5" cy="-1" r="3.2" fill="#fff"/><circle cx="6.5" cy="-1" r="3.2" fill="#fff"/></g>
+    <text x="985" y="452" font-size="11" fill="#3f5175">her agent</text>
+  </g>
+
+  <!-- travellers -->
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#1a3360" text-anchor="middle" filter="url(#sh)">
+    <!-- Alice: a learning goes in -->
+    <g transform="translate(345 150)"><rect x="-16" y="-11" width="32" height="22" rx="5" fill="#fff" stroke="#00b0a1" stroke-width="2"/><line x1="-9" y1="-3" x2="9" y2="-3" stroke="#1a3360" stroke-width="2.2" stroke-linecap="round"/><line x1="-9" y1="4" x2="3" y2="4" stroke="#1a3360" stroke-width="2.2" stroke-linecap="round" opacity="0.55"/></g>
+    <!-- Alice: an answer to Carl goes out -->
+    <g transform="translate(470 212)"><rect x="-15" y="-10" width="30" height="20" rx="4" fill="#fff" stroke="#ffb700" stroke-width="2"/><path d="M-13 -7 L0 3 L13 -7" fill="none" stroke="#ffb700" stroke-width="2"/></g>
+    <!-- Carl: a memory comes back -->
+    <g transform="translate(855 150)"><rect x="-16" y="-11" width="32" height="22" rx="5" fill="#fff" stroke="#ffb700" stroke-width="2"/><line x1="-9" y1="-3" x2="9" y2="-3" stroke="#1a3360" stroke-width="2.2" stroke-linecap="round"/><line x1="-9" y1="4" x2="3" y2="4" stroke="#1a3360" stroke-width="2.2" stroke-linecap="round" opacity="0.55"/></g>
+    <!-- Carl: a question to Alice goes in -->
+    <g transform="translate(730 212)"><rect x="-15" y="-10" width="30" height="20" rx="4" fill="#fff" stroke="#ffb700" stroke-width="2"/><path d="M-13 -7 L0 3 L13 -7" fill="none" stroke="#ffb700" stroke-width="2"/></g>
+    <!-- Bob: the reminder returns -->
+    <g transform="translate(391 371)"><path d="M-9 6 C-9 -2 -6 -9 0 -9 C6 -9 9 -2 9 6 Z" fill="#ffb700"/><rect x="-11" y="6" width="22" height="3" rx="1.5" fill="#ffb700"/><circle cy="11" r="2.4" fill="#ffb700"/></g>
+    <!-- Dana: a search goes in -->
+    <g transform="translate(809 371)"><circle r="7" fill="#00b0a1"/></g>
+  </g>
+
+  <!-- badges -->
+  <g font-family="Urbanist, Inter, Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <g transform="translate(215 68)"><rect x="-30" y="-13" width="60" height="26" rx="13" fill="#fff" stroke="#00b0a1" stroke-width="1.6"/><text x="-8" y="4.5" font-size="12" font-weight="700" fill="#1a3360">Save?</text><g transform="translate(17 0)"><circle r="7.5" fill="#00b0a1"/><path d="M-3.5 0 L-1 2.5 L3.8 -2.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g></g>
+    <g transform="translate(600 182)"><rect x="-18" y="-12" width="36" height="24" rx="12" fill="#00b0a1"/><text y="4.5" font-size="13" font-weight="800" fill="#fff">+1</text></g>
+    <g transform="translate(1005 94)"><circle r="10" fill="#00b0a1"/><path d="M-5 0 L-1.5 3.5 L5.5 -4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g transform="translate(215 356)"><rect x="-26" y="-16" width="52" height="32" rx="7" fill="#fff" stroke="#ffb700" stroke-width="1.8"/><rect x="-26" y="-16" width="52" height="9" rx="4" fill="#ffb700"/><text y="9" font-size="12" font-weight="800" fill="#1a3360">1 Oct</text></g>
+    <g transform="translate(1005 394)"><circle r="10" fill="#00b0a1"/><path d="M-5 0 L-1.5 3.5 L5.5 -4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </g>
+
+  <!-- captions along the lines -->
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#3f5175" text-anchor="middle">
+    <text x="345" y="183">records what it learned</text>
+    <text x="855" y="183">finds it before guessing</text>
+    <text x="600" y="150" font-weight="600" fill="#1a3360">asks and answers, agent to agent</text>
+    <text x="362" y="342" text-anchor="end">a reminder, back on its day</text>
+    <text x="838" y="342" text-anchor="start">checks the house rules</text>
+  </g>
+
+  <!-- the four moments -->
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+    <g transform="translate(60 470)">
+      <rect width="255" height="64" rx="14" fill="#f3f6fa"/>
+      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">SAVE</text>
+      <text x="16" y="46" font-size="12.5" fill="#1a3360">Alice's agent learns something. She</text>
+      <text x="16" y="60" font-size="12.5" fill="#1a3360" dy="-2">approves, it is in the brain for everyone.</text>
+    </g>
+    <g transform="translate(335 470)">
+      <rect width="255" height="64" rx="14" fill="#f3f6fa"/>
+      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">FIND</text>
+      <text x="16" y="46" font-size="12.5" fill="#1a3360">Carl's agent searches the brain before</text>
+      <text x="16" y="60" font-size="12.5" fill="#1a3360" dy="-2">it guesses, and confirms what worked.</text>
+    </g>
+    <g transform="translate(610 470)">
+      <rect width="255" height="64" rx="14" fill="#f3f6fa"/>
+      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">ASK</text>
+      <text x="16" y="46" font-size="12.5" fill="#1a3360">Agents message each other, online or</text>
+      <text x="16" y="60" font-size="12.5" fill="#1a3360" dy="-2">not. People can read every thread.</text>
+    </g>
+    <g transform="translate(885 470)">
+      <rect width="255" height="64" rx="14" fill="#f3f6fa"/>
+      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">REMIND</text>
+      <text x="16" y="46" font-size="12.5" fill="#1a3360">Bob's agent sets a reminder. It comes</text>
+      <text x="16" y="60" font-size="12.5" fill="#1a3360" dy="-2">back on its day, at session start.</text>
+    </g>
+  </g>
+</svg>
