@@ -3,7 +3,7 @@ import { audit } from "./audit";
 import { callerKey } from "./caller-key";
 import { TooManyRequestsError, ValidationError } from "./errors";
 import { derivedNameFromEmail, identityHint, identityRejectionText, isAliasEmail, isValidIdentityEmail } from "./identity";
-import { upsertUser } from "./users";
+import { getUser, upsertUser } from "./users";
 import { bindDevice, devicesEnabled } from "./devices";
 import { bindConnection } from "./mcp-connections";
 
@@ -26,11 +26,13 @@ export interface IdentifyContext {
   connectionId: string | null;
   /** The caller's address (lib/client-ip.ts), for the audit row and the device list. */
   ip: string | null;
+  /** The email the request's bearer token is bound to (lib/gate.ts tokenIdentityFor), or null/absent. */
+  tokenEmail?: string | null;
 }
 
 export interface IdentifyResult {
   identifiedAs: { email: string; name: string };
-  remembered: "device" | "connection" | "none";
+  remembered: "device" | "connection" | "none" | "token";
   /** Only when nothing is remembered. */
   note?: string;
 }
@@ -159,6 +161,20 @@ export function identify(args: { email?: unknown; name?: unknown }, ctx: Identif
       audit(getDb(), "anonymous", "identify_refused", "user", "-", "mcp", { details: { reason: err.reason, cx: refusalCx, ip: ctx.ip } });
     }
     throw err;
+  }
+
+  // A token=email token IS that person (lib/session.ts fromToken) whatever bab_identify says, so
+  // saying otherwise would only mislead the agent. Nothing is written: no user, device or connection.
+  if (ctx.tokenEmail) {
+    const bound = ctx.tokenEmail.toLowerCase();
+    if (bound !== email) {
+      throw new ValidationError(`This connection is bound to ${bound} by its API token; bab_identify cannot change it`);
+    }
+    return {
+      identifiedAs: { email: bound, name: getUser(bound)?.name ?? derivedNameFromEmail(bound) },
+      remembered: "token",
+      note: "Your identity is fixed by this connection's API token; there is nothing to remember.",
+    };
   }
 
   // The users row is canonical for the name (lib/users.ts): the first name seen sticks.

@@ -46,7 +46,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 - `users(id TEXT PK /* proxy user id header */, email, name, roles, created_at, last_seen_at, trust REAL DEFAULT 1 /* unused */)`
 - `learnings(id, author_id, title, body, tags TEXT /* json array */, repo, project, confidence TEXT,
    status TEXT /* active|archived|deleted */, expires_at /* optional valid-until date */, supersedes_id, score REAL, kind TEXT /* learning|practice|standard|decision */,
-   source TEXT /* native|confluence */, source_url, source_version INTEGER, model TEXT /* optional, migration v37 */, pinned INTEGER /* house rule, migration v39 */, last_accessed_at, access_days INTEGER /* agent reads, migration v40 */, applies_to TEXT /* json array of labels, '[]' = everywhere, migration v41 */, created_at, updated_at)`.
+   source TEXT /* native|confluence */, source_url, source_version INTEGER, model TEXT /* optional, migration v37 */, pinned INTEGER /* house rule, migration v39 */, pinned_by, pinned_at /* migration v43 */, last_accessed_at, access_days INTEGER /* agent reads, migration v40 */, applies_to TEXT /* json array of labels, '[]' = everywhere, migration v41 */, created_at, updated_at)`.
    `project` is the general-purpose scope every team uses (a repo, client, campaign, product
    or system); `repo` stays as the pre-existing engineering-only extra. Both are optional,
    normalized the same way (`normalizeProjectKey()`, `lib/learnings.ts`: trimmed, lowercased,
@@ -121,7 +121,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    the key from `cwd` with `projectKeyFromCwd()`: the segment before `.claude/worktrees`, else
    the segment after `_worktrees`, else the last segment. Migration v22 re-normalised every
    stored `project` (repo text untouched). `expires_at` is NULL unless the author gave a
-   valid-until date (`expiresAt: "YYYY-MM-DD"`); `"never"` is accepted and means none.
+   valid-until date (`expiresAt: "YYYY-MM-DD"`, a real calendar day); `"never"` is accepted and means none.
 - **Kind and source (migration v35).** `kind` says what an entry is: `learning`
    (the default, every older row), `practice` (should), `standard` (must), `decision` (an ADR:
    what was chosen, why, what was rejected). `source` is `native` or `confluence`; a mirror of a
@@ -149,8 +149,10 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    people's CLAUDE.md files. A pin is an explicit opt-in, not a tag, so the digest stays small and
    curated: one audited verb (`bab_react` `pin` / `unpin`, audit actions `pin` and `unpin`) instead
    of a label anyone adds while writing. Only a standard or practice that is active can be pinned
-   (a data rule, 400 or 409 otherwise); who pins is in the texts only: maintainers pin, agents
-   propose (honour system, no server check; `tests/house-rules.test.ts` pins that). A correction
+   (a data rule, 400 or 409 otherwise); when `BAB_MAINTAINERS` is set only a maintainer may pin or
+   unpin (403 `Only maintainers can pin or unpin`), because a pinned rule goes into every agent's
+   context; with none configured it is an honour system (agents propose, maintainers pin).
+   A pin records `pinned_by` and `pinned_at` (migration v43), an unpin clears them. A correction
    of a pinned entry (supersede) is pinned too, so fixing a typo does not drop the rule.
    `houseRulesFor(projectKey)` (`lib/learnings.ts`) picks pinned standards and practices with status
    active and with no `expires_at` or one of today or later, company-wide (no project) plus those whose
@@ -204,7 +206,8 @@ byline, linking back to the filtered list.
 
 
 `/api/me` (self-check, plus `POST /api/me { name }` to deliberately rename yourself). Every write is
-stamped from the resolved actor, idempotent via `Idempotency-Key`, and rate-limited per identity.
+stamped from the resolved actor, idempotent via `Idempotency-Key` (at most 120 characters; the same key with a different
+method, path or body is a 422, not a replay), and rate-limited per identity.
 Repeat writes that would be silent no-ops say so explicitly instead: a second kudos on the same
 learning, or completing/abandoning an already-done-or-abandoned reminder, or snoozing a done one,
 all 409 with a specific message; a repeated `helpful`/`not_helpful` vote of the same kind is a 200

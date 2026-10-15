@@ -70,7 +70,20 @@ export type OpenThread = {
 }
 
 /** One open reminder of the person, as the panel draws it. */
-export type Reminder = { id: string; title: string; due: string; isDue: boolean; isOverdue: boolean }
+export type Reminder = {
+  id: string
+  /** Shortened for the row. */
+  title: string
+  /** The whole title, shown when the row is opened. */
+  fullTitle: string
+  /** The reminder's text, if any, shown when the row is opened. */
+  body: string | null
+  /** A ticket or key the reminder is about, if any. */
+  relatedKey: string | null
+  due: string
+  isDue: boolean
+  isOverdue: boolean
+}
 
 /** What a clicked row says under itself: that it is opening, or why it could not. */
 export type RowNote = { id: string; text: string; isError: boolean }
@@ -107,6 +120,8 @@ declare module 'claude-code' {
       showMore: boolean
       /** The reminders that are not yet due are shown. */
       showLater: boolean
+      /** The reminder whose full text is open under its row, if any. */
+      openReminder: string | null
       /** Null until the first load of the list. */
       unreadCount: UnreadCount | null
     }

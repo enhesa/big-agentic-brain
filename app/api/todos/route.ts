@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server";
 import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { listMine, create, type TodoFilter } from "@/lib/todos";
+import { listMine, create, TODO_TABS, type TodoFilter } from "@/lib/todos";
 import { withIdempotency } from "@/lib/idempotency";
 import { toApiError } from "@/lib/errors";
+import { isCalendarDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-const TAB_VALUES: TodoFilter[] = ["overdue", "due_soon", "open", "done"];
+const TAB_VALUES: readonly TodoFilter[] = TODO_TABS;
 
 /** GET /api/todos?tab=overdue|due_soon|open|done — my reminders. */
 export async function GET(req: NextRequest) {
@@ -21,8 +22,11 @@ export async function GET(req: NextRequest) {
   await auditRequest({ actor: user, method: "GET", path: "/api/todos", via: "mcp" });
 
   const { searchParams } = new URL(req.url);
-  const tabRaw = searchParams.get("tab") ?? "open";
-  const tab = TAB_VALUES.includes(tabRaw as TodoFilter) ? (tabRaw as TodoFilter) : "open";
+  const tabRaw = searchParams.get("tab");
+  if (tabRaw != null && !TAB_VALUES.includes(tabRaw as TodoFilter)) {
+    return Response.json({ error: `tab must be one of ${TAB_VALUES.join(", ")}` }, { status: 400 });
+  }
+  const tab = (tabRaw ?? "open") as TodoFilter;
 
   const todos = listMine(user.id, tab);
   return Response.json({ todos });
@@ -51,8 +55,11 @@ export async function POST(req: NextRequest) {
       if (!title) return { status: 400, body: { error: "title is required" } };
 
       const dueAtRaw = record.dueAt;
-      if (typeof dueAtRaw !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dueAtRaw)) {
-        return { status: 400, body: { error: "dueAt is required and must be YYYY-MM-DD" } };
+      if (dueAtRaw == null || dueAtRaw === "") {
+        return { status: 400, body: { error: "dueAt is required and must be a real calendar date, YYYY-MM-DD" } };
+      }
+      if (!isCalendarDate(dueAtRaw)) {
+        return { status: 400, body: { error: "dueAt must be a real calendar date, YYYY-MM-DD" } };
       }
 
       const body = record.body == null ? null : String(record.body);

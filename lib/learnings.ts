@@ -281,6 +281,18 @@ export function ageInfo(
   return { ageDays, expiresInDays };
 }
 
+/**
+ * `tags` as callers send it: absent or null (no tags), or an array of strings. Anything else
+ * is a caller mistake and a 400, never silently stored as [].
+ */
+export function parseTags(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined;
+  if (!Array.isArray(raw) || !raw.every((t) => typeof t === "string")) {
+    throw new ValidationError("tags must be an array of strings");
+  }
+  return raw as string[];
+}
+
 function normalizeTags(tags: string[] | undefined): string[] {
   if (!tags) return [];
   return tags
@@ -1518,11 +1530,13 @@ function supersedeWithinTransaction(
   // One row per archived original, so a consolidation can point several at one entry.
   db.prepare("INSERT OR REPLACE INTO supersession_links (old_id, new_id) VALUES (?, ?)").run(oldId, newId);
   // A correction of a house rule stays a house rule, so fixing a typo does not silently drop it
-  // from every session's digest. Only onto a kind that can be pinned.
-  if (oldLearning.pinned === 1) {
+  // from every session's digest. Only onto a kind that can be pinned, and only when the corrector
+  // could have pinned it themselves: otherwise a correction would be a way around the maintainer
+  // check, putting unreviewed text into every session. The pin is attributed to the corrector.
+  if (oldLearning.pinned === 1 && mayPin(actorId)) {
     db.prepare(
-      `UPDATE learnings SET pinned = 1 WHERE id = ? AND kind IN (${HOUSE_RULE_KINDS.map(() => "?").join(",")})`,
-    ).run(newId, ...HOUSE_RULE_KINDS);
+      `UPDATE learnings SET pinned = 1, pinned_by = ?, pinned_at = datetime('now') WHERE id = ? AND kind IN (${HOUSE_RULE_KINDS.map(() => "?").join(",")})`,
+    ).run(actorId, newId, ...HOUSE_RULE_KINDS);
   }
   audit(db, actorId, "supersede", "learning", oldId, via);
   return { id: oldId, title: oldLearning.title };
@@ -2120,12 +2134,20 @@ export const HOUSE_RULES_GENERAL_MAX = 8;
 /** At most this many house rules for the session's own project. */
 export const HOUSE_RULES_PROJECT_MAX = 5;
 
+/** Who may pin: anyone while BAB_MAINTAINERS is unset (honour system), else maintainers only. */
+export function mayPin(actorId: string): boolean {
+  return config().identity.maintainers.size === 0 || isMaintainer(actorId);
+}
+
 /**
  * Pins or unpins a memory as a house rule (bab_react pin / unpin). A house rule is put in front of
  * every Claude session on its first prompt (houseRulesFor, app/api/hook/route.ts), so the flag is an
  * explicit opt-in that keeps the digest small. Only a standard or a practice can be pinned: that is
- * a data rule. Who may pin (maintainers; agents propose) is in the agent texts, not checked here
- * (honour system). Idempotent: `changed` says whether anything moved.
+ * a data rule. Who may pin: when BAB_MAINTAINERS is set, only a maintainer (anyone else gets a 403,
+ * "Only maintainers can pin or unpin", like a feedback status change), because a pinned rule goes
+ * straight into every agent's context. With no maintainers configured it stays an honour system
+ * (the agent texts say agents propose, maintainers pin). A pin records pinned_by and pinned_at, an
+ * unpin clears both. Idempotent: `changed` says whether anything moved.
  */
 export function setPinned(
   learningId: string,
@@ -2133,6 +2155,10 @@ export function setPinned(
   pinned: boolean,
   via: AuditVia = "ui",
 ): { learning: LearningRow; changed: boolean } {
+  // Before the lookup, so a non-maintainer learns nothing about which ids exist or what state they are in.
+  if (!mayPin(actorId)) {
+    throw new ForbiddenError("Only maintainers can pin or unpin");
+  }
   const learning = getById(learningId);
   if (!learning) throw new NotFoundError("Learning not found");
   if (pinned) {
@@ -2147,7 +2173,11 @@ export function setPinned(
 
   const db = getDb();
   inTransaction(db, () => {
-    db.prepare("UPDATE learnings SET pinned = ?, updated_at = datetime('now') WHERE id = ?").run(pinned ? 1 : 0, learningId);
+    db.prepare(
+      pinned
+        ? "UPDATE learnings SET pinned = 1, pinned_by = ?, pinned_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
+        : "UPDATE learnings SET pinned = 0, pinned_by = NULL, pinned_at = NULL, updated_at = datetime('now') WHERE id = ?",
+    ).run(...(pinned ? [actorId, learningId] : [learningId]));
     audit(db, actorId, pinned ? "pin" : "unpin", "learning", learningId, via);
   });
   return { learning: getById(learningId)!, changed: true };

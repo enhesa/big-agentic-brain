@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 42;
+export const CURRENT_VERSION = 43;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -284,6 +284,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(42);
     appliedVersion = 42;
   }
+  if (appliedVersion < 43) {
+    runMigrationV43(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(43);
+    appliedVersion = 43;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -291,6 +296,18 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV43(database: DatabaseSync) {
+  // Who pinned a house rule and when (lib/learnings.ts setPinned): pinned rules go into every
+  // session's first prompt, so the pin is attributable. NULL for rules pinned before this and
+  // for every unpinned row. Same PRAGMA guard as v39: ALTER TABLE has no IF NOT EXISTS, so a
+  // process that died between the column add and the migrations row must still be able to boot.
+  const columns = new Set(
+    (database.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!columns.has("pinned_by")) database.exec("ALTER TABLE learnings ADD COLUMN pinned_by TEXT");
+  if (!columns.has("pinned_at")) database.exec("ALTER TABLE learnings ADD COLUMN pinned_at TEXT");
+}
 
 function runMigrationV42(database: DatabaseSync) {
   // The session list is gone (2026-10-07: messaging is async and inbox driven), so BAB no longer
@@ -350,8 +367,9 @@ function runMigrationV40(database: DatabaseSync) {
 function runMigrationV39(database: DatabaseSync) {
   // House rules (2026-10-07): a pinned standard or practice is put in front of every session on its
   // first prompt (app/api/hook/route.ts, houseRulesFor in lib/learnings.ts). An explicit opt-in so
-  // the digest stays small and curated; bab_react pin and unpin set it. The texts say only
-  // maintainers pin (honour system); the server does not check.
+  // the digest stays small and curated; bab_react pin and unpin set it. With BAB_MAINTAINERS set
+  // only maintainers may (setPinned in lib/learnings.ts); with none configured it is an honour
+  // system. v43 adds pinned_by and pinned_at.
   // Same PRAGMA guard as v36/v37: ALTER TABLE has no IF NOT EXISTS, so a process that died between
   // the column add and the migrations row must still be able to boot.
   const columns = new Set(

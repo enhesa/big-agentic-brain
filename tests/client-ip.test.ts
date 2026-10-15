@@ -86,8 +86,8 @@ describe("BAB_CLIENT_IP_HEADER", () => {
     expect(clientIpMode()).toBeNull();
     expect(clientIpVerified()).toBe(false);
     expect(clientIpMode()).toBeNull();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toContain("BAB_CLIENT_IP_HEADER");
+    const about = warn.mock.calls.filter((c) => String(c[0]).includes("BAB_CLIENT_IP_HEADER"));
+    expect(about).toHaveLength(1);
   });
 
   it("the value is case-insensitive", () => {

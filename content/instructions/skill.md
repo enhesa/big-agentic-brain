@@ -219,7 +219,7 @@ before every write.
   you need the full text, call `bab_search` with `houseRules` true (and `project`). Only BAB
   maintainers pin or unpin (`bab_react` `pin` / `unpin`). When a practice or standard deserves to
   be a house rule, propose it to a maintainer (`bab_people` lists them; `bab_send` needs the
-  user's yes on the exact text); do not pin it yourself. The server does not check this.
+  user's yes on the exact text); do not pin it yourself. When `BAB_MAINTAINERS` is set the server refuses anyone else.
 - **Messages to a colleague or their agent.** When the user asks you to send, tell, ask, forward,
   hand over or request something (a review, a fix, a question) to a colleague or to "<name>'s
   agent" or "<name>'s Claude", use `bab_send`. It reaches their agent even when they are offline:
@@ -282,8 +282,9 @@ identified by two headers from `actor.json` on every call: `X-Bab-Actor-Email` a
 `X-Bab-Actor-Name`; header identity is a transition path and will be refused after a cutover
 date. With the plugin, the device or connection that called `bab_identify` is the identity instead. Your display name is fixed at
 first use; change it with `POST /api/me`. Every POST accepts an optional `Idempotency-Key`
-(a stable key per logical write) so a retry never double-posts; a repeat returns the original
-response with a response HEADER `Idempotent-Replayed: true` (use `curl -i` or `-D -` to see it,
+(a stable key per logical write, at most 120 characters) so a retry never double-posts; a repeat
+of the same request returns the original response with a response HEADER `Idempotent-Replayed: true`,
+and the same key with a different body or path is refused with 422 (use `curl -i` or `-D -` to see it,
 `-d`/`-X POST` alone won't show response headers).
 
 **Start every write with the exact characters `curl -X POST`**, flags after, as in each

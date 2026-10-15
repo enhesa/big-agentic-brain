@@ -5,6 +5,7 @@ import {
   search,
   recordSearchRead,
   parseSupersedes,
+  parseTags,
   createWithSupersedes,
   normalizeProjectKey,
   parseFlaggedFilter,
@@ -19,13 +20,13 @@ import {
 import { parseAppliesToFilter, parseStack, readAppliesTo } from "@/lib/applies-to";
 import { withIdempotency } from "@/lib/idempotency";
 import { toApiError } from "@/lib/errors";
+import { isCalendarDate } from "@/lib/dates";
 import { VERIFY_HINT } from "@/lib/swarm-gc";
 import type { LearningConfidence } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const CONFIDENCE_VALUES: LearningConfidence[] = ["low", "medium", "high"];
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** GET /api/learnings?q=&tag=&repo=&project=&author=&status=&kind=&model=&appliesTo=&stack=&flagged=&limit= */
 export async function GET(req: NextRequest) {
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
       }
 
       const tagsRaw = (payload as Record<string, unknown>).tags;
-      const tags = Array.isArray(tagsRaw) ? tagsRaw.map((t) => String(t)) : undefined;
+      const tags = parseTags(tagsRaw);
 
       const repoRaw = (payload as Record<string, unknown>).repo;
       const repo = repoRaw == null ? undefined : String(repoRaw);
@@ -143,8 +144,8 @@ export async function POST(req: NextRequest) {
 
       const expiresAtRaw = (payload as Record<string, unknown>).expiresAt;
       const neverExpires = typeof expiresAtRaw === "string" && expiresAtRaw.trim().toLowerCase() === "never";
-      if (expiresAtRaw != null && !neverExpires && !DATE_RE.test(String(expiresAtRaw))) {
-        return { status: 400, body: { error: 'expiresAt must be YYYY-MM-DD or "never"' } };
+      if (expiresAtRaw != null && !neverExpires && !isCalendarDate(expiresAtRaw)) {
+        return { status: 400, body: { error: 'expiresAt must be a real calendar date, YYYY-MM-DD, or "never"' } };
       }
 
       // One id or a list of ids (a consolidation). The learnings.supersedes_id FK column

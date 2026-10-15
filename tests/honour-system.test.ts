@@ -20,6 +20,11 @@ import path from "node:path";
  * and strengthen the text instead; do not change the test. What the server DOES enforce is
  * required fields (a note on a flag, a confirm and a non-author's retire) and plain data rules,
  * which have their own tests.
+ *
+ * One exception, on purpose: pin / unpin. A pinned house rule goes straight into every agent's
+ * first prompt, so with BAB_MAINTAINERS set the server refuses a non-maintainer (403), like a
+ * feedback status change. With no maintainers configured it is still an honour system. That
+ * contract is in tests/pin-maintainers.test.ts.
  */
 
 let dataDir: string;

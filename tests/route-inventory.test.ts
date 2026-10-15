@@ -11,6 +11,7 @@ const IDENTITY_HELPERS = ["requireActorForApi", "getSessionUser", "requireUser",
  */
 const ANONYMOUS_OK: Record<string, string> = {
   "/": "public landing page, static marketing content",
+  "/api/:slug*": "catch-all for unknown /api paths, answers 404 { error } to everyone and reads nothing",
   "/board": "redirect to /memory, reads nothing",
   "/board/:id": "redirect to /memory/:id, reads nothing",
   "/connect/:nonce": "retired link, static explanation, reads nothing",

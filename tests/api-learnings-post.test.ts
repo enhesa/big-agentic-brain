@@ -185,7 +185,7 @@ describe("POST /api/learnings", () => {
     const firstBody = await first.json();
     expect(first.headers.get("Idempotent-Replayed")).toBeNull();
 
-    const second = await POST(postReq({ title: "Different", body: "Different" }, { "Idempotency-Key": "abc-123" }) as never);
+    const second = await POST(postReq({ title: "T", body: "B" }, { "Idempotency-Key": "abc-123" }) as never);
     const secondBody = await second.json();
 
     expect(second.headers.get("Idempotent-Replayed")).toBe("true");
@@ -193,6 +193,49 @@ describe("POST /api/learnings", () => {
 
     const { list } = await import("../lib/learnings");
     expect(list().length).toBe(1);
+  });
+
+  it("422s when an Idempotency-Key is reused with a different body, and creates nothing", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+
+    expect((await POST(postReq({ title: "T", body: "B" }, { "Idempotency-Key": "abc-123" }) as never)).status).toBe(201);
+    const second = await POST(postReq({ title: "Different", body: "Different" }, { "Idempotency-Key": "abc-123" }) as never);
+    expect(second.status).toBe(422);
+    expect(await second.json()).toEqual({ error: "Idempotency-Key was already used with a different request" });
+
+    const { list } = await import("../lib/learnings");
+    expect(list().length).toBe(1);
+  });
+
+  it("400s on an Idempotency-Key longer than 120 characters, and creates nothing", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "T", body: "B" }, { "Idempotency-Key": "k".repeat(121) }) as never);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Idempotency-Key is too long (max 120)" });
+    const { list } = await import("../lib/learnings");
+    expect(list().length).toBe(0);
+
+    const ok = await POST(postReq({ title: "T", body: "B" }, { "Idempotency-Key": "k".repeat(120) }) as never);
+    expect(ok.status).toBe(201);
+  });
+
+  it.each(["2026-13-45", "2026-02-30", "2026-02-29", "2026-13-01"])("400s on expiresAt %s: not a real calendar date", async (expiresAt) => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "T", body: "B", expiresAt }) as never);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'expiresAt must be a real calendar date, YYYY-MM-DD, or "never"' });
+    const { list } = await import("../lib/learnings");
+    expect(list().length).toBe(0);
+  });
+
+  it.each(["2024-02-29", "2026-10-15"])("accepts expiresAt %s", async (expiresAt) => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "T", body: "B", expiresAt }) as never);
+    expect(res.status).toBe(201);
   });
 
   it("409s with { error, candidates } when the draft looks like a duplicate", async () => {
@@ -348,5 +391,44 @@ describe("POST /api/learnings provenance edge cases", () => {
     );
     expect(second.status).toBe(201);
     expect((await second.json()).learning).toMatchObject({ kind: "standard", source: "confluence", source_url: MIRROR_URL, source_version: 4 });
+  });
+
+  it.each([
+    ["a string", "abc"],
+    ["numbers", [1, 2]],
+    ["an object", { a: 1 }],
+    ["a mixed array", ["ok", 3]],
+  ])("rejects tags that are %s with 400 and creates nothing", async (_label, tags) => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "Tags are validated", body: "A body about tag validation.", tags }) as never);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "tags must be an array of strings" });
+    const { search } = await import("../lib/learnings");
+    expect(search("validated", {}, 5)).toHaveLength(0);
+  });
+
+  it("treats tags: null like an absent tags (as null does for repo and confidence)", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "Null tags are absent", body: "A body about null tags.", tags: null }) as never);
+    expect(res.status).toBe(201);
+    expect(JSON.parse((await res.json()).learning.tags)).toEqual([]);
+  });
+
+  it("an absent tags defaults to []", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "Absent tags default", body: "A body without any tags." }) as never);
+    expect(res.status).toBe(201);
+    expect(JSON.parse((await res.json()).learning.tags)).toEqual([]);
+  });
+
+  it("a valid tags array is still stored, trimmed and lowercased", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const res = await POST(postReq({ title: "Valid tags kept", body: "A body with valid tags.", tags: [" Kafka ", "retries"] }) as never);
+    expect(res.status).toBe(201);
+    expect(JSON.parse((await res.json()).learning.tags)).toEqual(["kafka", "retries"]);
   });
 });

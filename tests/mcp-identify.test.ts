@@ -32,6 +32,7 @@ afterEach(async () => {
   rmSync(dataDir, { recursive: true, force: true });
   delete process.env.DATA_DIR;
   delete process.env.BAB_DEVICES;
+  delete process.env.BAB_API_TOKENS;
   delete process.env.BAB_CLIENT_IP_HEADER;
   (await import("../lib/config"))._resetConfigForTests();
   delete process.env.BAB_PUBLIC_ORIGIN;
@@ -423,5 +424,55 @@ describe("the retired connect flow", () => {
   const MCP_INSTRUCTIONS = mcpInstructions("https://bab.example.com");
     expect(MCP_INSTRUCTIONS).not.toMatch(/connect link|Connect link|connect page/);
     expect(MCP_INSTRUCTIONS).toContain("bab_identify");
+  });
+});
+
+describe("bab_identify on a token-bound connection", () => {
+  const BEARER = { Authorization: "Bearer tok" };
+  const bindTokenToAlice = async () => {
+    process.env.BAB_API_TOKENS = `tok=${ALICE}`;
+    (await import("../lib/config"))._resetConfigForTests();
+  };
+  const count = async (table: string) => {
+    const { getDb } = await import("../lib/db");
+    return (getDb().prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+  };
+
+  it("refuses a different email, says the token fixes the identity, and writes no user, device or connection", async () => {
+    await bindTokenToAlice();
+    const out = await call("bab_identify", { email: MARIE, name: "Marie Curie" }, { ...BEARER, ...DEVICE("t"), ...SESS("t") });
+    expect(out.result.isError).toBe(true);
+    expect(text(out)).toBe(`This connection is bound to ${ALICE} by its API token; bab_identify cannot change it`);
+    expect(text(out)).not.toContain("identifiedAs");
+
+    const { getDb } = await import("../lib/db");
+    expect(getDb().prepare("SELECT id FROM users WHERE id = ?").get(MARIE)).toBeUndefined();
+    expect(await count("devices")).toBe(0);
+    expect(await count("mcp_connections")).toBe(0);
+  });
+
+  it("identifying as the token's own email is a no-op success that binds nothing", async () => {
+    await bindTokenToAlice();
+    const out = await call("bab_identify", { email: ALICE.toUpperCase(), name: "Alice Example" }, { ...BEARER, ...DEVICE("t"), ...SESS("t") });
+    expect(out.result.isError).toBeFalsy();
+    expect(JSON.parse(text(out)).identifiedAs.email).toBe(ALICE);
+    expect(await count("devices")).toBe(0);
+    expect(await count("mcp_connections")).toBe(0);
+  });
+
+  it("keeps acting as the token's person after a refused identify", async () => {
+    await bindTokenToAlice();
+    await call("bab_identify", { email: MARIE }, { ...BEARER, ...SESS("t") });
+    const me = await call("bab_inbox", {}, { ...BEARER, ...SESS("t") });
+    expect(me.result.isError).toBeFalsy();
+    const { getDb } = await import("../lib/db");
+    const row = getDb().prepare("SELECT actor_id FROM audit_log WHERE entity = 'request' ORDER BY id DESC LIMIT 1").get() as { actor_id: string };
+    expect(row.actor_id).toBe(ALICE);
+  });
+
+  it("without a bound token, bab_identify works as before", async () => {
+    const out = await call("bab_identify", { email: MARIE, name: "Marie Curie" }, SESS("t"));
+    expect(out.result.isError).toBeFalsy();
+    expect(JSON.parse(text(out)).identifiedAs.email).toBe(MARIE);
   });
 });

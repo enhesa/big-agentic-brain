@@ -129,7 +129,7 @@ describe("config", () => {
     _resetConfigForTests();
     process.env.BAB_PROXY_SECRET = "s";
     config();
-    expect(warn).not.toHaveBeenCalled();
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("without a shared secret"))).toBe(false);
   });
 
   it("BAB_API_TOKENS rejects a token=email whose email fails the identity pattern", () => {

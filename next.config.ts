@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
+  // No page uses next/image, so the image optimizer (and its attack surface) stays off.
+  images: { unoptimized: true },
   outputFileTracingIncludes: {
     "/instructions/**": ["./content/instructions/*"],
   },

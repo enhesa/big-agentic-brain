@@ -155,6 +155,9 @@ function maintainersNow(): Set<string> {
 
 function parse(env: Env): BabConfig {
   const trustIdentity = bool(env, "BAB_TRUST_PROXY_IDENTITY", false);
+  if (maintainersNow().size === 0) {
+    console.warn("[config] BAB_MAINTAINERS is unset: anyone can pin a house rule, and nobody can change a feedback status or open /admin");
+  }
   if (trustIdentity && optStr(env, "BAB_PROXY_SECRET") === null) {
     console.warn("[config] proxy identity trusted without a shared secret; make sure the pod is reachable only through the proxy");
   }

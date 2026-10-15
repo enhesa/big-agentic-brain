@@ -102,12 +102,20 @@ describe("POST /api/learnings/[id]/vote", () => {
     const req2 = new Request("http://x/vote", {
       method: "POST",
       headers: { "content-type": "application/json", "Idempotency-Key": "k1" },
-      body: JSON.stringify({ kind: "not_helpful" }),
+      body: JSON.stringify({ kind: "helpful" }),
     });
     const second = await POST(req2 as never, { params: Promise.resolve({ id: learning.id }) });
     const secondBody = await second.json();
 
     expect(second.headers.get("Idempotent-Replayed")).toBe("true");
     expect(secondBody).toEqual(firstBody);
+
+    const req3 = new Request("http://x/vote", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "k1" },
+      body: JSON.stringify({ kind: "not_helpful" }),
+    });
+    const third = await POST(req3 as never, { params: Promise.resolve({ id: learning.id }) });
+    expect(third.status).toBe(422);
   });
 });

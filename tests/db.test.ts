@@ -142,9 +142,10 @@ describe("getDb", () => {
     // 39: learnings.pinned for house rules,
     // 40: learnings.last_accessed_at + access_days for agent reads, the default expiry cleared and
     //     the `expiring` status turned into `active`,
-    // 41: learnings.applies_to for the stack or platform labels, and
-    // 42: clears the old session titles, folders and host names).
-    expect(migrations.n).toBe(42);
+    // 41: learnings.applies_to for the stack or platform labels,
+    // 42: clears the old session titles, folders and host names, and
+    // 43: learnings.pinned_by + pinned_at for who pinned a house rule).
+    expect(migrations.n).toBe(43);
   });
 });
 
@@ -634,16 +635,16 @@ describe("v42: old session titles and folders are cleared", () => {
   });
 });
 
-describe("migration order: v40, then v41, then v42", () => {
-  it("a fresh database gets all three, in order", async () => {
+describe("migration order: v40, then v41, v42, then v43", () => {
+  it("a fresh database gets all four, in order", async () => {
     const db = (await import("../lib/db")).getDb();
     const versions = (db.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY rowid").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42]);
+    expect(versions).toEqual([40, 41, 42, 43]);
     const cols = new Set((db.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
-    for (const c of ["last_accessed_at", "access_days", "applies_to"]) expect(cols.has(c)).toBe(true);
+    for (const c of ["last_accessed_at", "access_days", "applies_to", "pinned_by", "pinned_at"]) expect(cols.has(c)).toBe(true);
   });
 
-  it("a database at v40 gets v41 and v42 on the next boot", async () => {
+  it("a database at v40 gets v41, v42 and v43 on the next boot", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     const db = getDb();
     db.prepare("INSERT INTO users (id, email, name) VALUES ('u1', 'a.b@example.com', 'A B')").run();
@@ -654,7 +655,7 @@ describe("migration order: v40, then v41, then v42", () => {
 
     const again = (await import("../lib/db")).getDb();
     const versions = (again.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY version").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42]);
+    expect(versions).toEqual([40, 41, 42, 43]);
     const cols = new Set((again.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     expect(cols.has("applies_to")).toBe(true);
     expect({ ...again.prepare("SELECT title FROM sessions WHERE id = 's1'").get() }).toEqual({ title: null });

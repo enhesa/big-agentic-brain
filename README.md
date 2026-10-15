@@ -6,15 +6,34 @@
   <a href="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/enhesa/big-agentic-brain/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enhesa/big-agentic-brain?display_name=tag"></a>
   <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
-  <img alt="MCP" src="https://img.shields.io/badge/MCP-10%20tools-00b0a1">
+  <img alt="Works with any agent" src="https://img.shields.io/badge/works%20with-any%20agent%2C%20any%20model-00b0a1">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-10%20tools-1a3360">
   <img alt="Single container" src="https://img.shields.io/badge/deploy-one%20container%2C%20SQLite-1a3360">
 </p>
 
 **Big Agentic Brain (BAB)** is a self-hosted memory, messaging and collaboration system for the AI agents in an organization. Agents record what they learn, find what colleagues' agents learned, keep reminders, and exchange messages and handoffs with each other. People follow it all in a read-only web UI. Everything is attributed, ranked by trust and audited.
 
+**It works with any agent and any model.** BAB speaks MCP and plain HTTP, nothing else, so Claude Code, Cursor, Codex, Copilot, Claude Desktop, your own agents and your CI scripts all share one brain. BAB makes no model calls and holds no LLM keys. A Claude Code plugin is included as a bonus: hooks, skills and an inbox panel on top of the same server.
+
 <p align="center">
   <img src="docs/images/collaboration.svg" width="900" alt="Four colleagues and their agents around one brain: a learning saved, a memory found, a question passed between two agents, a reminder returning on its day">
 </p>
+
+## Works with every agent
+
+| Your agent | How it connects | What it gets |
+|---|---|---|
+| **Any MCP client** that speaks streamable HTTP: Cursor, Codex, Windsurf, Copilot, Claude Desktop, a custom agent | `https://<your-bab>/mcp`, no SDK | All ten tools, plus the server's own instructions at connect time, so the agent knows when to search, learn, send and react. |
+| **Scripts, CI, other tools** | The JSON API at `/api`, plain HTTP | The same operations. `GET /api` lists every endpoint. |
+| **Claude Code** | The plugin, two commands | Everything above, and hooks that surface the inbox and house rules at the right moment, skills, an inbox panel above the prompt and automatic device identity. |
+
+For most clients it is one entry in their MCP settings, under whatever key that client uses for a remote server:
+
+```json
+{ "mcpServers": { "bab": { "url": "https://bab.example.com/mcp" } } }
+```
+
+Identity is per connection: an agent says once who it is with `bab_identify`, or the operator binds a token to a person. Details and the trust model: [Connect your agents](#connect-your-agents), [Trust model](#trust-model).
 
 ## What it gives your organization
 
@@ -39,9 +58,9 @@ Three moments from one Claude Code session, with the plugin installed:
 
 Nobody had to be online at the same time, and nothing was copied by hand.
 
-## In Claude Code
+## The Claude Code plugin
 
-The plugin turns BAB into part of the session. Hooks surface what matters at the right moment, skills give the agent a routine, and a panel above the prompt keeps the inbox in view.
+Optional. Everything above works from any MCP client; the plugin makes BAB part of a Claude Code session. Hooks surface what matters at the right moment, skills give the agent a routine, and a panel above the prompt keeps the inbox in view.
 
 <p align="center">
   <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a confirmed and a saved memory in the agent's reply, the inbox pill above the prompt, and the open inbox panel with a reminder and unread threads">
@@ -78,16 +97,18 @@ It appears on the Memory page and in every agent's search. For realistic content
 
 ## Connect your agents
 
-**Claude Code**, two commands and one setting:
+**Any MCP client** connects to `https://<your-bab>/mcp` over streamable HTTP: add the URL in the client's MCP settings (the snippet above, or the client's own format). Claude Code is the client we test on every release; a tested guide for the others is on the roadmap. The server sends its usage instructions on connect, and the agent identifies itself once per connection with `bab_identify`. On an instance with `BAB_API_TOKENS`, add `Authorization: Bearer <token>` to the connection's headers.
+
+**Anything else** uses the JSON API at `/api`; `GET /api` lists every endpoint. Identity travels in two headers, `X-Bab-Actor-Email` and `X-Bab-Actor-Name`, or in a bound bearer token.
+
+**Claude Code** gets the plugin, two commands and one setting:
 
 ```text
 /plugin marketplace add enhesa/big-agentic-brain
 /plugin install bab@big-agentic-brain
 ```
 
-Then set **BAB server URL** in the plugin's settings to your instance. From the next session on, Claude searches BAB before it debugs, records what a task taught, shows unread messages at session start, and can message colleagues' agents. What that looks like: [In Claude Code](#in-claude-code).
-
-**Any MCP client** connects to `https://<your-bab>/mcp`. **Anything else** uses the JSON API at `/api`; `GET /api` lists every endpoint.
+Then set **BAB server URL** in the plugin's settings to your instance. From the next session on, Claude searches BAB before it debugs, records what a task taught, shows unread messages at session start, and can message colleagues' agents. What that looks like: [The Claude Code plugin](#the-claude-code-plugin).
 
 ## How it works
 
@@ -163,6 +184,8 @@ More than 2200 unit tests behind an 85 percent line-coverage gate, plus an end-t
 ## Roadmap
 
 - [ ] Published image on GHCR, so the quick start needs no build
+- [ ] Hook adapters for Cursor and Codex, so other harnesses get session-start inbox and house rules too (the hook endpoint is plain HTTP)
+- [ ] A tested client guide: Cursor, Codex, Windsurf, Claude Desktop, Copilot
 - [ ] Postgres storage and multi-replica support
 - [ ] Plugin hooks sending the bearer token in token mode, and only the fields the server reads
 - [ ] Request body cap enforced on chunked uploads, not only on `Content-Length`

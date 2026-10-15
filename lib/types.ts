@@ -60,6 +60,9 @@ export interface LearningRow {
   applies_to: string;
   /** 1 when the memory is a house rule (a pinned standard or practice), 0 otherwise. See houseRulesFor in lib/learnings.ts. */
   pinned: number;
+  /** Who pinned it and when (UTC, SQLite datetime); NULL when unpinned or pinned before migration v43. */
+  pinned_by: string | null;
+  pinned_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -22,6 +22,7 @@ import {
   searchTotal,
   recordSearchRead,
   parseSupersedes,
+  parseTags,
   createWithSupersedes,
   getById as getLearningById,
   flag,
@@ -52,8 +53,10 @@ import {
   complete as completeTodo,
   snooze as snoozeTodo,
   abandon as abandonTodo,
+  TODO_TABS,
   type TodoFilter,
 } from "./todos";
+import { isCalendarDate } from "./dates";
 import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./users";
 import { resetPromptsSinceLearn } from "./sessions";
 import {
@@ -133,9 +136,7 @@ export interface Tool {
   run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string;
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONFIDENCE_VALUES: LearningConfidence[] = ["low", "medium", "high"];
-const TODO_TABS: TodoFilter[] = ["overdue", "due_soon", "open", "done"];
 const REACT_ACTIONS = ["helpful", "not_helpful", "flag", "kudos", "confirm", "keep", "retire", "delete", "pin", "unpin", "label"] as const;
 type ReactAction = (typeof REACT_ACTIONS)[number];
 const INBOX_LIMIT_DEFAULT = 20;
@@ -258,7 +259,7 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   const body = str(args.body).trim();
   if (!title || !body) throw new ValidationError("title and body are required");
 
-  const tags = Array.isArray(args.tags) ? args.tags.map(str) : undefined;
+  const tags = parseTags(args.tags);
   const repo = args.repo == null ? undefined : str(args.repo);
   // A literal JSON `null` is "company-wide, on purpose" (create()'s contract) and must survive as `null`, not collapse into "absent" the way a plain
   // `== null` check would (that check is true for BOTH null and undefined) — an absent
@@ -279,8 +280,8 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
 
   const expiresAtRaw = args.expiresAt;
   const neverExpires = typeof expiresAtRaw === "string" && expiresAtRaw.trim().toLowerCase() === "never";
-  if (expiresAtRaw != null && !neverExpires && !DATE_RE.test(str(expiresAtRaw))) {
-    throw new ValidationError('expiresAt must be YYYY-MM-DD or "never"');
+  if (expiresAtRaw != null && !neverExpires && !isCalendarDate(expiresAtRaw)) {
+    throw new ValidationError('expiresAt must be a real calendar date, YYYY-MM-DD, or "never"');
   }
 
   // One id (a correction) or a list (a consolidation). All are validated before the
@@ -460,7 +461,10 @@ function runRemind(actor: SessionUser, args: Record<string, unknown>): string {
 
   if (action === "list") {
     const tabRaw = args.tab == null ? "open" : str(args.tab);
-    const tab = TODO_TABS.includes(tabRaw as TodoFilter) ? (tabRaw as TodoFilter) : "open";
+    if (!(TODO_TABS as readonly string[]).includes(tabRaw)) {
+      throw new ValidationError(`tab must be one of ${TODO_TABS.join(", ")}`);
+    }
+    const tab = tabRaw as TodoFilter;
     return JSON.stringify({ todos: listMine(actor.id, tab) });
   }
 
@@ -481,8 +485,11 @@ function runRemind(actor: SessionUser, args: Record<string, unknown>): string {
   if (!title) throw new ValidationError("title is required");
 
   const dueAtRaw = args.dueAt;
-  if (typeof dueAtRaw !== "string" || !DATE_RE.test(dueAtRaw)) {
-    throw new ValidationError("dueAt is required and must be YYYY-MM-DD");
+  if (dueAtRaw == null || dueAtRaw === "") {
+    throw new ValidationError("dueAt is required and must be a real calendar date, YYYY-MM-DD");
+  }
+  if (!isCalendarDate(dueAtRaw)) {
+    throw new ValidationError("dueAt must be a real calendar date, YYYY-MM-DD");
   }
 
   const body = args.body == null ? null : str(args.body);
@@ -527,7 +534,8 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     return JSON.stringify({ learning: deleteOwn(learningId, actor.id, "mcp") });
   }
   if (action === "pin" || action === "unpin") {
-    // House rules: maintainers pin, by the texts (honour system); the server does not check who.
+    // House rules: with BAB_MAINTAINERS set only a maintainer pins (setPinned throws a 403);
+    // with none configured it is an honour system, by the texts.
     return withUrl(ctx, setPinned(learningId, actor.id, action === "pin", "mcp"));
   }
   if (action === "label") {
@@ -835,7 +843,7 @@ export const TOOLS: Tool[] = [
       "On a memory that was retired, flagged away or archived for lack of reads, keep restores it to active: a non-author gives a note saying why, and one a correction replaced comes back by superseding its replacement. Restoring someone else's retired standard or decision is a maintainer's or its author's call: leave it to them. " +
       "retire: archives a memory with no replacement; anyone may retire a learning or practice, a non-author with an evidence note. A standard is retired by a maintainer only, a decision by its author (with the user's yes) or a maintainer; for anyone else's, flag it with your evidence. " +
       "delete: your own entry only, wipes title and body for good. " +
-      "pin / unpin: a house rule is a pinned standard or practice that every session sees on its first prompt (company-wide ones, plus the session's project). Only BAB maintainers pin or unpin: if a rule deserves it, propose it to one (bab_people lists them; bab_send needs the user's yes). " +
+      "pin / unpin: a house rule is a pinned standard or practice that every session sees on its first prompt (company-wide ones, plus the session's project). Only BAB maintainers pin or unpin (the server refuses anyone else when maintainers are configured): if a rule deserves it, propose it to one (bab_people lists them; bab_send needs the user's yes). " +
       "label: set appliesTo when a memory's stack or platform labels are missing or wrong. " +
       "Autopilot: helpful (or confirm, if you checked it) and kudos on a colleague's memory you used, keep, a flag with evidence on any entry, and retire with a note on a learning or practice you checked. Needs the user's yes: delete (irreversible), retiring your own decision.",
     inputSchema: {

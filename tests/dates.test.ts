@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { todayUtc, addDaysUtc, toCalendarDate } from "../lib/dates";
+import { todayUtc, addDaysUtc, toCalendarDate, isCalendarDate } from "../lib/dates";
 
 describe("dates.todayUtc", () => {
   it("returns a YYYY-MM-DD calendar date", () => {
@@ -66,5 +66,28 @@ describe("parseDbTime", () => {
     const { formatRelativeTime } = await import("../lib/relative-time");
     const now = Date.UTC(2026, 8, 16, 15, 45, 0);
     expect(formatRelativeTime("2026-09-16 15:43:49", now)).toBe("1 min ago");
+  });
+});
+
+describe("dates.isCalendarDate", () => {
+  it("accepts real calendar days, including a leap day", () => {
+    expect(isCalendarDate("2026-10-15")).toBe(true);
+    expect(isCalendarDate("2024-02-29")).toBe(true);
+    expect(isCalendarDate("2026-12-31")).toBe(true);
+  });
+
+  it("rejects impossible days that only pass the format", () => {
+    for (const s of ["2026-13-01", "2026-02-30", "2026-02-29", "2026-13-45", "2026-00-10", "2026-04-31", "2026-01-00"]) {
+      expect(isCalendarDate(s), s).toBe(false);
+    }
+  });
+
+  it("rejects other formats and non-strings", () => {
+    for (const s of ["", "tomorrow", "2026-1-5", "2026-10-15T00:00:00Z", " 2026-10-15", "20261015"]) {
+      expect(isCalendarDate(s), s).toBe(false);
+    }
+    expect(isCalendarDate(undefined)).toBe(false);
+    expect(isCalendarDate(null)).toBe(false);
+    expect(isCalendarDate(20261015)).toBe(false);
   });
 });

@@ -177,7 +177,7 @@ describe("which paths count as an agent read", () => {
       upsertUser({ id: "maint.m@example.com", email: "maint.m@example.com", name: "Mia", roles: [] });
       const rule = await mk({ kind: "practice" });
       const { setPinned, flag } = await import("../lib/learnings");
-      setPinned(rule.id, ALICE, true, "mcp");
+      setPinned(rule.id, "maint.m@example.com", true, "mcp"); // a maintainer, now that pinning is restricted when BAB_MAINTAINERS is set
       const flagged = await mk({ kind: "standard" });
       flag(flagged.id, BOB, "mcp", "Moved to src/x.ts, 2026-10-07");
       const archived = await mk();

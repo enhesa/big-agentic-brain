@@ -105,11 +105,14 @@ describe("POST /api/messages", () => {
 
     const first = await POST(postReq({ to: "bob@example.com", body: "Hi" }, { "Idempotency-Key": "m1" }) as never);
     const firstBody = await first.json();
-    const second = await POST(postReq({ to: "bob@example.com", body: "Different" }, { "Idempotency-Key": "m1" }) as never);
+    const second = await POST(postReq({ to: "bob@example.com", body: "Hi" }, { "Idempotency-Key": "m1" }) as never);
     const secondBody = await second.json();
 
     expect(second.headers.get("Idempotent-Replayed")).toBe("true");
     expect(secondBody).toEqual(firstBody);
+
+    const third = await POST(postReq({ to: "bob@example.com", body: "Different" }, { "Idempotency-Key": "m1" }) as never);
+    expect(third.status).toBe(422);
 
     const { inboxFor } = await import("../lib/messages");
     expect(inboxFor("bob@example.com").length).toBe(1);

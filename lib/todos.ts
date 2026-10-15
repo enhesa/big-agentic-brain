@@ -56,7 +56,8 @@ export function getById(id: string): TodoRow | undefined {
     | undefined;
 }
 
-export type TodoFilter = "overdue" | "due_soon" | "open" | "done";
+export const TODO_TABS = ["overdue", "due_soon", "open", "done"] as const;
+export type TodoFilter = (typeof TODO_TABS)[number];
 
 /**
  * due_at is a UTC calendar date ("YYYY-MM-DD"); overdue/due_soon are computed

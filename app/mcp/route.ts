@@ -10,6 +10,7 @@ import { DEVICE_ERROR_RE, identify, identifyRequiredText } from "@/lib/identify"
 import { identityHint } from "@/lib/identity";
 import { callerKey } from "@/lib/caller-key";
 import { createConnection } from "@/lib/mcp-connections";
+import { tokenIdentityFor } from "@/lib/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -242,6 +243,7 @@ export async function POST(req: Request): Promise<Response> {
             deviceLabel: deviceLabelFrom(h),
             connectionId: connection?.id ?? null,
             ip,
+            tokenEmail: tokenIdentityFor(h),
           });
           return rpcResult(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
         } catch (err) {

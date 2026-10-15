@@ -876,6 +876,22 @@ it("bab_learn accepts tags, repo, project and a valid confidence/expiresAt toget
   expect(learning.confidence).toBe("high");
 });
 
+it.each([
+  ["a string", "abc"],
+  ["numbers", [1, 2]],
+  ["a mixed array", ["ok", 3]],
+])("bab_learn refuses tags that are %s", async (_label, tags) => {
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: { title: "T", body: "B", tags } }, ACTOR);
+  expect(out.result.isError).toBe(true);
+  expect(out.result.content[0].text).toMatch(/tags must be an array of strings/i);
+});
+
+it("bab_learn treats tags: null like absent tags", async () => {
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: { title: "Null tags", body: "Body about null tags.", tags: null } }, ACTOR);
+  expect(out.result.isError).toBeFalsy();
+  expect(JSON.parse(JSON.parse(out.result.content[0].text).learning.tags)).toEqual([]);
+});
+
 it("bab_learn refuses an out-of-enum confidence", async () => {
   const out = await rpc(
     "tools/call",
@@ -1087,7 +1103,7 @@ it("bab_send to yourself is a note in your own inbox", async () => {
   expect(threads[0].unreadCount).toBe(1);
 });
 
-it("bab_remind lists reminders, defaulting the tab and falling back on an invalid one", async () => {
+it("bab_remind lists reminders, defaulting the tab and refusing an unknown one", async () => {
   const created = await rpc(
     "tools/call",
     { name: "bab_remind", arguments: { action: "create", title: "Follow up", dueAt: "2026-10-05" } },
@@ -1100,7 +1116,42 @@ it("bab_remind lists reminders, defaulting the tab and falling back on an invali
   expect(JSON.parse(defaultTab.result.content[0].text).todos.some((t: { title: string }) => t.title === "Follow up")).toBe(true);
 
   const invalidTab = await rpc("tools/call", { name: "bab_remind", arguments: { action: "list", tab: "nonsense" } }, ACTOR);
-  expect(invalidTab.result.isError).toBeFalsy();
+  expect(invalidTab.result.isError).toBe(true);
+  expect(invalidTab.result.content[0].text).toBe("tab must be one of overdue, due_soon, open, done");
+
+  const doneTab = await rpc("tools/call", { name: "bab_remind", arguments: { action: "list", tab: "done" } }, ACTOR);
+  expect(doneTab.result.isError).toBeFalsy();
+});
+
+it("bab_remind create refuses a dueAt that is not a real calendar date, and accepts a leap day", async () => {
+  for (const dueAt of ["2026-13-01", "2026-02-30", "2026-02-29"]) {
+    const out = await rpc("tools/call", { name: "bab_remind", arguments: { action: "create", title: "Bad date", dueAt } }, ACTOR);
+    expect(out.result.isError, dueAt).toBe(true);
+    expect(out.result.content[0].text).toBe("dueAt must be a real calendar date, YYYY-MM-DD");
+  }
+  const { listMine } = await import("../lib/todos");
+  expect(listMine("alice.example@example.com", "open")).toHaveLength(0);
+
+  const ok = await rpc("tools/call", { name: "bab_remind", arguments: { action: "create", title: "Leap", dueAt: "2024-02-29" } }, ACTOR);
+  expect(ok.result.isError).toBeFalsy();
+});
+
+it("bab_learn refuses an expiresAt that is not a real calendar date", async () => {
+  for (const expiresAt of ["2026-13-45", "2026-02-30", "2026-02-29"]) {
+    const out = await rpc(
+      "tools/call",
+      { name: "bab_learn", arguments: { title: "Dated fact", body: "A time-bound fact about the freeze.", expiresAt } },
+      ACTOR,
+    );
+    expect(out.result.isError, expiresAt).toBe(true);
+    expect(out.result.content[0].text).toBe('expiresAt must be a real calendar date, YYYY-MM-DD, or "never"');
+  }
+  const ok = await rpc(
+    "tools/call",
+    { name: "bab_learn", arguments: { title: "Dated fact", body: "A time-bound fact about the freeze.", expiresAt: "2024-02-29" } },
+    ACTOR,
+  );
+  expect(ok.result.isError).toBeFalsy();
 });
 
 it("bab_remind snoozes and abandons the caller's own reminders", async () => {
@@ -1181,7 +1232,7 @@ it("bab_remind create refuses an invalid dueAt", async () => {
     ACTOR,
   );
   expect(out.result.isError).toBe(true);
-  expect(out.result.content[0].text).toMatch(/dueAt is required/i);
+  expect(out.result.content[0].text).toBe("dueAt must be a real calendar date, YYYY-MM-DD");
 });
 
 it("bab_remind refuses an unrecognized action", async () => {

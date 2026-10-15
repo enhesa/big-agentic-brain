@@ -146,6 +146,8 @@ describe("learnings.expiryState", () => {
       model: null,
       applies_to: "[]",
       pinned: 0,
+      pinned_by: null,
+      pinned_at: null,
       created_at: today,
       updated_at: today,
     };

@@ -10,7 +10,8 @@ process.env.BAB_PUBLIC_ORIGIN = "https://bab.example.com";
  * House rules (2026-10-07): pinned standards and practices that every Claude session sees on its
  * first prompt, company-wide ones plus the session's project, ranked by standing then recency,
  * capped (8 + 5, about 1200 characters), model-only, and re-readable with bab_search houseRules.
- * Pinning goes through bab_react pin / unpin; the texts say only maintainers pin (honour system).
+ * Pinning goes through bab_react pin / unpin; with BAB_MAINTAINERS set only maintainers may pin
+ * (enforced, tests/pin-maintainers.test.ts); with none configured it is an honour system.
  */
 
 let dataDir: string;
@@ -208,15 +209,18 @@ describe("pin flow (bab_react pin / unpin)", () => {
     await expect(tool("bab_react", { learningId: archived.id, action: "pin" })).rejects.toThrow(/archived/);
   });
 
-  // Honour system (tests/honour-system.test.ts): the texts say only maintainers pin; the
-  // server does not check. If this fails because a check was added, remove it and strengthen the text.
-  it("lets a non-maintainer pin: the rule lives in the texts", async () => {
+  // With BAB_MAINTAINERS set the server enforces who pins (tests/pin-maintainers.test.ts); the
+  // texts say the same, so agents propose instead of trying.
+  it("refuses a non-maintainer when maintainers are configured, and the texts say so", async () => {
     process.env.BAB_MAINTAINERS = "maintainer.one@example.com";
     try {
       const r = await rule({ pinned: false });
-      expect((await tool("bab_react", { learningId: r.id, action: "pin" }, VOTERS[1])).learning.pinned).toBe(1);
+      await expect(tool("bab_react", { learningId: r.id, action: "pin" }, VOTERS[1])).rejects.toThrow(
+        "Only maintainers can pin or unpin",
+      );
       const { findTool } = await import("../lib/mcp");
       expect(findTool("bab_react")!.description).toContain("Only BAB maintainers pin or unpin");
+      expect(findTool("bab_react")!.description).toContain("the server refuses anyone else when maintainers are configured");
     } finally {
       delete process.env.BAB_MAINTAINERS;
     }

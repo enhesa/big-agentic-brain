@@ -44,6 +44,7 @@ function learnOrigin(value: unknown): void {
   }
 }
 const inboxUrl = (): string | null => (origin ? `${origin}/inbox` : null)
+const remindersUrl = (): string | null => (origin ? `${origin}/reminders` : null)
 /** The hook route, asked here for a link token only (link_only); the curl hooks post the real events. */
 const hookUrl = (): string | null => (origin ? `${origin}/api/hook` : null)
 const PANE = 'bab-inbox'
@@ -141,6 +142,7 @@ const remindersAtom = atom({ plugin: 'bab', key: 'reminders' } as const, [] as R
 const showOlderAtom = atom({ plugin: 'bab', key: 'showOlder' } as const, false)
 const showMoreAtom = atom({ plugin: 'bab', key: 'showMore' } as const, false)
 const showLaterAtom = atom({ plugin: 'bab', key: 'showLater' } as const, false)
+const openReminderAtom = atom({ plugin: 'bab', key: 'openReminder' } as const, null as string | null)
 // What BAB counted when the list was last loaded; null until then.
 const unreadCountAtom = atom({ plugin: 'bab', key: 'unreadCount' } as const, null as UnreadCount | null)
 
@@ -191,6 +193,11 @@ let loadAgain = false
 /** Colleague text is drawn, never interpreted: strip control characters, which a Text refuses. */
 function clean(s: string | null | undefined, max = 120): string {
   return (s ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim().slice(0, max)
+}
+
+/** Like clean, but keeps line breaks: a reminder's text may be a list of steps. */
+function cleanLines(s: string | null | undefined, max: number): string {
+  return (s ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 }
 
 /** What went wrong, as one short line a Text can hold: an error can carry text from the server. */
@@ -445,7 +452,7 @@ async function unreadThreads($: EngineInterface): Promise<{ threads: Thread[]; t
   return { threads: threads.slice(0, UNREAD_CAP), total }
 }
 
-type Todo = { id: string; title?: string; due_at?: string | null }
+type Todo = { id: string; title?: string; body?: string | null; due_at?: string | null; related_key?: string | null }
 
 /** The person's open reminders, oldest due first. */
 async function openReminders($: EngineInterface): Promise<Reminder[]> {
@@ -458,6 +465,9 @@ async function openReminders($: EngineInterface): Promise<Reminder[]> {
       return {
         id: t.id,
         title: clean(t.title, 120) || '(no title)',
+        fullTitle: clean(t.title, 160) || '(no title)',
+        body: cleanLines(t.body, 4000) || null,
+        relatedKey: clean(t.related_key, 80) || null,
         due: due ? (due === today ? 'today' : due) : 'no date',
         isDue: !!due && due <= today,
         isOverdue: !!due && due < today,
@@ -901,6 +911,7 @@ export const register: Register = on => {
     const showOlder = await read($, showOlderAtom)
     const showMore = await read($, showMoreAtom)
     const showLater = await read($, showLaterAtom)
+    const openReminder = await read($, openReminderAtom)
     const open = await read($, openAtom)
     const threads = await read($, threadsAtom)
     const unreadCount = await read($, unreadCountAtom)
@@ -1052,6 +1063,8 @@ export const register: Register = on => {
     /** One reminder on one line: its title, when it is due and its two buttons, the title giving way before a button does. */
     const reminderRow = (r: Reminder) => {
       const color = r.isOverdue ? RED : r.due === 'today' ? TEAL : undefined
+      const isOpen = openReminder === r.id
+      const toggle = () => void update($, openReminderAtom, id => (id === r.id ? null : r.id))
       const due = r.isOverdue ? `overdue ${shortDate(r.due)}` : r.due === 'today' || r.due === 'no date' ? r.due : shortDate(r.due)
       const note = reminderNote?.id === r.id ? reminderNote : null
       // The pane's padding (2), the clock (3), the gaps, and for a reminder that is due its two buttons ("✓ Done", "Snooze a week"), come off the title.
@@ -1067,14 +1080,26 @@ export const register: Register = on => {
         <Box key={`r-${r.id}`} flexDirection="column">
           <Box flexDirection="row" alignItems="center" gap={1}>
             <Text>⏰</Text>
-            <Text color={color} bold={r.isDue} dimColor={!r.isDue}>
-              {fit(r.title, isStacked ? cols - 2 - 3 - 1 - due.length - 1 : room)}
-            </Text>
+            <Button key={`open-${r.id}`} plain dimColor={!r.isDue} hover={{ underline: true }} onPress={toggle}>
+              <Text color={color} bold={r.isDue}>{fit(r.title, isStacked ? cols - 2 - 3 - 1 - due.length - 1 : room)}</Text>
+            </Button>
             <Box flexGrow={1} />
             <Text color={color} dimColor={!r.isDue}>{due}</Text>
             {r.isDue && !isStacked ? actions : null}
           </Box>
           {r.isDue && isStacked ? <Box paddingLeft={3}>{actions}</Box> : null}
+          {isOpen ? (
+            <Box flexDirection="column" paddingLeft={3} marginBottom={1}>
+              <Text wrap="wrap" bold>{r.fullTitle}</Text>
+              {r.body ? <Text wrap="wrap">{r.body}</Text> : <Text dimColor>No further text.</Text>}
+              <Text dimColor wrap="wrap">
+                {r.due === 'no date' ? 'No due date' : `Due ${r.due === 'today' ? 'today' : r.due}`}
+                {r.relatedKey ? ` · ${r.relatedKey}` : ''}
+              </Text>
+              {remindersUrl() ? <Link key={`web-${r.id}`} href={remindersUrl()!}>Open on the web ↗</Link> : null}
+              <Button key={`close-${r.id}`} plain dimColor label="Close" onPress={toggle} />
+            </Box>
+          ) : null}
           {note ? (
             <Box paddingLeft={3}>
               <Text color={RED} wrap="wrap">{note.text}</Text>
