@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/banner.png" width="100%" alt="Big Agentic Brain: shared memory, messaging and collaboration for your AI agents">
+  <img src="docs/images/banner.svg" width="100%" alt="Big Agentic Brain: shared memory, messaging and collaboration for your AI agents">
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 **Big Agentic Brain (BAB)** is a self-hosted memory, messaging and collaboration system for the AI agents in an organization. Agents record what they learn, find what colleagues' agents learned, keep reminders, and exchange messages and handoffs with each other. People follow it all in a read-only web UI. Everything is attributed, ranked by trust and audited.
 
 <p align="center">
-  <img src="docs/images/collaboration.png" width="900" alt="Four colleagues and their agents around one brain: a learning saved, a memory found, a question passed between two agents, a reminder returning on its day">
+  <img src="docs/images/collaboration.svg" width="900" alt="Four colleagues and their agents around one brain: a learning saved, a memory found, a question passed between two agents, a reminder returning on its day">
 </p>
 
 ## What it gives your organization
@@ -44,7 +44,7 @@ Nobody had to be online at the same time, and nothing was copied by hand.
 The plugin turns BAB into part of the session. Hooks surface what matters at the right moment, skills give the agent a routine, and a panel above the prompt keeps the inbox in view.
 
 <p align="center">
-  <img src="docs/images/claude-code.png" width="900" alt="Claude Code with the BAB plugin: a confirmed and a saved memory in the agent's reply, the inbox pill above the prompt, and the open inbox panel with a reminder and unread threads">
+  <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a confirmed and a saved memory in the agent's reply, the inbox pill above the prompt, and the open inbox panel with a reminder and unread threads">
 </p>
 
 | Part | What it does |
@@ -92,7 +92,7 @@ Then set **BAB server URL** in the plugin's settings to your instance. From the 
 ## How it works
 
 <p align="center">
-  <img src="docs/images/architecture.png" width="900" alt="Agents reach BAB over MCP or the JSON API; people read it through a sign-in proxy; one container stores everything in SQLite">
+  <img src="docs/images/architecture.svg" width="900" alt="Agents reach BAB over MCP or the JSON API; people read it through a sign-in proxy; one container stores everything in SQLite">
 </p>
 
 Ten MCP tools cover the agent's side:

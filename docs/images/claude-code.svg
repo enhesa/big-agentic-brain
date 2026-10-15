@@ -1,7 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" role="img" aria-labelledby="t">
   <title id="t">Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel</title>
+  <style>
+    .cursor { animation: blink 1s steps(2) infinite; }
+    @keyframes blink { to { opacity: 0; } }
+    .pill { animation: pill 12s ease-out infinite; }
+    @keyframes pill { 0%, 8% { opacity: 0; transform: translateY(6px); } 14%, 100% { opacity: 1; transform: translateY(0); } }
+    .toast { animation: toast 12s ease-out infinite; }
+    @keyframes toast { 0%, 10% { opacity: 0; } 14%, 24% { opacity: 1; } 28%, 100% { opacity: 0; } }
+    .panel { animation: panel 12s ease-out infinite; }
+    @keyframes panel { 0%, 30% { opacity: 0; } 36%, 100% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .cursor, .pill, .toast, .panel { animation: none; } }
+  </style>
   <defs>
     <clipPath id="win"><rect x="0" y="0" width="1000" height="600" rx="16"/></clipPath>
+    <clipPath id="typed"><rect x="40" y="560" width="0" height="24"><animate attributeName="width" values="0;0;760;760" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect></clipPath>
   </defs>
   <g clip-path="url(#win)">
     <rect width="1000" height="600" fill="#0f1b2d"/>
@@ -19,13 +31,18 @@
     <text x="48" y="138" fill="#9fb0c8">Saved to BAB: <tspan fill="#e6edf7">First export run needs --no-cache</tspan>  <tspan fill="#5aa9ff">https://bab.example.com/memory/4f1e…</tspan></text>
 
     <!-- the inbox pill -->
+    <g class="pill">
     <rect x="28" y="162" width="944" height="34" rx="8" fill="none" stroke="#00b0a1" stroke-width="1.5"/>
     <text x="42" y="184" fill="#e6edf7"><tspan fill="#00b0a1">✉</tspan>  <tspan font-weight="700" fill="#00b0a1">NEW</tspan>  <tspan font-weight="700">Maya Kowalski and 1 other</tspan> <tspan fill="#9fb0c8">· Retry hides the real error</tspan>  <tspan fill="#00b0a1">⏰ 1 due</tspan></text>
     <rect x="820" y="168" width="34" height="22" rx="3" fill="#00b0a1"/><text x="837" y="184" text-anchor="middle" font-weight="700" fill="#0f1b2d">2</text>
     <rect x="866" y="168" width="56" height="22" rx="3" fill="#1e3150"/><text x="894" y="184" text-anchor="middle" fill="#e6edf7">Open</text>
     <text x="946" y="184" fill="#9fb0c8">✕</text>
+    </g>
+    <!-- the toast -->
+    <g class="toast"><rect x="548" y="222" width="424" height="40" rx="8" fill="#1e3150" stroke="#00b0a1"/><text x="564" y="247" fill="#e6edf7"><tspan fill="#00b0a1">✉</tspan> Maya Kowalski: Retry hides the real error</text></g>
 
     <!-- the open panel -->
+    <g class="panel">
     <rect x="28" y="212" width="944" height="326" rx="8" fill="#13213a" stroke="#27405f"/>
     <text x="44" y="238" fill="#00b0a1" font-weight="700">◆ BAB  2 new <tspan fill="#00b0a1" font-weight="400">· 1 due today</tspan></text>
     <text x="900" y="238" fill="#9fb0c8">↻   <tspan fill="#5aa9ff">Web ↗</tspan></text>
@@ -61,8 +78,10 @@
 
     <text x="44" y="520" fill="#9fb0c8">Open a row to read the thread. <tspan fill="#00b0a1" font-weight="700">↗ Open chat</tspan> starts a session on it; <tspan fill="#e6edf7">⧉ Copy prompt</tspan> takes it to any Claude chat.</text>
 
-    <!-- the prompt -->
-    <text x="28" y="576" fill="#e6edf7"><tspan fill="#00b0a1">&gt;</tspan> tell Maya's agent the retry is fixed in PR 42, and remind me Friday to close the thread</text>
-    <rect x="786" y="564" width="9" height="16" fill="#e6edf7" opacity="0.8"/>
+    </g>
+    <!-- the prompt, typed -->
+    <text x="28" y="576" fill="#00b0a1">&gt;</text>
+    <text x="28" y="576" fill="#e6edf7" clip-path="url(#typed)">&gt; tell Maya's agent the retry is fixed in PR 42, and remind me Friday to close the thread</text>
+    <rect x="46" y="564" width="9" height="16" fill="#e6edf7" opacity="0.8" class="cursor"><animate attributeName="x" values="46;46;786;786" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect>
   </g>
 </svg>
