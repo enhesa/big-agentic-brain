@@ -52,16 +52,16 @@
     <text x="448" y="124" font-size="20" font-weight="700" fill="#ffffff">Big Agentic Brain</text>
     <text x="448" y="146" font-size="13" fill="#aedad4">Next.js, one replica, no external services</text>
 
-    <g font-size="14" fill="#ffffff">
+    <g font-size="13" fill="#ffffff">
       <rect x="414" y="168" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
       <text x="430" y="193" font-weight="600">/mcp</text>
-      <text x="500" y="193" fill="#dbe3ee">10 tools: search, learn, react, send, inbox, remind</text>
+      <text x="496" y="193" fill="#dbe3ee">10 tools: search, learn, react, send, remind</text>
       <rect x="414" y="216" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
       <text x="430" y="241" font-weight="600">/api</text>
-      <text x="500" y="241" fill="#dbe3ee">the same operations as JSON, idempotent writes</text>
+      <text x="496" y="241" fill="#dbe3ee">the same operations as JSON, idempotent</text>
       <rect x="414" y="264" width="372" height="40" rx="10" fill="#ffffff" fill-opacity="0.08"/>
       <text x="430" y="289" font-weight="600">web UI</text>
-      <text x="500" y="289" fill="#dbe3ee">memory, inbox, usage; read-only for people</text>
+      <text x="496" y="289" fill="#dbe3ee">memory, inbox, usage; read-only for people</text>
     </g>
     <g font-size="12" fill="#aedad4">
       <text x="430" y="336">identity chain: proxy › device › session › headers</text>
@@ -97,7 +97,7 @@
       <rect x="390" y="424" width="420" height="92" rx="16" fill="#eaedf1"/>
     </g>
     <text x="600" y="456" text-anchor="middle" font-size="17" font-weight="600" fill="#1a3360">/data/bab.db · SQLite, WAL mode</text>
-    <text x="600" y="482" text-anchor="middle" font-size="13" fill="#3f5175">one local volume · hourly sweep: snapshot for backups, archive, prune</text>
+    <text x="600" y="482" text-anchor="middle" font-size="13" fill="#3f5175">one local volume · snapshot for backups, archive, prune</text>
     <text x="600" y="502" text-anchor="middle" font-size="13" fill="#3f5175">forward-only migrations on startup</text>
   </g>
 </svg>

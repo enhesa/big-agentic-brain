@@ -203,8 +203,8 @@
 
   <!-- captions, one per moment -->
   <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#3f5175" text-anchor="middle">
-    <text x="345" y="183" opacity="0">records what it learned<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.01;0.03;0.23;0.25;1" dur="24s" repeatCount="indefinite"/></text>
-    <text x="855" y="183" opacity="0">finds it before guessing<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.26;0.28;0.48;0.5;1" dur="24s" repeatCount="indefinite"/></text>
+    <text x="330" y="218" opacity="0">records what it learned<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.01;0.03;0.23;0.25;1" dur="24s" repeatCount="indefinite"/></text>
+    <text x="870" y="218" opacity="0">finds it before guessing<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.26;0.28;0.48;0.5;1" dur="24s" repeatCount="indefinite"/></text>
     <text x="838" y="342" text-anchor="start" opacity="0">checks the house rules<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.26;0.28;0.48;0.5;1" dur="24s" repeatCount="indefinite"/></text>
     <text x="600" y="150" font-weight="600" fill="#1a3360" opacity="0">asks and answers, agent to agent<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.51;0.53;0.73;0.75;1" dur="24s" repeatCount="indefinite"/></text>
     <text x="362" y="342" text-anchor="end" opacity="0">a reminder, back on its day<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.76;0.78;0.98;1;1" dur="24s" repeatCount="indefinite"/></text>
@@ -212,29 +212,29 @@
 
   <!-- the four moments -->
   <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
-    <g transform="translate(60 470)">
-      <rect width="255" height="64" rx="14" class="chip" stroke-width="1.5"/>
-      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">SAVE</text>
-      <text x="16" y="44" font-size="12.5" class="chipText">Alice's agent learns something. She</text>
-      <text x="16" y="58" font-size="12.5" class="chipText">approves, it is in the brain for everyone.</text>
+    <g transform="translate(60 486)">
+      <rect width="255" height="60" rx="14" class="chip" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#00b0a1">SAVE</text>
+      <text x="14" y="41" font-size="12" class="chipText">Alice's agent learns something. She</text>
+      <text x="14" y="54" font-size="12" class="chipText">approves, it is in the brain for everyone.</text>
     </g>
-    <g transform="translate(335 470)">
-      <rect width="255" height="64" rx="14" class="chip c2" stroke-width="1.5"/>
-      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">FIND</text>
-      <text x="16" y="44" font-size="12.5" class="chipText c2">Carl's agent searches the brain before</text>
-      <text x="16" y="58" font-size="12.5" class="chipText c2">it guesses, and confirms what worked.</text>
+    <g transform="translate(335 486)">
+      <rect width="255" height="60" rx="14" class="chip c2" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#00b0a1">FIND</text>
+      <text x="14" y="41" font-size="12" class="chipText c2">Carl's agent searches the brain before</text>
+      <text x="14" y="54" font-size="12" class="chipText c2">it guesses, and confirms what worked.</text>
     </g>
-    <g transform="translate(610 470)">
-      <rect width="255" height="64" rx="14" class="chip c3" stroke-width="1.5"/>
-      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">ASK</text>
-      <text x="16" y="44" font-size="12.5" class="chipText c3">Agents message each other, online or</text>
-      <text x="16" y="58" font-size="12.5" class="chipText c3">not. People can read every thread.</text>
+    <g transform="translate(610 486)">
+      <rect width="255" height="60" rx="14" class="chip c3" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#00b0a1">ASK</text>
+      <text x="14" y="41" font-size="12" class="chipText c3">Agents message each other, online or</text>
+      <text x="14" y="54" font-size="12" class="chipText c3">not. People can read every thread.</text>
     </g>
-    <g transform="translate(885 470)">
-      <rect width="255" height="64" rx="14" class="chip c4" stroke-width="1.5"/>
-      <text x="16" y="26" font-size="13" font-weight="700" fill="#00b0a1">REMIND</text>
-      <text x="16" y="44" font-size="12.5" class="chipText c4">Bob's agent sets a reminder. It comes</text>
-      <text x="16" y="58" font-size="12.5" class="chipText c4">back on its day, at session start.</text>
+    <g transform="translate(885 486)">
+      <rect width="255" height="60" rx="14" class="chip c4" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#00b0a1">REMIND</text>
+      <text x="14" y="41" font-size="12" class="chipText c4">Bob's agent sets a reminder. It comes</text>
+      <text x="14" y="54" font-size="12" class="chipText c4">back on its day, at session start.</text>
     </g>
   </g>
 </svg>

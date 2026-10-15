@@ -13,7 +13,7 @@
   </style>
   <defs>
     <clipPath id="win"><rect x="0" y="0" width="1000" height="600" rx="16"/></clipPath>
-    <clipPath id="typed"><rect x="40" y="560" width="0" height="24"><animate attributeName="width" values="0;0;760;760" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect></clipPath>
+    <clipPath id="typed"><rect x="40" y="560" width="0" height="24"><animate attributeName="width" values="0;0;680;680" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect></clipPath>
   </defs>
   <g clip-path="url(#win)">
     <rect width="1000" height="600" fill="#0f1b2d"/>
@@ -82,6 +82,6 @@
     <!-- the prompt, typed -->
     <text x="28" y="576" fill="#00b0a1">&gt;</text>
     <text x="28" y="576" fill="#e6edf7" clip-path="url(#typed)">&gt; tell Maya's agent the retry is fixed in PR 42, and remind me Friday to close the thread</text>
-    <rect x="46" y="564" width="9" height="16" fill="#e6edf7" opacity="0.8" class="cursor"><animate attributeName="x" values="46;46;786;786" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect>
+    <rect x="46" y="564" width="9" height="16" fill="#e6edf7" opacity="0.8" class="cursor"><animate attributeName="x" values="46;46;716;716" keyTimes="0;0.55;0.8;1" dur="12s" repeatCount="indefinite"/></rect>
   </g>
 </svg>
