@@ -6,6 +6,7 @@ import { derivedNameFromEmail, identityHint, identityRejectionText, isAliasEmail
 import { getUser, upsertUser } from "./users";
 import { bindDevice, devicesEnabled } from "./devices";
 import { bindConnection } from "./mcp-connections";
+import { isTokenBoundEmail, tokenBoundMessage } from "./gate";
 
 /**
  * bab_identify: the honour-system identity. The deployment must sit on a private network, behind an
@@ -119,7 +120,7 @@ export function identifyRequiredText(errorCode?: string | null): string {
 }
 
 /** A refused bab_identify, with a plain reason code for the audit row (read by /admin/usage). */
-export type IdentifyRefusalReason = "missing-email" | "wrong-form" | "not-allowed" | "bad-name";
+export type IdentifyRefusalReason = "missing-email" | "wrong-form" | "not-allowed" | "bad-name" | "token-bound";
 class IdentifyRefusal extends ValidationError {
   constructor(
     message: string,
@@ -154,6 +155,9 @@ export function identify(args: { email?: unknown; name?: unknown }, ctx: Identif
   try {
     email = cleanEmail(args.email);
     given = cleanName(args.name);
+    // A token=email address is its token holder's. Without that token, saying it is yours would
+    // let anyone act as them, so nothing is bound or created. (With the token, see below.)
+    if (!ctx.tokenEmail && isTokenBoundEmail(email)) throw new IdentifyRefusal(tokenBoundMessage(email), "token-bound");
   } catch (err) {
     // One audit row per refusal (bounded by the limiter above), so /admin/usage can show why
     // identifies fail. The caller is unknown, so the actor is anonymous; no address is stored.

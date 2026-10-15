@@ -89,7 +89,7 @@ describe("edge cases", () => {
   });
 });
 
-describe("forge-links alias matching with another domain", () => {
+describe("proxy-links alias matching with another domain", () => {
   let dataDir: string;
   beforeEach(() => {
     dataDir = mkdtempSync(path.join(tmpdir(), "bab-identity-pattern-"));
@@ -107,7 +107,7 @@ describe("forge-links alias matching with another domain", () => {
   it("suggests the long-form user for an alias on the hint domain only", async () => {
     const { upsertUser } = await import("../lib/users");
     upsertUser({ id: "alice.example@acme.example", email: "alice.example@acme.example", name: null, roles: [] });
-    const { suggestLinkFor } = await import("../lib/forge-links");
+    const { suggestLinkFor } = await import("../lib/proxy-links");
     expect(suggestLinkFor("oid-1", "aexample@acme.example", "Alice Example")?.email).toBe("alice.example@acme.example");
     expect(suggestLinkFor("oid-1", "aexample@example.com", "Alice Example")).toBeNull();
   });

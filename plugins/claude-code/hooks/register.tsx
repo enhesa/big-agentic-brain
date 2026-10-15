@@ -134,6 +134,8 @@ const hiddenAt = atom({ plugin: 'bab', key: 'hiddenAt' } as const, -1)
 const threadsAtom = atom({ plugin: 'bab', key: 'threads' } as const, null as ThreadRow[] | null)
 const openAtom = atom({ plugin: 'bab', key: 'open' } as const, null as OpenThread | null)
 const noticeAtom = atom({ plugin: 'bab', key: 'notice' } as const, null as string | null)
+// Why BAB's MCP server is not connected in this session, in words a person can act on; null while it is.
+const connectProblemAtom = atom({ plugin: 'bab', key: 'connectProblem' } as const, null as string | null)
 const rowNoteAtom = atom({ plugin: 'bab', key: 'rowNote' } as const, null as RowNote | null)
 const reminderNoteAtom = atom({ plugin: 'bab', key: 'reminderNote' } as const, null as ReminderNote | null)
 // The prompt to copy by hand when the clipboard refused it; null when there is none to show.
@@ -293,9 +295,27 @@ function groupMessages(messages: MessageLine[], now: number): Group[] {
   return groups
 }
 
+/** What to tell a person when BAB's MCP server is not connected, by the host's one-word reason. */
+function connectHelp(reason: string, message: string): string {
+  const detail = clean(message, 120)
+  switch (reason) {
+    case 'disabled':
+      return "BAB's server is turned off in this session. Turn it on in /mcp, then press ↻."
+    case 'policy':
+      return "Your organization's MCP policy blocks BAB's server. Ask your Claude admin."
+    case 'auth':
+      return "BAB's server needs you to sign in. Open /mcp to sign in, then press ↻."
+    default:
+      return `BAB's server did not connect${detail ? ` (${detail})` : ''}. Run /mcp to see why. Updating the plugin in /plugin and restarting Claude usually fixes it.`
+  }
+}
+
 async function serverName($: EngineInterface): Promise<string> {
   const c = await $.mcp.connect('bab')
-  return c.isConnected ? c.server : SERVER
+  if (c.isConnected) return c.server
+  // Recorded, not thrown: the call below still tries the plugin's own server name, and clears this when it works.
+  await update($, connectProblemAtom, () => connectHelp(c.reason, c.message))
+  return SERVER
 }
 
 /** Settles with `work`, or rejects when it takes longer than `ms`: a stalled request must not hold a check for ever. */
@@ -320,6 +340,7 @@ async function call($: EngineInterface, tool: string, args: Record<string, unkno
   const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool)
   const text = result.isError ? null : result.content?.find(c => c.type === 'text')?.text
   if (text == null) throw new Error(`${tool} failed`)
+  if ((await read($, connectProblemAtom)) !== null) await update($, connectProblemAtom, () => null)
   return text
 }
 
@@ -719,7 +740,8 @@ async function fetchThreads($: EngineInterface): Promise<void> {
     await update($, unreadCountAtom, () => ({ threads: unread.total, hidden: Math.max(0, unread.total - unread.threads.length) }))
     await update($, noticeAtom, () => null)
   } catch (err) {
-    await update($, noticeAtom, () => `Could not load the inbox (${why(err)})`)
+    const problem = await read($, connectProblemAtom)
+    await update($, noticeAtom, () => problem ?? `Could not load the inbox (${why(err)})`)
   }
 }
 
@@ -904,6 +926,7 @@ export const register: Register = on => {
     const cols = e.props.bodyColumns > 0 ? Math.max(24, e.props.bodyColumns) : 80
     const v = await read($, view)
     const notice = await read($, noticeAtom)
+    const connectProblem = await read($, connectProblemAtom)
     const rowNote = await read($, rowNoteAtom)
     const copy = await read($, copyTextAtom)
     const reminders = await read($, remindersAtom)
@@ -1126,7 +1149,7 @@ export const register: Register = on => {
           <Button key="refresh" label="↻" plain onPress={() => void refreshPanel($)} />
           {inboxUrl() ? <Link key="web" href={inboxUrl()!}>Web ↗</Link> : null}
         </Box>
-        {v.isDown ? <Text dimColor>BAB unreachable, retrying</Text> : null}
+        {v.isDown ? <Text dimColor wrap="wrap">{connectProblem ?? 'BAB unreachable, retrying'}</Text> : null}
         {notice ? (
           <Box marginTop={1}>
             <Text color={RED} wrap="wrap">{notice}</Text>

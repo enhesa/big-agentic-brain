@@ -30,6 +30,7 @@ The plugin registers hooks that post to `<bab_url>/api/hook`:
   messages, due reminders and house rules on the first prompt.
 - `SessionStart` (after a compaction only): reminds the agent to save what the summary lost.
 - `Stop`: after a finished task, nudges the agent to record a reusable learning.
+- Bash results: when a Bash command fails (an error result, or output that shows a failed test or build even though the command exited 0), the plugin appends a one-line reminder to the result: search BAB for the error text before debugging. It matches the output only, once per distinct error and at most three times per session, and stays quiet for interrupted or refused commands. It never changes the command, its output or its exit code, and if anything goes wrong the result passes through untouched.
 
 Each hook posts the event Claude Code hands it, as is: the session id, the working directory, the event name and, on `Stop`, the agent's last message; on `UserPromptSubmit` that payload also includes the prompt text. The server reads only those fields. It keeps the session id (to count prompts and deliveries per session) and the working directory for a few minutes (to name the project); the last message is only matched against a task-completion pattern, and the prompt text is ignored. Use an `https://` URL without a trailing slash, since the hooks follow no redirects and a redirect body would land in the session as text.
 

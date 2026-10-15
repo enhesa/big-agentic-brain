@@ -51,28 +51,28 @@ describe("ownerIdFor", () => {
     ).toBe("jean.dupont@example.com");
   });
 
-  it("maps a forge actor via its email, not its (opaque) forge id", async () => {
+  it("maps a proxy actor via its email, not its (opaque) proxy id", async () => {
     const { ownerIdFor } = await import("../lib/reminders-view");
     expect(
-      ownerIdFor({ id: "forge-oid-123", email: "jean.dupont@example.com", source: "forge" }),
+      ownerIdFor({ id: "proxy-oid-123", email: "jean.dupont@example.com", source: "proxy" }),
     ).toBe("jean.dupont@example.com");
   });
 
-  it("lowercases a forge email before matching", async () => {
+  it("lowercases a proxy email before matching", async () => {
     const { ownerIdFor } = await import("../lib/reminders-view");
     expect(
-      ownerIdFor({ id: "forge-oid-123", email: "Jean.Dupont@Example.com", source: "forge" }),
+      ownerIdFor({ id: "proxy-oid-123", email: "Jean.Dupont@Example.com", source: "proxy" }),
     ).toBe("jean.dupont@example.com");
   });
 
-  it("rejects a forge actor whose email is a short alias, not the long form", async () => {
+  it("rejects a proxy actor whose email is a short alias, not the long form", async () => {
     const { ownerIdFor } = await import("../lib/reminders-view");
-    expect(ownerIdFor({ id: "forge-oid-123", email: "jdupont@example.com", source: "forge" })).toBeNull();
+    expect(ownerIdFor({ id: "proxy-oid-123", email: "jdupont@example.com", source: "proxy" })).toBeNull();
   });
 
-  it("rejects a forge actor with no email at all", async () => {
+  it("rejects a proxy actor with no email at all", async () => {
     const { ownerIdFor } = await import("../lib/reminders-view");
-    expect(ownerIdFor({ id: "forge-oid-123", email: null, source: "forge" })).toBeNull();
+    expect(ownerIdFor({ id: "proxy-oid-123", email: null, source: "proxy" })).toBeNull();
   });
 
   it("returns null for no actor", async () => {
@@ -164,10 +164,10 @@ describe("RemindersPage (render)", () => {
     expect(html).not.toContain("Bob's secret reminder");
   });
 
-  it("maps a trusted forge session to reminders by email, not the opaque forge id", async () => {
+  it("maps a trusted proxy session to reminders by email, not the opaque proxy id", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-999",
+      "x-auth-request-user": "proxy-oid-999",
       "x-auth-request-email": "carol.jones@example.com",
       "x-auth-request-preferred-username": "Carol Jones",
     });
@@ -191,11 +191,11 @@ describe("RemindersPage (render)", () => {
     expect(html).not.toContain("Should never render");
   });
 
-  it("shows only the privacy line for an untrusted forge session (BAB_TRUST_PROXY_IDENTITY unset)", async () => {
+  it("shows only the privacy line for an untrusted proxy session (BAB_TRUST_PROXY_IDENTITY unset)", async () => {
     // Default posture: sign-in proxy headers present, but not trusted, so
     // getSessionUser() resolves nothing and the page must not guess an owner.
     mockRequest({
-      "x-auth-request-user": "forge-oid-999",
+      "x-auth-request-user": "proxy-oid-999",
       "x-auth-request-email": "carol.jones@example.com",
       "x-auth-request-preferred-username": "Carol Jones",
     });
@@ -232,7 +232,7 @@ describe("RemindersPage (render)", () => {
   it("points at /me/devices plus the privacy line for a trusted, unlinked proxy viewer (short alias)", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -248,7 +248,7 @@ describe("RemindersPage (render)", () => {
   it("an unlinked viewer sees just the /me/devices line and the privacy line: no form, no button, no link to a devices list", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -263,7 +263,7 @@ describe("RemindersPage (render)", () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     await seedUser("alice.example@example.com");
     mockRequest({
-      "x-auth-request-user": "forge-oid-suggest",
+      "x-auth-request-user": "proxy-oid-suggest",
       "x-auth-request-email": "aexample@example.com",
       "x-auth-request-preferred-username": "Alice Example",
     });
@@ -280,7 +280,7 @@ describe("RemindersPage (render)", () => {
   it("shows no suggestion when the alias matches nobody", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-none",
+      "x-auth-request-user": "proxy-oid-none",
       "x-auth-request-email": "aexample@example.com",
       "x-auth-request-preferred-username": "Alice Example",
     });
@@ -295,7 +295,7 @@ describe("RemindersPage (render)", () => {
   it("never shows another person's reminders alongside the /me/devices line", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -320,7 +320,7 @@ describe("RemindersPage (render)", () => {
 
   it("shows no /me/devices line for an untrusted proxy session (BAB_TRUST_PROXY_IDENTITY unset)", async () => {
     mockRequest({
-      "x-auth-request-user": "forge-oid-pending",
+      "x-auth-request-user": "proxy-oid-pending",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -332,14 +332,14 @@ describe("RemindersPage (render)", () => {
 
   it("shows the viewer's own reminders, not the /me/devices line, once their proxy id is linked", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await linkForTests("forge-oid-now-linked", "jean.dupont@example.com");
+    await linkForTests("proxy-oid-now-linked", "jean.dupont@example.com");
 
     const { create } = await import("../lib/todos");
     await seedUser("jean.dupont@example.com");
     create({ ownerId: "jean.dupont@example.com", title: "Renew the VPN cert" });
 
     mockRequest({
-      "x-auth-request-user": "forge-oid-now-linked",
+      "x-auth-request-user": "proxy-oid-now-linked",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -353,12 +353,12 @@ describe("RemindersPage (render)", () => {
   // browser linkage at all. Unlinking lives on /me/devices.
   it("shows a linked proxy viewer only their reminders: no devices link, no unlink form, no 'linked to' line", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
-    await linkForTests("forge-oid-unlink", "jean.dupont@example.com");
+    await linkForTests("proxy-oid-unlink", "jean.dupont@example.com");
     await seedUser("jean.dupont@example.com");
     const { create } = await import("../lib/todos");
     create({ ownerId: "jean.dupont@example.com", title: "Rotate the signing key" });
     mockRequest({
-      "x-auth-request-user": "forge-oid-unlink",
+      "x-auth-request-user": "proxy-oid-unlink",
       "x-auth-request-email": "jdupont@example.com",
       "x-auth-request-preferred-username": "Jean Dupont",
     });
@@ -379,12 +379,12 @@ describe("RemindersPage (render)", () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     await seedUser("real.person@example.com");
     mockRequest({
-      "x-auth-request-user": "forge-oid-longform",
+      "x-auth-request-user": "proxy-oid-longform",
       "x-auth-request-email": "real.person@example.com",
       "x-auth-request-preferred-username": "Real Person",
     });
-    const forgeHtml = await renderReminders();
-    for (const text of ["Your devices", "Unlink", "linked to", "/me/devices"]) expect(forgeHtml).not.toContain(text);
+    const proxyHtml = await renderReminders();
+    for (const text of ["Your devices", "Unlink", "linked to", "/me/devices"]) expect(proxyHtml).not.toContain(text);
   });
 
   it("shows nothing about browsers to an agent-header actor either", async () => {

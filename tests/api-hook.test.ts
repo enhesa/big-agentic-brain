@@ -127,7 +127,11 @@ describe("GET /api/hook", () => {
     const { version } = getInstructions("https://bab.example.com");
     const text = (await (await call()).json()).hookSpecificOutput.additionalContext;
     expect(text).toContain(version);
-    expect(text).toContain("/instructions/install.md");
+    expect(text).toContain("Install guide: https://bab.example.com/instructions/install.md");
+    expect(text).not.toContain("Steps:");
+    // What the legacy install left behind, named in the hook itself since install.md no longer lists it.
+    expect(text).toContain("permissions.ask");
+    expect(text).toContain("~/.claude/skills/big-agentic-brain");
   });
 
   // A hook that 401s would make Claude Code report an error on every prompt for anyone

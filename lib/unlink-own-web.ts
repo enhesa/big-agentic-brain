@@ -1,8 +1,8 @@
 import { auditRequest } from "./request-audit";
 import { notifyJson } from "./notify-auth";
 import { currentUser } from "./user";
-import { trustForgeHeaders } from "./session";
-import { unlinkOwnBrowser } from "./forge-links";
+import { trustProxyHeaders } from "./session";
+import { unlinkOwnBrowser } from "./proxy-links";
 import { forbiddenResponse, redirectTo, sameOrigin } from "./feedback-web";
 import { wantsJson } from "./me-web";
 
@@ -15,13 +15,13 @@ import { wantsJson } from "./me-web";
  */
 export async function unlinkOwnResponse(request: Request, path: string, backTo: string): Promise<Response> {
   if (!sameOrigin(request)) return forbiddenResponse();
-  if (!trustForgeHeaders()) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
-  const forge = await currentUser();
-  if (!forge) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
+  if (!trustProxyHeaders()) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
+  const proxy = await currentUser();
+  if (!proxy) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
 
-  const removed = unlinkOwnBrowser(forge.id);
+  const removed = unlinkOwnBrowser(proxy.id);
   await auditRequest({
-    actor: removed ? { id: removed.email, name: forge.name, email: removed.email } : null,
+    actor: removed ? { id: removed.email, name: proxy.name, email: removed.email } : null,
     method: "POST",
     path,
     via: "ui",

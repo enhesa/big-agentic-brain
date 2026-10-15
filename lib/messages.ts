@@ -6,6 +6,7 @@ import { redact, assertMaxLength, assertRawLength } from "./redact";
 import { getUser, getUsersByIds } from "./users";
 import { deliveryFor, type Delivery } from "./delivery";
 import { NotFoundError, ForbiddenError, ValidationError } from "./errors";
+import { isMaintainer } from "./feedback";
 import type {
   AuditVia,
   MessageKind,
@@ -624,17 +625,21 @@ export interface ViewerMessage extends ClientMessage {
 
 /**
  * Thread + all its messages, chronologically, with sender/recipient names
- * and emails resolved — for the human-facing Conversations browser. No
- * participant restriction (unlike thread()/requireThreadForActor(), which
- * the agent-facing API keeps unchanged).
+ * and emails resolved, for the human-facing thread page. Only a participant
+ * or a maintainer (BAB_MAINTAINERS) may read it: anyone else gets the same
+ * ForbiddenError as requireThreadForActor(). A missing thread is undefined.
  */
 export function threadForViewer(
   threadId: string,
+  viewerId: string,
 ): { thread: ThreadRow; messages: ViewerMessage[] } | undefined {
   const db = getDb();
   const t = db.prepare("SELECT * FROM threads WHERE id = ?").get(threadId) as unknown as | ThreadRow
     | undefined;
   if (!t) return undefined;
+  if (!isParticipant(db, threadId, viewerId) && !isMaintainer(viewerId)) {
+    throw new ForbiddenError("Not a participant of this thread");
+  }
 
   const messages = db
     .prepare("SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC")

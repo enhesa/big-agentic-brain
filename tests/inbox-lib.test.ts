@@ -17,6 +17,7 @@ afterEach(async () => {
   rmSync(dataDir, { recursive: true, force: true });
   delete process.env.DATA_DIR;
   delete process.env.BAB_INBOX_PAGE;
+  delete process.env.BAB_MAINTAINERS;
   _resetConfigForTests();
 });
 
@@ -106,6 +107,17 @@ describe("threadForParticipant", () => {
     const asBob = threadForParticipant(thread.id, BOB);
     expect(asBob?.messages[0]).toMatchObject({ body: "Hello", fromName: "Alice A", toName: "Bob B" });
     expect(threadForParticipant(thread.id, ALICE)).toBeDefined();
+    expect(threadForParticipant(thread.id, CARL)).toBeUndefined();
+  });
+
+  it("does not let a maintainer in: the Inbox is the viewer's own threads, unlike the thread page", async () => {
+    await seed();
+    process.env.BAB_MAINTAINERS = CARL;
+    const { send, threadForViewer } = await import("../lib/messages");
+    const { threadForParticipant } = await import("../lib/inbox-page");
+    const { thread } = send({ fromId: ALICE, to: BOB, subject: "Hi", body: "Hello" });
+
+    expect(threadForViewer(thread.id, CARL)).toBeDefined();
     expect(threadForParticipant(thread.id, CARL)).toBeUndefined();
   });
 

@@ -21,8 +21,8 @@ SVEN="sven.aalto@example.com";    SVENN="Sven Aalto"
 LEA="lea.moreau@example.com";     LEAN="Lea Moreau"
 PRIYA="priya.nair@example.com";   PRIYAN="Priya Nair"
 
-learn $MAYA "$MAYAN" l1 "UTM naming for campaigns: utm_campaign = q4-{region}-{product}" "Every paid and owned link uses utm_campaign=<quarter>-<region>-<product>, lowercase, hyphens only. Region codes: eu, us, apac. Product codes: esg, ehs, cmd. Example: q4-eu-esg. Anything else breaks the attribution dashboard." '"marketing","campaigns"' ',"confidence":"high"'
-learn $MAYA "$MAYAN" l2 "Brand toolkit 2026 lives in the Marketing SharePoint under Brand/2026" "Fonts: Urbanist for headings, Inter for body, Inconsolata for code. Primary teal #00B0A1, navy #1A3360. Never use the 2023 palette (the coral was retired)." '"marketing","brand"'
+learn $MAYA "$MAYAN" l1 "UTM naming for campaigns: utm_campaign = q4-{region}-{product}" "Every paid and owned link uses utm_campaign=<quarter>-<region>-<product>, lowercase, hyphens only. Region codes: eu, us, apac. Product codes: alpha, beta, gamma. Example: q4-eu-alpha. Anything else breaks the attribution dashboard." '"marketing","campaigns"' ',"confidence":"high"'
+learn $MAYA "$MAYAN" l2 "Brand assets for 2026 live in the Marketing SharePoint under Brand/2026" "Logos, fonts and the colour palette are in that folder. Never use the 2023 palette, it was retired." '"marketing","brand"'
 learn $SVEN "$SVENN" l3 "Pricing quotes need legal review before they leave the building" "Any quote with non-standard terms (multi-year, custom SLA, data residency) goes to Legal first. Standard price list quotes do not. Turnaround is usually two working days." '"sales","legal","pricing"' ''
 learn $SVEN "$SVENN" l4 "A customer in the automotive sector requires a signed NDA before any demo" "Ask the account owner for the NDA template; it is on the Sales SharePoint under Templates/NDA. Do not share screenshots or sample data before it is signed." '"sales","clients","process"' ''
 learn $ELI "$ELIN" l5 "The export service needs the VPN for NuGet restore" "dotnet restore in acme.export.* fails with a timeout when off the VPN because nuget.config points at an internal package feed. This is a setup problem, not a broken repo." '"engineering","ci","tooling"' ',"repo":"acme.export.api","confidence":"high"'
@@ -43,10 +43,10 @@ post $PRIYA "$PRIYAN" "/api/learnings/$ID5/vote" v3 '{"kind":"helpful"}'
 post $LEA "$LEAN" "/api/learnings/$ID3/kudos" k2 '{"note":"Exactly the rule, thank you"}'
 
 # conversations
-post $ELI "$ELIN" /api/messages m1 "{\"to\":\"$MAYA\",\"subject\":\"UTM product code for the newsletter\",\"body\":\"Is esg also the product code for the sustainability newsletter, or does the newsletter have its own?\"}"
+post $ELI "$ELIN" /api/messages m1 "{\"to\":\"$MAYA\",\"subject\":\"UTM product code for the newsletter\",\"body\":\"Is alpha also the product code for the sustainability newsletter, or does the newsletter have its own?\"}"
 T1=$(curl -s "$O/api/inbox" -H "X-Bab-Actor-Email: $MAYA" -H "X-Bab-Actor-Name: $MAYAN" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);const t=j.threads??j;console.log(t[0].thread.id)})")
-post $MAYA "$MAYAN" /api/messages m2 "{\"threadId\":\"$T1\",\"body\":\"Yes, esg for all Q4 sustainability content, newsletter included. Region stays eu.\"}"
-post $ELI "$ELIN" /api/messages m3 "{\"threadId\":\"$T1\",\"body\":\"Thanks. Using utm_campaign=q4-eu-esg on all six links.\"}"
+post $MAYA "$MAYAN" /api/messages m2 "{\"threadId\":\"$T1\",\"body\":\"Yes, alpha for all Q4 sustainability content, newsletter included. Region stays eu.\"}"
+post $ELI "$ELIN" /api/messages m3 "{\"threadId\":\"$T1\",\"body\":\"Thanks. Using utm_campaign=q4-eu-alpha on all six links.\"}"
 post $SVEN "$SVENN" /api/messages m4 "{\"to\":\"$LEA\",\"subject\":\"Multi-year quote for an automotive prospect\",\"body\":\"Three-year term with a custom SLA. Can Legal look at the draft this week?\"}"
 T2=$(curl -s "$O/api/inbox" -H "X-Bab-Actor-Email: $LEA" -H "X-Bab-Actor-Name: $LEAN" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);const t=j.threads??j;console.log(t[0].thread.id)})")
 post $LEA "$LEAN" /api/messages m5 "{\"threadId\":\"$T2\",\"body\":\"Yes. Send the draft to the legal inbox and tag it multi-year; two working days.\"}"

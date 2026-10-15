@@ -16,6 +16,21 @@ describe("next.config headers", () => {
     expect(byKey["x-frame-options"]).toBe("DENY");
   });
 
+  it("sends nosniff, a strict referrer policy and a locked-down permissions policy on every path", async () => {
+    const rules = await config.headers!();
+    const all = rules.find((r) => r.source === "/:path*");
+    const byKey = Object.fromEntries(all!.headers.map((h) => [h.key.toLowerCase(), h.value]));
+    expect(byKey["x-content-type-options"]).toBe("nosniff");
+    expect(byKey["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    expect(byKey["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+  });
+
+  it("sets no script or style CSP (Next inline styles would break): only frame-ancestors", async () => {
+    const rules = await config.headers!();
+    const csp = rules.flatMap((r) => r.headers).filter((h) => h.key.toLowerCase() === "content-security-policy");
+    expect(csp.map((h) => h.value)).toEqual(["frame-ancestors 'none'"]);
+  });
+
   it("keeps the service worker's no-cache rule", async () => {
     const rules = await config.headers!();
     const sw = rules.find((r) => r.source === "/sw.js");

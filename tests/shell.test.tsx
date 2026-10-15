@@ -7,7 +7,7 @@ describe("Shell", () => {
     const html = renderToStaticMarkup(Shell({ children: <div>content</div> }));
 
     expect(html).not.toContain('href="/whoami"');
-    expect(html).not.toContain("/__forge/logout");
+    expect(html).not.toContain("/__proxy/logout");
     // The note that used to say so was removed; the property is
     // still that nothing here writes: no form, no button that posts.
     expect(html).not.toContain("<form");

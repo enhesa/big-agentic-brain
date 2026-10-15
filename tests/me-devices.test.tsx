@@ -37,7 +37,7 @@ afterEach(async () => {
 
 function asAliasViewer(opts: { id?: string; email?: string; name?: string } = {}) {
   current = {
-    "x-auth-request-user": opts.id ?? "forge-oid-1",
+    "x-auth-request-user": opts.id ?? "proxy-oid-1",
     "x-auth-request-email": opts.email ?? "aexample@example.com",
     "x-auth-request-preferred-username": opts.name ?? "Alice Example",
   };
@@ -50,14 +50,14 @@ async function render(search: Record<string, string> = {}) {
   return new Response(await renderToReadableStream(element as never)).text();
 }
 
-/** A device bound to `who`; `forgeUserId` stands for one an earlier release connected through a browser. */
-async function connect(c: string, who: string, label: string, forgeUserId?: string, ip: string | null = null) {
+/** A device bound to `who`; `proxyUserId` stands for one an earlier release connected through a browser. */
+async function connect(c: string, who: string, label: string, proxyUserId?: string, ip: string | null = null) {
   const d = await import("../lib/devices");
   const h = d.hashSecret(secret(c))!;
   d.bindDevice(h, who, label, ip);
-  if (forgeUserId) {
+  if (proxyUserId) {
     const { getDb } = await import("../lib/db");
-    getDb().prepare("UPDATE devices SET bound_via_forge_id = ? WHERE secret_hash = ?").run(forgeUserId, h);
+    getDb().prepare("UPDATE devices SET bound_via_proxy_id = ? WHERE secret_hash = ?").run(proxyUserId, h);
   }
 }
 
@@ -117,7 +117,7 @@ describe("/me/devices page", () => {
   });
 
   it("offers the unlink when the browser's old link no longer fits the SSO name", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     asAliasViewer({ name: "Marie Curie", email: "mcurie@example.com" });
     const html = await render();
     expect(html).toContain("Unlink this browser");
@@ -125,7 +125,7 @@ describe("/me/devices page", () => {
   });
 
   it("lists the viewer's devices with a Forget each, and nobody else's", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "MINGW64_NT-10.0 LAPTOP-123");
     await connect("b", ALICE, "Mac mini");
     await connect("c", MARIE, "Maries laptop");
@@ -142,7 +142,7 @@ describe("/me/devices page", () => {
   });
 
   it("shows when each was identified and last seen, and never a secret or hash", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "Laptop");
     const d = await import("../lib/devices");
     d.lookupDevice(d.hashSecret(secret("a"))!); // marks it seen
@@ -155,7 +155,7 @@ describe("/me/devices page", () => {
   });
 
   it("an empty list says Claude identifies the device by itself", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     asAliasViewer();
     const html = await render();
     expect(html).toContain("No devices yet");
@@ -163,7 +163,7 @@ describe("/me/devices page", () => {
   });
 
   it("has no token UI and no deprecation banner: personal tokens are gone", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     asAliasViewer();
     const html = await render();
     expect(html).not.toMatch(/New token|Personal token|bab_token/i);
@@ -173,7 +173,7 @@ describe("/me/devices page", () => {
 
 describe("POST /me/devices/revoke", () => {
   async function seed() {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "One");
     await connect("b", ALICE, "Two");
     await connect("c", MARIE, "Hers");
@@ -237,7 +237,7 @@ describe("POST /me/devices/revoke", () => {
   });
 
   it("the connections block says what Forget all does and that one Forget does not", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     const c = await import("../lib/mcp-connections");
     c.bindConnection(c._insertConnectionForTests(), ALICE);
     asAliasViewer();
@@ -280,38 +280,38 @@ describe("POST /me/devices/revoke", () => {
 
 describe("POST /me/devices/unlink", () => {
   it("unlinks the browser and revokes the devices connected through it, only those", async () => {
-    await linkForTests("forge-oid-1", ALICE);
-    await connect("a", ALICE, "Via this browser", "forge-oid-1");
-    await connect("b", ALICE, "Via another", "forge-oid-other");
+    await linkForTests("proxy-oid-1", ALICE);
+    await connect("a", ALICE, "Via this browser", "proxy-oid-1");
+    await connect("b", ALICE, "Via another", "proxy-oid-other");
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
     const res = await POST(post("/me/devices/unlink"));
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("http://localhost/me/devices");
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId("forge-oid-1")).toBeNull();
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId("proxy-oid-1")).toBeNull();
     const d = await import("../lib/devices");
     expect(d.listDevices(ALICE).map((x) => x.label)).toEqual(["Via another"]);
   });
 
   it("is refused cross-site and changes nothing", async () => {
-    await linkForTests("forge-oid-1", ALICE);
-    await connect("a", ALICE, "Via this browser", "forge-oid-1");
+    await linkForTests("proxy-oid-1", ALICE);
+    await connect("a", ALICE, "Via this browser", "proxy-oid-1");
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
     expect((await POST(post("/me/devices/unlink", {}, { headers: { origin: "https://evil.example.test" } }))).status).toBe(403);
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId("forge-oid-1")).toBe(ALICE);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId("proxy-oid-1")).toBe(ALICE);
   });
 });
 
 // Coverage that used to live in tests/reminders-unlink.test.ts, now that /me/devices/unlink is the only
 // self-unlink route (same shared logic, lib/unlink-own-web.ts).
 describe("POST /me/devices/unlink: the rest of the self-unlink contract", () => {
-  const FORGE_ID = "forge-oid-1";
+  const PROXY_ID = "proxy-oid-1";
 
   it("audits the unlink as unlink-browser-self under the person", async () => {
-    await linkForTests(FORGE_ID, ALICE);
+    await linkForTests(PROXY_ID, ALICE);
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
     await POST(post("/me/devices/unlink"));
@@ -321,7 +321,7 @@ describe("POST /me/devices/unlink: the rest of the self-unlink contract", () => 
   });
 
   it("answers JSON for a JSON caller", async () => {
-    await linkForTests(FORGE_ID, ALICE);
+    await linkForTests(PROXY_ID, ALICE);
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
     const res = await POST(post("/me/devices/unlink", {}, { json: true }));
@@ -330,24 +330,24 @@ describe("POST /me/devices/unlink: the rest of the self-unlink contract", () => 
   });
 
   it("refuses a post with no Origin at all, and removes nothing", async () => {
-    await linkForTests(FORGE_ID, ALICE);
+    await linkForTests(PROXY_ID, ALICE);
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
     const noOrigin = new Request("http://localhost/me/devices/unlink", { method: "POST", headers: { host: "localhost" } });
     expect((await POST(noOrigin)).status).toBe(403);
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId(FORGE_ID)).toBe(ALICE);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(PROXY_ID)).toBe(ALICE);
   });
 
   it("only ever removes the caller's own link, whatever the body says", async () => {
-    await linkForTests(FORGE_ID, ALICE);
-    await linkForTests("forge-oid-other", MARIE);
+    await linkForTests(PROXY_ID, ALICE);
+    await linkForTests("proxy-oid-other", MARIE);
     asAliasViewer();
     const { POST } = await import("../app/me/devices/unlink/route");
-    await POST(post("/me/devices/unlink", { forgeUserId: "forge-oid-other", email: MARIE }, { json: true }));
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId(FORGE_ID)).toBeNull();
-    expect(getLinkedUserId("forge-oid-other")).toBe(MARIE);
+    await POST(post("/me/devices/unlink", { proxyUserId: "proxy-oid-other", email: MARIE }, { json: true }));
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(PROXY_ID)).toBeNull();
+    expect(getLinkedUserId("proxy-oid-other")).toBe(MARIE);
   });
 
   it("401s with no proxy viewer, or when proxy headers are not trusted", async () => {
@@ -361,7 +361,7 @@ describe("POST /me/devices/unlink: the rest of the self-unlink contract", () => 
   });
 
   it("is a harmless no-op for a browser that was not linked", async () => {
-    asAliasViewer({ id: "forge-oid-never" });
+    asAliasViewer({ id: "proxy-oid-never" });
     const { POST } = await import("../app/me/devices/unlink/route");
     const res = await POST(post("/me/devices/unlink", {}, { json: true }));
     expect(await res.json()).toEqual({ ok: true, unlinked: false });
@@ -375,8 +375,8 @@ describe("POST /me/devices/claim", () => {
     const res = await POST(post("/me/devices/claim", { email: ALICE }));
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("http://localhost/me/devices");
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId("forge-oid-1")).toBe(ALICE);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId("proxy-oid-1")).toBe(ALICE);
   });
 
   it("refuses a mismatch with a code, never the message", async () => {
@@ -411,7 +411,7 @@ describe("the old /me/token address", () => {
 
 describe("the address a device identified from, and the connections", () => {
   it("shows the address in a From column", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "Windows laptop", undefined, "192.0.2.5");
     await connect("b", ALICE, "Mac mini", undefined, null);
     asAliasViewer();
@@ -422,7 +422,7 @@ describe("the address a device identified from, and the connections", () => {
   });
 
   it("has no new-device banner, no (new) mark and no hold text any more", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "Windows laptop", undefined, "192.0.2.5");
     asAliasViewer();
     const html = await render();
@@ -432,7 +432,7 @@ describe("the address a device identified from, and the connections", () => {
   });
 
   it("lists the connections that said they are the person in the last 7 days, without the session id", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     const c = await import("../lib/mcp-connections");
     const mine = c._insertConnectionForTests();
     c.bindConnection(mine, ALICE);
@@ -448,7 +448,7 @@ describe("the address a device identified from, and the connections", () => {
   });
 
   it("shows no connections block when there are none, or only old ones", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     const c = await import("../lib/mcp-connections");
     const { getDb } = await import("../lib/db");
     const old = c._insertConnectionForTests();
@@ -459,7 +459,7 @@ describe("the address a device identified from, and the connections", () => {
   });
 
   it("labels an address nobody has verified, and not once BAB_CLIENT_IP_HEADER is set", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     await connect("a", ALICE, "Laptop", undefined, "192.0.2.5");
     asAliasViewer();
     expect(await render()).toContain("192.0.2.5 (unverified)");
@@ -476,7 +476,7 @@ describe("the address a device identified from, and the connections", () => {
   });
 
   it("the unlink text no longer promises to take devices with it", async () => {
-    await linkForTests("forge-oid-1", ALICE);
+    await linkForTests("proxy-oid-1", ALICE);
     asAliasViewer();
     const html = await render();
     expect(html).toContain("This browser is linked to");

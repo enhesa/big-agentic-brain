@@ -17,7 +17,7 @@ const HOST = "localhost:4310";
 
 let current: Record<string, string> = {};
 function asViewer(email: string, name: string) {
-  current = { "x-auth-request-user": `forge-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": name };
+  current = { "x-auth-request-user": `proxy-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": name };
 }
 
 beforeEach(() => {

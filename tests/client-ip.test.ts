@@ -12,7 +12,7 @@ describe("clientIp", () => {
     expect(clientIp(new Headers({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "198.51.100.1, 192.0.2.9" }))).toBe("203.0.113.7");
   });
 
-  it("takes the RIGHT-most X-Forwarded-For entry, not the left-most (which the caller can forge)", () => {
+  it("takes the RIGHT-most X-Forwarded-For entry, not the left-most (which the caller can fake)", () => {
     expect(clientIp(new Headers({ "x-forwarded-for": "6.6.6.6, 198.51.100.1, 192.0.2.9" }))).toBe("192.0.2.9");
     expect(clientIp(new Headers({ "x-forwarded-for": "192.0.2.9" }))).toBe("192.0.2.9");
   });

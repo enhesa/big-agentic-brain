@@ -57,7 +57,7 @@ describe("POST /api/learnings with project", () => {
       postReq("http://x/api/learnings", {
         title: "Runbook note",
         body: "Deploy steps.",
-        repo: "https://git.forge.example.com/forge/bab.git",
+        repo: "https://git.example.com/org/bab.git",
       }) as never,
     );
     expect(res.status).toBe(201);
@@ -89,7 +89,7 @@ describe("GET /api/learnings?project=", () => {
         title: "Deploy notes",
         body: "runTest.sh wires up CI for this other repo.",
         tags: ["engineering", "ci"],
-        project: "forge2",
+        project: "proxy2",
         confirmNotDuplicate: true,
       }) as never,
     );
@@ -119,7 +119,7 @@ describe("GET /api/learnings?project=", () => {
     mockAgentIdentity("ada.t@example.com", "Ada");
     await seed();
     const { GET } = await import("../app/api/learnings/route");
-    const res = await GET(new Request("http://x/api/learnings?q=runTest&tag=ci&project=forge2") as never);
+    const res = await GET(new Request("http://x/api/learnings?q=runTest&tag=ci&project=proxy2") as never);
     const body = await res.json();
     expect(body.results.length).toBe(1);
     expect(body.results[0].title).toBe("Deploy notes");

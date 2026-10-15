@@ -27,7 +27,7 @@ function mockHeaders(map: Record<string, string>) {
   vi.doMock("next/headers", () => ({ headers: async () => new Headers(map) }));
 }
 
-function asViewer(email: string, id = "forge-oid-1", name = "Alice Example") {
+function asViewer(email: string, id = "proxy-oid-1", name = "Alice Example") {
   mockHeaders({ "x-auth-request-user": id, "x-auth-request-email": email, "x-auth-request-preferred-username": name });
 }
 
@@ -74,10 +74,10 @@ describe("GET /notify/identity", () => {
     expect(await res.json()).toMatchObject({ state: "linked", email: "bob.t@example.com" });
   });
 
-  it("reports linked for an alias viewer whose forge id is linked", async () => {
+  it("reports linked for an alias viewer whose proxy id is linked", async () => {
     await seed("alice.example@example.com");
-    const { claimSuggestedLink } = await import("../lib/forge-links");
-    claimSuggestedLink("forge-oid-1", "aexample@example.com", "Alice Example", "alice.example@example.com");
+    const { claimSuggestedLink } = await import("../lib/proxy-links");
+    claimSuggestedLink("proxy-oid-1", "aexample@example.com", "Alice Example", "alice.example@example.com");
     asViewer("aexample@example.com");
     const { GET } = await import("../app/notify/identity/route");
     expect(await (await GET()).json()).toMatchObject({ state: "linked", email: "alice.example@example.com" });
@@ -109,8 +109,8 @@ describe("POST /notify/identity/claim", () => {
     const res = await POST(claim({ email: "alice.example@example.com" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ state: "linked", email: "alice.example@example.com" });
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId("forge-oid-1")).toBe("alice.example@example.com");
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId("proxy-oid-1")).toBe("alice.example@example.com");
   });
 
   it("400s when the claim does not match the suggestion", async () => {
@@ -122,9 +122,9 @@ describe("POST /notify/identity/claim", () => {
     expect((await POST(claim({ email: 5 }))).status).toBe(400);
   });
 
-  it("409s when the user is already linked to another forge id", async () => {
+  it("409s when the user is already linked to another proxy id", async () => {
     await seed("alice.example@example.com");
-    const { claimSuggestedLink } = await import("../lib/forge-links");
+    const { claimSuggestedLink } = await import("../lib/proxy-links");
     claimSuggestedLink("someone-else", "aexample@example.com", "Alice Example", "alice.example@example.com");
     asViewer("aexample@example.com");
     const { POST } = await import("../app/notify/identity/claim/route");
@@ -148,7 +148,7 @@ describe("POST /notify/identity/claim", () => {
       body: JSON.stringify({ email: "alice.example@example.com" }),
     });
     expect((await POST(plain)).status).toBe(415);
-    const { getLinkedUserId } = await import("../lib/forge-links");
-    expect(getLinkedUserId("forge-oid-1")).toBeNull();
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId("proxy-oid-1")).toBeNull();
   });
 });

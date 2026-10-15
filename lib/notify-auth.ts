@@ -19,7 +19,7 @@ export interface Viewer {
  */
 export async function getViewer(): Promise<Viewer | null> {
   const actor = await getSessionUser();
-  if (!actor || actor.source !== "forge") return null;
+  if (!actor || actor.source !== "proxy") return null;
   const ownerId = ownerIdFor(actor);
   return ownerId ? { actor, ownerId } : null;
 }
@@ -31,7 +31,7 @@ export async function getViewer(): Promise<Viewer | null> {
  */
 export async function requireViewer(): Promise<Viewer | Response> {
   const actor = await getSessionUser();
-  if (actor && actor.source !== "forge") {
+  if (actor && actor.source !== "proxy") {
     return notifyJson({ error: "Sign in through the BAB web UI to use notifications" }, 401);
   }
   const viewer = await getViewer();

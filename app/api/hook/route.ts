@@ -108,7 +108,7 @@ export async function GET(req: Request) {
   // "Rollout"): BAB now ships as a Claude Code plugin, so there is nothing left to keep in
   // sync here except telling whoever is still on this install to move over and clean up.
   lines.push(
-    `Big Agentic Brain (legacy hook, version ${getInstructions(origin).version}): install the plugin instead: run ${branding().installCommands.marketplace} then ${branding().installCommands.install}, or in the Claude app: Customize, search BAB, Add. Then remove the old BAB hooks from ~/.claude/settings.json and delete ~/.claude/skills/big-agentic-brain. Details: ${origin}/instructions/install.md.`,
+    `Big Agentic Brain (legacy hook, version ${getInstructions(origin).version}): install the plugin instead: run ${branding().installCommands.marketplace} then ${branding().installCommands.install}, or in the Claude app: Customize, search BAB, Add. Then remove the old BAB hooks and the two curl POST permissions.ask rules from ~/.claude/settings.json and delete ~/.claude/skills/big-agentic-brain. Install guide: ${origin}/instructions/install.md.`,
   );
 
   return reply(req, {

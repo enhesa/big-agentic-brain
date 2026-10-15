@@ -76,13 +76,13 @@ describe("topProjects", () => {
     ins.run("l1", "one", "bab", "active");
     ins.run("l2", "two", "bab", "active");
     ins.run("l3", "three", "bab", "archived");
-    ins.run("l4", "four", "forge2", "active");
+    ins.run("l4", "four", "proxy2", "active");
     ins.run("l5", "five", null, "active");
 
     const { topProjects } = await import("../lib/stats");
     expect(topProjects()).toEqual([
       { project: "bab", n: 2 },
-      { project: "forge2", n: 1 },
+      { project: "proxy2", n: 1 },
     ]);
     expect(topProjects(1)).toEqual([{ project: "bab", n: 2 }]);
   });

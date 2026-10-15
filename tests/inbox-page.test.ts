@@ -43,7 +43,7 @@ function mockHeaders(extra: Record<string, string> = {}) {
   current = extra;
 }
 function asViewer(email: string, name: string) {
-  mockHeaders({ "x-auth-request-user": `forge-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": name });
+  mockHeaders({ "x-auth-request-user": `proxy-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": name });
 }
 
 async function seed() {

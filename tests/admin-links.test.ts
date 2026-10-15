@@ -31,7 +31,7 @@ function mockHeaders(map: Record<string, string>) {
   vi.doMock("next/headers", () => ({ headers: async () => new Headers(map) }));
 }
 function asViewer(email: string, name = "Some Viewer") {
-  mockHeaders({ "x-auth-request-user": "forge-admin", "x-auth-request-email": email, "x-auth-request-preferred-username": name });
+  mockHeaders({ "x-auth-request-user": "proxy-admin", "x-auth-request-email": email, "x-auth-request-preferred-username": name });
 }
 
 /** A wrongly linked alias viewer. */
@@ -39,7 +39,7 @@ async function seedLink() {
   const { upsertUser } = await import("../lib/users");
   upsertUser({ id: TARGET, email: TARGET, name: null, roles: [] });
   upsertUser({ id: MAINT, email: MAINT, name: "Mia Maint", roles: [] });
-  const { claimSuggestedLink, getLinkedUserId } = await import("../lib/forge-links");
+  const { claimSuggestedLink, getLinkedUserId } = await import("../lib/proxy-links");
   claimSuggestedLink("oid-wrong", "aexample@example.com", "Alice Example", TARGET);
   expect(getLinkedUserId("oid-wrong")).toBe(TARGET);
 }
@@ -61,7 +61,7 @@ describe("POST /admin/links/unlink", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, removed: 1 });
 
-    const { getLinkedUserId } = await import("../lib/forge-links");
+    const { getLinkedUserId } = await import("../lib/proxy-links");
     expect(getLinkedUserId("oid-wrong")).toBeNull();
 
     const { getDb } = await import("../lib/db");
@@ -70,19 +70,19 @@ describe("POST /admin/links/unlink", () => {
       .get() as { actor_id: string; entity: string; entity_id: string; via: string; details: string };
     expect({ ...row, details: JSON.parse(row.details) }).toEqual({
       actor_id: MAINT,
-      entity: "forge_link",
+      entity: "proxy_link",
       entity_id: "oid-wrong",
       via: "ui",
       details: { email: TARGET, devicesRevoked: 0, connectionsEnded: 0 },
     });
   });
 
-  it("removes the link by forge user id", async () => {
+  it("removes the link by proxy user id", async () => {
     await seedLink();
     asViewer(MAINT);
     const { POST } = await import("../app/admin/links/unlink/route");
-    expect((await POST(unlink({ forgeUserId: "oid-wrong" }))).status).toBe(200);
-    const { getLinkedUserId } = await import("../lib/forge-links");
+    expect((await POST(unlink({ proxyUserId: "oid-wrong" }))).status).toBe(200);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
     expect(getLinkedUserId("oid-wrong")).toBeNull();
   });
 
@@ -99,7 +99,7 @@ describe("POST /admin/links/unlink", () => {
     asViewer("alice.example@example.com");
     const { POST } = await import("../app/admin/links/unlink/route");
     expect((await POST(unlink({ email: TARGET }))).status).toBe(403);
-    const { getLinkedUserId } = await import("../lib/forge-links");
+    const { getLinkedUserId } = await import("../lib/proxy-links");
     expect(getLinkedUserId("oid-wrong")).toBe(TARGET);
   });
 
@@ -124,9 +124,9 @@ describe("POST /admin/links/unlink", () => {
     await seedLink();
     asViewer(MAINT);
     const { POST } = await import("../app/admin/links/unlink/route");
-    expect((await POST(unlink({ email: TARGET }, { origin: "https://evil.forge.example.com" }))).status).toBe(403);
+    expect((await POST(unlink({ email: TARGET }, { origin: "https://evil.example.com" }))).status).toBe(403);
     expect((await POST(unlink({ email: TARGET }, { "content-type": "text/plain" }))).status).toBe(415);
-    const { getLinkedUserId } = await import("../lib/forge-links");
+    const { getLinkedUserId } = await import("../lib/proxy-links");
     expect(getLinkedUserId("oid-wrong")).toBe(TARGET);
   });
 });
@@ -138,7 +138,7 @@ describe("/admin/links page", () => {
     return new Response(await renderToReadableStream((await Page()) as never)).text();
   }
 
-  it("lists links for a maintainer, with the forge name and email from the claim audit", async () => {
+  it("lists links for a maintainer, with the proxy name and email from the claim audit", async () => {
     await seedLink();
     asViewer(MAINT);
     const html = await render();

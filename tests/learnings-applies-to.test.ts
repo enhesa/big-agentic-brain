@@ -278,3 +278,117 @@ describe("MCP", () => {
     expect(mcpInstructions("https://bab.example.com").length).toBeLessThanOrEqual(1980);
   });
 });
+
+describe("BAB_EXTRA_APPLIES_TO", () => {
+  afterEach(() => {
+    delete process.env.BAB_EXTRA_APPLIES_TO;
+  });
+
+  /** A row written before the label left the built-in list: raw SQL, as an older release stored it. */
+  async function seedStored() {
+    await seedUser();
+    const { getDb } = await import("../lib/db");
+    getDb()
+      .prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, applies_to) VALUES ('l-stored', ?, 'Deploy through the app platform', 'platform deploy words', '[]', 'active', ?)")
+      .run(AUTHOR, '["forge","aks"]');
+  }
+
+  it("refuses an unlisted platform label on a write with the variable unset, and accepts it when listed", async () => {
+    await seedUser();
+    const { create } = await import("../lib/learnings");
+    expect(() => create({ authorId: AUTHOR, title: "Extra label", body: "extra label words", appliesTo: ["forge"] })).toThrow(/Unknown appliesTo/);
+    process.env.BAB_EXTRA_APPLIES_TO = "forge";
+    const { _resetConfigForTests } = await import("../lib/config");
+    _resetConfigForTests();
+    const ok = create({ authorId: AUTHOR, title: "Extra label", body: "extra label words", appliesTo: ["Forge", "aks"] });
+    expect(JSON.parse((await import("../lib/learnings")).getById(ok.id)!.applies_to)).toEqual(["forge", "aks"]);
+  });
+
+  it("a stored label that is not listed still reads, lists, searches and filters on its other labels", async () => {
+    await seedStored();
+    const { getById, search, list } = await import("../lib/learnings");
+    expect(JSON.parse(getById("l-stored")!.applies_to)).toEqual(["forge", "aks"]);
+    expect(list({ status: "active" }).map((l) => l.id)).toEqual(["l-stored"]);
+    const hits = search("platform deploy");
+    expect(hits.map((h) => h.id)).toEqual(["l-stored"]);
+    expect(hits[0].appliesTo).toEqual(["forge", "aks"]);
+    expect(search("platform deploy", { appliesTo: ["aks"] }).map((h) => h.id)).toEqual(["l-stored"]);
+    expect(search("platform deploy", { stack: ["aks"] })[0].stackMismatch).toBeUndefined();
+    // Filtering on the unlisted label itself is a write-side vocabulary check: refused.
+    const { parseAppliesToFilter } = await import("../lib/applies-to");
+    expect(() => parseAppliesToFilter("forge")).toThrow(/Unknown/);
+  });
+
+  it("a correction inherits an unlisted stored label, and setting new labels replaces it", async () => {
+    await seedStored();
+    const { create, getById, setLabels } = await import("../lib/learnings");
+    const next = create({ authorId: AUTHOR, title: "Deploy through the app platform v2", body: "corrected platform deploy words", supersedesId: "l-stored" });
+    expect(JSON.parse(getById(next.id)!.applies_to)).toEqual(["forge", "aks"]);
+    expect(() => setLabels(next.id, AUTHOR, ["forge"])).toThrow(/Unknown appliesTo/);
+    expect(JSON.parse(setLabels(next.id, AUTHOR, ["aks"]).learning.applies_to)).toEqual(["aks"]);
+  });
+
+  it("a consolidation of memories that carry an unlisted stored label keeps the union, and still refuses a typed unlisted label", async () => {
+    await seedStored();
+    const { getDb } = await import("../lib/db");
+    getDb()
+      .prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, applies_to) VALUES ('l-stored-2', ?, 'Deploy through the app platform too', 'platform deploy more words', '[]', 'active', ?)")
+      .run(AUTHOR, '["forge","docker"]');
+    const { createWithSupersedes, getById } = await import("../lib/learnings");
+    const merged = createWithSupersedes(
+      { authorId: AUTHOR, title: "Deploy through the app platform, merged", body: "merged platform deploy words" },
+      ["l-stored", "l-stored-2"],
+    );
+    expect(JSON.parse(getById(merged.id)!.applies_to).sort()).toEqual(["aks", "docker", "forge"]);
+    expect(getById("l-stored")!.status).toBe("archived");
+    expect(getById("l-stored-2")!.status).toBe("archived");
+
+    // Labels the caller types are still checked against the vocabulary in force.
+    getDb()
+      .prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, applies_to) VALUES ('l-a', ?, 'Alpha thing', 'alpha thing words', '[]', 'active', '[]'), ('l-b', ?, 'Beta thing', 'beta thing words', '[]', 'active', '[]')")
+      .run(AUTHOR, AUTHOR);
+    expect(() =>
+      createWithSupersedes({ authorId: AUTHOR, title: "Alpha beta merged", body: "alpha beta merged words", appliesTo: ["forge"] }, ["l-a", "l-b"]),
+    ).toThrow(/Unknown appliesTo/);
+    expect(getById("l-a")!.status).toBe("active");
+  });
+
+  it("the REST read and the memory pages render a stored unlisted label", async () => {
+    await seedStored();
+    mockIdentity();
+    const { GET: GET_ID } = await import("../app/api/learnings/[id]/route");
+    const got = await GET_ID(new Request("http://x/api/learnings/l-stored") as never, { params: Promise.resolve({ id: "l-stored" }) });
+    expect((await got.json()).learning.appliesTo).toEqual(["forge", "aks"]);
+
+    const { renderToReadableStream } = await import("react-dom/server.edge");
+    const render = async (node: unknown) => new Response(await renderToReadableStream(node as never)).text();
+    const { default: MemoryPage } = await import("../app/memory/page");
+    expect(await render(MemoryPage({ searchParams: Promise.resolve({}) }))).toContain("Deploy through the app platform");
+    const { default: DetailPage } = await import("../app/memory/[id]/page");
+    expect(await render(DetailPage({ params: Promise.resolve({ id: "l-stored" }) }))).toContain("forge");
+  });
+
+  it("the tool descriptions agents read list the extra label, and only when it is set", async () => {
+    const { TOOLS } = await import("../lib/mcp");
+    const text = () => JSON.stringify(TOOLS.filter((t) => t.name === "bab_search" || t.name === "bab_learn").map((t) => t.inputSchema));
+    expect(text()).not.toContain("forge");
+    process.env.BAB_EXTRA_APPLIES_TO = "forge";
+    const { _resetConfigForTests } = await import("../lib/config");
+    _resetConfigForTests();
+    const learn = TOOLS.find((t) => t.name === "bab_learn")!.inputSchema.properties as Record<string, { description: string }>;
+    const search = TOOLS.find((t) => t.name === "bab_search")!.inputSchema.properties as Record<string, { description: string }>;
+    expect(learn.appliesTo.description).toContain("platform aks, azure, aws, windows, linux, macos, forge (aliases");
+    expect(search.stack.description).toContain("also aks, forge, docker, kafka and so on");
+  });
+
+  it("the memory filter lists the extra label as a platform when it is set", async () => {
+    process.env.BAB_EXTRA_APPLIES_TO = "forge";
+    await seedStored();
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
+    const { renderToReadableStream } = await import("react-dom/server.edge");
+    const { default: MemoryPage } = await import("../app/memory/page");
+    const html = await new Response(await renderToReadableStream((await MemoryPage({ searchParams: Promise.resolve({}) })) as never)).text();
+    expect(html).toContain('<option value="forge"');
+    expect(html).toContain('<option value="aks"');
+  });
+});

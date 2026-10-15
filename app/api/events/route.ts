@@ -72,7 +72,7 @@ function retryLater(): Response {
  * "Realtime"). One long HTTP response, not a websocket upgrade: the app is a
  * single process and websockets often do not pass through a sign-in proxy, but a
  * normal streamed response does. No identity required — this is part of the
- * read-only UI, same as /memory or /conversations.
+ * read-only UI, same as /memory.
  *
  * `?topics=learnings,messages,...` filters to event types whose name starts
  * with one of those prefixes (e.g. "learnings" matches "learning.created"

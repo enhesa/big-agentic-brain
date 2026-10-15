@@ -33,7 +33,7 @@ function mockHeaders(map: Record<string, string>) {
   vi.doMock("next/headers", () => ({ headers: async () => new Headers(map) }));
 }
 function asViewer(email: string, name = "Some Viewer") {
-  mockHeaders({ "x-auth-request-user": "forge-admin", "x-auth-request-email": email, "x-auth-request-preferred-username": name });
+  mockHeaders({ "x-auth-request-user": "proxy-admin", "x-auth-request-email": email, "x-auth-request-preferred-username": name });
 }
 
 async function seed() {
@@ -96,7 +96,7 @@ describe("POST /admin/links/devices/revoke", () => {
     const { d, id } = await seed();
     asViewer(MAINT);
     const { POST } = await import("../app/admin/links/devices/revoke/route");
-    expect((await POST(revoke({ id }, { origin: "https://evil.forge.example.com" }))).status).toBe(403);
+    expect((await POST(revoke({ id }, { origin: "https://evil.example.com" }))).status).toBe(403);
     expect((await POST(revoke({ id }, { "content-type": "text/plain" }))).status).toBe(415);
     expect(d.listDevices(ALICE)).toHaveLength(1);
   });

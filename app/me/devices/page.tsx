@@ -2,9 +2,9 @@ import Shell from "@/app/components/shell/Shell";
 import buttons from "@/app/components/shell/LinkActions.module.css";
 import SuggestLink from "./SuggestLink";
 import { getViewer } from "@/lib/notify-auth";
-import { trustForgeHeaders } from "@/lib/session";
-import { currentUser, type ForgeUser } from "@/lib/user";
-import { getLinkedUserId, suggestLinkFor } from "@/lib/forge-links";
+import { trustProxyHeaders } from "@/lib/session";
+import { currentUser, type ProxyUser } from "@/lib/user";
+import { getLinkedUserId, suggestLinkFor } from "@/lib/proxy-links";
 import { listDevices } from "@/lib/devices";
 import { listRecentConnections, CONNECTION_TTL_DAYS } from "@/lib/mcp-connections";
 import { CLAIM_ERRORS } from "@/lib/devices-web";
@@ -35,15 +35,15 @@ export default async function DevicesPage({ searchParams }: { searchParams?: Pro
 
   const viewer = await getViewer();
   await auditRequest({ actor: viewer?.actor ?? null, method: "GET", path: "/me/devices", via: "ui" });
-  const forge = trustForgeHeaders() ? await currentUser() : null;
+  const proxy = trustProxyHeaders() ? await currentUser() : null;
 
   return (
     <Shell>
       <h1 className={styles.h1}>Your devices</h1>
       {viewer ? (
-        <LinkedView email={viewer.ownerId} showUnlink={!!forge && getLinkedUserId(forge.id) !== null} />
-      ) : forge ? (
-        <WhoAreYou forge={forge} error={claimError} stale={getLinkedUserId(forge.id) !== null} />
+        <LinkedView email={viewer.ownerId} showUnlink={!!proxy && getLinkedUserId(proxy.id) !== null} />
+      ) : proxy ? (
+        <WhoAreYou proxy={proxy} error={claimError} stale={getLinkedUserId(proxy.id) !== null} />
       ) : (
         <div className="card">
           <p className={styles.muted}>Sign in through the BAB web UI to see your devices.</p>
@@ -142,8 +142,8 @@ function LinkedView({ email, showUnlink }: { email: string; showUnlink: boolean 
   );
 }
 
-function WhoAreYou({ forge, error, stale }: { forge: ForgeUser; error?: string; stale: boolean }) {
-  const suggestion = stale ? null : suggestLinkFor(forge.id, forge.email, forge.name);
+function WhoAreYou({ proxy, error, stale }: { proxy: ProxyUser; error?: string; stale: boolean }) {
+  const suggestion = stale ? null : suggestLinkFor(proxy.id, proxy.email, proxy.name);
   return (
     <>
       <div className={`card ${styles.section}`}>

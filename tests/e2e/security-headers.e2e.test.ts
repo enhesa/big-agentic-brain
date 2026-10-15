@@ -9,6 +9,9 @@ describe("e2e: nobody can frame BAB", () => {
     const res = await fetch(`${origin()}${p}`);
     expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(res.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
   });
 
   it("POST /mcp answers normally and carries the headers too", async () => {

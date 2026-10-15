@@ -1,21 +1,14 @@
-# Required so `pnpm install` doesn't prompt to approve build scripts interactively,
-# which breaks a non-interactive CI run. Dockerfile.node already COPYs this file via a
-# glob (`pnpm-workspace.yaml*`), so it just needs to exist.
+# Lets `pnpm install` run non-interactively (CI, Docker build) if a dependency ever brings a
+# build script. The two approvals below are precautionary (lockfile v9 does not record
+# requiresBuild): esbuild (only an optional peer of vite) and sharp (an optional dependency of
+# next that BAB does not use) may run install scripts in some setups. The Dockerfile copies this
+# file with the lockfile.
 #
-# Both keys below are needed, not just one, because pnpm changed how this is
-# declared between major versions and silently IGNORES the key it doesn't
-# recognize (no error, no warning about the other key — it just still prompts):
-#   - `onlyBuiltDependencies` — pnpm 10.5 through 10.x. Removed entirely in pnpm 11.
-#   - `allowBuilds`           — pnpm 11+. Doesn't exist before pnpm 11.
-# A pnpm older than 10.5 recognizes neither in this file (only in package.json) and
-# will still prompt — see templates/app/CLAUDE.md's package-manager section for the
-# non-interactive fallback (`pnpm approve-builds --all`, pnpm ≥10.32).
-#
-# Pre-approved here: `esbuild` (a transitive dep of most tooling) and `sharp` (Next.js
-# image optimization — common enough in real apps that it earns a permanent entry
-# rather than every app owner rediscovering the same prompt). Adding a genuinely new
-# dependency with its own postinstall script? Add it to BOTH lists below, or run `pnpm
-# approve-builds --all` in this app's repo and commit the regenerated file.
+# Both keys are needed because pnpm changed how this is declared and silently ignores
+# the key it does not recognize:
+#   - `onlyBuiltDependencies`: pnpm 10.5 through 10.x. Removed in pnpm 11.
+#   - `allowBuilds`: pnpm 11 and later.
+# Adding a dependency with its own postinstall script? Add it to both lists.
 onlyBuiltDependencies:
   - esbuild
   - sharp

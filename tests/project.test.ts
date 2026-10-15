@@ -1,3 +1,4 @@
+import { useLegacyProxyNames } from "./db-legacy-names";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -99,7 +100,7 @@ describe("create - project field", () => {
       authorId: "author-1",
       title: "Runbook note",
       body: "Deploy steps.",
-      repo: "https://git.forge.example.com/forge/bab.git",
+      repo: "https://git.example.com/org/bab.git",
     });
     expect(l.project).toBe("bab");
   });
@@ -123,7 +124,7 @@ describe("create - project field", () => {
       authorId: "author-1",
       title: "Explicit wins",
       body: "Explicit project beats the repo-derived one.",
-      repo: "https://git.forge.example.com/forge/bab.git",
+      repo: "https://git.example.com/org/bab.git",
       project: "Q4 ESG Campaign",
     });
     expect(l.project).toBe("q4-esg-campaign");
@@ -161,7 +162,7 @@ describe("list/search - project filter", () => {
       authorId: "author-1",
       title: "Beta rollout notes",
       body: "Deploy steps for beta.",
-      project: "forge2",
+      project: "proxy2",
       confirmNotDuplicate: true,
     });
 
@@ -184,7 +185,7 @@ describe("list/search - project filter", () => {
       title: "Deploy pipeline gotcha elsewhere",
       body: "runTest.sh wires up containers for CI too.",
       tags: ["engineering", "ci"],
-      project: "forge2",
+      project: "proxy2",
       confirmNotDuplicate: true,
     });
 
@@ -214,7 +215,7 @@ describe("list/search - project filter", () => {
       authorId: "author-1",
       title: "Beta rollout notes",
       body: "Deploy steps for beta.",
-      project: "forge2",
+      project: "proxy2",
       confirmNotDuplicate: true,
     });
 
@@ -228,11 +229,11 @@ describe("listProjects", () => {
     await seedUsers();
     const { create, listProjects } = await import("../lib/learnings");
     const bab1 = create({ authorId: "author-1", title: "Bab note one", body: "First note about bab.", project: "bab" });
-    const forge = create({
+    const proxyMemory = create({
       authorId: "author-1",
       title: "Deploy note",
-      body: "A note about forge2.",
-      project: "forge2",
+      body: "A note about proxy2.",
+      project: "proxy2",
       confirmNotDuplicate: true,
     });
     const bab2 = create({
@@ -248,13 +249,13 @@ describe("listProjects", () => {
     const { getDb } = await import("../lib/db");
     const db = getDb();
     db.prepare("UPDATE learnings SET updated_at = '2020-01-01 00:00:00' WHERE id = ?").run(bab1.id);
-    db.prepare("UPDATE learnings SET updated_at = '2020-01-02 00:00:00' WHERE id = ?").run(forge.id);
+    db.prepare("UPDATE learnings SET updated_at = '2020-01-02 00:00:00' WHERE id = ?").run(proxyMemory.id);
     db.prepare("UPDATE learnings SET updated_at = '2020-01-03 00:00:00' WHERE id = ?").run(bab2.id);
 
     const projects = listProjects();
-    expect(projects.map((p) => p.project)).toEqual(["bab", "forge2"]);
+    expect(projects.map((p) => p.project)).toEqual(["bab", "proxy2"]);
     expect(projects.find((p) => p.project === "bab")?.count).toBe(2);
-    expect(projects.find((p) => p.project === "forge2")?.count).toBe(1);
+    expect(projects.find((p) => p.project === "proxy2")?.count).toBe(1);
   });
 
   it("excludes learnings with no project and archived/deleted ones", async () => {
@@ -285,9 +286,10 @@ describe("v9 backfill", () => {
     db.prepare("INSERT INTO users (id, email, name) VALUES ('u1', 'a.b@example.com', 'A B')").run();
     db.prepare(
       "INSERT INTO learnings (id, author_id, title, body, tags, repo, project, status) VALUES (?, 'u1', ?, 'b', '[]', ?, NULL, 'active')",
-    ).run("l-old", "old one", "https://git.forge.example.com/forge/bab.git");
+    ).run("l-old", "old one", "https://git.example.com/org/bab.git");
     // Every row from 9 up: the runner takes the highest applied version, so leaving 10
     // in place would keep v9 from re-running at all.
+    useLegacyProxyNames(db);
     db.prepare("DELETE FROM migrations WHERE version >= 9").run();
 
     const { _resetDbForTests } = await import("../lib/db");
@@ -308,7 +310,7 @@ describe("company-wide learnings", () => {
       title: "Never commit secrets, use the vault",
       body: "Applies everywhere, not just here.",
       tags: ["security"],
-      repo: "https://git.forge.example.com/forge/bab.git",
+      repo: "https://git.example.com/org/bab.git",
       project: null,
     });
     expect(guardrail.project).toBeNull();
@@ -319,7 +321,7 @@ describe("company-wide learnings", () => {
       title: "Deploy step that only applies here",
       body: "Project specific.",
       tags: ["engineering"],
-      repo: "https://git.forge.example.com/forge/bab.git",
+      repo: "https://git.example.com/org/bab.git",
     });
     expect(scoped.project).toBe("bab");
   });

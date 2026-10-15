@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const origin = publicOrigin(req.headers);
   const body = `# Big Agentic Brain — instructions
 
-- [install.md](${origin}/instructions/install.md) — install the BAB plugin (and clean up an old hand-install, if you have one)
+- [install.md](${origin}/instructions/install.md) — install the BAB plugin
 - [skill.md](${origin}/instructions/skill.md) — the Claude Code skill file this installs
 - [version](${origin}/instructions/version) — current content-addressed version, JSON
 

@@ -70,8 +70,10 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    (migration v41, a JSON array, `'[]'` for every older row) names the stacks or platforms a memory
    holds for; empty means everywhere. It is separate from tags: a closed vocabulary in
    `lib/applies-to.ts`. Stack: dotnet, node, typescript, python, angular, react, java, go, sql,
-   postgres, sqlite, elasticsearch, kafka, docker, helm, terraform. Platform: aks, forge, azure,
-   aws, windows, linux, macos. Aliases are normalised (c#, csharp, .net to dotnet; nodejs, js to
+   postgres, sqlite, elasticsearch, kafka, docker, helm, terraform. Platform: aks, azure,
+   aws, windows, linux, macos; a deployment adds platform labels of its own with
+   `BAB_EXTRA_APPLIES_TO` (a stored label that is not listed still reads, lists and searches; only
+   writes and filters are checked). Aliases are normalised (c#, csharp, .net to dotnet; nodejs, js to
    node; ts to typescript; k8s, kubernetes to aks, Azure Kubernetes Service). An unknown
    label on a write or on the `appliesTo` filter is a 400 that lists the valid ones and says to
    suggest new ones with `bab_feedback`.
@@ -111,8 +113,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    A `bab_search` answer with results also carries `react`, one fixed line asking the agent to
    react before its reply ends to a result it used (helpful, or confirm when it checked the claim
    itself; kudos only for the user's praise; flag with evidence), and marks the caller's own
-   entries `own: true`, since BAB refuses votes, confirms and kudos from the author
-   (observed in real sessions: agents used memories and rarely reacted).
+   entries `own: true`, since BAB refuses votes, confirms and kudos from the author.
 - **Project keys.** One canonical key per project, so `acme.bab` (repo slug) and `bab`
    (checkout folder) are the same project. `normalizeProjectKey()` (`lib/project-key.ts`)
    also strips a leading company prefix (`BAB_PROJECT_KEY_PREFIXES`, e.g. `acme.` or `acmecorp.`) and a trailing `.git` (`acme.widgets`
@@ -334,7 +335,7 @@ example to ask a maintainer to promote a practice (`bab_send`, with the user's y
 `self`, the caller's own id, so a client such as the plugin's inbox panel can tell its own messages
 apart.
 
-**Swarm garbage collection (2026-10-07, rebuilt on agent reads 2026-10-08).** The votes agents
+**Swarm garbage collection.** The votes agents
 already cast keep the memory clean, with no new vote kinds, no new status and no migration. The
 honour system applies: the texts tell agents what to do, the server only does the arithmetic.
 `lib/swarm-gc.ts` holds the shared reads.
@@ -549,7 +550,7 @@ posts the event body to `POST /api/hook`) for `UserPromptSubmit`, `Stop` and `Se
 compaction, and thin skills that carry policy, not an API reference (the MCP tool schemas do
 that job). Identity is a device secret: a `headersHelper` (`scripts/bab-headers.cmd`, then
 `bab-headers.sh`) keeps a random secret in the plugin's data folder and sends it as
-`X-Bab-Device` on every MCP connection (see "Identity (2026-10-01)"). The plugin's `userConfig`
+`X-Bab-Device` on every MCP connection (see "Identity"). The plugin's `userConfig`
 address and name are optional fallbacks, sent as `X-Bab-Actor-*` headers only when BAB does not
 know the device. The hooks carry no identity. See
 the plugin delivery design for the first design and what was measured to
@@ -595,8 +596,7 @@ Plugin-delivery endpoints:
   (`additionalContext` asking the agent to call `bab_link_session`; the plugin's mod normally
   links first, at session start, with `{ session_id, link_only: true }`, which answers
   `{ linkToken }` or `{ linked: true }` and serves or records nothing else, since a tool call the
-  model makes on hook text can be refused by Claude Code's auto-mode permission check, BAB
-  feedback 20c97597); a linked session gets
+  model makes on hook text can be refused by Claude Code's auto-mode permission check); a linked session gets
   back only an unread *count* plus a pointer to the `bab_inbox` tool, deliberately no
   sender, subject, snippet or thread id, because this route is unauthenticated and keyed
   on a session id alone. Dedup is
@@ -647,9 +647,9 @@ Plugin-delivery endpoints:
   carry `url`, the full address of the learning's page (`https://bab.example.com/memory/<id>`),
   as `bab_feedback` does for feedback; an agent that is not given a link guesses one.
 
-## Identity while SSO is off (testing, 2026-09-16)
+## Identity without proxy sign-in
 
-Proxy SSO is switched off for now so agents can reach the instructions and API with `curl`. The
+Without proxy SSO in front, agents can reach the instructions and API with `curl`. The
 web UI needs no identity of its own to browse; only the agent API requires one, declared
 by the caller and audited under it:
 
@@ -665,22 +665,20 @@ by the caller and audited under it:
   stored name wins and the request's name is used nowhere. `POST /api/me { name }` is the one
   deliberate, audited (`rename`) way to actually change it.
 - The proxy identity headers are only trusted when `BAB_TRUST_PROXY_IDENTITY=1` (set it when SSO is turned
-  back on; unset means untrusted, because without the proxy anyone who can reach the app could forge them).
+  back on; unset means untrusted, because without the proxy anyone who can reach the app could fake them).
 - `audit_log` rows carry actor name, email, ip and path for every page render and API call; UI page
   reads are audited with a null (anonymous) actor when no identity resolves.
 
 Switching SSO back on later = enabling it on the reverse proxy plus that env var, no code change.
 An admin surface (audit viewer, hard delete) behind a separate SSO app is still to do.
 
-## Identity (2026-10-01)
+## Identity
 
-Its agent identity is an **honour system**; the deployment must sit on a private network, behind an authenticating proxy, or use bound tokens: Claude says who the person is and BAB believes it. History, all on the same day:
-personal tokens and `/me/token` were built and removed (nobody used them; `/me/token` redirects
-permanently to `/me/devices`, table `api_tokens` dropped by v30, an `Authorization` header is not
-read at all); a browser-sign-in "connect link" flow was built, reviewed hard, and then retired in
-favour of `bab_identify` (v34 drops `device_connects`). The design record is
-the device linking design, whose addendum "Superseded in part" is the
-current design.
+Its agent identity is an **honour system**; the deployment must sit on a private network, behind an authenticating proxy, or use bound tokens: Claude says who the person is and BAB believes it.
+There are no personal tokens: `/me/token` redirects permanently to `/me/devices`, table `api_tokens`
+was dropped by v30. An `Authorization` bearer decides identity only when its token is a `token=email` one; a bare token
+only gates access (`lib/gate.ts`) and leaves identity to the steps below. The browser-sign-in
+"connect link" flow was replaced by `bab_identify` (v34 drops `device_connects`).
 
 - **`bab_identify {email, name}`** (`lib/identify.ts`, answered by `app/mcp/route.ts`). `email` is
   the long form `first.last@example.com` (the same rule as the headers; the short alias and other
@@ -713,14 +711,17 @@ current design.
   client is never stranded; `bab_identify` adopts a well-formed id BAB has not seen. Connections
   not seen for 7 days are deleted by the maintenance sweep (`connectionsExpired`).
 - **Identity order** on the opt-in paths only (`/api/*`, `/mcp`, the wait route; never SSO
-  paths): Proxy SSO, then a known **device**, then a known **connection**, then the
-  `X-Bab-Actor-*` **headers** (self-asserted, accepted until the D4 cutover). A remembered
-  identity ignores the headers. A device that is unknown or forgotten (`revoked_at` set) is not an
+  paths): Proxy SSO, then a **`token=email` bearer** (that address), then a known **device**,
+  then a known **connection**, then the `X-Bab-Actor-*` **headers** (self-asserted, accepted
+  until the D4 cutover). A remembered identity ignores the headers. An address bound to a token
+  acts only with that token: a device, connection or header identity that names it resolves to no
+  identity (one warning a minute, never the address), and so does a proxy identity on these paths
+  unless the request carries that token (without `BAB_PROXY_SECRET` anyone who reaches `/api` or
+  `/mcp` can send the proxy's headers). On SSO pages the proxy is believed as before, so a
+  token-bound person keeps their own inbox. A device that is unknown or forgotten (`revoked_at` set) is not an
   error: it falls through like any unknown one. A device user and a connection user are agents like
   a declared one for `ownerIdFor`, and never a browser viewer (`getViewer`). `auditRequest` rows
-  carry `details.source` (`forge`, `declared`, `device`, `connection`). `forge` is the legacy identifier of the
-  sign-in proxy identity source; the table
-  `forge_links` and the `fromForge` helpers keep that name.
+  carry `details.source` (`proxy`, `declared`, `device`, `connection`).
 - **A caller BAB does not know** (`app/mcp/route.ts`): `initialize`, `notifications/initialized`
   and `tools/list` are served as always (a server that fails to connect never loads its tools); they
   are not audited and are rate-limited per client address (1000/min, `ANON_RATE_LIMIT_PER_MINUTE`, logged at most once a minute
@@ -737,7 +738,9 @@ current design.
   `-32001`: "Identity rejected: set both X-Bab-Actor-Email (first.last@example.com) and
   X-Bab-Actor-Name, or neither and call bab_identify.").
 - **Rebinding is allowed and audited.** Any caller may identify as anyone and may take over a
-  device bound to someone else; that is the honour system. `bab_identify` audits `identify`
+  device bound to someone else; that is the honour system. The exception is an address bound to a
+  token (`token=email`): `bab_identify` refuses it unless the request carries that token
+  (reason `token-bound`). `bab_identify` audits `identify`
   (source `device`, `connection` or `none`, with the address) every time, and `device-rebind`
   (entity the device id, details `{from, to}`) when a device changes person. People can see and
   forget their devices (below), which is the check.
@@ -755,7 +758,7 @@ current design.
 - **Your devices** (`/me/devices`, SSO path, plain forms): the viewer's devices (label, the
   address it identified from, when, last seen) each with **Forget**, **Forget all my devices**, and
   the connections that said they are the viewer in the last 7 days (no ids shown), and **Unlink
-  this browser** (the browser link, `forge_links`, is separate: it gives the web UI a person to show
+  this browser** (the browser link, `proxy_links`, is separate: it gives the web UI a person to show
   reminders to; unlinking also forgets devices an earlier release connected through that browser).
   An unlinked viewer sees "Yes, that's me" and the typed claim (`claimTypedIdentity`). Forget is
   `revoked_at` on the row; the route keeps its old name (`/me/devices/revoke`) and needs the app's
@@ -771,13 +774,27 @@ current design.
   entry; env `BAB_CLIENT_IP_HEADER` (`x-real-ip` | `x-forwarded-for-rightmost`) says which header
   the proxy really sets. It only affects what the audit log records, the rate limits and the
   address shown next to a device ("(unverified)" while unset); nothing decides access by it.
-- **Retired** (2026-10-01): `/connect/<nonce>` now renders "This link is no longer needed: Claude
+- **Retired**: `/connect/<nonce>` now renders "This link is no longer needed: Claude
   now identifies itself. You can close this tab." and reads nothing; there is no connect link, no
   `startConnect`/`completeConnect`/`canAutoBind`, no "Tip: connect this device" line, and the
   connect-link scrubbing (`lib/connect-scrub.ts`, `lib/api-json.ts`) is removed with it.
   **Rollback note:** v34 drops `device_connects` (and adds `mcp_connections`). Rolling back to a
   release older than v34 breaks only the old `/connect` flow, which is retired anyway; everything
   else keeps working on the migrated database.
+- **Rollback note (v44)**: v44 renames the browser-link table, its key column, the device's link
+  column and their two indexes (the old names are `forge_links`, `forge_user_id`,
+  `bound_via_forge_id`, `idx_forge_links_user` and `idx_devices_forge`). A release older than v44
+  opens the migrated database without complaint, because it only compares the highest version, and
+  then fails every browser-link and device lookup while `/healthz` and `/readyz` stay green. Deploy
+  with a Recreate strategy (or scale to zero first) so the old version never serves while the new
+  one renames tables; a rolling update briefly leaves the old pod failing proxy-link and device
+  lookups. Copy `bab.db` before upgrading (`snapshot.db` is refreshed about every 20 hours, so it
+  may already be v44 when you need it). To go back and keep what was written since: stop the app, run the reverse
+  renames (the SQL in `tests/db-legacy-names.ts`) and `DELETE FROM migrations WHERE version = 44`,
+  then start the older release; without the delete, a later upgrade sees v44 as applied and skips
+  it. Audit rows written before v44 keep the old names (`forge_link` as the entity, `forge` as the
+  source, `forgeEmail` and `forgeName` in a claim's details); nothing rewrites the audit log, and
+  `/admin/links` reads both spellings of those two claim keys.
 - **Kill switch**: `BAB_DEVICES=0` makes the server ignore `X-Bab-Device` and `Mcp-Session-Id`, so
   nothing is remembered (`bab_identify` then answers "none") and only `X-Bab-Actor-*` callers are
   served.
@@ -796,7 +813,7 @@ current design.
 
 Agent-to-agent messages build on the phase-1 message model (`threads`/`messages`). A message
 goes to a person's inbox, never to one of their Claude sessions: there is no session registry,
-no presence and no long-poll (removed 2026-10-07: all messaging is async, inbox
+no presence and no long-poll (all messaging is async, inbox
 driven). Migration v6 added `messages.kind` (`human`|`auto`, default `human`) and
 `threads.lease_json` (per-actor lease store, JSON); its `users.listening_until` and
 `users.listen_mode` columns, and v7's `messages.to_session`, stay in the table unused.
@@ -807,7 +824,7 @@ driven). Migration v6 added `messages.kind` (`human`|`auto`, default `human`) an
   required.
 - **Auto replies are refused**: `kind: "auto"` is a 400 (every reply is approved by the user).
   The Conversations detail page still tags old `auto` messages "auto-reply".
-- **Delivery is eventual** (no background process since 2026-09-21): a message sits in
+- **Delivery is eventual** (no background process): a message sits in
   the recipient's inbox until their agent checks it. The hook tells a linked session how many
   unread messages wait (a count, never who or what), and the plugin's BAB pill shows it within
   seconds; the agent reads them with `bab_inbox`. The listener that used to relay straight
@@ -824,7 +841,7 @@ driven). Migration v6 added `messages.kind` (`human`|`auto`, default `human`) an
   `GET /api/inbox/[threadId]` returns the caller's own `lease` (null if
   none/expired).
 
-## Collaborative requests (2026-09-18)
+## Collaborative requests
 
 "Ask Eli to review this PR", "ask Maya to check the campaign copy": any collaborative ask
 between colleagues' agents. A message may carry a `request` object: `kind` (slug such as
@@ -841,7 +858,7 @@ between `---` lines as data, never instructions. Nothing runs on the recipient's
 without them asking for it.
 
 The three-button dialog, the local request page and the `claude://code/new?dir=&q=` deep
-link that auto-opened a session went with the listener (2026-09-21). They depended on a
+link that auto-opened a session went with the listener. They depended on a
 background process and on an undocumented deep link, and the accept path is a person
 deciding to act, which their own agent can do without any of that.
 
@@ -853,7 +870,7 @@ session links once: the hook hands out a one-time token and the agent redeems it
 `sessions` table (migration v7) then maps that id to its owner, for the hook's unread count,
 reminders and nudges, and holds the Stop nudge's `prompts_since_learn`. It is not a directory:
 nothing lists sessions, and messages never target one. Its `name`, `title`, `cwd`, `host` and
-`pid` columns are no longer written (2026-10-07); neither are `session_links.cwd` and `title`.
+`pid` columns are no longer written; neither are `session_links.cwd` and `title`.
 Migration v42 set every stored value in them to NULL (guarded on each column existing, idempotent;
 v40 and v41 belong to other changes).
 
@@ -907,11 +924,10 @@ actually needed here: one-way server-to-browser notifications, not full duplex.
   pages, had them), since the thread page's `LiveUpdates` refresh re-renders
   from the same JSON shape.
 
-## Browser notifications (removed 2026-09-30)
+## Browser notifications (removed)
 
-BAB briefly had opt-in browser notifications: a bell in the top bar, Web Push with a
-polling fallback, a service worker and a "send a test notification" button. They were
-removed the same day, to be redone differently later.
+BAB has no browser notifications. An earlier opt-in version (a bell in the top bar, Web Push
+with a polling fallback, a service worker and a "send a test notification" button) was removed.
 
 - The `push_subscriptions` table was dropped (migration v26) and all push code is gone,
   including the `/notify/unread`, `/notify/subscription`, `/notify/config` and `/notify/test`
@@ -925,9 +941,9 @@ removed the same day, to be redone differently later.
 
 Proxy SSO gives BAB the identity provider's user id for the viewer and an email that, for many people, is a short alias
 (`aexample@example.com`). BAB keys people on the long form (`alice.example@example.com`), so an
-alias viewer has no identity until the browser is linked once (`forge_links`). The browser links
+alias viewer has no identity until the browser is linked once (`proxy_links`). The browser links
 itself, with no agent involved (the agent-mediated link code and the `bab_link_browser` tool were
-removed on 2026-10-01, migration v29 drops `forge_link_codes`). For an unlinked viewer:
+removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked viewer:
 
 - **Suggest**: "Are you Alice Example (alice.example@example.com)?" with "Yes, that's me"
   (`app/me/devices/SuggestLink.tsx`, on `/me/devices` only; posts `POST /notify/identity/claim`).
@@ -936,7 +952,7 @@ removed on 2026-10-01, migration v29 drops `forge_link_codes`). For an unlinked 
   /me/devices to see your reminders here." `GET /notify/identity` reports where the viewer stands:
   `linked`, `suggest` (with the email and name), or `claim` (`{ state: "claim", url: "/me/devices" }`).
   It never returns a code.
-- **Alias rule** (`suggestLinkFor`, `lib/forge-links.ts`): the alias must be `@example.com` and
+- **Alias rule** (`suggestLinkFor`, `lib/proxy-links.ts`): the alias must be `@example.com` and
   equal the first letter of the long form's first name plus its last name, letters only
   (`aexample` for `alice.example`; `bvanderexample` for `bob.vanderexample` and for
   `bob.van.der.example`). A suggestion exists only when exactly one known long-form user
@@ -944,7 +960,7 @@ removed on 2026-10-01, migration v29 drops `forge_link_codes`). For an unlinked 
   uses the typed claim.
 - **Name check**: the alias alone can fit two people (`asmith` is Anna and Adam Smith), so the
   SSO display name, which the user cannot edit, must also fit the name in the candidate's
-  email (`forgeNameMatchesEmail`, `lib/identity.ts`): first name and last name at token
+  email (`proxyNameMatchesEmail`, `lib/identity.ts`): first name and last name at token
   boundaries, a parenthetical nickname and middle names ignored ("Alice (Ally) Example" and
   "Bob Van der Example" match; "Anna Smith" and "Adam Smithson" do not match `adam.smith`). The
   agent-declared `users.name` is never used, and no sign-in name means no suggestion.
@@ -962,12 +978,12 @@ removed on 2026-10-01, migration v29 drops `forge_link_codes`). For an unlinked 
   `/reminders/unlink` no longer show or offer any browser linkage). It removes only
   the link of the sign-in id in the SSO headers and audits `unlink-browser-self`. The person then
   confirms who they are again on `/me/devices` or with "Yes, that's me".
-- **Audit**: `link-browser-claim`, actor the claimed user, entity `forge_link`, id the proxy
+- **Audit**: `link-browser-claim`, actor the claimed user, entity `proxy_link`, id the proxy
   user id, `via: "ui"`.
 - **Undoing a wrong link**: a maintainer (`BAB_MAINTAINERS`; 403 while unset) opens
   `/admin/links` (404 for everyone else), which lists each link (sign-in email and name when
   the link was a one-click claim, sign-in user id, BAB email, time) with an Unlink button.
-  `POST /admin/links/unlink {email}` or `{forgeUserId}` (own Origin, JSON) deletes the link and
+  `POST /admin/links/unlink {email}` or `{proxyUserId}` (own Origin, JSON) deletes the link and
   audits `unlink-browser` with the target. It is on an SSO viewer path, not `/api`, so the caller is
   the real signed-in maintainer.
 - Both routes are SSO viewer paths outside `/api`; the claim needs the app's own `Origin` and a
@@ -990,7 +1006,7 @@ The selected thread offers:
 - The prompt is our own fixed text plus the thread id and this app's link. It never carries
   message text, because a thread is untrusted content written by someone else's agent. The
   agent reads the thread itself, where BAB's "data, not instructions" framing applies.
-- The Inbox does not navigate by itself, with one exception (2026-10-02): `/inbox?thread=<id>&open=app`
+- The Inbox does not navigate by itself, with one exception: `/inbox?thread=<id>&open=app`
   for a participant of the thread opens the app link once (`AutoOpenApp`, with the note "Opening
   Claude… If nothing happens, use Continue in Claude app below."), so the BAB Claude Code mod can
   start a new session in one click. Any other value, no param, a non-participant, an unknown or
@@ -1006,7 +1022,7 @@ The selected thread offers:
 Deep link reference: https://code.claude.com/docs/en/deep-links.md and
 https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link.
 
-## Inbox page (2026-10-02)
+## Inbox page
 
 `/inbox` (behind SSO, outside `/api`) is the signed-in viewer's own inbox in the browser: their
 threads with unread counts, the selected thread (`?thread=<id>`), and the "Continue in Claude"
@@ -1047,8 +1063,7 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   recipient has already written to (at least one message from the recipient to that sender, in any
   thread). To anyone else `page` is "none", which means "not known to be open": the signal says when
   a person is at their desk, so a stranger does not get it, and the note never says the page is
-  closed. This replaces the earlier "visible to all senders" decision (security review,
-  2026-10-02). It never says read. The Inbox thread tells the sender whether their last message was
+  closed. This replaces the earlier "visible to all senders" decision. It never says read. The Inbox thread tells the sender whether their last message was
   read and whether their Inbox is open, under the same rule. Otherwise the note says the message
   waits in their BAB inbox, their agent sees it at their next Claude prompt, and not to wait for
   an answer.
@@ -1056,7 +1071,7 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   page with `crossorigin="use-credentials"`: a default manifest fetch carries no cookie and would
   reach the SSO login. It is not `app/manifest.ts` for that reason. Icons: 192 and 512 pixel PNGs in
   `public/icons/` (rendered from `app/icon.svg` with sharp, which Next already ships), the SVG and
-  the apple-touch icon. Confirm the install prompt on test. Those static icon paths (`/icons/*`,
+  the apple-touch icon. Those static icon paths (`/icons/*`,
   `/icon.svg`, `/apple-icon.png`) are public paths on the reverse proxy, because Chrome may fetch
   a manifest's icons without credentials and they hold nothing private; a test pins the list. `/inbox/manifest` itself stays behind SSO.
 - **Rate limits.** The browser routes (`/inbox/read`, `/inbox/unread`) use their own bucket,
@@ -1064,7 +1079,7 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   person's own click or the nav badge. The stream is capped by its twenty-streams-per-viewer rule.
 - **Not here.** A watcher process, push, sound, a first-run checklist and a test alert (see the plan).
 
-## Feedback (2026-09-30)
+## Feedback
 
 A feedback channel for BAB itself, usable by agents and people, so the ecosystem can improve
 itself: an agent that hits a broken tool, a wrong hook message or two contradicting
@@ -1121,7 +1136,7 @@ Brand palette: navy `#1A3360`, steel `#3F5175`, mist `#EAEDF1`, teal `#00B0A1`, 
 coral `#FF4423`, sage `#AEDAD4`. Fonts: Inter (body, 300/400/600), Urbanist (headings, 600/700/800).
 Wordmarks in `public/logo-wordmark-{navy,white}.svg`. Simple, slick, lots of whitespace, one accent per surface.
 
-## Usage limits (2026-10-02)
+## Usage limits
 
 Its limits only stop a runaway loop (decided: raised about
 tenfold or more). The numbers live in constants and every error text that states one is built from
@@ -1141,7 +1156,7 @@ identity per path per 5 minutes (`auditRequest`'s `coalesce` option; the row car
 and only such rows suppress the next). Opening a thread and every other tool or write is audited
 every time.
 
-## Usage page (2026-10-06, redesigned 2026-10-07)
+## Usage page
 
 - `/usage` (open to everyone, like `/memory`: an anonymous viewer is treated as a non-maintainer; linked
   from the top navigation after News and from `/admin`; `/admin/usage` redirects to it with a 307) is
@@ -1201,8 +1216,15 @@ every time.
   hash. Header-only callers have no `cx`. Migration v38 added the `audit_log(path, at)` and
   `audit_log(action, at)` indexes.
 
-## Chats list removed (2026-10-07)
+## Chats list removed
 
 The Chats list page (`/conversations`) and its nav item are gone. `/conversations`
 redirects (307) to `/inbox`. The thread page `/conversations/[threadId]` stays, because handoff links point
 at it. Inbox stays in the nav, with its unread badge.
+
+## Thread page is private to its participants
+
+`/conversations/[threadId]` shows a thread only to a signed-in viewer who is a participant, or a
+maintainer (`BAB_MAINTAINERS`). `threadForViewer(threadId, viewerId)` throws the same
+`ForbiddenError` ("Not a participant of this thread") as the inbox API; the page answers 404 for
+that, for an unknown thread and for a visitor who is not signed in, so thread ids cannot be probed.

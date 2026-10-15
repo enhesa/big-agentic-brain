@@ -1182,13 +1182,13 @@ describe("retired-memory nudge (POST /api/hook)", () => {
     (await import("../lib/config"))._resetConfigForTests();
     const { POST } = await import("../app/api/hook/route");
     const res = await POST(
-      new Request("https://bab-test.forge.example.com/api/hook", {
+      new Request("https://bab-test.example.com/api/hook", {
         method: "POST",
-        headers: { "content-type": "application/json", host: "bab-test.forge.example.com", "x-forwarded-proto": "https" },
+        headers: { "content-type": "application/json", host: "bab-test.example.com", "x-forwarded-proto": "https" },
         body: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "sess-rt-2" }),
       }),
     );
-    expect(retiredLines(await res.json())[0]).toContain("(https://bab-test.forge.example.com/memory/");
+    expect(retiredLines(await res.json())[0]).toContain("(https://bab-test.example.com/memory/");
     process.env.BAB_PUBLIC_ORIGIN = ORIGIN;
     (await import("../lib/config"))._resetConfigForTests();
   });

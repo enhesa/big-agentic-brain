@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 43;
+export const CURRENT_VERSION = 44;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -289,6 +289,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(43);
     appliedVersion = 43;
   }
+  if (appliedVersion < 44) {
+    runMigrationV44(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(44);
+    appliedVersion = 44;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -296,6 +301,50 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV44(database: DatabaseSync) {
+  // The first deployment's sign-in proxy had its own product name in the schema. Everything is
+  // renamed to "proxy": the browser-link table, its key column, the device's link column and
+  // their indexes. Each step is guarded on what exists (ALTER TABLE has no IF NOT EXISTS), so a
+  // process that died half way, or a database that never had the old names, boots again.
+  // One way: an older release cannot read the renamed schema (rollback note in docs/spec.md).
+  // The audit log is left alone, so old claim rows keep their old keys (lib/proxy-links.ts reads both).
+  const hasTable = (name: string) =>
+    !!database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+  const columnsOf = (table: string) =>
+    new Set((database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name));
+
+  if (hasTable("forge_links") && !hasTable("proxy_links")) {
+    database.exec("ALTER TABLE forge_links RENAME TO proxy_links");
+  }
+  if (hasTable("proxy_links")) {
+    const cols = columnsOf("proxy_links");
+    if (cols.has("forge_user_id") && !cols.has("proxy_user_id")) {
+      database.exec("ALTER TABLE proxy_links RENAME COLUMN forge_user_id TO proxy_user_id");
+    }
+  }
+  if (hasTable("devices")) {
+    const cols = columnsOf("devices");
+    if (cols.has("bound_via_forge_id") && !cols.has("bound_via_proxy_id")) {
+      database.exec("ALTER TABLE devices RENAME COLUMN bound_via_forge_id TO bound_via_proxy_id");
+    }
+  }
+  // A table rename keeps index names, so the old-named ones are dropped and made again under the new names.
+  if (hasTable("proxy_links")) {
+    database.exec(`
+      DROP INDEX IF EXISTS idx_forge_links_user;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_proxy_links_user ON proxy_links(user_id);
+    `);
+  }
+  if (hasTable("devices") && columnsOf("devices").has("bound_via_proxy_id")) {
+    database.exec(`
+      DROP INDEX IF EXISTS idx_devices_forge;
+      CREATE INDEX IF NOT EXISTS idx_devices_proxy ON devices(bound_via_proxy_id);
+    `);
+  }
+  // learnings.applies_to is left alone on purpose: a stored label the app no longer lists still reads
+  // (lib/applies-to.ts readAppliesTo never validates); only writes and filters are checked.
+}
 
 function runMigrationV43(database: DatabaseSync) {
   // Who pinned a house rule and when (lib/learnings.ts setPinned): pinned rules go into every
@@ -537,7 +586,7 @@ function runMigrationV31(database: DatabaseSync) {
 function runMigrationV30(database: DatabaseSync) {
   // Devices (the device linking design). A device is one plugin install,
   // proved by a 256-bit secret of which only the sha256 is stored. Times are epoch
-  // milliseconds. bound_via_forge_id names the browser link the device was connected through,
+  // milliseconds. The link column (renamed by v44) names the browser link the device was connected through,
   // so unlinking that browser can revoke it. A revoked row is kept (and rebound in place if the
   // same secret connects again) because secret_hash is unique.
   database.exec(`
@@ -574,7 +623,7 @@ function runMigrationV30(database: DatabaseSync) {
 function runMigrationV29(database: DatabaseSync) {
   // The agent-mediated browser link code is gone: the browser links
   // itself on /me/devices. Its wrong-code limiters were in memory, so this table is the only
-  // leftover. forge_links, the durable link, stays.
+  // leftover. The browser-link table, the durable link, stays.
   database.exec("DROP TABLE IF EXISTS forge_link_codes");
 }
 
@@ -1181,10 +1230,10 @@ function runMigrationV18(database: DatabaseSync) {
   // One-time browser link: maps a sign-in proxy user id (opaque, the user-id header)
   // to the long-form email an agent already declared for that person via
   // X-Bab-Actor-Email. A proxy may send only a SHORT alias in the email header
-  // (the configured identity pattern never matches it), so fromForge()
+  // (the configured identity pattern never matches it), so fromProxy()
   // (lib/session.ts) alone can't key a signed-in viewer on their real identity — this
   // table is the durable side of that link, written by the browser's own claim
-  // (lib/forge-links.ts) and read on every request after. v19 added a short-lived link
+  // (lib/proxy-links.ts) and read on every request after. v19 added a short-lived link
   // code table that v29 dropped again.
   database.exec(`
     CREATE TABLE IF NOT EXISTS forge_links (

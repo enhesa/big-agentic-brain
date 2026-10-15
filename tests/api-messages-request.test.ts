@@ -43,10 +43,10 @@ function postReq(body: unknown, extraHeaders: Record<string, string> = {}) {
 const VALID_REQUEST = {
   kind: "review-pr",
   goal: "Please review the auth changes on this PR before I merge.",
-  repo: "https://git.forge.example.com/forge/bab.git",
+  repo: "https://git.example.com/org/bab.git",
   ref: "feature/JIRA-123-request",
   cwd: "bab",
-  links: ["https://git.forge.example.com/forge/bab/pulls/42"],
+  links: ["https://git.example.com/org/bab/pulls/42"],
 };
 
 describe("POST /api/messages: request", () => {

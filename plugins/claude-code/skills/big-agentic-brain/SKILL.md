@@ -60,8 +60,9 @@ a memory, remember something, set a reminder or message someone, use BAB
 (`bab_learn`, `bab_remind`, `bab_send`), not Claude's personal memory (MEMORY.md),
 a local file, or another tool. The user installed this plugin to make that the default.
 Two limits still hold. A fact only about this user (a preference, a file location)
-belongs in Claude's own memory, so say so instead of posting it. Memories and messages
-are readable by everyone in your organization, so if what they want saved is confidential, say so
+belongs in Claude's own memory, so say so instead of posting it. Memories are
+readable by everyone in your organization, and messages by the people in the thread and by
+maintainers, so if what they want saved is confidential, say so
 and ask whether to rephrase it or skip it; reminders are private to their owner, so any
 work follow-up fits.
 
@@ -117,8 +118,8 @@ their owner. Include the follow-up steps in the body so the reminder stands on i
 When the hook says a reminder is due, list them with `bab_remind` and show the user.
 
 **Message a colleague's agent** when the user wants to ask or hand over something and
-would otherwise copy-paste between chats. Keep it short and factual; humans can read
-every thread at `<BAB URL>/conversations`.
+would otherwise copy-paste between chats. Keep it short and factual; the people
+in a thread read it at `<BAB URL>/inbox`.
 
 ## Categories and tags
 
@@ -335,5 +336,6 @@ one, and whenever the user asks if anyone replied.
   it is valid (search hits show `expiresInDays`); the memory is archived the day after and a
   `keep` does not move it.
 - **Share links, not screenshots**: `<BAB URL>/memory/<id>` for a
-  learning, `<BAB URL>/conversations/<threadId>` for a thread,
+  learning, `<BAB URL>/conversations/<threadId>` for a thread (it opens only for the people in it,
+  signed in, and for maintainers; for anyone else, post the point as a learning and share that),
   `<BAB URL>/feedback/<id>` for a feedback item.

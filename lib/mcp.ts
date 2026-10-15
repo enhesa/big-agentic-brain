@@ -12,7 +12,7 @@
  * a tool is an actual bug, not a refusal, and the route lets it surface as a
  * JSON-RPC protocol error instead of a quiet isError result.
  */
-import { parseAppliesToFilter, parseStack, readAppliesTo } from "./applies-to";
+import { parseAppliesToFilter, parseStack, PLATFORM_LABELS, platformLabels, readAppliesTo, STACK_LABELS } from "./applies-to";
 import type { SessionUser } from "./session";
 import { identityDomain, identityHint } from "./identity";
 import { redeemLinkToken } from "./session-links";
@@ -716,7 +716,19 @@ export const TOOLS: Tool[] = [
           description: "Filter by kind: learning, practice (should), standard (must), decision (an ADR). A list is OR. Omit for all kinds.",
         },
         model: { type: "string", description: "Only memories written with this model id (for example claude-opus-5-5), to trace and re-check one model's memories. Self-declared by the author, so it can be missing." },
-        stack: { type: "array", items: { type: "string" }, description: "Your repo's stack, from what you see in it: .csproj or .sln is dotnet; package.json is node, plus angular or react from its dependencies; pyproject.toml or requirements.txt is python; also aks, forge, docker, kafka and so on. Memories for another stack are ranked after the rest and marked stackMismatch with a hint: weigh, don't follow. Aliases are accepted (c#, k8s); values BAB does not know are ignored." },
+        stack: {
+          type: "array",
+          items: { type: "string" },
+          // Built per request: the platform labels in force include BAB_EXTRA_APPLIES_TO.
+          get description() {
+            const extra = platformLabels().filter((l) => !(PLATFORM_LABELS as readonly string[]).includes(l));
+            return (
+              "Your repo's stack, from what you see in it: .csproj or .sln is dotnet; package.json is node, plus angular or react from its dependencies; pyproject.toml or requirements.txt is python; also " +
+              ["aks", ...extra, "docker", "kafka"].join(", ") +
+              " and so on. Memories for another stack are ranked after the rest and marked stackMismatch with a hint: weigh, don't follow. Aliases are accepted (c#, k8s); values BAB does not know are ignored."
+            );
+          },
+        },
         appliesTo: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }], description: "Only memories with one of these applies-to labels (dotnet, node, aks and so on), or everywhere for those that hold anywhere. An unknown label is an error." },
         flagged: { type: "boolean", description: "true: only the flagged standards and decisions, and the standards, decisions and pinned house rules colleagues marked not helpful, that wait for a maintainer, exactly what the maintainer notice counts." },
         houseRules: { type: "boolean", description: "true: the house rules digest the session's first prompt showed (pinned standards and practices: company-wide, plus project's if you pass project), with bodies. Re-read it after a compaction. Ignores the other filters." },
@@ -740,7 +752,20 @@ export const TOOLS: Tool[] = [
         repo: { type: "string", description: "The repo slug (git remote, e.g. my-repo) only when the fact holds only in that repo; omit for a house rule or way of working and pass project _general." },
         project: { type: "string", description: "Scope key (repo, client, campaign, product or system); defaults from `repo` when omitted, or pass _general (null works too) for a company-wide learning." },
         model: { type: "string", description: "Your own model id, read from your system prompt (for example claude-opus-5-5): lowercase letters, digits, dot, dash, 64 characters or fewer. Self-declared; omit it if you do not know it. It only records who wrote the memory and does not change standing." },
-        appliesTo: { type: "array", items: { type: "string" }, description: "Stack or platform labels the fact is specific to, so other stacks do not follow it: stack dotnet, node, typescript, python, angular, react, java, go, sql, postgres, sqlite, elasticsearch, kafka, docker, helm, terraform; platform aks, forge, azure, aws, windows, linux, macos (aliases like c# or k8s are normalised; an unknown label is an error, suggest new ones with bab_feedback). Judge from the content and the repo you work in: .csproj or .sln is dotnet; package.json is node, plus angular or react from its dependencies; pyproject.toml or requirements.txt is python. Leave it empty when the fact holds anywhere. A correction keeps the labels of what it replaces unless you pass some ([] for anywhere)." },
+        appliesTo: {
+          type: "array",
+          items: { type: "string" },
+          // Built per request: the platform labels in force include BAB_EXTRA_APPLIES_TO.
+          get description() {
+            return (
+              "Stack or platform labels the fact is specific to, so other stacks do not follow it: stack " +
+              STACK_LABELS.join(", ") +
+              "; platform " +
+              platformLabels().join(", ") +
+              " (aliases like c# or k8s are normalised; an unknown label is an error, suggest new ones with bab_feedback). Judge from the content and the repo you work in: .csproj or .sln is dotnet; package.json is node, plus angular or react from its dependencies; pyproject.toml or requirements.txt is python. Leave it empty when the fact holds anywhere. A correction keeps the labels of what it replaces unless you pass some ([] for anywhere)."
+            );
+          },
+        },
         confidence: { type: "string", enum: ["low", "medium", "high"], description: "Author's confidence: how sure you are, self-declared; defaults to medium. Not the same as standing, which BAB computes from colleagues' reactions." },
         expiresAt: { type: "string", description: "Only for a time-bound fact (a campaign, a code freeze): YYYY-MM-DD, the last day it is valid; the memory is archived the day after. Omit it otherwise: memories do not expire, but one that no agent reads for a year is archived (bab_react keep restores it). \"never\" is accepted and means no date." },
         supersedes: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }], description: "Id of an existing learning this one corrects and archives, or a list of ids for a consolidation (all archived, none if any id is bad). Anyone may supersede any learning, not just their own (BAB is a decentralized memory managed by agents): autopilot for a learning or practice you checked against the source, with the evidence in the body. Never supersede someone else's standard or decision, unless you are a BAB maintainer: flag it with your evidence instead. Correcting your own decision needs the user's yes first." },

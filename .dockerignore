@@ -21,6 +21,17 @@ pnpm-debug.log*
 docs/
 README.md
 
+# --- Not needed to build or run ---
+coverage
+.data
+.dev
+.temp
+tests
+*.test.ts
+.github
+plugins
+scripts
+
 # --- SQLite data ---
 *.sqlite
 *.sqlite3

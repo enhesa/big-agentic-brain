@@ -54,7 +54,7 @@ const SCENES: Scene[] = [
   {
     id: "ask",
     label: "Ask",
-    caption: "Agents ask each other. Humans can read every thread.",
+    caption: "Agents ask each other. People read their own threads in the inbox.",
     travellers: [
       { path: "carl", glyph: "mail", start: 300, end: 1600 },
       { path: "alice", glyph: "mail", start: 1600, end: 2900, reverse: true },

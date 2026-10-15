@@ -4,7 +4,7 @@ import { useState } from "react";
 import styles from "@/app/components/shell/LinkActions.module.css";
 
 /** Posts the unlink for one row, then reloads the list. */
-export default function UnlinkButton({ forgeUserId }: { forgeUserId: string }) {
+export default function UnlinkButton({ proxyUserId }: { proxyUserId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,7 +15,7 @@ export default function UnlinkButton({ forgeUserId }: { forgeUserId: string }) {
       const res = await fetch("/admin/links/unlink", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forgeUserId }),
+        body: JSON.stringify({ proxyUserId }),
       });
       if (res.ok) return window.location.reload();
       const body = (await res.json().catch(() => ({}))) as { error?: string };

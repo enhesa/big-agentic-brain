@@ -333,7 +333,17 @@ function normalizeRepo(repo: string | null | undefined): string | null {
  * never a thrown error (the `repo` field itself is validated separately).
  */
 
-export function create(input: CreateLearningInput, via: AuditVia = "ui"): LearningRow {
+/**
+ * What create() carries over from entries it replaces when the caller gave no value of its own.
+ * Not part of CreateLearningInput, so no request body can reach it: these values come from stored
+ * rows and are never checked against the vocabulary in force (a stored label that is no longer
+ * listed still reads, and still carries over).
+ */
+export interface InheritedFields {
+  appliesTo?: string[];
+}
+
+export function create(input: CreateLearningInput, via: AuditVia = "ui", inherited?: InheritedFields): LearningRow {
   const db = getDb();
 
   assertRawLength("title", input.title, TITLE_MAX);
@@ -375,7 +385,7 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui"): Learni
   // A correction does not inherit the model: it records who wrote THIS entry.
   const model = normalizeModel(input.model);
   // A correction keeps the applies-to labels of what it replaces unless given (an empty list is given).
-  const appliesTo = parseAppliesTo(input.appliesTo) ?? (target ? readAppliesTo(target.applies_to) : []);
+  const appliesTo = parseAppliesTo(input.appliesTo) ?? inherited?.appliesTo ?? (target ? readAppliesTo(target.applies_to) : []);
   const provenance = resolveProvenance(
     target && input.source == null && input.sourceUrl == null && input.sourceVersion == null
       ? { source: target.source, sourceUrl: target.source_url, sourceVersion: target.source_version }
@@ -1458,6 +1468,7 @@ export function createWithSupersedes(
   assertSupersedable(supersedesIds);
   const db = getDb();
   let createInput: CreateLearningInput = { ...input, supersedesId: supersedesIds[0] ?? null };
+  let inherited: InheritedFields | undefined;
   if (supersedesIds.length > 1) {
     // A consolidation keeps one kind, so standing earned under "standard" cannot be laundered
     // into a "learning" (or the reverse) by merging. Checked before the transaction so a
@@ -1475,13 +1486,14 @@ export function createWithSupersedes(
       ...createInput,
       kind: input.kind ?? [...kinds][0],
       source: input.source ?? "native",
-      // create() sees one target only: a merge carries the union of all their applies-to labels.
-      appliesTo: input.appliesTo !== undefined ? input.appliesTo : mergeAppliesTo(supersedesIds.map((id) => readAppliesTo(getById(id)!.applies_to))),
     };
+    // create() sees one target only: a merge carries the union of all their applies-to labels. Passed
+    // as inherited, not as input.appliesTo, so stored labels that are no longer listed are not re-validated.
+    inherited = { appliesTo: mergeAppliesTo(supersedesIds.map((id) => readAppliesTo(getById(id)!.applies_to))) };
   }
   const archived: Array<{ id: string; title: string }> = [];
   const created = inTransaction(db, () => {
-    const row = create(createInput, via);
+    const row = create(createInput, via, inherited);
     for (const oldId of supersedesIds) archived.push(supersedeWithinTransaction(row.id, oldId, input.authorId, via));
     return getById(row.id)!;
   });

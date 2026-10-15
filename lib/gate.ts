@@ -56,6 +56,18 @@ export function tokenIdentityFor(h: Headers): string | null {
   return presented ? lookup(presented).email : null;
 }
 
+/** True when `email` is the identity of a token=email entry: only a request carrying that token may act as them. */
+export function isTokenBoundEmail(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  for (const bound of config().tokenIdentities.values()) if (bound === e) return true;
+  return false;
+}
+
+/** The refusal text for a request that claims a token-bound address without its token. */
+export function tokenBoundMessage(email: string): string {
+  return `${email.trim().toLowerCase()} is bound to an API token; connect with that token to act as them`;
+}
+
 function json(status: number, error: string): Response {
   return new Response(JSON.stringify({ error }), { status, headers: { "Content-Type": "application/json" } });
 }

@@ -56,7 +56,6 @@ const LABELS = {
   helm: ["\\bhelm\\b", "values-(dev|qa|acc|prod)\\.yaml"],
   terraform: ["\\bterraform\\b", "\\btfstate\\b"],
   aks: ["\\baks\\b", "\\bkubectl\\b", "\\bk8s\\b", "\\bkubernetes\\b", "\\bargocd\\b", "\\bkeda\\b"],
-  forge: ["\\bai forge\\b", "\\bforge app\\b", "forge\\.app\\.yaml"],
   azure: ["\\bazure\\b", "\\baz cli\\b", "\\bazure devops\\b", "\\bapp configuration\\b"],
   aws: ["\\baws\\b", "\\bs3 bucket\\b", "\\bec2\\b"],
   windows: ["\\bwindows\\b", "\\bpowershell\\b", "\\bwsl\\b"],

@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
 import { search, searchTotal, list, expiryState, voteCounts, parseKindFilter, LEARNING_KINDS, GENERAL_PROJECT_KEY } from "@/lib/learnings";
 import type { ListFilters } from "@/lib/learnings";
-import { parseAppliesToFilter, STACK_LABELS, PLATFORM_LABELS, EVERYWHERE } from "@/lib/applies-to";
+import { parseAppliesToFilter, STACK_LABELS, platformLabels, EVERYWHERE } from "@/lib/applies-to";
 import { standingText } from "@/lib/standing";
 import type { LearningKind, LearningStatus } from "@/lib/types";
 import { liveNumbers, topTags, topProjects, topAuthors, generalProjectCount } from "@/lib/stats";
@@ -256,7 +256,7 @@ export default async function BoardPage({
         ...(applies.includes(",") ? [{ value: applies, label: `Custom: ${applies.split(",").join(", ")}` }] : []),
         { value: EVERYWHERE, label: "Everywhere" },
         { group: "Stack", options: STACK_LABELS.map((l) => ({ value: l, label: l })) },
-        { group: "Platform", options: PLATFORM_LABELS.map((l) => ({ value: l, label: l })) },
+        { group: "Platform", options: platformLabels().map((l) => ({ value: l, label: l })) },
       ],
     },
   ];

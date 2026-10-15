@@ -27,6 +27,11 @@ for (const [k, v] of Object.entries(ACME_ENV)) {
   if (process.env[k] === undefined) process.env[k] = v;
 }
 
+// Many tests turn BAB_TRUST_PROXY_IDENTITY on without a proxy secret; config refuses that unless acknowledged.
+// tests/config.test.ts clears every BAB_* variable first, so it still covers the refusal.
+// Kept out of ACME_ENV: the e2e server sets it in global-setup, and config-fail.e2e must not inherit it.
+if (process.env.BAB_TRUST_PROXY_WITHOUT_SECRET === undefined) process.env.BAB_TRUST_PROXY_WITHOUT_SECRET = "1";
+
 // Isolated data dir by default. lib/db.ts defaults to /data (for containers), which is unwritable on Linux CI.
 // Tests that need their own dir still set DATA_DIR themselves. One process per file (forks), so one dir per file.
 if (!process.env.DATA_DIR) {

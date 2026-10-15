@@ -13,8 +13,8 @@ import type { SessionUser } from "./session";
  * declared email, never a proxy id.
  *
  * A "declared" or "device" SessionUser already has this: its `id` IS the validated email.
- * A "forge" SessionUser is keyed on its long-form email too (lib/session.ts
- * fromForge), but its `email` is re-checked here anyway so this page never depends
+ * A "proxy" SessionUser is keyed on its long-form email too (lib/session.ts
+ * fromProxy), but its `email` is re-checked here anyway so this page never depends
  * on that staying true.
  * Anything that doesn't resolve to a confident long-form address returns
  * null, never a guess.

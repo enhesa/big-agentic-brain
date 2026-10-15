@@ -8,7 +8,7 @@ allow="scripts/vendor-allowlist.txt"
 PATTERN='enhesa|forge\.enhesa|atlassian\.net/wiki|azurecr|devenhesa|docs/specs/|docs/evals/|docs/plans/|\b(EHSREQSRV|EHSARCH|EHSESG|TECHLEADS|SOFTARCH|DPUSH)-[0-9]+'
 [ -n "${VENDOR_EXTRA_PATTERN:-}" ] && PATTERN="$PATTERN|$VENDOR_EXTRA_PATTERN"
 hits=$( {
-  grep -rniE "$PATTERN" app lib content plugins proxy.ts instrumentation.ts README.md docs tests \
+  grep -rniE "$PATTERN" app lib content plugins proxy.ts instrumentation.ts instrumentation-node.ts README.md docs tests \
     --include=*.ts --include=*.tsx --include=*.mjs --include=*.md --include=*.json --include=*.css --include=*.sh 2>/dev/null
   grep -rniE "$PATTERN" Dockerfile docker-compose*.yml scripts .gitignore .github 2>/dev/null
 } | sort -u || true)
