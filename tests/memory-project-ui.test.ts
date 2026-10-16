@@ -215,12 +215,21 @@ describe("age and expiry text (Change 1: show how fresh a memory is)", () => {
   it("shows age and expiry on the /memory/[id] detail page", async () => {
     const { bab } = await seed();
     const { getDb } = await import("../lib/db");
+    // A fixed clock and timestamps written from it, not SQLite's 'now': the day count must not
+    // depend on the time of day the suite runs (feedback 537bc05f).
+    const now = new Date("2026-06-15T18:30:00Z");
+    vi.useFakeTimers({ toFake: ["Date"], now });
     getDb()
-      .prepare("UPDATE learnings SET created_at = datetime('now', '-10 days'), expires_at = date('now', '+2 days') WHERE id = ?")
-      .run(bab.id);
+      .prepare("UPDATE learnings SET created_at = ?, expires_at = ? WHERE id = ?")
+      .run("2026-06-05 18:29:00", "2026-06-17", bab.id);
 
     const { default: LearningDetailPage } = await import("../app/memory/[id]/page");
-    const html = await renderHtml(LearningDetailPage({ params: Promise.resolve({ id: bab.id }) }));
+    let html: string;
+    try {
+      html = await renderHtml(LearningDetailPage({ params: Promise.resolve({ id: bab.id }) }));
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(html).toContain("Saved 10 days ago");
     expect(html).toContain("valid for 2 more days");

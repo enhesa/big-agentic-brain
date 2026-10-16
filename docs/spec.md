@@ -43,7 +43,8 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 
 ## Data model (SQLite)
 
-- `users(id TEXT PK /* proxy user id header */, email, name, roles, created_at, last_seen_at, trust REAL DEFAULT 1 /* unused */)`
+- `users(id TEXT PK /* proxy user id header */, email, name, roles, created_at, last_seen_at, trust REAL DEFAULT 1 /* unused */, home_team TEXT /* a team tag or NULL, migration v45 */)`
+- `area_contacts(area TEXT, user_id TEXT REFERENCES users, note TEXT, created_at, PRIMARY KEY(area, user_id))` (migration v45): people who opted in as a contact for a knowledge area.
 - `learnings(id, author_id, title, body, tags TEXT /* json array */, repo, project, confidence TEXT,
    status TEXT /* active|archived|deleted */, expires_at /* optional valid-until date */, supersedes_id, score REAL, kind TEXT /* learning|practice|standard|decision */,
    source TEXT /* native|confluence */, source_url, source_version INTEGER, model TEXT /* optional, migration v37 */, pinned INTEGER /* house rule, migration v39 */, pinned_by, pinned_at /* migration v43 */, last_accessed_at, access_days INTEGER /* agent reads, migration v40 */, applies_to TEXT /* json array of labels, '[]' = everywhere, migration v41 */, created_at, updated_at)`.
@@ -206,7 +207,7 @@ chips next to the tag chips (`topProjects()`, `lib/stats.ts`); `/memory/[id]` sh
 byline, linking back to the filtered list.
 
 
-`/api/me` (self-check, plus `POST /api/me { name }` to deliberately rename yourself). Every write is
+`/api/me` (self-check, plus `POST /api/me { name }` to deliberately rename yourself; `/api/me/team` and `/api/me/areas` for the home team and area contacts). Every write is
 stamped from the resolved actor, idempotent via `Idempotency-Key` (at most 120 characters; the same key with a different
 method, path or body is a 422, not a replay), and rate-limited per identity.
 Repeat writes that would be silent no-ops say so explicitly instead: a second kudos on the same
@@ -334,6 +335,24 @@ directory, else derived from the address), which is where the texts send an agen
 example to ask a maintainer to promote a practice (`bab_send`, with the user's yes). It also returns
 `self`, the caller's own id, so a client such as the plugin's inbox panel can tell its own messages
 apart.
+
+**Home team and area contacts.** A person has an optional home team (one of the team tags, kept
+apart from post tags: a tag says what a memory is about, the home team says where the person
+works) and may opt in as a named contact for knowledge areas, for example `toxicology`. An area is
+a free label, lowercased and hyphenated, at most 40 characters; the optional note (at most 200
+characters, redacted like other user text) says what to ask. At most 3 contacts per area and 10
+areas per person (a 400 otherwise). A person sets only their own home team and areas;
+a maintainer may also remove anyone from an area, never add one. Every change is audited
+(`home_team_set`, `area_contact_add`, `area_contact_update`, `area_contact_remove`); no realtime event is emitted
+(events never carry person names). `bab_people` lists each person's `homeTeam` and `areas`;
+`area` lists the contacts for one area; `action` `set_home_team`, `add_contact` or
+`remove_contact` changes the caller's own profile. `GET /api/people` (`?area=`), `POST /api/me/team`,
+`GET`, `POST` and `DELETE /api/me/areas` mirror them, and `/me/devices` has a form for the signed-in person.
+When `bab_search` (or `GET /api/learnings`) finds nothing, `contacts` (at most 3) holds the contacts whose
+area is a query word or the `tag` filter, whole or as one hyphen-separated part, with a
+`contactsHint`: suggest one, or with the user's yes send only that person the question with
+`bab_send`, and save the reusable answer with `bab_learn`. Ranking is untouched.
+Home team and contact areas are opt-in, and they are shown on the public `/usage` directory and in `/api/people`, so keep both free of personal data (an area label that redaction would change is refused).
 
 **Swarm garbage collection.** The votes agents
 already cast keep the memory clean, with no new vote kinds, no new status and no migration. The

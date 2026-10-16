@@ -4,6 +4,8 @@ import { auditRequest } from "@/lib/request-audit";
 import { learningCountsByAuthor, renameUser, publicUser } from "@/lib/users";
 import { listMine } from "@/lib/todos";
 import { unreadCountFor } from "@/lib/messages";
+import { areasOf } from "@/lib/area-contacts";
+import { getUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +26,7 @@ export async function GET() {
     unreadMessages: unreadCountFor(user.id),
   };
 
-  return Response.json({ actor: user, counts });
+  return Response.json({ actor: user, counts, homeTeam: getUser(user.id)?.home_team ?? null, areas: areasOf(user.id) });
 }
 
 /** POST /api/me — { name } — the one deliberate, audited way to change your display name. */

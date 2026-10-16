@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 44;
+export const CURRENT_VERSION = 45;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -294,6 +294,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(44);
     appliedVersion = 44;
   }
+  if (appliedVersion < 45) {
+    runMigrationV45(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(45);
+    appliedVersion = 45;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -301,6 +306,25 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV45(database: DatabaseSync) {
+  // A person's home team (one of the team tags, kept apart from post tags) and the knowledge
+  // areas they volunteered to be a contact for. Both are the person's own opt-in. The column add
+  // is guarded (ALTER TABLE has no IF NOT EXISTS) so a process that died before the migrations
+  // row boots again; the table is IF NOT EXISTS for the same reason.
+  const cols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "home_team")) database.exec("ALTER TABLE users ADD COLUMN home_team TEXT");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS area_contacts (
+      area TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (area, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_area_contacts_user ON area_contacts(user_id);
+  `);
+}
 
 function runMigrationV44(database: DatabaseSync) {
   // The first deployment's sign-in proxy had its own product name in the schema. Everything is

@@ -22,6 +22,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { toApiError } from "@/lib/errors";
 import { isCalendarDate } from "@/lib/dates";
 import { VERIFY_HINT } from "@/lib/swarm-gc";
+import { CONTACTS_HINT, contactsForSearch } from "@/lib/area-contacts";
 import type { LearningConfidence } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,14 @@ export async function GET(req: NextRequest) {
   recordSearchRead(results, { status, flagged });
 
   // verifyHint only when a result is marked verify: true, like bab_search.
-  return Response.json({ results, limit, ...(results.some((r) => r.verify) ? { verifyHint: VERIFY_HINT } : {}) });
+  // Nothing found for a real query: name the area contacts, like bab_search.
+  const contacts = results.length === 0 && (q.trim() || tag) ? contactsForSearch(q, tag) : [];
+  return Response.json({
+    results,
+    limit,
+    ...(contacts.length > 0 ? { contacts, contactsHint: CONTACTS_HINT } : {}),
+    ...(results.some((r) => r.verify) ? { verifyHint: VERIFY_HINT } : {}),
+  });
 }
 
 /** POST /api/learnings — create a learning, then optionally supersede. */
