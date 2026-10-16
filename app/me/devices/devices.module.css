@@ -4,6 +4,12 @@
   margin-bottom: 20px;
 }
 
+.h2 {
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+
 .section {
   margin-bottom: 24px;
 }
@@ -31,6 +37,13 @@
 .form label {
   font-size: 0.85rem;
   color: var(--steel);
+}
+
+.form select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--navy);
+  border-radius: 8px;
 }
 
 .form input[type="text"],

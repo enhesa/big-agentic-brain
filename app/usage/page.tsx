@@ -6,6 +6,7 @@ import { auditRequest } from "@/lib/request-audit";
 import { isMaintainer } from "@/lib/feedback";
 import { parseDbTime } from "@/lib/dates";
 import { getUsersByIds, learningCountsByAuthor, listUsersPage } from "@/lib/users";
+import { areasByUser } from "@/lib/area-contacts";
 import { GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import {
   IDENTIFY_LOOP_THRESHOLD,
@@ -206,6 +207,7 @@ export default async function UsagePage({
   const maintainer = viewer !== null && isMaintainer(viewer.ownerId);
   const usersPage = listUsersPage(Number((await searchParams)?.users));
   const memoryCounts = learningCountsByAuthor();
+  const areaCounts = areasByUser();
 
   const report = cachedUsageReport();
   const generated = new Date(report.generatedAt);
@@ -677,6 +679,8 @@ export default async function UsagePage({
                 <tr>
                   <th>Name</th>
                   <th>Email</th>
+                  <th>Team</th>
+                  <th>Contact for</th>
                   <th>Last seen</th>
                   <th className={styles.num}>Memories</th>
                 </tr>
@@ -684,13 +688,15 @@ export default async function UsagePage({
               <tbody>
                 {usersPage.users.length === 0 && (
                   <tr>
-                    <td colSpan={4}>No users yet.</td>
+                    <td colSpan={6}>No users yet.</td>
                   </tr>
                 )}
                 {usersPage.users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.name ?? u.id}</td>
                     <td className={styles.wide}>{u.email ?? "-"}</td>
+                    <td>{u.home_team ?? "-"}</td>
+                    <td>{(areaCounts.get(u.id) ?? []).map((a) => a.area).join(", ") || "-"}</td>
                     <td className={styles.nowrap}>{parseDbTime(u.last_seen_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</td>
                     <td className={styles.num}>{memoryCounts[u.id] ?? 0}</td>
                   </tr>

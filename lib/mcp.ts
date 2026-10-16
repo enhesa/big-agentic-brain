@@ -58,6 +58,7 @@ import {
 } from "./todos";
 import { isCalendarDate } from "./dates";
 import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./users";
+import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, removeAreaContact, setHomeTeam } from "./area-contacts";
 import { resetPromptsSinceLearn } from "./sessions";
 import {
   create as createFeedback,
@@ -240,10 +241,13 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   recordSearchRead(results, filters);
   const total = searchTotal(query, filters);
   const nextOffset = offset + limit < total ? offset + limit : null;
+  // Nothing found for a real query: name the people who volunteered as contacts for the area.
+  const contacts = total === 0 && offset === 0 && (query.trim() || tag) ? contactsForSearch(query, tag) : [];
   return JSON.stringify({
     results,
     total,
     nextOffset,
+    ...(contacts.length > 0 ? { contacts, contactsHint: CONTACTS_HINT } : {}),
     ...(results.length > 0 ? { react: SEARCH_REACT_HINT } : {}),
     // Only on an answer that has a result marked verify: never in a hook.
     ...(results.some((r) => r.verify) ? { verifyHint: VERIFY_HINT } : {}),
@@ -431,9 +435,37 @@ function runSend(actor: SessionUser, args: Record<string, unknown>): string {
 // bab_people
 // ---------------------------------------------------------------------------
 
-function runPeople(actor: SessionUser, _args: Record<string, unknown>, ctx?: ToolContext): string {
+const PEOPLE_ACTIONS = ["set_home_team", "add_contact", "remove_contact"] as const;
+
+function runPeople(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string {
+  const action = args.action == null || args.action === "" ? "" : str(args.action);
+  if (action && !PEOPLE_ACTIONS.includes(action as (typeof PEOPLE_ACTIONS)[number])) {
+    throw new ValidationError("action must be one of set_home_team, add_contact, remove_contact");
+  }
+  // The caller's own profile: home team and the areas they are a contact for. Nobody changes
+  // anyone else's, except a maintainer removing someone from an area.
+  if (action === "set_home_team") return JSON.stringify({ homeTeam: setHomeTeam(actor.id, args.team, "mcp") });
+  if (action === "add_contact") {
+    const mine = addAreaContact(actor.id, args.area, args.note, "mcp");
+    return JSON.stringify({ ...mine, contacts: contactsForArea(mine.area) });
+  }
+  if (action === "remove_contact") {
+    const user = args.user == null ? undefined : str(args.user);
+    return JSON.stringify({ removed: removeAreaContact(actor.id, args.area, user, "mcp") });
+  }
+  // Who to ask about one area.
+  if (args.area != null && str(args.area).trim()) {
+    return JSON.stringify({ area: str(args.area), contacts: contactsForArea(args.area) });
+  }
+
   const counts = learningCountsByAuthor();
-  const users = listUsers().map((u) => ({ ...publicUser(u), learningCount: counts[u.id] ?? 0 }));
+  const areas = areasByUser();
+  const users = listUsers().map((u) => ({
+    ...publicUser(u),
+    learningCount: counts[u.id] ?? 0,
+    homeTeam: u.home_team,
+    areas: (areas.get(u.id) ?? []).map((a) => a.area),
+  }));
   // Who decides about a flagged standard or decision, and whom to ask to promote a practice to a
   // standard (bab_send, with the user's yes). From BAB_MAINTAINERS; empty while it is unset.
   const maintainerIds = maintainerIdList();
@@ -695,6 +727,7 @@ export const TOOLS: Tool[] = [
       "Searches the shared learnings memory by keyword and returns the ranked matches; " +
       "pass stack (your repo's stack) so a memory for another stack does not pass as company-wide; every result carries appliesTo (empty: holds anywhere); " +
       "results carry model (the id the author declared, or null), standing (strong, fair or weak, computed from colleagues' reactions, with standingReason) and confidence (the author's own, self-declared: a different signal), ageDays (mention it when citing an old memory) and expiresInDays (only set on a time-bound fact with its own valid-until date), verify: true on a live memory over 90 days old that nobody has confirmed or kept in the last 90 days (if you use it, check it against code or docs in this task, then confirm it with where you checked, correct it with bab_learn supersedes, or flag or retire it with the evidence; the response's `verifyHint` repeats this), and lastRetire (kind retire or restore, voterName, note, at) when the memory was retired or restored: read why before you restore or retire it again. " +
+      "When nothing matches, `contacts` names up to 3 people who volunteered for that area (bab_people lists them): suggest one, or with the user's yes send only them the question with bab_send. " +
       "The response also carries `total` (matches for these filters) and `nextOffset` " +
       "(null once there's no more); pass that back as `offset` to page through the rest. " +
       "When a result helped, react to it with bab_react before your reply ends, as the response's `react` field says; results you wrote carry own: true and take no votes.",
@@ -834,8 +867,17 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_people",
-    description: "Lists the people directory with learning counts; `self` is your own id. `maintainers` ([{ id, name }]) are the people who post standards and decide about a flagged standard or decision: ask one to promote a practice with bab_send, with the user's yes.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Lists the people directory with learning counts, each person's homeTeam and the areas they are a contact for; `self` is your own id. `maintainers` ([{ id, name }]) are the people who post standards and decide about a flagged standard or decision: ask one to promote a practice with bab_send, with the user's yes. area=toxicology lists the named contacts for that area (use them when BAB has no answer). Your own profile, only with the user's yes: action=set_home_team (team, one of the team tags; empty clears it), add_contact (area, optional note on what to ask you; up to 3 contacts per area, 10 areas per person) or remove_contact (area; a maintainer may also pass user).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        area: { type: "string", description: "Without action: list the contacts for this knowledge area. With add_contact or remove_contact: the area (a free label, lowercased and hyphenated, 40 characters or fewer)." },
+        action: { type: "string", enum: ["set_home_team", "add_contact", "remove_contact"], description: "Change your own profile; omit to read." },
+        team: { type: "string", description: "For set_home_team: your home team (engineering, product, marketing, sales, content, legal, regulatory, finance, hr, management, operations, it, data), or empty to clear." },
+        note: { type: "string", description: "For add_contact: what to ask you about, 200 characters or fewer." },
+        user: { type: "string", description: "For remove_contact, maintainers only: the person (email) to remove from the area." },
+      },
+    },
     run: runPeople,
   },
   {

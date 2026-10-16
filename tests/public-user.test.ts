@@ -78,10 +78,10 @@ describe("GET /api/people", () => {
   it("lists only the allowlisted fields plus the derived ones, for every user", async () => {
     await seed();
     const { GET } = await import("../app/api/people/route");
-    const body = (await (await GET()).json()) as { users: Record<string, unknown>[] };
+    const body = (await (await GET(new Request("http://localhost/api/people"))).json()) as { users: Record<string, unknown>[] };
     expect(body.users).toHaveLength(2);
     for (const u of body.users) {
-      expectOnlyPublic(u, ["learningCount"]);
+      expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
     }
   });
 });
@@ -103,7 +103,7 @@ describe("bab_people", () => {
     const users = (JSON.parse(text) as { users: Record<string, unknown>[] }).users;
     expect(users).toHaveLength(2);
     for (const u of users) {
-      expectOnlyPublic(u, ["learningCount"]);
+      expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
     }
     for (const key of INTERNAL_KEYS) expect(text).not.toContain(key);
   });

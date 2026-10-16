@@ -34,14 +34,14 @@ describe("GET /api/people", () => {
   it("returns 401 without identity", async () => {
     mockNoIdentity();
     const { GET } = await import("../app/api/people/route");
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/people"));
     expect(res.status).toBe(401);
   });
 
   it("returns the directory with learning counts", async () => {
     mockAgentIdentity("ada.t@example.com", "Ada");
     const { GET } = await import("../app/api/people/route");
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/people"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.users.some((u: { id: string }) => u.id === "ada.t@example.com")).toBe(true);

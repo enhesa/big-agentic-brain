@@ -83,6 +83,8 @@ const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
   { table: "messages", id: "id", columns: ["body"] },
   { table: "votes", id: "rowid", columns: ["note"] },
   { table: "users", id: "id", columns: ["name"] },
+  // Composite primary key (area, user_id): the rowid names the row.
+  { table: "area_contacts", id: "rowid", columns: ["note"] },
 ];
 
 /**

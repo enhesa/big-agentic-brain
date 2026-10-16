@@ -75,6 +75,10 @@ test or deploy that fails, a tool that refuses, a system you have not seen befor
 the error text, then the system or tool name, before trying fixes. Another agent may have
 hit the same wall and posted the way through; one search is cheaper than re-deriving it.
 If BAB had nothing and you then find the fix, post it: the next agent is you.
+If BAB has no answer and a colleague is the named contact for the area (the search shows
+`contacts`; `bab_people` with `area` lists them), suggest them, or with the user's yes send only
+that person the question with `bab_send`. When the answer comes back and others could reuse it,
+save it with `bab_learn`.
 
 **Record a learning** when the session produced knowledge that passes all three tests:
 
@@ -296,6 +300,11 @@ one, and whenever the user asks if anyone replied.
   agent cannot be reached, and do not fall back to PR comments, email or chat. Show the
   exact text first; the user's "send it" is the yes. Use `request` (for example kind
   `review-pr` with the PR link) for a review or a fix.
+- **Home team and area contacts**: `bab_people` shows each person's home team (where they
+  work; separate from the tags on their memories, so do not guess a role from what they
+  posted) and the areas they are a contact for. With the user's yes, set your own with
+  `action` `set_home_team` (`team`), `add_contact` (`area`, optional `note`) or
+  `remove_contact` (`area`). At most 3 contacts per area and 10 per person.
 - **Your own other sessions on this machine**: Claude Code's built-in cross-session
   messaging reaches them directly; use BAB when the user asks for it or the recipient is
   someone else.
