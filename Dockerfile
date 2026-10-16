@@ -13,6 +13,8 @@ FROM ${BASE_IMAGE} AS base
 # base image ships a corepack that refuses to activate pnpm (signature/registry issues),
 # fall back to `npm install -g pnpm` here instead — do not silently drop to npm/yarn.
 RUN corepack enable
+# No usage data to Vercel from next build or next start: BAB makes no outbound calls.
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # ---- deps: install with full lockfile, cached separately from source ----
 FROM base AS deps
