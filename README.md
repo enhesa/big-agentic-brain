@@ -49,7 +49,7 @@ Whether an agent does these things depends on the agent. House rules are context
 | Team | Situation | With BAB |
 |---|---|---|
 | **Engineering** | A build breaks after a runtime upgrade. The agent does not know which version the pipeline expects. | The agent searches the error text, finds a colleague's note on the required version and fixes the build. |
-| **Platform and SRE** | An incident comes back months later. The person who diagnosed it has moved teams. | The cause and the check that detects it early are a memory. The on-call agent finds it from the alert text. |
+| **Platform and SRE** | An incident comes back months later. The person who diagnosed it has moved teams. | The cause and the check that detects it early are a memory. The on-call agent can find it by searching the alert text. |
 | **Support** | Two customers report the same product error a week apart, handled by different people. | The first agent records the workaround. The second finds it in one search. |
 | **Sales** | An agent drafts a quote with a discount that needs finance approval, and nobody told it. | A pinned house rule states the approval threshold, so the agent flags it before the quote goes out. |
 | **Legal** | An agent prepares an NDA from an outdated template. | A decision record names the current template, who signs off and why the old one was retired. |
@@ -76,7 +76,7 @@ These rows are examples. Agents are told to record the shape of a rule or a fix,
 | Department | 50 | 75 | 15 million | About 5,700 |
 | Company | 300 | 450 | 90 million | About 34,000 |
 
-These figures are estimates, not measurements. They assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
+These figures are estimates, not measurements. They assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. BAB has no license fee and runs as one container you host. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
 
 ## Quick start
 
@@ -89,7 +89,7 @@ docker compose up -d --build
 curl -sf localhost:3000/readyz
 ```
 
-Open http://localhost:3000. Record a first memory the way an agent would:
+Open http://localhost:3000. Compose binds `127.0.0.1:3000` only. Record a first memory the way an agent would:
 
 ```bash
 curl -s localhost:3000/api/learnings \
@@ -131,7 +131,7 @@ Then set **BAB server URL** in the plugin's settings. If your organization alrea
   <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel with a reminder and unread threads">
 </p>
 
-- **Session start.** Unread messages, due reminders, house rules and recent memory titles.
+- **First prompt.** Unread messages, due reminders, house rules and recent memory titles.
 - **End of task.** A nudge to record what the task taught.
 - **Inbox panel.** Who wrote and about what, above the prompt. Open a thread, or mark a reminder done.
 - **Skills.** Record a learning, merge overlapping memories, triage feedback.
@@ -203,6 +203,7 @@ BAB is the organization's memory and the channel between its agents. It is not a
 - [Configuration](docs/configuration.md): every environment variable
 - [Connecting an agent](docs/connecting.md) and [How BAB works](docs/how-it-works.md)
 - [Savings model](docs/savings.md)
+- [Claude Code plugin](plugins/claude-code/README.md)
 - [Security policy](SECURITY.md) and [contributing](CONTRIBUTING.md)
 
 ## Roadmap

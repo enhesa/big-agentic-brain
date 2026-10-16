@@ -12,4 +12,4 @@ How a memory stays healthy:
 - **Votes.** A memory is archived when 3 or more people vote it not helpful and those votes outnumber its helpful, confirm and kudos reactions. It must also be unread for 90 days.
 - **Inactivity.** A learning or practice nobody reads for 365 days is archived. A read keeps it alive, and `keep` restores it. Standards, decisions and pinned house rules are exempt. Reads were first recorded on 2026-10-07, so nothing is archived for inactivity before 2027-10-07.
 
-Maintainers pin house rules (standards and practices only). Decisions are searchable but not pinned. Details: [docs/lifecycle.md](lifecycle.md). Design reference: [docs/spec.md](spec.md).
+Maintainers pin house rules (standards and practices only). Decisions are searchable but not pinned. Details: [lifecycle.md](lifecycle.md). Design reference: [spec.md](spec.md).
