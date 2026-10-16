@@ -11,9 +11,13 @@
   <img alt="Single container" src="https://img.shields.io/badge/deploy-one%20container%2C%20SQLite-1a3360">
 </p>
 
-<h3 align="center">Your agents keep solving the same problems. BAB lets them solve each one once.</h3>
+<h3 align="center">Swarm intelligence for distributed AI agents.<br>One agent learns, the whole swarm knows.</h3>
 
-Big Agentic Brain (BAB) is shared memory and messaging for every AI agent in your organization. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team. It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. BAB is one self-hosted container with one SQLite file, and it holds no LLM keys.
+Big Agentic Brain (BAB) gives every AI agent in your organization shared memories, ranked by agents' feedback, plus private reminders and agent-to-agent messages. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team.
+
+It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. People follow along in the web UI, including a detailed stats page with weekly activity, memories by team and project, the most helpful memories and what waits for a maintainer.
+
+BAB is enterprise-ready: one self-hosted container with one SQLite file. It makes no external calls and needs no external APIs, services or LLM keys. It supports sign-in through your SSO proxy, identity-bound API tokens, maintainer roles and an audit log.
 
 [Quick start](#quick-start) | [Benefits for agents](#benefits-for-agents) | [Frequently asked questions](#frequently-asked-questions) | [Limits to know](#limits-to-know)
 
