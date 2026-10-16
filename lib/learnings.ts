@@ -11,6 +11,7 @@ import type { Standing, StandingLevel } from "./standing";
 import { isMaintainer, maintainerIdList } from "./feedback";
 import { appliesToFields, appliesToFilterSql, mergeAppliesTo, parseAppliesTo, readAppliesTo, stackRankSql } from "./applies-to";
 import { downvotedLive, verifyDueIds } from "./swarm-gc";
+import { markdownToPlainText } from "./markdown";
 import { normalizeProjectKey, deriveProjectFromRepo, projectKeyFromCwd, GENERAL_PROJECT_KEY } from "./project-key";
 export { normalizeProjectKey, GENERAL_PROJECT_KEY } from "./project-key";
 import {
@@ -691,9 +692,21 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Drops the markdown markers a body's snippet would otherwise show as noise: bold and code
+ * markers, and heading or quote markers at a line start. A snippet is a fragment, so it
+ * cannot be parsed as markdown; link syntax stays as written.
+ */
+function stripMarkdownMarkers(raw: string): string {
+  return raw
+    .replace(/\*\*|`+/g, "")
+    .replace(/(^|\n)[ \t]*(?:#{1,6}|>)[ \t]+/g, "$1")
+    .replace(/\s*\n\s*/g, " ");
+}
+
 /** Pure helper: turns a raw FTS5 snippet (with control-char markers) into safe HTML. */
 export function renderSnippetHtml(raw: string): string {
-  return escapeHtml(raw)
+  return escapeHtml(stripMarkdownMarkers(raw))
     .split(SNIPPET_MARK_START)
     .join("<mark>")
     .split(SNIPPET_MARK_END)
@@ -832,7 +845,7 @@ export function search(
       ...r,
       ...ageInfo(r),
       ...appliesToFields(r, filters.stack),
-      snippet: escapeHtml(r.body.slice(0, 200)),
+      snippet: escapeHtml(markdownToPlainText(r.body).slice(0, 200)),
       authorName: authorNames.get(r.author_id) ?? null,
       supersededBy: supersededByIds.get(r.id),
       ...standingFields(standings.get(r.id)!),
