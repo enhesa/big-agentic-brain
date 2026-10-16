@@ -22,6 +22,7 @@ import {
 import { formatRelativeTime, formatAge, formatExpiry } from "@/lib/relative-time";
 import { getDb } from "@/lib/db";
 import styles from "../memory.module.css";
+import Markdown from "@/app/components/Markdown";
 import { formatDate, DATE_TIME } from "@/lib/branding";
 
 /**
@@ -175,7 +176,7 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
           )}
         </p>
 
-        <div className={styles.body}>{learning.body}</div>
+        <Markdown source={learning.body} className={styles.body} />
 
         <ul className={styles.facts}>
           {facts.map(([k, v]) => (

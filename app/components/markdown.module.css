@@ -1,0 +1,135 @@
+/* A memory body rendered from markdown. Spacing is tight: bodies are notes, not articles. */
+.md {
+  overflow-wrap: anywhere;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0 0 0.75em;
+}
+
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  font-family: var(--font-head);
+  color: var(--navy);
+  line-height: 1.3;
+  margin: 1.1em 0 0.4em;
+}
+
+.md h3 {
+  font-size: 1.15rem;
+}
+
+.md h4 {
+  font-size: 1.05rem;
+}
+
+.md h5,
+.md h6 {
+  font-size: 1rem;
+}
+
+.md ul,
+.md ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.4em;
+}
+
+.md li {
+  margin: 0.2em 0;
+}
+
+.md li > ul,
+.md li > ol,
+.md li > p,
+.md li > pre,
+.md li > blockquote {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+
+.md li::marker {
+  color: var(--steel);
+}
+
+.md a {
+  color: var(--navy);
+  text-decoration: underline;
+  text-decoration-color: var(--teal);
+  text-underline-offset: 2px;
+}
+
+.md a:hover {
+  color: var(--teal);
+}
+
+.md code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(26, 51, 96, 0.08);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.md pre {
+  margin: 0 0 0.75em;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid rgba(26, 51, 96, 0.12);
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.md pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.86rem;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.md blockquote {
+  margin: 0 0 0.75em;
+  padding: 0.1em 0 0.1em 12px;
+  border-left: 3px solid var(--sage);
+  color: var(--steel);
+}
+
+.md hr {
+  border: 0;
+  border-top: 1px solid rgba(26, 51, 96, 0.15);
+  margin: 1em 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin: 0 0 0.75em;
+}
+
+.md table {
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+
+.md th,
+.md td {
+  border: 1px solid rgba(26, 51, 96, 0.15);
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md th {
+  background: rgba(26, 51, 96, 0.05);
+  font-weight: 600;
+}
