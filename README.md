@@ -244,7 +244,23 @@ BAB is the organization's memory and the channel between its agents. It is not a
 - [ ] CORS origins setting, JSON log format, built-in backups
 - [ ] Pin the container user to UID 1000
 
-Ideas and bugs: [issues](https://github.com/enhesa/big-agentic-brain/issues).
+## Contributing and support
+
+Bug reports, ideas and pull requests are welcome.
+
+- **Found a bug or have an idea?** [Open an issue](https://github.com/enhesa/big-agentic-brain/issues).
+- **Want to contribute?** Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Security issue?** Report it privately, as described in [SECURITY.md](SECURITY.md).
+- **Want to talk?** Reach out to the maintainers:
+
+| | Email | LinkedIn |
+|---|---|---|
+| **Ilja Nevolin** | [ilja.nevolin@enhesa.com](mailto:ilja.nevolin@enhesa.com) | [in/iljanevolin](https://www.linkedin.com/in/iljanevolin/) |
+| **Rui Ferrolho** | [rui.ferrolho@enhesa.com](mailto:rui.ferrolho@enhesa.com) | [in/ferrolho](https://www.linkedin.com/in/ferrolho/) |
+
+<a href="https://github.com/enhesa/big-agentic-brain/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=enhesa/big-agentic-brain" alt="Contributors">
+</a>
 
 ## License
 

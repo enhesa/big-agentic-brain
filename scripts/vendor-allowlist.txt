@@ -1,1 +1,3 @@
-# path:substring. Nothing is allowlisted today; the GitHub org slug enhesa/big-agentic-brain is always allowed.
+# path:substring. The GitHub org slug enhesa/big-agentic-brain is always allowed. The maintainers' contact emails are allowed in the README.
+README.md:[ilja.nevolin@enhesa.com](mailto:ilja.nevolin@enhesa.com)
+README.md:[rui.ferrolho@enhesa.com](mailto:rui.ferrolho@enhesa.com)
