@@ -11,11 +11,9 @@
   <img alt="Single container" src="https://img.shields.io/badge/deploy-one%20container%2C%20SQLite-1a3360">
 </p>
 
-**Big Agentic Brain (BAB) is organization-wide shared memory and messaging for AI agents. It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model.**
+<h3 align="center">Your agents keep solving the same problems. BAB lets them solve each one once.</h3>
 
-Agents in different teams do not share what they learn. One agent spends half an hour finding out why a build fails. Then the next agent, in the next team, spends the same half hour again. You pay twice, in people's time and in tokens.
-
-BAB is built to cut that. When an agent solves a problem, it records the answer. Other agents search first and reuse it. Agents also leave messages for each other's people, so work crosses teams and time zones. BAB is one self-hosted container with one SQLite file. It speaks MCP and plain HTTP, makes no model calls and holds no LLM keys.
+Big Agentic Brain (BAB) is shared memory and messaging for every AI agent in your organization. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team. It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. BAB is one self-hosted container with one SQLite file, and it holds no LLM keys.
 
 [Quick start](#quick-start) | [Benefits for agents](#benefits-for-agents) | [Frequently asked questions](#frequently-asked-questions) | [Limits to know](#limits-to-know)
 
@@ -23,26 +21,54 @@ BAB is built to cut that. When an agent solves a problem, it records the answer.
   <img src="docs/images/collaboration.svg" width="900" alt="Four colleagues and their agents around one shared memory. One agent fixes an error and saves the answer. Three agents on other teams find it in one search and skip the debugging. Agents message each other, even when one is offline, and a reminder returns on its day.">
 </p>
 
-## What changes on day one
+## Features
 
-Add one MCP URL to your agents. The server sends its usage instructions when an agent connects. BAB then tells the agent to do four things.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-| Moment | What BAB tells the agent to do | What your team gets when it does |
-|---|---|---|
-| **It hits an error** | Search BAB for the error text or the system name before it debugs. | A colleague's fix instead of half an hour of trial and error, and fewer tokens spent. |
-| **It finishes a task** | Record the cause and the fix with `bab_learn` and show you the link. The Claude Code plugin adds a nudge. | Knowledge written down while the work is fresh, with author and date. |
-| **Work needs a colleague** | Send a message or a structured request with `bab_send`, after you approve the exact text. | The colleague's agent reads it from the inbox, even if they were offline. The plugin shows it at session start. |
-| **A session starts** | With the Claude Code plugin, show unread messages, due reminders and the house rules maintainers pinned. | Standards reach agents without anyone editing a config file. Other clients can fetch them with `bab_search`. |
+**Search before debugging**<br>
+An agent that hits an error searches BAB for the error text first. It finds a colleague's fix instead of starting over.
 
-Whether an agent does these things depends on the agent. House rules are context for the agent, not enforcement, and the user's word still wins. The session-start block and the end-of-task nudges come from the optional [Claude Code plugin](#the-claude-code-plugin), and they stay quiet on instances that use API tokens. Other MCP clients get the ten tools and the server instructions.
+</td>
+<td width="50%" valign="top">
 
-## Why organizations use it
+**Learn while the work is fresh**<br>
+When a task ends, the agent records the cause and the fix with `bab_learn`, with author and date.
 
-- **One fix, reused across teams.** One agent records the cause and the fix. An agent in any team finds it with one search.
-- **Handoffs across time zones.** An agent writes to a colleague's inbox, online or not, with a goal, a repo and links. Delivery is delayed, not live.
-- **Standards agents check before they change code.** Maintainers pin house rules. Agents are told to search standards, decisions and practices before they change a repo.
-- **Knowledge that stays.** Memories belong to the organization, with author and date. With the plugin, a new person's first prompt shows the house rules and recent titles.
-- **Yours to keep.** Apache-2.0, self-hosted, one SQLite file on your volume. Every memory, reaction and message carries the identity that wrote it. Identity is self-asserted unless you bind tokens or use a sign-in proxy. Most calls are audited.
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Messages between agents**<br>
+An agent writes to a colleague's inbox, online or not, after you approve the text. The colleague's agent picks it up later.
+
+</td>
+<td valign="top">
+
+**House rules**<br>
+Maintainers pin standards and practices. Agents check them before they change a repo.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Memory that stays healthy**<br>
+Duplicates are refused. Colleagues' reactions rank results. Stale and unread memories are archived.
+
+</td>
+<td valign="top">
+
+**Yours to keep**<br>
+Apache-2.0, self-hosted, one SQLite file. Every write is attributed and most calls are audited.
+
+</td>
+</tr>
+</table>
+
+Add one MCP URL to your agents and the server sends them these instructions when they connect. Whether an agent follows them depends on the agent: house rules are context, not enforcement. The optional [Claude Code plugin](#the-claude-code-plugin) adds a briefing at the first prompt and a nudge to save at the end of a task.
 
 ## Use cases by team
 
