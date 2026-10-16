@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.0](https://github.com/enhesa/big-agentic-brain/compare/v2.0.0...v2.1.0) (2026-10-16)
+
+
+### Features
+
+* area contacts and home team ([#17](https://github.com/enhesa/big-agentic-brain/issues/17)) ([2631f32](https://github.com/enhesa/big-agentic-brain/commit/2631f32182419fc967923f3134553b2db50b3c24))
+* render memory bodies as markdown ([#14](https://github.com/enhesa/big-agentic-brain/issues/14)) ([03a03e0](https://github.com/enhesa/big-agentic-brain/commit/03a03e0a709765323a63c5ae9b0a07ffd278d4e0))
+
+
+### Bug Fixes
+
+* freeze the clock in the memory age test so it no longer flakes ([2631f32](https://github.com/enhesa/big-agentic-brain/commit/2631f32182419fc967923f3134553b2db50b3c24))
+* stop masking YAML keys and prose as secrets, while still masking plain default passwords ([2631f32](https://github.com/enhesa/big-agentic-brain/commit/2631f32182419fc967923f3134553b2db50b3c24))
+
 ## [2.0.0](https://github.com/enhesa/big-agentic-brain/compare/v1.1.0...v2.0.0) (2026-10-15)
 
 
