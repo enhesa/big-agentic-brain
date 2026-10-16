@@ -10,6 +10,8 @@ pnpm install
 DATA_DIR=./.data pnpm dev   # http://localhost:4310
 ```
 
+About 2,000 tests sit behind coverage gates (85 percent of lines and functions, 75 percent of branches). An end-to-end suite boots the standalone server. CI runs `pnpm check` and a Docker build on every push to main and every pull request. BAB needs Node 24 or newer.
+
 The container default data directory is `/data`, which a dev machine usually cannot write, so point `DATA_DIR` at a local folder.
 
 ## Before you open a PR
