@@ -19,6 +19,7 @@ export async function POST(request: Request) {
   const viewer = await getViewer();
   if (!viewer) return json ? notifyJson({ error: "Sign in through the BAB web UI" }, 401) : redirectTo(request, "/me/devices");
 
+  await auditRequest({ actor: viewer.actor, method: "POST", path: "/me/devices/profile", via: "ui" });
   const { action, team, area, note } = await readFields(request);
   try {
     if (action === "team") setHomeTeam(viewer.ownerId, team, "ui");
@@ -32,6 +33,5 @@ export async function POST(request: Request) {
     }
     return redirectTo(request, "/me/devices?profile=invalid");
   }
-  await auditRequest({ actor: viewer.actor, method: "POST", path: "/me/devices/profile", via: "ui" });
   return json ? notifyJson({ ok: true }) : redirectTo(request, "/me/devices");
 }

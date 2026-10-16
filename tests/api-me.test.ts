@@ -46,6 +46,8 @@ describe("GET /api/me", () => {
     const body = await res.json();
     expect(body.actor.id).toBe("ada.t@example.com");
     expect(body.counts).toEqual({ learnings: 0, todosOpen: 0, unreadMessages: 0 });
+    expect(body.homeTeam).toBeNull();
+    expect(body.areas).toEqual([]);
   });
 
   it("reflects a learning and an open todo in the counts", async () => {

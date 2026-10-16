@@ -27,22 +27,29 @@ function internalEmailDomains(): RegExp[] {
 }
 
 /**
- * key=value style secrets (see SECRET_PATTERNS). The value must be on the same line as its key,
- * and must not itself be a YAML key: in "passwordSecret:\n  secretName: app-user" neither line
- * holds a secret (feedback f8942f33, 2026-10-16).
+ * key=value style secrets (see SECRET_PATTERNS). After a colon the value may sit on the next line
+ * only when that line is indented (a YAML scalar), and it must not itself be a YAML key: in
+ * "passwordSecret:\n  secretName: app-user" neither line holds a secret (feedback f8942f33).
+ * After "=" anything goes, as before.
  */
 const KEY_VALUE_SECRET =
-  /(?<![A-Za-z0-9_])["']?[A-Za-z0-9_]*(?:password|passwd|pwd|token|secret|apikey|api_key|access_token|refresh_token|client_secret|clientsecret|private_key|sas_token|auth_token|bearer_token|session_key|signing_key|encryption_key|connection_string|connectionstring)["']?[ \t]*[:=][ \t]*["']?(?!(?:true|false|null|undefined|\d+)["']?(?![A-Za-z0-9_-]))(?![^\s;,"']+:(?:\s|$))[^\s;,"']+["']?/gi;
+  /(?<![A-Za-z0-9_])["']?[A-Za-z0-9_]*(?:password|passwd|pwd|token|secret|apikey|api_key|access_token|refresh_token|client_secret|clientsecret|private_key|sas_token|auth_token|bearer_token|session_key|signing_key|encryption_key|connection_string|connectionstring)["']?[ \t]*[:=](?:[ \t]*|[ \t]*\r?\n[ \t]+)["']?(?:(?<==[ \t]*["']?)|(?![^\s;,"']+:(?:\s|$)))(?!(?:true|false|null|undefined|\d+)["']?(?![A-Za-z0-9_-]))[^\s;,"']+["']?/gi;
 
 /**
- * Prose, not a credential: a plain lowercase key word, a colon, then a plain lowercase word, as in
- * "scoped token: pull" or "password: required". Values with digits, capitals or symbols, quoted
- * values, and every key=value or SCREAMING_CASE key, are still masked.
+ * Prose, not a credential: "Use a scoped token: pull access only". All of these must hold, so a
+ * config line such as "  password: postgres" or "password: changeme" is still masked:
+ * - a plain lowercase key word, a colon and a plain lowercase word, nothing quoted;
+ * - the key sits mid-sentence: other text comes before it on the same line;
+ * - the sentence goes on: more words follow the value on the same line.
  */
-function isKeyValueProse(match: string): boolean {
-  if (/["']/.test(match)) return false; // quoted keys or values are config (JSON, YAML strings), not prose
+function isKeyValueProse(match: string, offset: number, text: string): boolean {
+  if (/["'\n]/.test(match)) return false;
   const m = /^([A-Za-z0-9_]*)[ \t]*([:=])[ \t]*(.*)$/.exec(match);
-  return m !== null && m[2] === ":" && /^[a-z]+$/.test(m[1]) && /^[a-z]+(?:-[a-z]+)*$/.test(m[3]);
+  if (!m || m[2] !== ":" || !/^[a-z]+$/.test(m[1]) || !/^[a-z]+$/.test(m[3])) return false;
+  const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
+  const before = text.slice(lineStart, offset);
+  const after = text.slice(offset + match.length).split("\n", 1)[0];
+  return /\S/.test(before) && /^[ \t]+[A-Za-z]/.test(after);
 }
 
 // Order matters: more specific patterns first so we don't partially mask a match
@@ -223,7 +230,10 @@ export function redact(text: string, opts: { emails?: boolean } = {}): string {
   let result = text;
   for (const pattern of SECRET_PATTERNS) {
     result = result.replace(pattern, (whole, ...groups: unknown[]) => {
-      if (pattern === KEY_VALUE_SECRET && isKeyValueProse(whole)) return whole;
+      if (pattern === KEY_VALUE_SECRET) {
+        const offset = groups[groups.length - 2] as number;
+        if (isKeyValueProse(whole, offset, groups[groups.length - 1] as string)) return whole;
+      }
       // URL-credential pattern keeps its scheme (first capture group).
       const scheme = typeof groups[0] === "string" && /:\/\/$/.test(groups[0]) ? groups[0] : "";
       return scheme ? `${scheme}${REDACTED}@` : REDACTED;

@@ -114,6 +114,10 @@ describe("POST /me/devices/profile", () => {
     const { getDb } = await import("../lib/db");
     const actions = (getDb().prepare("SELECT action FROM audit_log WHERE via = 'ui' AND entity IN ('user', 'area_contact') ORDER BY id").all() as { action: string }[]).map((r) => r.action);
     expect(actions).toEqual(["home_team_set", "area_contact_add", "area_contact_remove"]);
+    // Every attempt is audited as a request, refused ones included.
+    await POST(post({ action: "team", team: "wizards" }));
+    const reqs = getDb().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE path = '/me/devices/profile'").get() as { n: number };
+    expect(reqs.n).toBe(4);
   });
 
   it("redirects with a refusal code for bad input and changes nothing", async () => {

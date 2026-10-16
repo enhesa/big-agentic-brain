@@ -1,7 +1,7 @@
 import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
 import { listUsers, learningCountsByAuthor, publicUser } from "@/lib/users";
-import { areasByUser, contactsForArea } from "@/lib/area-contacts";
+import { areasByUser, contactsForArea, normalizeArea } from "@/lib/area-contacts";
 import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const area = new URL(req.url).searchParams.get("area");
   if (area?.trim()) {
     try {
-      return Response.json({ area, contacts: contactsForArea(area) });
+      return Response.json({ area: normalizeArea(area), contacts: contactsForArea(area) });
     } catch (err) {
       const { status, body } = toApiError(err);
       return Response.json(body, { status });

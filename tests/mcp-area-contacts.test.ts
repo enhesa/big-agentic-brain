@@ -95,6 +95,9 @@ describe("bab_people", () => {
     ]);
     const listed = await tool(BOB, "bab_people", { area: "toxicology" });
     expect(listed.contacts.map((c: { id: string }) => c.id)).toEqual([ADA.email]);
+    expect((await tool(BOB, "bab_people", { area: "Toxicology " })).area).toBe("toxicology");
+    await tool(ADA, "bab_people", { action: "add_contact", area: "regulatory-lists" });
+    expect((await tool(BOB, "bab_people", { area: "Regulatory Lists" })).area).toBe("regulatory-lists");
     expect(await tool(ADA, "bab_people", { action: "remove_contact", area: "toxicology" })).toEqual({ removed: true });
     expect((await tool(BOB, "bab_people", { area: "toxicology" })).contacts).toEqual([]);
     expect(await tool(ADA, "bab_people", { action: "remove_contact", area: "toxicology" })).toEqual({ removed: false });
@@ -212,6 +215,11 @@ describe("JSON API", () => {
     expect(add.body.contacts).toHaveLength(1);
     await api(ADA, areas, "POST", "http://localhost/api/me/areas", { area: "toxicology", note: "hazards and lists" });
     expect((await api(ADA, areas, "GET", "http://localhost/api/me/areas")).body).toEqual({ areas: [{ area: "toxicology", note: "hazards and lists" }] });
+    await api(ADA, team, "POST", "http://localhost/api/me/team", { team: "legal" });
+    const me = await api(ADA, "../app/api/me/route", "GET", "http://localhost/api/me");
+    expect(me.body).toMatchObject({ homeTeam: "legal", areas: [{ area: "toxicology", note: "hazards and lists" }] });
+    await api(ADA, team, "POST", "http://localhost/api/me/team", { team: null });
+    expect((await api(BOB, people, "GET", "http://localhost/api/people?area=Regulatory%20Lists")).body.area).toBe("regulatory-lists");
     const byArea = await api(BOB, people, "GET", "http://localhost/api/people?area=toxicology");
     expect(byArea.body.contacts).toEqual([{ area: "toxicology", id: ADA.email, name: "Ada T", note: "hazards and lists" }]);
     expect((await api(BOB, people, "GET", "http://localhost/api/people?area=!!!")).status).toBe(400);
@@ -266,6 +274,7 @@ describe("JSON API", () => {
       expect(body.endpoints[key], key).toBeTruthy();
     }
     expect(body.endpoints["GET /api/people"]).toContain("homeTeam");
+    expect(body.endpoints["GET /api/me"]).toContain("homeTeam");
   });
 });
 

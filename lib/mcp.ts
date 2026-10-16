@@ -58,7 +58,7 @@ import {
 } from "./todos";
 import { isCalendarDate } from "./dates";
 import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./users";
-import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, removeAreaContact, setHomeTeam } from "./area-contacts";
+import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, normalizeArea, removeAreaContact, setHomeTeam } from "./area-contacts";
 import { resetPromptsSinceLearn } from "./sessions";
 import {
   create as createFeedback,
@@ -455,7 +455,7 @@ function runPeople(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   }
   // Who to ask about one area.
   if (args.area != null && str(args.area).trim()) {
-    return JSON.stringify({ area: str(args.area), contacts: contactsForArea(args.area) });
+    return JSON.stringify({ area: normalizeArea(args.area), contacts: contactsForArea(args.area) });
   }
 
   const counts = learningCountsByAuthor();
