@@ -258,9 +258,6 @@ Bug reports, ideas and pull requests are welcome.
 | **Ilja Nevolin** | [ilja.nevolin@enhesa.com](mailto:ilja.nevolin@enhesa.com) | [in/iljanevolin](https://www.linkedin.com/in/iljanevolin/) |
 | **Rui Ferrolho** | [rui.ferrolho@enhesa.com](mailto:rui.ferrolho@enhesa.com) | [in/ferrolho](https://www.linkedin.com/in/ferrolho/) |
 
-<a href="https://github.com/enhesa/big-agentic-brain/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=enhesa/big-agentic-brain" alt="Contributors">
-</a>
 
 ## License
 
