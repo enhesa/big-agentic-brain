@@ -24,7 +24,6 @@
   --u-on-fill: #fff;
   /* Delta text: up, down. Both clear 4.5:1 on white. */
   --u-up: #00665d;
-  --u-down: #b8341a;
   --u-warn: var(--amber);
   --u-warn-ink: #7a5600;
   --u-warn-wash: rgba(255, 183, 0, 0.1);
@@ -54,7 +53,6 @@
   --u-ord3: #5fe0d3;
   --u-on-fill: #08201d;
   --u-up: #4fd8c9;
-  --u-down: #ff8a70;
   --u-warn-ink: #ffcf5c;
   --u-warn-wash: rgba(255, 183, 0, 0.12);
 }
@@ -187,15 +185,7 @@
   color: var(--u-up);
 }
 
-.deltaDown {
-  color: var(--u-down);
-}
-
 .deltaFlat {
-  color: var(--u-muted);
-}
-
-.deltaWhat {
   color: var(--u-muted);
   font-weight: 400;
 }
@@ -598,6 +588,15 @@
   color: var(--u-ink);
 }
 
+/* A year of weeks: a wider track, bars stretched to it. */
+.cleanDense .cleanRow {
+  grid-template-columns: minmax(0, 1fr) 200px 2.5rem;
+}
+
+.cleanDense .cleanTrack {
+  width: 200px;
+}
+
 .cleanTrack {
   display: block;
   width: 112px;
@@ -726,6 +725,22 @@
   color: var(--u-ink);
   padding: 0 6px 0 0;
   text-overflow: ellipsis;
+}
+
+/* A year of weeks: colour blocks without numbers, month names in the header. */
+.heatDense {
+  border-spacing: 1px;
+}
+
+.heatDense th {
+  overflow: visible;
+  text-align: left;
+}
+
+.heatDense .heatCell,
+.heatDense .heatZero {
+  height: 24px;
+  border-radius: 2px;
 }
 
 .heatCell,
@@ -1076,8 +1091,18 @@ a.mini:hover {
   }
 
   .heatMonth,
+  .heatAlt,
   .tickAlt {
     display: none;
+  }
+
+  .cleanDense .cleanRow {
+    grid-template-columns: minmax(0, 1fr) 130px 2.2rem;
+    gap: 8px;
+  }
+
+  .cleanDense .cleanTrack {
+    width: 130px;
   }
 
   /* The charts scale down with their viewBox; larger units keep the labels readable. */

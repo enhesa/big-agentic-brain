@@ -5,8 +5,8 @@ import { generalProjectCount, topProjects } from "./stats";
 import type { StandingLevel } from "./standing";
 
 /**
- * The numbers behind /usage (docs/spec.md "Usage page"). Weekly numbers cover the last 8 ISO
- * weeks (Monday to Sunday, UTC) from audit_log; "what's in BAB" counts the live memories
+ * The numbers behind /usage (docs/spec.md "Usage page"). Weekly numbers cover the last 12 months,
+ * USAGE_WEEKS ISO weeks (Monday to Sunday, UTC), from audit_log; "what's in BAB" counts the live memories
  * (status active) in learnings. Every audit query is bounded by `at >=` the first
  * Monday (or the last 30 days) and runs on idx_audit_action_at, idx_audit_path_at or idx_audit_at;
  * every learnings query is bounded by status, created_at or last_accessed_at.
@@ -19,7 +19,8 @@ import type { StandingLevel } from "./standing";
  * identify refusals, the `cx` session detail and the model behind a memory.
  */
 
-export const USAGE_WEEKS = 8;
+/** The window of every windowed number on the page: 52 ISO weeks, about 12 months (audit rows are kept 365 days by default). */
+export const USAGE_WEEKS = 52;
 /** A Stop nudge counts as followed when the same person calls bab_learn within this many minutes. */
 export const NUDGE_FOLLOW_MINUTES = 10;
 /** More bab_identify calls than this from one device or connection on one day is a loop. */
@@ -161,7 +162,7 @@ export interface TeamWeek {
   noTeamTag: number;
 }
 
-/** The four headline counts, for one week or one stretch of time. */
+/** The four headline counts, for one week or the whole window. */
 export interface ActivityCounts {
   /** Memories stored (audit `create` on a learning). */
   saves: number;
@@ -176,6 +177,8 @@ export interface ActivityCounts {
 export interface ActivityWeek extends ActivityCounts {
   week: string;
   label: string;
+  /** People whose first activity in the window is this week (they sum to the window's distinct people). */
+  newPeople: number;
 }
 
 export interface GrowthPoint {
@@ -250,8 +253,8 @@ export interface CleanupWeek {
 export interface UsageReport {
   weeks: string[];
   activity: ActivityWeek[];
-  /** Last week from its Monday up to the same weekday and time as now, for a fair "vs last week". */
-  lastWeekToDate: ActivityCounts;
+  /** The hero tiles: saves, searches and reactions summed over the window; people are distinct, not a sum of weekly counts. */
+  totals: ActivityCounts;
   growth: Growth;
   contents: Contents;
   topHelpful: HelpfulItem[];
@@ -278,17 +281,17 @@ export interface UsageReport {
 /* ------------------------------------------------------------------ activity */
 
 /**
- * Saves, searches, reactions and active people per week between `from` (inclusive) and `to`
- * (exclusive), keyed by Monday. Three queries, each on an (action|path, at) or (at) index range.
+ * Saves, searches, reactions, active people and first-time people per week between `from`
+ * (inclusive) and `to` (exclusive), keyed by Monday. Four queries, each on an (action|path, at) or (at) index range.
  * `+entity` keeps the planner off idx_audit_entity, which is not bounded by time.
  */
-function activityRows(from: string, to: string): Map<string, ActivityCounts> {
+function activityRows(from: string, to: string): Map<string, ActivityCounts & { newPeople: number }> {
   const db = getDb();
-  const out = new Map<string, ActivityCounts>();
+  const out = new Map<string, ActivityCounts & { newPeople: number }>();
   const slot = (week: string) => {
     let c = out.get(week);
     if (!c) {
-      c = { saves: 0, searches: 0, reactions: 0, people: 0 };
+      c = { saves: 0, searches: 0, reactions: 0, people: 0, newPeople: 0 };
       out.set(week, c);
     }
     return c;
@@ -320,6 +323,17 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts> {
     )
     .all(from, to) as Array<{ week: string; n: number }>;
   for (const r of people) slot(r.week).people = num(r.n);
+  // Each person counts once, in the week of their first activity in the range: the weekly values
+  // add up to the range's distinct people.
+  const firsts = db
+    .prepare(
+      `SELECT ${weekSql("first_at")} AS week, COUNT(*) AS n
+       FROM (SELECT MIN(at) AS first_at FROM audit_log
+             WHERE at >= ? AND at < ? AND actor_id NOT IN ${NOT_PEOPLE} GROUP BY actor_id)
+       GROUP BY week`,
+    )
+    .all(from, to) as Array<{ week: string; n: number }>;
+  for (const r of firsts) slot(r.week).newPeople = num(r.n);
   return out;
 }
 
@@ -328,17 +342,14 @@ export function activityByWeek(weeks: string[]): ActivityWeek[] {
   return weeks.map((week) => ({
     week,
     label: isoWeekLabel(week),
-    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, people: 0 }),
+    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, people: 0, newPeople: 0 }),
   }));
 }
 
-/** Last week from its Monday up to the same point in the week as `now`. */
-export function lastWeekToDate(now: Date): ActivityCounts {
-  const monday = new Date(`${weekStart(now)}T00:00:00Z`);
-  const from = new Date(monday.getTime() - 7 * DAY_MS);
-  const to = new Date(now.getTime() - 7 * DAY_MS);
-  const rows = activityRows(sqlTime(from), sqlTime(to));
-  return rows.get(from.toISOString().slice(0, 10)) ?? { saves: 0, searches: 0, reactions: 0, people: 0 };
+/** The window's totals for the hero tiles: the weekly counts added up, and the distinct people (each counted once). */
+export function activityTotals(activity: ActivityWeek[]): ActivityCounts {
+  const sum = (key: "saves" | "searches" | "reactions" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
+  return { saves: sum("saves"), searches: sum("searches"), reactions: sum("reactions"), people: sum("newPeople") };
 }
 
 /* ------------------------------------------------------------- what's in BAB */
@@ -711,12 +722,13 @@ export function auditDataSince(): string | null {
 
 export function usageReport(now: Date = new Date()): UsageReport {
   const weeks = lastWeeks(now);
+  const activity = activityByWeek(weeks);
   return {
     dataSince: auditDataSince(),
     generatedAt: now.toISOString(),
     weeks,
-    activity: activityByWeek(weeks),
-    lastWeekToDate: lastWeekToDate(now),
+    activity,
+    totals: activityTotals(activity),
     growth: growth(now),
     contents: contents(),
     topHelpful: topHelpful(now),

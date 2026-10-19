@@ -154,10 +154,13 @@ export function GroupedBars({ data, series, label }: { data: GroupDatum[]; serie
   const plotH = GH - GP.top - GP.bottom;
   const base = GP.top + plotH;
   const slot = plotW / Math.max(1, data.length);
-  const gap = 2;
-  const bw = Math.max(3, Math.min(18, (slot * 0.72 - gap * (series.length - 1)) / series.length));
+  // Narrow slots (a year of weeks) lose the 2px gap and the 3px minimum, so a group still fits its slot.
+  const gap = slot < 20 ? 0.5 : 2;
+  const bw = Math.max(1, Math.min(18, (slot * 0.8 - gap * (series.length - 1)) / series.length));
   const groupW = bw * series.length + gap * (series.length - 1);
   const y = (v: number) => GP.top + plotH - (v / max) * plotH;
+  // With more than 13 weeks only about 8 week labels are drawn, counted back from the newest.
+  const every = data.length > 13 ? Math.ceil(data.length / 8) : 1;
   return (
     <svg viewBox={`0 0 ${GW} ${GH}`} className={styles.chart} role="img" aria-label={label}>
       <title>{label}</title>
@@ -181,15 +184,17 @@ export function GroupedBars({ data, series, label }: { data: GroupDatum[]; serie
               const p = columnPath(x0 + j * (bw + gap), top, bw, base);
               return p ? <path key={j} d={p} className={series[j].className} /> : null;
             })}
-            <text
-              x={GP.left + slot * (i + 0.5)}
-              y={GH - 8}
-              textAnchor="middle"
-              // On a phone every other week label goes, counted from the newest, so they never touch.
-              className={data.length > 5 && (data.length - 1 - i) % 2 === 1 ? `${styles.tick} ${styles.tickAlt}` : styles.tick}
-            >
-              {d.label}
-            </text>
+            {(data.length - 1 - i) % every === 0 && (
+              <text
+                x={GP.left + slot * (i + 0.5)}
+                y={GH - 8}
+                textAnchor="middle"
+                // On a phone every other drawn week label goes, counted from the newest, so they never touch.
+                className={data.length > 5 && ((data.length - 1 - i) / every) % 2 === 1 ? `${styles.tick} ${styles.tickAlt}` : styles.tick}
+              >
+                {d.label}
+              </text>
+            )}
           </g>
         );
       })}
@@ -247,27 +252,33 @@ export interface MiniBarRow {
 }
 
 const MW = 112;
+/** A year of weeks gets a wider track (see .cleanDense) so the bars stay about 3px wide. */
+const MW_DENSE = 200;
 const MH = 26;
+/** More weeks than this draw the dense track. */
+const MINI_DENSE_WEEKS = 16;
 
 /**
  * Several small weekly bar charts, one per row, each on its own scale (a row is "how many per week
- * of this", not a comparison between rows): label, 8 bars, the total at the end. A non-zero week
+ * of this", not a comparison between rows): label, one bar per week, the total at the end. A non-zero week
  * always shows at least 2px; every bar has a <title> with its week and count.
  */
 export function MiniBars({ rows, weeks, label }: { rows: MiniBarRow[]; weeks: string[]; label: string }) {
   const n = Math.max(1, weeks.length);
-  const gap = 3;
-  const bw = (MW - gap * (n - 1)) / n;
+  const dense = n > MINI_DENSE_WEEKS;
+  const w = dense ? MW_DENSE : MW;
+  const gap = dense ? 1 : 3;
+  const bw = (w - gap * (n - 1)) / n;
   return (
-    <ul className={styles.clean} aria-label={label}>
+    <ul className={`${styles.clean} ${dense ? styles.cleanDense : ""}`} aria-label={label}>
       {rows.map((r) => {
         const max = Math.max(1, ...r.values);
         const total = r.values.reduce((s, v) => s + v, 0);
         return (
           <li key={r.key} className={styles.cleanRow} title={r.title}>
             <span className={styles.cleanLabel}>{r.label}</span>
-            <svg viewBox={`0 0 ${MW} ${MH}`} className={styles.cleanTrack} role="img" aria-label={`${r.label} per week: ${r.values.join(", ")}`}>
-              <line x1="0" x2={MW} y1={MH - 0.5} y2={MH - 0.5} className={styles.axis} />
+            <svg viewBox={`0 0 ${w} ${MH}`} preserveAspectRatio={dense ? "none" : undefined} className={styles.cleanTrack} role="img" aria-label={`${r.label} per week: ${r.values.join(", ")}`}>
+              <line x1="0" x2={w} y1={MH - 0.5} y2={MH - 0.5} className={styles.axis} />
               {r.values.map((v, i) => {
                 const h = v > 0 ? Math.max(2, (v / max) * (MH - 4)) : 0;
                 const p = columnPath(i * (bw + gap), MH - 1 - h, bw, MH - 1);
