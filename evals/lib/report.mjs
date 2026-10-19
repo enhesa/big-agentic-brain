@@ -45,17 +45,34 @@ function fmt(key, v, signed = false) {
 
 /** Summary statistics per condition and paired comparisons; returns { stats, markdown }. */
 export function summarize(rows, meta) {
-  const conds = Object.keys(CONDITIONS).filter((c) => rows.some((r) => r.condition === c));
-  const stats = { meta, conditions: {}, paired: {} };
+  const allRows = rows;
+  const clean = allRows.filter((r) => Number(r.suspicious_cmds) === 0);
+  const conds = Object.keys(CONDITIONS).filter((c) => clean.some((r) => r.condition === c));
+  const stats = { meta, conditions: {}, paired: {}, flaggedSuspicious: allRows.filter((r) => Number(r.suspicious_cmds) > 0).length, erroredOrTimeout: allRows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout").length };
   const L = [];
+  const erroredRows = allRows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout");
+  const graded = clean.filter((r) => r.stop_reason !== "error" && r.stop_reason !== "timeout");
+  const flagged = allRows.filter((r) => Number(r.suspicious_cmds) > 0);
+  const cacheRead = clean.reduce((a, r) => a + Number(r.cache_read_tokens || 0), 0);
+  const cacheWrite = clean.reduce((a, r) => a + Number(r.cache_write_tokens || 0), 0);
+  const inputTok = clean.reduce((a, r) => a + Number(r.input_tokens || 0), 0);
+  const successes = clean.filter((r) => Number(r.success) === 1).length;
+  const costPerSuccess = successes ? meta.spendUsd / successes : NaN;
+  const cacheShare = (cacheRead + inputTok) > 0 ? cacheRead / (cacheRead + inputTok + cacheWrite) : NaN;
   L.push(`# BAB eval summary (${meta.mode})`, "");
   L.push(`Model \`${meta.model}\` (${meta.provider}), BAB ${meta.babCommit}, ${meta.date}. Sandbox: ${meta.sandbox}. Memory for B: ${meta.memory}.`);
-  L.push(`Runs: ${rows.length}; errored runs (counted as failures): ${rows.filter((r) => r.stop_reason === "error").length}. Spend: $${meta.spendUsd.toFixed(4)} (eval) + $${meta.seedCostUsd.toFixed(4)} (seeding).`, "");
+  L.push(`Runs: ${allRows.length} (${graded.length} graded; ${erroredRows.length} errored/timed-out reported separately; ${flagged.length} flagged suspicious_cmds>0 and excluded from paired stats).`);
+  L.push(`Spend: $${meta.spendUsd.toFixed(4)} (eval) + $${meta.seedCostUsd.toFixed(4)} (seeding)` + (meta.skippedForBudget ? `; ${meta.skippedForBudget} runs skipped for budget` : "") + `.`);
+  L.push(`Cost per success: ${Number.isFinite(costPerSuccess) ? "$" + costPerSuccess.toFixed(4) : "n/a"}; cache-read share of prompt tokens: ${Number.isFinite(cacheShare) ? Math.round(cacheShare * 100) + "%" : "n/a"}.`, "");
+  if (meta.suite === "tk") {
+    L.push("> **Caveat (TK suite):** by construction the repos omit a fictional vendor spec, the prompt names the vendor, the colleague memory is that spec, and the hidden tests check those values. A can only guess. Success deltas measure that the memory channel works, not how often BAB helps on real work.", "");
+  }
+  L.push("> Paired p-values are **uncorrected** for the number of comparisons. Claims not distinguishable from B at this n are not bolded.", "");
   L.push("| Condition | Runs | Success (95% Wilson CI) | Cost/run mean (median) | Tokens/run median | Turns median [IQR] | Searched BAB | Retrieved relevant (mean rank) | Reacted helpful | Recorded a learning |");
   L.push("|---|---|---|---|---|---|---|---|---|---|");
   const hazardRows = [];
   for (const c of conds) {
-    const rs = rows.filter((r) => r.condition === c);
+    const rs = clean.filter((r) => r.condition === c);
     const k = rs.filter((r) => r.success).length;
     const [p, lo, hi] = wilson(k, rs.length);
     const col = (f) => rs.map((r) => Number(r[f]));
@@ -84,10 +101,10 @@ export function summarize(rows, meta) {
   for (const c of ["L", "F", "N", "R", "AR", "CF"]) if (conds.includes(c) && conds.includes("B")) comparisons.push([c, "B"]);
   if (comparisons.length) {
     L.push("", "## Paired comparisons (unit = task, trials averaged within task)", "");
-    L.push("Ratio = mean(X)/mean(baseline). 95% CIs: bootstrap over tasks (10k). p: exact two-sided sign-flip permutation test.", "");
+    L.push("Ratio = mean(X)/mean(baseline). 95% CIs: BCa bootstrap over task clusters (10k) and paired-t; p: exact two-sided sign-flip (uncorrected for multiplicity).", "");
     L.push("| Comparison | Tasks | Metric | Baseline | X | Diff (95% CI) | Ratio (95% CI) | p |", "|---|---|---|---|---|---|---|---|");
   }
-  const tasks = [...new Set(rows.map((r) => r.task))].sort();
+  const tasks = [...new Set(clean.map((r) => r.task))].sort();
   for (const [x, base] of comparisons) {
     for (const [subName, sub] of [["all", tasks], ["original", tasks.filter((t) => t.includes("-orig-"))], ["variant", tasks.filter((t) => t.includes("-var-"))]]) {
       if (!sub.length) continue;
@@ -95,15 +112,15 @@ export function summarize(rows, meta) {
         const byTask = {};
         for (const t of sub) {
           byTask[t] = {
-            A: rows.filter((r) => r.task === t && r.condition === base).map((r) => Number(r[key])),
-            X: rows.filter((r) => r.task === t && r.condition === x).map((r) => Number(r[key])),
+            A: clean.filter((r) => r.task === t && r.condition === base).map((r) => Number(r[key])),
+            X: clean.filter((r) => r.task === t && r.condition === x).map((r) => Number(r[key])),
           };
         }
         const pr = paired(byTask);
         if (!pr.nTasks) continue;
         stats.paired[`${x}-vs-${base}|${subName}|${key}`] = pr;
         const ratio = key === "success" ? "-" : `${pr.ratio.toFixed(2)} (${pr.ratioCi[0].toFixed(2)}-${pr.ratioCi[1].toFixed(2)})`;
-        L.push(`| ${x} vs ${base} | ${subName} (${pr.nTasks}) | ${label} | ${fmt(key, pr.aMean)} | ${fmt(key, pr.xMean)} | ${fmt(key, pr.diff, true)} (${fmt(key, pr.diffCi[0], true)} to ${fmt(key, pr.diffCi[1], true)}) | ${ratio} | ${pr.p.toFixed(4)} |`);
+        L.push(`| ${x} vs ${base} | ${subName} (${pr.nTasks}) | ${label} | ${fmt(key, pr.aMean)} | ${fmt(key, pr.xMean)} | ${fmt(key, pr.diff, true)} (BCa ${fmt(key, pr.diffCi[0], true)} to ${fmt(key, pr.diffCi[1], true)}; t ${fmt(key, pr.diffCiT[0], true)} to ${fmt(key, pr.diffCiT[1], true)}) | ${ratio} | ${pr.p.toFixed(4)}† |`);
       }
     }
   }
@@ -111,13 +128,19 @@ export function summarize(rows, meta) {
   L.push(`| Task | ${conds.map((c) => COND_LABEL[c]).join(" | ")} |`, `|---|${conds.map(() => "---|").join("")}`);
   for (const t of tasks) {
     const cells = conds.map((c) => {
-      const rs = rows.filter((r) => r.task === t && r.condition === c);
+      const rs = clean.filter((r) => r.task === t && r.condition === c);
       if (!rs.length) return "-";
       return `${rs.filter((r) => r.success).length}/${rs.length}; $${median(rs.map((r) => Number(r.cost_usd))).toFixed(4)}; ${median(rs.map((r) => Number(r.turns)))}t`;
     });
     L.push(`| ${t} | ${cells.join(" | ")} |`);
   }
+  if (comparisons.length) L.push("", "† p-values are uncorrected for the number of comparisons. At n≈8 task clusters, differences from B that are not significant at α=0.05 are not claimed.");
   if (tasks.length < 6) L.push("", "_Few tasks: treat CIs and p-values as plumbing checks, not evidence._");
+  if (erroredRows.length) {
+    L.push("", "## Errored / timed-out runs (excluded from success rates above when stop_reason is error/timeout — currently still listed in the table as failures; see per-run error field)", "");
+    for (const r of erroredRows) L.push(`- ${r.run_id}: ${r.stop_reason} ${r.error || ""}`);
+  }
+  if (meta.skippedForBudget) L.push("", `Skipped for budget: ${meta.skippedForBudget} jobs were not started once spend reached the cap.`);
   return { stats, markdown: L.join("\n") + "\n" };
 }
 

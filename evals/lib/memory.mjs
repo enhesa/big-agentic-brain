@@ -103,7 +103,8 @@ async function seedLive({ outDir, origin, providerCfg, price, sandbox, maxTurns,
         try {
           const l = JSON.parse(ev.out).learning;
           ids.push(l.id);
-          learnings.push({ family: task.family, id: l.id, title: ev.args.title, body: ev.args.body, tags: ev.args.tags ?? [], task: id });
+          // Only learnings from successful seed runs count as relevant (failed seeds are recorded but not target facts).
+          learnings.push({ family: task.family, id: l.id, title: ev.args.title, body: ev.args.body, tags: ev.args.tags ?? [], task: id, seedSuccess: g.pass });
         } catch {}
       }
     }
@@ -119,6 +120,15 @@ async function seedLive({ outDir, origin, providerCfg, price, sandbox, maxTurns,
 }
 
 /** Returns { snaps: { memoryName: { dir, relevant, hazard } }, seedCost, seedRuns }. */
+function loadFrozenSnap(outDir, name) {
+  const dir = path.join(outDir, "memory", name);
+  const relPath = path.join(outDir, "memory", `${name}.relevant.json`);
+  if (!fs.existsSync(dir) || !fs.existsSync(relPath)) return null;
+  const { relevant = {}, hazard = {} } = JSON.parse(fs.readFileSync(relPath, "utf8"));
+  const toSet = (m) => Object.fromEntries(Object.entries(m).map(([f, ids]) => [f, new Set(ids)]));
+  return { dir, relevant: toSet(relevant), hazard: toSet(hazard) };
+}
+
 export async function buildMemories({ outDir, suite = "core", memories, memory, providerCfg, price, sandbox, maxTurns, maxSeconds, log }) {
   fs.mkdirSync(path.join(outDir, "memory"), { recursive: true });
   const snaps = {};
@@ -126,8 +136,20 @@ export async function buildMemories({ outDir, suite = "core", memories, memory, 
   let seedRuns = [];
   let colleague = null; // { learnings, summaries }
   const needColleague = memories.some((m) => ["colleague", "autorecord", "conflict"].includes(m));
+  // One memory draw per outDir: reuse frozen snapshots on --resume so trials stay comparable.
   if (needColleague) {
-    snaps.colleague = await snapshot(outDir, `colleague-${memory}`, async (origin, ctx) => {
+    const frozenName = `colleague-${memory}`;
+    const frozen = loadFrozenSnap(outDir, frozenName);
+    if (frozen) {
+      log(`[seed] reusing frozen memory snapshot ${frozenName} (resume determinism)`);
+      snaps.colleague = frozen;
+      const fixturePath = path.join(outDir, "seed", "colleague-learnings.json");
+      if (fs.existsSync(fixturePath)) {
+        const d = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+        colleague = { learnings: d.learnings ?? [], summaries: d.summaries ?? [] };
+      }
+    } else {
+    snaps.colleague = await snapshot(outDir, frozenName, async (origin, ctx) => {
       if (memory === "fixture") {
         const d = readFixture(SUITE_FIXTURES[suite].colleague);
         colleague = { learnings: Array.isArray(d) ? d : d.learnings, summaries: d.summaries ?? [] };
@@ -139,11 +161,17 @@ export async function buildMemories({ outDir, suite = "core", memories, memory, 
       seedCost += r.cost;
       seedRuns = r.runs;
       colleague = { learnings: r.learnings, summaries: r.runs.map((x) => ({ family: x.family, task: x.task, success: x.success, summary: x.summary })) };
-      for (const l of r.learnings) addId(ctx.relevant, l.family, l.id);
+      for (const l of r.learnings) {
+        if (l.seedSuccess) addId(ctx.relevant, l.family, l.id);
+        else log(`[seed] ignoring learning from failed seed ${l.task} (${l.id}) as relevant`);
+      }
     });
+    } // end else (not frozen)
   }
   for (const m of memories) {
     if (m === "colleague") continue;
+    const frozen = loadFrozenSnap(outDir, m);
+    if (frozen) { log(`[seed] reusing frozen memory snapshot ${m}`); snaps[m] = frozen; continue; }
     if (m === "distractors") snaps[m] = await snapshot(outDir, "distractors", async () => {});
     else if (m === "handwritten") snaps[m] = await snapshot(outDir, "handwritten", (o, ctx) => postAll(o, ctx, HANDWRITTEN_AUTHOR, fixtureFor(suite, "handwritten"), "relevant"));
     else if (m === "stale") snaps[m] = await snapshot(outDir, "stale", (o, ctx) => postAll(o, ctx, FORMER_AUTHOR, fixtureFor(suite, "stale"), "hazard"));

@@ -2,14 +2,20 @@
 
 const RESULT_ID = /\{"id":"([0-9a-f-]{36})"/g;
 
-/** Result ids in rank order from a raw bab_search tool result (robust to truncated or non-JSON text). */
+/** Result ids in rank order from a bab_search tool result. Prefer JSON; fall back to regex if truncated. */
 export function resultIds(text) {
-  return [...String(text).matchAll(RESULT_ID)].map((m) => m[1]);
+  const s = String(text);
+  try {
+    const j = JSON.parse(s);
+    const results = j.results ?? j;
+    if (Array.isArray(results)) return results.map((r) => r?.id).filter((id) => typeof id === "string");
+  } catch {}
+  return [...s.matchAll(RESULT_ID)].map((m) => m[1]);
 }
 
 /**
  * relevant: Set of learning ids that answer this task's family.
- * Returns { queried, hit, hitRank, reacted, zeroResultSearches }.
+ * Returns { queried, hit, hitRank, reacted, zeroResultSearches, ... }.
  */
 export function memoryMetrics(run, relevant, hazard = new Set()) {
   let hitRank = null;

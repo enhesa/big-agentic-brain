@@ -34,8 +34,18 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
   else fs.mkdirSync(dataDir, { recursive: true });
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET/.test(k)));
-  Object.assign(env, { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1", DATA_DIR: dataDir, BAB_PUBLIC_ORIGIN: origin });
+  // Allowlist only: never inherit KEY/TOKEN/SECRET (or anything else) from the harness.
+  const env = {
+    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: process.env.HOME ?? "/tmp",
+    LANG: process.env.LANG ?? "C.UTF-8",
+    NODE_ENV: "production",
+    PORT: String(port),
+    HOSTNAME: "127.0.0.1",
+    DATA_DIR: dataDir,
+    BAB_PUBLIC_ORIGIN: origin,
+  };
+  if (process.env.BAB_EVAL_NODE) env.BAB_EVAL_NODE = process.env.BAB_EVAL_NODE;
   const out = fs.openSync(logFile ?? path.join(dataDir, "..", `bab-${port}.log`), "w");
   const child = spawn(process.env.BAB_EVAL_NODE ?? process.execPath, ["server.js"], {
     cwd: standaloneDir(),
@@ -55,20 +65,28 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  return {
-    origin,
-    stop: () =>
-      new Promise((resolve) => {
-        if (child.exitCode !== null) return resolve();
-        const t = setTimeout(() => child.kill("SIGKILL"), 10_000);
-        child.once("exit", () => {
-          clearTimeout(t);
-          fs.closeSync(out);
-          resolve();
-        });
-        child.kill("SIGTERM");
-      }),
-  };
+  const stop = () =>
+    new Promise((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        try { fs.closeSync(out); } catch {}
+        return resolve();
+      }
+      const t = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch {}
+      }, 10_000);
+      child.once("exit", () => {
+        clearTimeout(t);
+        try { fs.closeSync(out); } catch {}
+        resolve();
+      });
+      try { child.kill("SIGTERM"); } catch { clearTimeout(t); resolve(); }
+    });
+  // Keep orphan servers from outliving a Ctrl-C of the eval runner.
+  const onSignal = () => { stop().finally(() => process.exit(130)); };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  process.once("exit", () => { try { child.kill("SIGTERM"); } catch {} });
+  return { origin, stop };
 }
 
 /** POST /api/learnings as the given author. Returns the created learning. */
