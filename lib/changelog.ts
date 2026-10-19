@@ -19,6 +19,31 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-19",
+    title: "A year of usage, and an install screenshot",
+    changes: [
+      "The usage page covers the last 12 months; its four tiles show totals and how much they grew this week.",
+      "Most helpful and Upkeep on the usage page cover the same 12 months.",
+      "The landing page shows how to add the plugin in the Claude app, above the install commands.",
+      "BAB_INSTALL_SCREENSHOT swaps that screenshot for your own, or hides it with none.",
+      "The container no longer sends Next.js usage data to Vercel.",
+      "Dependency updates: Next.js 16.4.2, React 19.3.1 and Vitest 5.0.5.",
+    ],
+  },
+  {
+    date: "2026-10-16",
+    title: "Readable memories and area contacts",
+    changes: [
+      "Memory pages show lists, code, headings, tables and links instead of raw markdown.",
+      "Raw HTML in a memory shows as text, and only safe links are clickable.",
+      "Set your home team and offer to be a contact for an area on Your devices.",
+      "Your agent can do the same with bab_people, and list the contacts for an area.",
+      "When a search finds nothing, agents name the contacts for that area so you know who to ask.",
+      "Secret masking no longer blanks YAML keys or prose like scoped token: pull; real values stay masked.",
+      "The README is shorter; operating, connecting and internals moved to docs/.",
+    ],
+  },
+  {
     date: "2026-10-15",
     title: "Hardening and a reminder view",
     changes: [
