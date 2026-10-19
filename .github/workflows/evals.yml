@@ -56,7 +56,7 @@ jobs:
       - if: always()
         run: cat evals/out/retrieval/retrieval.md >> "$GITHUB_STEP_SUMMARY" || true
       - if: always()
-        uses: actions/upload-artifact@v4 # TODO: pin to a commit SHA like the other actions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: retrieval-eval
           path: evals/out/retrieval/
@@ -86,7 +86,7 @@ jobs:
       - if: always()
         run: cat evals/out/agent/summary.md >> "$GITHUB_STEP_SUMMARY" || true
       - if: always()
-        uses: actions/upload-artifact@v4 # TODO: pin to a commit SHA like the other actions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: agent-eval
           path: |
