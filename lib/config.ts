@@ -46,6 +46,9 @@ export interface BabConfig {
     accentColor: string;
     pluginMarketplace: string;
     pluginMarketplaceName: string;
+    /** Optional landing-page install screenshot (site path or https URL), and its alt text. */
+    installScreenshot: string | null;
+    installScreenshotAlt: string;
     locale: string;
     timeZone: string;
   };
@@ -67,6 +70,13 @@ function read(env: Env, name: string): string | undefined {
 
 function str(env: Env, name: string, def: string): string {
   return read(env, name)?.trim() || def;
+}
+
+/** A same-site path or an https URL; anything else is a misconfiguration and fails at startup. */
+function installScreenshotOf(value: string | null): string | null {
+  if (value === null) return null;
+  if ((value.startsWith("/") && !value.startsWith("//")) || /^https:\/\/[^\s]+$/i.test(value)) return value;
+  throw new Error("BAB_INSTALL_SCREENSHOT must be a path on this site (/branding/install.png) or an https URL");
 }
 
 function optStr(env: Env, name: string): string | null {
@@ -253,6 +263,8 @@ function parse(env: Env): BabConfig {
       accentColor: accent,
       pluginMarketplace: str(env, "BAB_PLUGIN_MARKETPLACE", "enhesa/big-agentic-brain"),
       pluginMarketplaceName: str(env, "BAB_PLUGIN_MARKETPLACE_NAME", "big-agentic-brain"),
+      installScreenshot: installScreenshotOf(optStr(env, "BAB_INSTALL_SCREENSHOT")),
+      installScreenshotAlt: str(env, "BAB_INSTALL_SCREENSHOT_ALT", "How to add the plugin in the Claude app"),
       locale,
       timeZone,
     },

@@ -8,10 +8,11 @@ import Reveal from "./Reveal";
  * nobody gets it automatically, so this section is the only place a colleague learns how
  * to add it. The old "paste this prompt" installer (/instructions/install.md) still
  * works and stays served for the legacy hook, but it is no longer what we point people at.
- * The annotated screenshot carries the steps; a separate step row only repeated it.
+ * An organization can show its own screenshot of the Claude app flow (BAB_INSTALL_SCREENSHOT),
+ * for example when the plugin comes from its managed marketplace; the commands follow it.
  */
 export default function GetStarted() {
-  const { installCommands } = branding();
+  const { installCommands, installScreenshot } = branding();
   return (
     <section className={styles.section} id="get-started">
       <div className={styles.wrap}>
@@ -23,7 +24,14 @@ export default function GetStarted() {
           </p>
         </div>
 
-        <h3 className={styles.cliHead}>Two commands</h3>
+        {installScreenshot ? (
+          <Reveal as="figure" className={styles.installShot}>
+            {/* Plain img: a static screenshot needs none of next/image's resizing. */}
+            <img src={installScreenshot.src} alt={installScreenshot.alt} loading="lazy" />
+          </Reveal>
+        ) : null}
+
+        <h3 className={styles.cliHead}>{installScreenshot ? "Prefer the terminal?" : "Two commands"}</h3>
         <p className={styles.cliSub}>Run these in Claude Code, one after the other.</p>
         <div className={styles.cliRows}>
           <Reveal className={styles.promptCard}>
