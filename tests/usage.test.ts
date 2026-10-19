@@ -281,7 +281,7 @@ describe("performance at 50k audit rows", () => {
     );
     expect(top).toContain("idx_audit_action_at");
     expect(top).not.toMatch(/SCAN (TABLE )?audit_log(?! USING)/);
-    // The upkeep tiles: memories the sweep archived unread, and the keeps, restores and retires, over the last 30 days.
+    // The upkeep tiles: memories the sweep archived unread, and the keeps, restores and retires, over the last 12 months.
     expect(
       plan(
         "SELECT COUNT(*) FROM audit_log WHERE action = 'auto-archive' AND at >= ? AND +entity = 'learning' AND json_extract(details, '$.reason') = 'inactive'",
@@ -524,8 +524,8 @@ describe("what is in BAB", () => {
 
 /* ------------------------------------------------------------- most helpful */
 
-describe("most helpful this month", () => {
-  it("ranks memories by helpful, kudos and confirm in the last 30 days, without deleted ones", async () => {
+describe("most helpful in the last 12 months", () => {
+  it("ranks memories by helpful, kudos and confirm in the last 12 months, without deleted ones", async () => {
     await people(A);
     const top = await memory(A, { title: "Kafka retries need idempotent consumers" });
     const second = await memory(A, { title: "Board deck cut-off is Thursday" });
@@ -535,12 +535,14 @@ describe("most helpful this month", () => {
     for (const action of ["helpful", "helpful", "kudos", "confirm"]) await row(B, action, at("2026-10-01"), { entity: "learning", entityId: top });
     await row(B, "not_helpful", at("2026-10-01"), { entity: "learning", entityId: top });
     for (const action of ["helpful", "confirm"]) await row(B, action, at("2026-09-20"), { entity: "learning", entityId: second });
-    for (let i = 0; i < 6; i++) await row(B, "helpful", at("2026-08-20"), { entity: "learning", entityId: old }); // over 30 days ago
+    // NOW is 2026-10-06 12:00 and the window is WINDOW_DAYS (364) days: it starts 2025-10-07 12:00.
+    await row(B, "helpful", "2025-10-07 12:30:00", { entity: "learning", entityId: second }); // just inside
+    for (let i = 0; i < 6; i++) await row(B, "helpful", "2025-10-07 11:30:00", { entity: "learning", entityId: old }); // just outside
     for (let i = 0; i < 6; i++) await row(B, "helpful", at("2026-10-02"), { entity: "learning", entityId: gone });
     const { topHelpful } = await import("../lib/usage");
     expect(topHelpful(NOW)).toEqual([
       { id: top, title: "Kafka retries need idempotent consumers", kind: "learning", helpful: 2, kudos: 1, confirm: 1, total: 4 },
-      { id: second, title: "Board deck cut-off is Thursday", kind: "learning", helpful: 1, kudos: 0, confirm: 1, total: 2 },
+      { id: second, title: "Board deck cut-off is Thursday", kind: "learning", helpful: 2, kudos: 0, confirm: 1, total: 3 },
     ]);
   });
 
@@ -589,19 +591,21 @@ describe("models", () => {
 // The quiet and archived-unread numbers are checked with their sweep in tests/agent-reads.test.ts;
 // these pin the windows and the day reads began, and the keeps, restores and retires.
 describe("upkeep", () => {
-  it("counts the keeps, restores and retires of the last 30 days", async () => {
+  it("counts the keeps, restores and retires of the last 12 months", async () => {
     await people(A);
     await memory(A); // saved just now: not quiet
     await row(A, "keep", "2026-10-03 10:00:00", { entity: "learning" });
     await row(A, "keep", "2026-10-01 10:00:00", { entity: "learning" });
     await row(A, "keep", "2026-09-30 10:00:00", { entity: "learning" });
-    await row(A, "keep", "2026-08-20 10:00:00", { entity: "learning" }); // over 30 days ago
+    await row(A, "keep", "2025-10-07 12:30:00", { entity: "learning" }); // just inside the window (WINDOW_DAYS)
+    await row(A, "keep", "2025-10-07 11:30:00", { entity: "learning" }); // just outside
     await row(A, "restored", "2026-10-02 10:00:00", { entity: "learning" });
     await row(A, "retire", "2026-09-20 10:00:00", { entity: "learning" });
     await row(A, "retire", "2026-09-10 10:00:00", { entity: "learning" });
-    await row(A, "retire", "2026-08-20 10:00:00", { entity: "learning" }); // over 30 days ago
+    await row(A, "retire", "2026-08-20 10:00:00", { entity: "learning" }); // 6 weeks ago: inside now
+    await row(A, "retire", "2025-10-07 11:30:00", { entity: "learning" }); // just outside
     const { upkeep } = await import("../lib/usage");
-    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 3, restored: 1, retired: 2 });
+    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 4, restored: 1, retired: 3 });
   });
 
   it("counts a live learning or practice as quiet 270 days after its last agent read, else its save day, never from before reads began", async () => {
@@ -628,15 +632,17 @@ describe("upkeep", () => {
     expect(quietAt("2028-03-01T12:00:00Z")).toBe(3); // the read memory, 274 days after its last read
   });
 
-  it("counts the memories the sweep archived unread in the last 30 days, not those archived for their date, by flags or long ago", async () => {
+  it("counts the memories the sweep archived unread in the last 12 months, not those archived for their date, by flags or long ago", async () => {
     const gone = (at: string, reason: string) => row("system", "auto-archive", at, { entity: "learning", details: { reason } });
     await gone("2026-10-01 10:00:00", "inactive");
     await gone("2026-09-10 10:00:00", "inactive");
-    await gone("2026-08-01 10:00:00", "inactive"); // over 30 days ago
+    await gone("2026-08-01 10:00:00", "inactive"); // 9 weeks ago: inside now
+    await gone("2025-10-07 12:30:00", "inactive"); // just inside the window (WINDOW_DAYS)
+    await gone("2025-10-07 11:30:00", "inactive"); // just outside
     await gone("2026-10-02 10:00:00", "valid-until"); // its author's own date
     await row(A, "auto_archive", "2026-10-02 10:00:00", { entity: "learning" }); // two flags, a different action
     const { upkeep } = await import("../lib/usage");
-    expect(upkeep(NOW).archivedUnread).toBe(2);
+    expect(upkeep(NOW).archivedUnread).toBe(4);
   });
 });
 
@@ -784,7 +790,7 @@ describe("/usage page", () => {
     expect(html).toContain("No saves, searches or reactions yet.");
     expect(html).toContain("No memories yet.");
     expect(html).toContain("No memories saved in these weeks.");
-    expect(html).toContain("No helpful reactions in the last 30 days.");
+    expect(html).toContain("No helpful reactions in the last 12 months.");
     // The page view itself is the only audit row, so every earlier week collapses into one note.
     expect(html).toContain(`No data before ${cur.short}`);
     expect(html).not.toMatch(/NaN|Infinity/);

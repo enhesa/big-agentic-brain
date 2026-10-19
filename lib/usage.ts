@@ -32,6 +32,9 @@ export const IDENTIFY_LOOP_THRESHOLD = 3;
 export const USAGE_COLLECTING_SINCE = "2026-10-06";
 /** "This month" on the page: the last 30 days. */
 export const MONTH_DAYS = 30;
+
+/** The page's window for everything that is not a weekly series: the same 12 months (52 weeks). */
+export const WINDOW_DAYS = USAGE_WEEKS * 7;
 /** A live memory no agent has read for this long is "quiet": three months from being archived (INACTIVITY_ARCHIVE_DAYS in lib/learnings.ts). */
 export const QUIET_DAYS = 270;
 /** How long one computed report is served to everyone. */
@@ -224,9 +227,9 @@ export interface HelpfulItem {
 export interface Upkeep {
   /** Live learnings and practices no agent has read for QUIET_DAYS or more: archived at INACTIVITY_ARCHIVE_DAYS unless read or kept. */
   quiet: number;
-  /** In the last MONTH_DAYS days: memories the sweep archived because no agent read them for a year. */
+  /** In the last WINDOW_DAYS days: memories the sweep archived because no agent read them for a year. */
   archivedUnread: number;
-  /** In the last MONTH_DAYS days. */
+  /** In the last WINDOW_DAYS days. */
   kept: number;
   restored: number;
   retired: number;
@@ -449,9 +452,9 @@ export function contents(): Contents {
   };
 }
 
-/** The memories with the most helpful, kudos and confirm reactions in the last MONTH_DAYS days. */
+/** The memories with the most helpful, kudos and confirm reactions in the last WINDOW_DAYS days. */
 export function topHelpful(now: Date, limit = 5): HelpfulItem[] {
-  const since = sqlTime(new Date(now.getTime() - MONTH_DAYS * DAY_MS));
+  const since = sqlTime(new Date(now.getTime() - WINDOW_DAYS * DAY_MS));
   const rows = getDb()
     .prepare(
       `SELECT l.id AS id, l.title AS title, l.kind AS kind,
@@ -503,7 +506,7 @@ export function upkeep(now: Date): Upkeep {
          AND max(COALESCE(last_accessed_at, created_at), ?) < ?`,
     )
     .get(INACTIVITY_CLOCK_START, sqlTime(new Date(now.getTime() - QUIET_DAYS * DAY_MS))) as { n: number };
-  const since = sqlTime(new Date(now.getTime() - MONTH_DAYS * DAY_MS));
+  const since = sqlTime(new Date(now.getTime() - WINDOW_DAYS * DAY_MS));
   const archivedUnread = db
     .prepare(
       `SELECT COUNT(*) AS n FROM audit_log

@@ -1182,8 +1182,9 @@ every time.
   charts and numbers first, in plain words. Tool names appear only in the Health card. Weeks are ISO
   weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
   last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
-  days by default). Only the growth line and "What's in BAB" are all-time, and the "this month"
-  numbers stay 30 days. Top to bottom:
+  days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line and
+  "What's in BAB" are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
+  (`MONTH_DAYS`). Top to bottom:
   1. Four tiles with the total over the last 12 months: memories saved (audit `create` on a
      learning), searches (`bab_search` calls and GETs on `/api/learnings`), "found it helpful"
      (`helpful`, `kudos` and `confirm` reactions), each the sum of its weekly counts, and people using
@@ -1201,13 +1202,13 @@ every time.
   4. What's in BAB: live memories by kind and by team tag (a memory with two team tags counts for
      both; unreadable tags count as no team tag), and the standing mix (strong, fair, weak, from
      `standingsFor`, over the newest 5,000 live memories).
-  5. Most helpful this month: the 5 memories with the most helpful, kudos and confirm reactions in the
-     last 30 days (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
+  5. Most helpful: the 5 memories with the most helpful, kudos and confirm reactions in the
+     last 12 months (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
   6. Who writes: memories saved since 6 Oct by the model their author named (`learnings.model`;
      "not stated" for none; past six models fold into "other"), and distinct authors per team tag per
      week as a heat grid (past 13 weeks compact colour blocks with month names, the count in each
      tooltip).
-  7. Upkeep: live memories no agent has read for 9 months or more (quiet), those the sweep archived unread in the last 30 days, and keeps, restores and retires in the last 30.
+  7. Upkeep: live memories no agent has read for 9 months or more (quiet), those the sweep archived unread in the last 12 months, and keeps, restores and retires in the last 12 months.
      Flags waiting links to the Health card. Below it a compact Clean-up card (swarm garbage collection,
      see "Garbage collection"): the last 12 months as six rows of small bars (`MiniBars` in
      `app/usage/charts.tsx`, a wider track at 52 weeks), each with its total: archived unread (`auto-archive`, reason `inactive`),

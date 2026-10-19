@@ -472,9 +472,11 @@ describe("clean-up numbers for /usage", () => {
 
     const weeks = lastWeeks(new Date());
     const cleanup = cleanupByWeek(weeks);
-    expect(cleanup).toHaveLength(8);
-    expect(cleanup.slice(0, 7).every((w) => Object.values(w).every((v) => typeof v === "string" || v === 0))).toBe(true);
-    expect(cleanup[7]).toMatchObject({ week: weeks[7], inactive: 1, downvoted: 1, flagged: 1, retired: 1, kept: 2, verified: 1 });
+    const { USAGE_WEEKS } = await import("../lib/usage");
+    const last = USAGE_WEEKS - 1;
+    expect(cleanup).toHaveLength(USAGE_WEEKS);
+    expect(cleanup.slice(0, last).every((w) => Object.values(w).every((v) => typeof v === "string" || v === 0))).toBe(true);
+    expect(cleanup[last]).toMatchObject({ week: weeks[last], inactive: 1, downvoted: 1, flagged: 1, retired: 1, kept: 2, verified: 1 });
     expect(usageReport(new Date()).cleanup).toEqual(cleanup);
   });
 });

@@ -11,6 +11,7 @@ import { GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import {
   IDENTIFY_LOOP_THRESHOLD,
   MONTH_DAYS,
+  WINDOW_DAYS,
   QUIET_DAYS,
   NUDGE_FOLLOW_MINUTES,
   STANDING_SAMPLE_MAX,
@@ -515,9 +516,9 @@ export default async function UsagePage({
 
         {/* 5. Most helpful */}
         <div className={styles.grid}>
-          <Card title="Most helpful this month" span="s7" sub={`Last ${MONTH_DAYS} days`}>
+          <Card title="Most helpful" span="s7" sub="Last 12 months">
             {report.topHelpful.length === 0 ? (
-              <Empty>No helpful reactions in the last {MONTH_DAYS} days.</Empty>
+              <Empty>No helpful reactions in the last 12 months.</Empty>
             ) : (
               <ol className={styles.top} data-testid="top-helpful">
                 {report.topHelpful.map((h, i) => (
@@ -643,7 +644,7 @@ export default async function UsagePage({
         {/* 7. Upkeep */}
         <section className={styles.group} aria-labelledby="upkeep-h">
           <h2 id="upkeep-h" className={styles.h2}>
-            Upkeep <span className={styles.h2Note}>last {MONTH_DAYS} days</span>
+            Upkeep <span className={styles.h2Note}>last 12 months</span>
           </h2>
           <div className={styles.minis}>
             <MiniTile
