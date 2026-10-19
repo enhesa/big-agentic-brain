@@ -72,11 +72,15 @@ function str(env: Env, name: string, def: string): string {
   return read(env, name)?.trim() || def;
 }
 
-/** A same-site path or an https URL; anything else is a misconfiguration and fails at startup. */
-function installScreenshotOf(value: string | null): string | null {
-  if (value === null) return null;
+const DEFAULT_INSTALL_SCREENSHOT = "/install/claude-app-plugins.png";
+const DEFAULT_INSTALL_SCREENSHOT_ALT =
+  "Claude app. Step 1: Customize in the sidebar is boxed in red. Step 2: the search field, containing BAB, is boxed. Step 3: the Add button next to Big Agentic Brain is circled.";
+
+/** A same-site path or an https URL, or "none" for no image; anything else fails at startup. */
+function installScreenshotOf(value: string): string | null {
+  if (value.toLowerCase() === "none") return null;
   if ((value.startsWith("/") && !value.startsWith("//")) || /^https:\/\/[^\s]+$/i.test(value)) return value;
-  throw new Error("BAB_INSTALL_SCREENSHOT must be a path on this site (/branding/install.png) or an https URL");
+  throw new Error("BAB_INSTALL_SCREENSHOT must be a path on this site (/install/claude-app-plugins.png), an https URL or none");
 }
 
 function optStr(env: Env, name: string): string | null {
@@ -263,8 +267,8 @@ function parse(env: Env): BabConfig {
       accentColor: accent,
       pluginMarketplace: str(env, "BAB_PLUGIN_MARKETPLACE", "enhesa/big-agentic-brain"),
       pluginMarketplaceName: str(env, "BAB_PLUGIN_MARKETPLACE_NAME", "big-agentic-brain"),
-      installScreenshot: installScreenshotOf(optStr(env, "BAB_INSTALL_SCREENSHOT")),
-      installScreenshotAlt: str(env, "BAB_INSTALL_SCREENSHOT_ALT", "How to add the plugin in the Claude app"),
+      installScreenshot: installScreenshotOf(str(env, "BAB_INSTALL_SCREENSHOT", DEFAULT_INSTALL_SCREENSHOT)),
+      installScreenshotAlt: str(env, "BAB_INSTALL_SCREENSHOT_ALT", DEFAULT_INSTALL_SCREENSHOT_ALT),
       locale,
       timeZone,
     },

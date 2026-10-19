@@ -91,9 +91,10 @@ describe("landing page", () => {
     expect(html).not.toContain("500+");
   });
 
-  it("draws everything inline, with no external image beyond the wordmark", () => {
+  it("draws everything inline, with no image beyond the wordmark and the install screenshot", () => {
     expect(html).toContain("<svg");
-    expect((html.match(/<img/g) ?? []).length).toBe(2);
+    expect((html.match(/<img/g) ?? []).length).toBe(3);
     expect(html).toContain("/branding/logo-light.svg");
+    expect(html).toContain('src="/install/claude-app-plugins.png"');
   });
 });

@@ -61,11 +61,14 @@ describe("branding", () => {
     expect(html).not.toContain("acme-plugins");
   });
 
-  it("shows no install screenshot unless one is configured", async () => {
-    const html = await renderHome();
-    expect(html).not.toContain("Prefer the terminal?");
+  it("shows the Claude app install screenshot by default, and none hides it", async () => {
+    let html = await renderHome();
+    expect(html).toContain('src="/install/claude-app-plugins.png"');
+    expect(html).toContain("Prefer the terminal?");
+    setEnv("BAB_INSTALL_SCREENSHOT", "none");
+    html = await renderHome();
+    expect(html).not.toContain("claude-app-plugins.png");
     expect(html).toContain("Two commands");
-    expect(html).not.toMatch(/<img[^>]+\/branding\/install/);
   });
 
   it("shows the configured install screenshot above the commands, with its alt text escaped", async () => {

@@ -8,8 +8,8 @@ import Reveal from "./Reveal";
  * nobody gets it automatically, so this section is the only place a colleague learns how
  * to add it. The old "paste this prompt" installer (/instructions/install.md) still
  * works and stays served for the legacy hook, but it is no longer what we point people at.
- * An organization can show its own screenshot of the Claude app flow (BAB_INSTALL_SCREENSHOT),
- * for example when the plugin comes from its managed marketplace; the commands follow it.
+ * A screenshot of the Claude app flow (Customize, search, Add) comes first; an organization can
+ * swap it for its own or hide it (BAB_INSTALL_SCREENSHOT). The commands follow it.
  */
 export default function GetStarted() {
   const { installCommands, installScreenshot } = branding();
