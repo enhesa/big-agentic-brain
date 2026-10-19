@@ -56,6 +56,8 @@ describe("config", () => {
       accentColor: "#1a3360",
       pluginMarketplace: "enhesa/big-agentic-brain",
       pluginMarketplaceName: "big-agentic-brain",
+      installScreenshot: null,
+      installScreenshotAlt: "How to add the plugin in the Claude app",
       locale: "en",
       timeZone: "UTC",
     });

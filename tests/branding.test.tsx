@@ -61,6 +61,33 @@ describe("branding", () => {
     expect(html).not.toContain("acme-plugins");
   });
 
+  it("shows no install screenshot unless one is configured", async () => {
+    const html = await renderHome();
+    expect(html).not.toContain("Prefer the terminal?");
+    expect(html).toContain("Two commands");
+    expect(html).not.toMatch(/<img[^>]+\/branding\/install/);
+  });
+
+  it("shows the configured install screenshot above the commands, with its alt text escaped", async () => {
+    setEnv("BAB_INSTALL_SCREENSHOT", "/branding/install.png");
+    setEnv("BAB_INSTALL_SCREENSHOT_ALT", 'Step 1: open "Customize" <then> add');
+    const html = await renderHome();
+    expect(html).toContain('src="/branding/install.png"');
+    expect(html).toContain('alt="Step 1: open &quot;Customize&quot; &lt;then&gt; add"');
+    expect(html).toContain("Prefer the terminal?");
+    expect(html.indexOf('src="/branding/install.png"')).toBeLessThan(html.indexOf("/plugin marketplace add"));
+  });
+
+  it("refuses an install screenshot that is not a site path or an https URL", async () => {
+    const { config } = await import("@/lib/config");
+    for (const bad of ["javascript:alert(1)", "http://example.com/x.png", "//evil.example/x.png", "install.png"]) {
+      setEnv("BAB_INSTALL_SCREENSHOT", bad);
+      expect(() => config(), bad).toThrow(/BAB_INSTALL_SCREENSHOT/);
+    }
+    setEnv("BAB_INSTALL_SCREENSHOT", "https://cdn.example.com/install.png");
+    expect(config().branding.installScreenshot).toBe("https://cdn.example.com/install.png");
+  });
+
   it("layout emits accent style and branding icon links", async () => {
     setEnv("BAB_ACCENT_COLOR", "#1a3360");
     const { default: RootLayout, generateMetadata, dynamic } = await import("../app/layout");

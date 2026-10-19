@@ -465,6 +465,22 @@
   white-space: nowrap;
 }
 
+/* The optional install screenshot (BAB_INSTALL_SCREENSHOT). Capped so its details stay legible
+   without the image dominating the section on a wide screen. */
+.installShot {
+  margin: 32px 0 0;
+  max-width: 760px;
+}
+
+.installShot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(20, 40, 70, 0.12);
+  box-shadow: 0 10px 30px rgba(20, 40, 70, 0.1);
+}
+
 .cliHead {
   margin: 44px 0 4px;
   font-family: var(--font-head);

@@ -12,6 +12,8 @@ export interface Branding {
   marketplace: string;
   marketplaceName: string;
   installCommands: { marketplace: string; install: string };
+  /** Optional landing-page install screenshot (BAB_INSTALL_SCREENSHOT), with its alt text. */
+  installScreenshot: { src: string; alt: string } | null;
 }
 
 export function branding(): Branding {
@@ -26,6 +28,7 @@ export function branding(): Branding {
       marketplace: `/plugin marketplace add ${b.pluginMarketplace}`,
       install: `/plugin install bab@${b.pluginMarketplaceName}`,
     },
+    installScreenshot: b.installScreenshot ? { src: b.installScreenshot, alt: b.installScreenshotAlt } : null,
   };
 }
 
