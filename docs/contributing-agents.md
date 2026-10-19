@@ -4,7 +4,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 
 ## Guard tests you will trip over
 
-- Keep the MCP instructions text at 1980 characters or fewer for the live origin (`tests/mcp-instructions.test.ts:18`). Any origin must stay under 2000 (`:22`, `:44`).
+- Keep the MCP instructions text at 1980 characters or fewer for the live origin (`tests/mcp-instructions.test.ts:18`). Any origin must stay under 2000 (`:22`).
 - Keep the identify rule, the `bab_link_session` rule and the "may be stale" line before character 2048 (`tests/mcp-instructions.test.ts:26`). The text is `mcpInstructions` in `lib/mcp.ts:110`.
 - Keep the house-rules block at `HOUSE_RULES_MAX_CHARS` (1200), set in `lib/learnings.ts:2298` and pinned by `tests/house-rules.test.ts:164`.
 - Keep the `/docs` page to diagrams. The visible word cap is 1350 (`tests/docs-page.test.ts:188`). Prose is a lede, one caption per section and a footnote, with word limits (`:194-202`). Shorten text. Do not raise the cap.
@@ -18,7 +18,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Keep `content/instructions/skill.md` and `plugins/claude-code/skills/big-agentic-brain/SKILL.md` in step by hand. No test links them. Both describe the tools.
 - Give every new route or page an identity helper, a `PUBLIC_PATHS` entry or an `ANONYMOUS_OK` entry with a one-line reason (`tests/route-inventory.test.ts:12`, `lib/public-paths.ts:8`). Remove `ANONYMOUS_OK` entries for deleted routes (`:55`).
 - Set `CURRENT_VERSION` in `lib/db.ts:13` to the highest migration (`tests/db.test.ts:487`).
-- Add a line to `CHANGELOG` in `lib/changelog.ts` for every change (`lib/changelog.ts:3-10`). Dates are ISO, newest first, one entry per day. Lines have 20 words or fewer and no em-dash (`tests/changelog.test.ts:14`, `:24-33`).
+- Add a line to `CHANGELOG` in `lib/changelog.ts` for every change (`lib/changelog.ts:3-10`). Dates are ISO, newest first, one entry per day. Lines have 20 words or fewer and no em-dash (`tests/changelog.test.ts:14`, `:28-36`).
 - Keep vendor, organization and Jira-key strings out of tracked files. The scan is `scripts/check-vendor-names.sh:8`. It covers `app lib content plugins docs tests`, `README.md`, `scripts` and `.github`. Exceptions go in `scripts/vendor-allowlist.txt` as `path:substring`.
 - Person-name checks only run when `VENDOR_EXTRA_PATTERN` is set (`scripts/check-vendor-names.sh:7-9`). A clean scan does not prove a file has no names.
 - Do not use `NEXT_PUBLIC_` in `app` or `lib`. Only CI checks it (`.github/workflows/ci.yml:31`). `runTest.sh` does not.
@@ -116,4 +116,3 @@ Read this on demand, before you change the area a section names. It lists the ru
 - If only `tests/perf.test.ts` fails on a busy machine, rerun it alone. Read the `db factor` it prints (`tests/perf.test.ts:165`, `:176-181`). Never loosen a budget. Set `PERF_TIMINGS_FILE` to log timings from green runs (`:44-52`).
 - A headless screenshot of `/usage` never reaches network idle. The page holds an SSE stream open (`app/components/shell/LiveUpdates.tsx:60`). Wait for `load`.
 - On Windows, read and write files as UTF-8. Python defaults to cp1252. Run `.sh` scripts under Git Bash.
-- Use Node APIs that exist in the version in `package.json` `engines` (`package.json:15-17`, Node 24 or newer). `@types/node` may allow newer ones.
