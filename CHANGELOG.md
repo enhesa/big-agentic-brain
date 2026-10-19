@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/enhesa/big-agentic-brain/compare/v2.1.0...v2.2.0) (2026-10-19)
+
+
+### Features
+
+* usage page covers 12 months, hero tiles show cumulative totals ([#21](https://github.com/enhesa/big-agentic-brain/issues/21)) ([a1e53be](https://github.com/enhesa/big-agentic-brain/commit/a1e53bee78046be7c1172a89849bc4b56c84ae7b))
+
 ## [2.1.0](https://github.com/enhesa/big-agentic-brain/compare/v2.0.0...v2.1.0) (2026-10-16)
 
 
