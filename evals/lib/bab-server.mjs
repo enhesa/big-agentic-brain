@@ -65,8 +65,19 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
     }
     await new Promise((r) => setTimeout(r, 100));
   }
+  const onExitKill = () => { try { child.kill("SIGTERM"); } catch {} };
+  const onSignal = () => { stop().finally(() => process.exit(130)); };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  process.once("exit", onExitKill);
+  const removeHandlers = () => {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    process.off("exit", onExitKill);
+  };
   const stop = () =>
     new Promise((resolve) => {
+      removeHandlers();
       if (child.exitCode !== null || child.signalCode !== null) {
         try { fs.closeSync(out); } catch {}
         return resolve();
@@ -81,11 +92,6 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
       });
       try { child.kill("SIGTERM"); } catch { clearTimeout(t); resolve(); }
     });
-  // Keep orphan servers from outliving a Ctrl-C of the eval runner.
-  const onSignal = () => { stop().finally(() => process.exit(130)); };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-  process.once("exit", () => { try { child.kill("SIGTERM"); } catch {} });
   return { origin, stop };
 }
 

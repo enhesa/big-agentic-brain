@@ -46,12 +46,19 @@ function fmt(key, v, signed = false) {
 /** Summary statistics per condition and paired comparisons; returns { stats, markdown }. */
 export function summarize(rows, meta) {
   const allRows = rows;
-  const clean = allRows.filter((r) => Number(r.suspicious_cmds) === 0);
-  const conds = Object.keys(CONDITIONS).filter((c) => clean.some((r) => r.condition === c));
-  const stats = { meta, conditions: {}, paired: {}, flaggedSuspicious: allRows.filter((r) => Number(r.suspicious_cmds) > 0).length, erroredOrTimeout: allRows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout").length };
+  const isBad = (r) => r.stop_reason === "error" || r.stop_reason === "timeout" || r.stop_reason === "harness_error";
+  const clean = allRows.filter((r) => Number(r.suspicious_cmds) === 0 && !isBad(r));
+  const conds = Object.keys(CONDITIONS).filter((c) => clean.some((r) => r.condition === c) || allRows.some((r) => r.condition === c && !isBad(r)));
+  const stats = {
+    meta, conditions: {}, paired: {},
+    flaggedSuspicious: allRows.filter((r) => Number(r.suspicious_cmds) > 0).length,
+    erroredOrTimeout: allRows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout").length,
+    harnessErrors: allRows.filter((r) => r.stop_reason === "harness_error").length,
+  };
   const L = [];
   const erroredRows = allRows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout");
-  const graded = clean.filter((r) => r.stop_reason !== "error" && r.stop_reason !== "timeout");
+  const harnessRows = allRows.filter((r) => r.stop_reason === "harness_error");
+  const graded = clean;
   const flagged = allRows.filter((r) => Number(r.suspicious_cmds) > 0);
   const cacheRead = clean.reduce((a, r) => a + Number(r.cache_read_tokens || 0), 0);
   const cacheWrite = clean.reduce((a, r) => a + Number(r.cache_write_tokens || 0), 0);
@@ -61,7 +68,7 @@ export function summarize(rows, meta) {
   const cacheShare = (cacheRead + inputTok) > 0 ? cacheRead / (cacheRead + inputTok + cacheWrite) : NaN;
   L.push(`# BAB eval summary (${meta.mode})`, "");
   L.push(`Model \`${meta.model}\` (${meta.provider}), BAB ${meta.babCommit}, ${meta.date}. Sandbox: ${meta.sandbox}. Memory for B: ${meta.memory}.`);
-  L.push(`Runs: ${allRows.length} (${graded.length} graded; ${erroredRows.length} errored/timed-out reported separately; ${flagged.length} flagged suspicious_cmds>0 and excluded from paired stats).`);
+  L.push(`Runs: ${allRows.length} (${graded.length} in rates; ${erroredRows.length} errored/timed-out excluded; ${harnessRows.length} harness failures excluded; ${flagged.length} flagged suspicious_cmds>0 excluded).`);
   L.push(`Spend: $${meta.spendUsd.toFixed(4)} (eval) + $${meta.seedCostUsd.toFixed(4)} (seeding)` + (meta.skippedForBudget ? `; ${meta.skippedForBudget} runs skipped for budget` : "") + `.`);
   L.push(`Cost per success: ${Number.isFinite(costPerSuccess) ? "$" + costPerSuccess.toFixed(4) : "n/a"}; cache-read share of prompt tokens: ${Number.isFinite(cacheShare) ? Math.round(cacheShare * 100) + "%" : "n/a"}.`, "");
   if (meta.suite === "tk") {
@@ -137,8 +144,12 @@ export function summarize(rows, meta) {
   if (comparisons.length) L.push("", "† p-values are uncorrected for the number of comparisons. At n≈8 task clusters, differences from B that are not significant at α=0.05 are not claimed.");
   if (tasks.length < 6) L.push("", "_Few tasks: treat CIs and p-values as plumbing checks, not evidence._");
   if (erroredRows.length) {
-    L.push("", "## Errored / timed-out runs (excluded from success rates above when stop_reason is error/timeout — currently still listed in the table as failures; see per-run error field)", "");
+    L.push("", "## Errored / timed-out runs (excluded from success rates and paired stats)", "");
     for (const r of erroredRows) L.push(`- ${r.run_id}: ${r.stop_reason} ${r.error || ""}`);
+  }
+  if (harnessRows.length) {
+    L.push("", "## Harness failures (no meta.json; excluded from rates; rerun with --resume)", "");
+    for (const r of harnessRows) L.push(`- ${r.run_id}: ${r.error || "harness_error"}`);
   }
   if (meta.skippedForBudget) L.push("", `Skipped for budget: ${meta.skippedForBudget} jobs were not started once spend reached the cap.`);
   return { stats, markdown: L.join("\n") + "\n" };

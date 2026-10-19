@@ -50,24 +50,22 @@ jobs:
       - name: Task validation (each task fails as shipped, passes with its reference fix)
         run: pnpm eval:validate
       - name: Retrieval eval (recall@k over MCP bab_search)
-        # Thresholds sit just under the values measured at the time the eval was added
-        # (recall@5 0.94, MRR 0.90); a drop below them is a search regression worth a look.
-        run: pnpm eval:retrieval --out evals/out/retrieval --min-recall5 0.85 --min-mrr 0.80
+        run: pnpm eval:retrieval --out "$RUNNER_TEMP/retrieval" --min-recall5 0.85 --min-mrr 0.80
       - name: Hard retrieval (vendor-overlap distractors + blind queries)
-        run: pnpm eval:retrieval --corpus tk --hard-distractors --queries hard --out evals/out/retrieval-hard --min-recall5 0 --min-mrr 0
+        run: pnpm eval:retrieval --corpus tk --hard-distractors --queries hard --out "$RUNNER_TEMP/retrieval-hard" --min-recall5 0 --min-mrr 0
       - if: always()
         run: |
-          { echo '## Baseline retrieval'; cat evals/out/retrieval/retrieval.md 2>/dev/null
+          { echo '## Baseline retrieval'; cat "$RUNNER_TEMP/retrieval/retrieval.md" 2>/dev/null
             echo '## Hard retrieval (vendor-overlap + blind)'
-            cat evals/out/retrieval-hard/retrieval.md 2>/dev/null
+            cat "$RUNNER_TEMP/retrieval-hard/retrieval.md" 2>/dev/null
           } >> "$GITHUB_STEP_SUMMARY" || true
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: retrieval-eval
           path: |
-            evals/out/retrieval/
-            evals/out/retrieval-hard/
+            ${{ runner.temp }}/retrieval/
+            ${{ runner.temp }}/retrieval-hard/
 
   agent:
     if: github.event_name == 'workflow_dispatch'
@@ -91,37 +89,49 @@ jobs:
           BAB_EVAL_MODEL: ${{ inputs.model }}
           BAB_EVAL_MODE: ${{ inputs.mode }}
           BAB_EVAL_BUDGET_USD: ${{ inputs.budget_usd }}
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
         run: |
           [ -n "$BAB_EVAL_MODEL" ] || unset BAB_EVAL_MODEL
-          pnpm eval --mode "$BAB_EVAL_MODE" --budget-usd "$BAB_EVAL_BUDGET_USD" --sandbox bwrap --out evals/out/agent
+          pnpm eval --mode "$BAB_EVAL_MODE" --budget-usd "$BAB_EVAL_BUDGET_USD" --sandbox bwrap --out "$BAB_EVAL_OUT"
       - name: Redact artifacts and guard against key leakage
+        id: guard
         if: always()
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
         run: |
           set -euo pipefail
-          # Strip any accidental key material from uploaded text artifacts.
+          if [ ! -d "$BAB_EVAL_OUT" ]; then
+            echo "no agent out dir; skipping guard"
+            exit 0
+          fi
           if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
             while IFS= read -r -d '' f; do
               sed -i "s|${ANTHROPIC_API_KEY}|***REDACTED***|g" "$f" || true
-            done < <(find evals/out/agent -type f \( -name '*.md' -o -name '*.json' -o -name '*.csv' -o -name '*.jsonl' -o -name '*.txt' -o -name '*.patch' \) -print0 2>/dev/null)
-            if grep -R --fixed-strings -- "$ANTHROPIC_API_KEY" evals/out/agent 2>/dev/null; then
+            done < <(find "$BAB_EVAL_OUT" -type f \( -name '*.md' -o -name '*.json' -o -name '*.csv' -o -name '*.jsonl' -o -name '*.txt' -o -name '*.patch' \) -print0 2>/dev/null)
+            if grep -R --fixed-strings -- "$ANTHROPIC_API_KEY" "$BAB_EVAL_OUT" 2>/dev/null; then
               echo "::error::API key found in eval artifacts after redaction"
               exit 1
             fi
           fi
+          if grep -R -E -- 'sk-ant-[A-Za-z0-9_-]+' "$BAB_EVAL_OUT" 2>/dev/null; then
+            echo "::error::sk-ant- pattern found in eval artifacts"
+            exit 1
+          fi
           echo "key-guard: ok"
       - if: always()
-        run: cat evals/out/agent/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-      - if: always()
+        env:
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
+        run: cat "$BAB_EVAL_OUT/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always() && steps.guard.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: agent-eval
           path: |
-            evals/out/agent/summary.md
-            evals/out/agent/results.json
-            evals/out/agent/results.csv
-            evals/out/agent/meta.json
-            evals/out/agent/runs/*/transcript.jsonl
-            evals/out/agent/runs/*/grade.txt
-            evals/out/agent/runs/*/diff.patch
+            ${{ runner.temp }}/agent-out/summary.md
+            ${{ runner.temp }}/agent-out/results.json
+            ${{ runner.temp }}/agent-out/results.csv
+            ${{ runner.temp }}/agent-out/meta.json
+            ${{ runner.temp }}/agent-out/runs/*/transcript.jsonl
+            ${{ runner.temp }}/agent-out/runs/*/grade.txt
+            ${{ runner.temp }}/agent-out/runs/*/diff.patch

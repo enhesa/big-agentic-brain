@@ -110,7 +110,7 @@ function shuffle(xs, seed) {
 }
 
 // A job that throws (e.g. BAB would not start) is logged and left without meta.json, so --resume redoes it.
-let harnessErrors = 0;
+const harnessFailures = []; // rows for summary.md when a job throws before writing meta.json
 async function pool(items, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
@@ -119,7 +119,12 @@ async function pool(items, n, fn) {
       try {
         await fn(item);
       } catch (e) {
-        harnessErrors++;
+        const id = `${String(item.order ?? 0).padStart(4, "0")}-${item.task}-${item.condition}-t${item.trial}`;
+        harnessFailures.push({
+          run_id: id, task: item.task, condition: item.condition, trial: item.trial, order_idx: item.order ?? 0,
+          stop_reason: "harness_error", success: 0, error: String(e.message ?? e).slice(0, 500),
+          suspicious_cmds: 0, cost_usd: 0, finished: 0,
+        });
         console.error(`[eval] job ${item.task}/${item.condition}/t${item.trial} failed in the harness: ${e.message}`);
       }
     }
@@ -192,9 +197,14 @@ async function main() {
     }
     log(`[eval] resume: ${rows.length} finished runs kept, ${jobs.filter((j) => !j.done).length} to go (spent so far $${spent.toFixed(3)})`);
   }
-  // Hard budget: reserve a pessimistic floor before starting a job so parallel runs cannot overshoot unbounded.
-  // Unknown prices already threw above. Floor = $0.01 so a free/mock provider still gates on the counter.
-  const reserveUsd = 0.01;
+  // Hard budget: reserve an estimated per-run cost so --parallel cannot overshoot by more than about one estimate.
+  // Unknown prices already threw above. Estimate ≈ maxTurns * (2k in + 1k out) tokens at list price, min $0.02.
+  const estPerRun = Math.max(
+    0.02,
+    ((2000 * (price.input + price.cacheWrite) + 1000 * price.output) * Math.min(maxTurns, 20)) / 1e6,
+  );
+  const reserveUsd = estPerRun;
+  log(`[eval] budget reserve ≈ $${reserveUsd.toFixed(4)}/run (est); parallel=${opt.parallel}`);
   await pool(jobs.filter((j) => !j.done), Number(opt.parallel), async (job) => {
     if (spent + reserveUsd > budget) {
       skipped++;
@@ -264,14 +274,15 @@ async function main() {
     fs.writeFileSync(path.join(d, "meta.json"), JSON.stringify({ ...row, summary: run.summary, babCalls: run.babCalls, learned: run.learned, reacts: run.reacts, injected: run.injected, suspicious: run.suspicious }, null, 2));
     log(`[eval] ${id}: success=${g.pass} turns=${run.turns} $${cost.toFixed(4)} bab=${JSON.stringify(run.babCalls)} hit=${mm.hitRank ?? "-"} (spent $${spent.toFixed(3)})`);
   });
+  for (const h of harnessFailures) rows.push(h);
   rows.sort((a, b) => a.order_idx - b.order_idx);
   const md = writeReports(outDir, rows, { ...meta, spendUsd: spent - seedCost, seedCostUsd: seedCost, skippedForBudget: skipped });
   log(`\n${md}`);
   log(`[eval] wrote ${path.join(outDir, "summary.md")}, results.json, results.csv${skipped ? ` (${skipped} runs skipped: budget reached)` : ""}`);
-  const errored = rows.filter((r) => r.stop_reason === "error").length + harnessErrors;
-  if (harnessErrors) log(`[eval] ${harnessErrors} job(s) failed in the harness and have no result; rerun with --resume`);
+  const errored = rows.filter((r) => r.stop_reason === "error" || r.stop_reason === "timeout" || r.stop_reason === "harness_error").length;
+  if (harnessFailures.length) log(`[eval] ${harnessFailures.length} job(s) failed in the harness; listed in summary.md; rerun with --resume`);
   if (errored) {
-    log(`[eval] ${errored} run(s) ended with an API/harness error`);
+    log(`[eval] ${errored} run(s) ended with an API/timeout/harness error (excluded from success rates)`);
     process.exit(2);
   }
 }

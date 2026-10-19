@@ -20,6 +20,7 @@ export function scratchRoot() {
   const root = override
     ? path.resolve(override)
     : path.join(os.tmpdir(), `bab-evals-${process.env.USER || process.env.LOGNAME || "user"}`);
-  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(root, 0o700); } catch {}
   return root;
 }

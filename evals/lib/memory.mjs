@@ -147,6 +147,10 @@ export async function buildMemories({ outDir, suite = "core", memories, memory, 
       if (fs.existsSync(fixturePath)) {
         const d = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
         colleague = { learnings: d.learnings ?? [], summaries: d.summaries ?? [] };
+      } else if (memory === "fixture") {
+        // Fixture mode never writes seed/; AR/CF still need colleague learnings/summaries from the package fixture.
+        const d = readFixture(SUITE_FIXTURES[suite].colleague);
+        colleague = { learnings: Array.isArray(d) ? d : d.learnings, summaries: (Array.isArray(d) ? [] : d.summaries) ?? [] };
       }
     } else {
     snaps.colleague = await snapshot(outDir, frozenName, async (origin, ctx) => {

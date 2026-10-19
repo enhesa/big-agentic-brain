@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { bootstrapCi, median, paired, quantile, signFlipP, wilson } from "../evals/lib/stats.mjs";
 import { memoryMetrics, resultIds, retrievalScores } from "../evals/lib/metrics.mjs";
 import { costUsd, redact } from "../evals/lib/providers.mjs";
-import { autoRetrievalBlock, FIXED_ADVICE, KIND_ADVICE, LEAN_TOOLS } from "../evals/lib/agent.mjs";
+import { autoRetrievalBlock, FIXED_ADVICE, KIND_ADVICE, LEAN_TOOLS, resolveInside, writeInside } from "../evals/lib/agent.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { conditionSpec, memoriesFor } from "../evals/lib/conditions.mjs";
 import { autoTitle } from "../evals/lib/memory.mjs";
 
@@ -116,5 +119,64 @@ describe("evals conditions and integration ablations", () => {
     };
     const m = memoryMetrics(run, new Set([id(1)]), new Set([id(2)]));
     expect(m).toMatchObject({ hit: true, hitRank: 1, hazardSeen: true, hazardFlagged: true, hazardEndorsed: false, relevantSeen: true });
+  });
+});
+
+describe("evals path safety", () => {
+  function mkWs() {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "bab-path-"));
+    fs.writeFileSync(path.join(ws, "ok.txt"), "hi");
+    return ws;
+  }
+
+  it("refuses a dangling symlink on write", () => {
+    const ws = mkWs();
+    const outside = path.join(os.tmpdir(), `bab-outside-${process.pid}.txt`);
+    try {
+      fs.symlinkSync(outside, path.join(ws, "link.txt")); // dangling or pointing outside
+      expect(() => writeInside(ws, "link.txt", "pwn")).toThrow(/symlink/);
+      expect(fs.existsSync(outside)).toBe(false);
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+      try { fs.unlinkSync(outside); } catch {}
+    }
+  });
+
+  it("refuses a symlinked parent directory", () => {
+    const ws = mkWs();
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-out-dir-"));
+    try {
+      fs.symlinkSync(outsideDir, path.join(ws, "via"));
+      expect(() => writeInside(ws, "via/pwn.txt", "pwn")).toThrow(/symlink/);
+      expect(fs.existsSync(path.join(outsideDir, "pwn.txt"))).toBe(false);
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses ../ mkdir escapes before creating folders", () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "bab-parent-"));
+    const ws = path.join(parent, "ws");
+    fs.mkdirSync(ws);
+    const marker = path.join(parent, "escaped-dir");
+    try {
+      expect(() => writeInside(ws, "../escaped-dir/x.txt", "pwn")).toThrow(/outside/);
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(fs.existsSync(path.join(parent, "escaped-dir"))).toBe(false);
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("allows a normal write inside the workspace", () => {
+    const ws = mkWs();
+    try {
+      writeInside(ws, "sub/a.txt", "ok");
+      expect(fs.readFileSync(path.join(ws, "sub/a.txt"), "utf8")).toBe("ok");
+      expect(resolveInside(ws, "ok.txt")).toBe(fs.realpathSync(path.join(ws, "ok.txt")));
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
   });
 });

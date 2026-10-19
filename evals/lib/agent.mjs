@@ -26,28 +26,73 @@ export const LOCAL_TOOLS = [
 export const CAPTURE_NUDGE =
   "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
 
-function resolveInside(ws, p, { forWrite = false } = {}) {
+/**
+ * Resolve a path inside the workspace without following symlinks.
+ * Refuses any symlink in the path (including dangling ones and symlinked parents).
+ * Does not mkdir until after the safety checks. Callers that write should open with O_NOFOLLOW.
+ */
+export function resolveInside(ws, p, { forWrite = false } = {}) {
   const rel = String(p).replace(/^\/work\/?/, "").replace(/^\/+/, "");
+  if (rel.includes("\0")) throw new Error("path outside the repository");
   const wsReal = fs.realpathSync(ws);
+  // Normalize without resolving symlinks: reject .. that would escape ws.
   const full = path.resolve(wsReal, rel);
-  // String prefix alone is not enough: a symlink under ws can point outside.
-  if (forWrite) {
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    const parentReal = fs.realpathSync(path.dirname(full));
-    if (parentReal !== wsReal && !parentReal.startsWith(wsReal + path.sep)) {
-      throw new Error("path outside the repository");
-    }
-    if (fs.existsSync(full)) {
-      const real = fs.realpathSync(full);
-      if (real !== wsReal && !real.startsWith(wsReal + path.sep)) throw new Error("path outside the repository");
-      return real;
-    }
-    return path.join(parentReal, path.basename(full));
+  if (full !== wsReal && !full.startsWith(wsReal + path.sep)) {
+    throw new Error("path outside the repository");
   }
-  if (!fs.existsSync(full)) throw new Error(`no such file: ${p}`);
-  const real = fs.realpathSync(full);
+  const relParts = path.relative(wsReal, full).split(path.sep).filter((x) => x && x !== ".");
+  let cur = wsReal;
+  for (let i = 0; i < relParts.length; i++) {
+    const part = relParts[i];
+    if (part === "..") throw new Error("path outside the repository");
+    const next = path.join(cur, part);
+    const isLast = i === relParts.length - 1;
+    let st;
+    try {
+      st = fs.lstatSync(next);
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+      if (!forWrite) throw new Error(`no such file: ${p}`);
+      // Missing component: for writes, create intermediate dirs only after checks (no symlink parents).
+      if (!isLast) {
+        fs.mkdirSync(next, { mode: 0o700 });
+        cur = next;
+        continue;
+      }
+      // Final component missing: ensure parent is a real directory inside ws, return the path (not yet created).
+      const parentReal = fs.realpathSync(cur);
+      if (parentReal !== wsReal && !parentReal.startsWith(wsReal + path.sep)) {
+        throw new Error("path outside the repository");
+      }
+      return path.join(parentReal, part);
+    }
+    if (st.isSymbolicLink()) throw new Error("symlink refused");
+    if (!isLast && !st.isDirectory()) throw new Error(`no such file: ${p}`);
+    cur = next;
+  }
+  // Existing final path: must be a non-symlink inside ws. Use realpath only after lstat proved no symlink.
+  const real = fs.realpathSync(cur);
   if (real !== wsReal && !real.startsWith(wsReal + path.sep)) throw new Error("path outside the repository");
   return real;
+}
+
+/** Write a file inside ws without following symlinks (O_NOFOLLOW). */
+export function writeInside(ws, p, content) {
+  const target = resolveInside(ws, p, { forWrite: true });
+  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW;
+  let fd;
+  try {
+    fd = fs.openSync(target, flags, 0o600);
+  } catch (e) {
+    if (e.code === "ELOOP" || e.code === "EEXIST") throw new Error("symlink refused");
+    throw e;
+  }
+  try {
+    fs.writeFileSync(fd, content ?? "");
+  } finally {
+    fs.closeSync(fd);
+  }
+  return target;
 }
 
 const SUSPICIOUS = /evals\/tasks|oracle|hidden|\/proc\/\S*environ|ln\s+-s|symlink\s+/;
@@ -161,8 +206,7 @@ export async function runAgent({ prompt, ws, providerCfg, bab, sandbox, maxTurns
             const s = fs.readFileSync(resolveInside(ws, a.path), "utf8");
             out = s.length > 20_000 ? `${s.slice(0, 20_000)}\n...[truncated]` : s;
           } else if (c.name === "write_file") {
-            const p = resolveInside(ws, a.path, { forWrite: true });
-            fs.writeFileSync(p, a.content ?? "");
+            writeInside(ws, a.path, a.content ?? "");
             out = `wrote ${(a.content ?? "").length} chars to ${a.path}`;
           } else if (c.name === "finish") {
             m.finished = true;

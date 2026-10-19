@@ -13,18 +13,24 @@ export function redact(text) {
 }
 
 async function post(url, headers, body, { retries = 6, timeoutMs = 300_000 } = {}) {
+  // One wall-clock deadline for the whole turn (attempts + backoff), not a fresh timeout per try.
+  const deadline = Date.now() + timeoutMs;
   for (let attempt = 0; ; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error(`LLM turn deadline exceeded after ${timeoutMs}ms`);
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(remaining),
       });
       if (res.ok) return await res.json();
       const msg = redact((await res.text()).slice(0, 800));
       if (RETRY.has(res.status) && attempt < retries - 1) {
-        await sleep(Math.min(60_000, 4000 * 2 ** attempt));
+        const wait = Math.min(60_000, 4000 * 2 ** attempt, Math.max(0, deadline - Date.now() - 1));
+        if (wait <= 0 || Date.now() + wait >= deadline) throw new Error(`HTTP ${res.status}: ${msg} (no time left to retry)`);
+        await sleep(wait);
         continue;
       }
       const err = new Error(`HTTP ${res.status}: ${msg}`);
@@ -32,7 +38,10 @@ async function post(url, headers, body, { retries = 6, timeoutMs = 300_000 } = {
       throw err;
     } catch (e) {
       if (e.status || attempt >= retries - 1) throw e;
-      await sleep(5000 * (attempt + 1));
+      if (e.name === "TimeoutError" || /deadline exceeded|no time left/.test(e.message)) throw e;
+      const wait = Math.min(5000 * (attempt + 1), Math.max(0, deadline - Date.now() - 1));
+      if (wait <= 0) throw e;
+      await sleep(wait);
     }
   }
 }

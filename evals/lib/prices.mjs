@@ -7,10 +7,22 @@ export const PRICES = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
 };
 
+function assertPrice(p, label) {
+  if (!p) return null;
+  for (const k of ["input", "output", "cacheRead", "cacheWrite"]) {
+    if (!Number.isFinite(p[k]) || p[k] < 0) {
+      throw new Error(`Invalid price for ${label}: ${k}=${p[k]} (need four non-negative numbers)`);
+    }
+  }
+  return p;
+}
+
 export function priceFor(model, env = process.env) {
   if (env.BAB_EVAL_PRICE) {
-    const [input, output, cacheRead, cacheWrite] = env.BAB_EVAL_PRICE.split(",").map(Number);
-    return { input, output, cacheRead, cacheWrite };
+    const parts = env.BAB_EVAL_PRICE.split(",").map(Number);
+    if (parts.length !== 4) throw new Error(`BAB_EVAL_PRICE must be "in,out,cacheRead,cacheWrite" (got ${env.BAB_EVAL_PRICE})`);
+    const [input, output, cacheRead, cacheWrite] = parts;
+    return assertPrice({ input, output, cacheRead, cacheWrite }, "BAB_EVAL_PRICE");
   }
-  return PRICES[model] ?? null;
+  return assertPrice(PRICES[model] ?? null, model);
 }
