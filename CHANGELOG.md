@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/enhesa/big-agentic-brain/compare/v2.3.0...v2.3.1) (2026-10-19)
+
+
+### Miscellaneous Chores
+
+* release 2.3.1 to ship the in-app changelog ([#35](https://github.com/enhesa/big-agentic-brain/issues/35)) ([ade3087](https://github.com/enhesa/big-agentic-brain/commit/ade30878f929028d72c143f014a84453eef22730))
+
 ## [2.3.0](https://github.com/enhesa/big-agentic-brain/compare/v2.2.0...v2.3.0) (2026-10-19)
 
 
