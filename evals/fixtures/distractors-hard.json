@@ -1,0 +1,165 @@
+{
+  "learnings": [
+    {
+      "title": "Ledgerly SSO login: use SAML, not the legacy password form",
+      "body": "Finance's Ledgerly portal switched to SAML SSO in 2025. The old /login password form still 200s but sessions created there cannot export invoices. Point users at the IdP tile named Ledgerly-Prod. Unrelated to import file layouts.",
+      "tags": [
+        "finance",
+        "ledgerly",
+        "sso"
+      ],
+      "family": null
+    },
+    {
+      "title": "Ledgerly report exports use comma CSV and YYYY-MM-DD dates",
+      "body": "When exporting reports FROM Ledgerly (Finance's ERP) for downstream analysis, use comma-separated CSV with ISO dates YYYY-MM-DD. This is the opposite direction from inbound import templates and must not be confused with import marker-line layouts.",
+      "tags": [
+        "finance",
+        "ledgerly",
+        "exports"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast tracking webhooks: HMAC-SHA256 of the raw body with Shipfast-Timestamp",
+      "body": "Inbound Shipfast tracking webhooks sign the raw request body with HMAC-SHA256 using the webhook secret; verify against the Shipfast-Timestamp header (seconds). Do not confuse with outbound API request signing (Shipfast-Signature). Unit tests that mock tracking must include that header.",
+      "tags": [
+        "shipping",
+        "shipfast",
+        "webhooks"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast rate limits: 120 req/min per API key, Retry-After in seconds",
+      "body": "Shipfast (carrier aggregator) returns 429 with Retry-After in seconds when an API key exceeds 120 requests per minute. Back off and retry; do not rotate keys on 429. Unrelated to signature verification failures.",
+      "tags": [
+        "shipping",
+        "shipfast",
+        "rate-limit"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api batch endpoint: max 50 addresses per request",
+      "body": "The platform geo-api /v1/batch accepts at most 50 addresses. Larger batches are rejected with 400 'batch too large'. Split client-side. This is unrelated to 429 Retry-After-Ms or 503 quota handling on the single-lookup endpoint.",
+      "tags": [
+        "platform",
+        "geo-api",
+        "batch"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api auth: use the X-Geo-Key header, not Bearer",
+      "body": "geo-api rejects Authorization: Bearer tokens with 401. Pass the team key in X-Geo-Key. Keys live in the platform vault under geo-api/prod. Unrelated to retry/backoff rules.",
+      "tags": [
+        "platform",
+        "geo-api",
+        "auth"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel holiday calendar is maintained in Confluence, not the bank API",
+      "body": "Bank settlement closures for Kestrel (our payout rail) are listed on the Treasury Confluence page 'Kestrel holidays'. The bank API does not expose a closures endpoint. Update the page when Treasury emails a notice. Unrelated to value-date cut-off math.",
+      "tags": [
+        "treasury",
+        "kestrel",
+        "holidays"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel sandbox vs prod hostnames",
+      "body": "Kestrel sandbox is api.sandbox.kestrel-pay.test; production is api.kestrel-pay.com. Never point CI at prod. Sandbox ignores cut-off times and always settles T+0 for testing. Unrelated to timezone conversion of cut-offs.",
+      "tags": [
+        "treasury",
+        "kestrel",
+        "env"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM: display names are title-cased on save",
+      "body": "Orion CRM title-cases contact display names on save (john smith -> John Smith). Matching on exact display name string will miss lower-case inputs. Prefer matching on the stable customer number field. Unrelated to check-digit algorithms.",
+      "tags": [
+        "crm",
+        "orion",
+        "names"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM API pagination uses cursor, not offset",
+      "body": "List endpoints on Orion CRM return next_cursor; offset/limit pairs are ignored. Clients that assume offset pagination silently re-read page 1. Unrelated to customer-number check digits.",
+      "tags": [
+        "crm",
+        "orion",
+        "api"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird transactional templates must include List-Unsubscribe",
+      "body": "Postbird rejects transactional template publishes that omit List-Unsubscribe headers (RFC 8058). Marketing templates are exempt. Unrelated to which stream marketing mail is sent on.",
+      "tags": [
+        "email",
+        "postbird",
+        "templates"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird sandbox suppresses all delivery",
+      "body": "Postbird's sandbox API accepts messages (202) but never delivers them. Use the event log UI to inspect. Unrelated to marketing-vs-transactional stream routing.",
+      "tags": [
+        "email",
+        "postbird",
+        "sandbox"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper service accounts rotate every 90 days",
+      "body": "Gatekeeper service-account keys must be rotated every 90 days; vault path gatekeeper/svc/<name>. Expired keys return 401 'key revoked'. Unrelated to JWT claim shape (iss/aud/scp).",
+      "tags": [
+        "auth",
+        "gatekeeper",
+        "rotation"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper admin UI is behind Okta, not Gatekeeper tokens",
+      "body": "Humans reach the Gatekeeper admin console via Okta SAML. Machine clients use Gatekeeper tokens. Do not mint long-lived Gatekeeper tokens for humans. Unrelated to aud/iss claim format.",
+      "tags": [
+        "auth",
+        "gatekeeper",
+        "admin"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane dashboard refunds are major units (decimal)",
+      "body": "Refunds filed through the Paylane merchant dashboard take a decimal major-unit amount (e.g. 10.50). The API v3 refunds endpoint is different. Unrelated to minor-unit string amounts on the API.",
+      "tags": [
+        "payments",
+        "paylane",
+        "dashboard"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane webhook retries use exponential backoff over 24h",
+      "body": "Paylane retries failed merchant webhooks with exponential backoff for up to 24 hours, then drops. Idempotency keys are required. Unrelated to refund amount encoding on API v3.",
+      "tags": [
+        "payments",
+        "paylane",
+        "webhooks"
+      ],
+      "family": null
+    }
+  ],
+  "note": "Share vendor/subsystem tokens with TK targets but state different facts. Used by the hard retrieval eval."
+}

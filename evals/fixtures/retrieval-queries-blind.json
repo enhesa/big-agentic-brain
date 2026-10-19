@@ -1,0 +1,85 @@
+{
+  "queries": [
+    {
+      "family": "tk-ledgerly",
+      "type": "blind",
+      "query": "nightly finance file upload fails on the first row of our ERP import"
+    },
+    {
+      "family": "tk-ledgerly",
+      "type": "blind",
+      "query": "what delimiter and date format does the accounting system expect for inbound invoices"
+    },
+    {
+      "family": "tk-shipfast",
+      "type": "blind",
+      "query": "carrier API rejects our signed requests even though the unit tests pass"
+    },
+    {
+      "family": "tk-shipfast",
+      "type": "blind",
+      "query": "which header carries the HMAC for outbound shipping API calls"
+    },
+    {
+      "family": "tk-geo-api",
+      "type": "blind",
+      "query": "geocoder tells us to wait but the header unit is unclear and some errors must not be retried"
+    },
+    {
+      "family": "tk-geo-api",
+      "type": "blind",
+      "query": "platform location service quota versus temporary throttle how to tell them apart"
+    },
+    {
+      "family": "tk-kestrel",
+      "type": "blind",
+      "query": "payout value date lands on the wrong day around bank holidays and evening cut-offs"
+    },
+    {
+      "family": "tk-kestrel",
+      "type": "blind",
+      "query": "convert settlement timestamps to the bank clock before applying the daily deadline"
+    },
+    {
+      "family": "tk-orion-ids",
+      "type": "blind",
+      "query": "customer id validation rejects numbers that pass the usual card check digit"
+    },
+    {
+      "family": "tk-orion-ids",
+      "type": "blind",
+      "query": "CRM account codes use a different modulus scheme and allow legacy letter prefixes"
+    },
+    {
+      "family": "tk-postbird",
+      "type": "blind",
+      "query": "campaign messages show accepted but never arrive in inboxes"
+    },
+    {
+      "family": "tk-postbird",
+      "type": "blind",
+      "query": "marketing mail must not ride on the default transactional sending lane"
+    },
+    {
+      "family": "tk-gatekeeper",
+      "type": "blind",
+      "query": "new service tokens fail introspection that still accepts the old auth format"
+    },
+    {
+      "family": "tk-gatekeeper",
+      "type": "blind",
+      "query": "audience and scope claims on internal JWTs changed shape and skew window"
+    },
+    {
+      "family": "tk-paylane",
+      "type": "blind",
+      "query": "refund payload amounts are rejected when sent as decimals like the old API"
+    },
+    {
+      "family": "tk-paylane",
+      "type": "blind",
+      "query": "payment provider wants currency codes lower case and amounts as integer strings"
+    }
+  ],
+  "note": "Written without copying target titles or exact error strings."
+}

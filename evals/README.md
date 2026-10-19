@@ -15,7 +15,7 @@ pnpm install && pnpm build          # the evals start throwaway BAB servers from
 pnpm eval:validate                  # no LLM
 pnpm eval:retrieval                 # no LLM
 ANTHROPIC_API_KEY=... pnpm eval     # smoke: Haiku, 3 tasks, A/B, 1 trial, about $0.01-0.05 (cap $0.50)
-ANTHROPIC_API_KEY=... pnpm eval:full  # 12 tasks, A/B/C, 3 trials, live colleague seeding (cap $25)
+ANTHROPIC_API_KEY=... pnpm eval:full  # core suite: 12 tasks, A/B/C, 3 trials, live colleague seeding (cap $25)
 ```
 
 Output goes to `evals/out/<timestamp>-<mode>/`:
@@ -56,7 +56,7 @@ pnpm eval:retrieval --corpus all --queries all --distractors 100
 
 Offline retrieval also accepts `--distractors N` (adds synthetic distractors from `fixtures/distractors-synthetic.json`) and `--queries v1|v2|all`.
 
-Reference numbers for the TK / ablation / scale / hazard study are in the research tree's `GAPS.md` (not shipped in this package).
+Reference numbers for the TK / ablation / scale / hazard study live in the companion research notes (`GAPS.md` in the research tree that produced this package; not shipped here). Headline TK numbers measure the memory channel by construction — see Caveats below.
 
 ## Conditions (`--conditions`)
 
@@ -103,8 +103,8 @@ Per run:
 - **recording rate** (called `bab_learn`)
 
 How the report summarises them:
-- Success uses a 95% Wilson CI.
-- Comparisons are paired per task (trials averaged within each task), against A and B vs C. They report the mean difference and ratio of means, each with a 10k bootstrap CI over tasks, plus an exact sign-flip permutation p.
+- Success uses a 95% Wilson CI (pooled; descriptive).
+- Comparisons are paired per task (trials averaged within each task), against A and B vs C. They report the mean difference and ratio of means with BCa and paired-t 95% CIs over task clusters, plus an exact sign-flip permutation p (**uncorrected** for multiplicity). Claims not distinguishable from B at this n are not bolded.
 - Each comparison is shown for all tasks, originals only, and variants only.
 
 ## Tasks
@@ -156,7 +156,7 @@ The run exits non-zero below the thresholds. CI uses thresholds just under the v
 | Retrieval, colleague corpus, kind filter | 0.00 | 0.00 | 0.00 |
 | Retrieval, hand-written corpus, plain | 0.69 | 0.86 | 0.77 |
 
-Agent eval with the same tasks and conditions (12 tasks × A/B/C × 3 trials), from the study this suite was extracted from:
+Agent eval with the same tasks and conditions (core: 12 tasks × A/B/C × 3 trials; TK full mode: 8 eval variants), from the study this suite was extracted from:
 - **`claude-sonnet-5-5`:** 100% success in every condition. B/A cost ratio 1.50 (95% CI 1.36-1.69); C/A 1.40 (1.31-1.52); turns unchanged.
 - **`claude-haiku-5-5`:** B/A cost ratio 1.94 (1.86-2.04); turns 1.30 (1.21-1.39).
 - **Why BAB costs more:** its 10 tool definitions and instructions add about 8.6k input tokens to every LLM call.
@@ -168,8 +168,15 @@ Agent eval with the same tasks and conditions (12 tasks × A/B/C × 3 trials), f
 - **On pull requests** touching `lib/`, `app/api/`, `app/mcp/` or `evals/`: build, then `eval:validate`, then `eval:retrieval` with thresholds. No secrets are needed.
 - **On manual dispatch:** the agent eval (`smoke` or `full`, model and budget as inputs), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
 
+
+## Caveats
+
+- **TK suite measures the memory channel by construction.** Repos omit a fictional vendor spec, the prompt names the vendor, the colleague memory is that spec (title/error strings overlapping the prompt), and hidden tests check those values. Condition A can only guess. Report TK success deltas as evidence that the memory path works, not as an estimate of how often BAB helps on real work.
+- **Retrieval recall is an upper bound** unless you pass `--hard-distractors` (vendor-overlap distractors) and `--queries blind|hard` (blind-written queries). The CI baseline still uses the original distractor set; the hard eval is reported alongside it.
+- Workspaces and default `--out` live under `$BAB_EVAL_SCRATCH` / `$TMPDIR/bab-evals-*`, outside the repo/tasks tree. `--sandbox none` is an explicit opt-in; CI always passes `--sandbox bwrap`.
+
 ## Limitations
 
 - The agent is a minimal MCP-capable loop with bash, read, write and finish tools, not Claude Code. The Claude Code plugin's hooks are not exercised, except that live seeding replays the Stop-hook capture nudge text.
-- 12 small synthetic tasks give coarse statistics. With 6 tasks per subset, the smallest possible p is 0.031.
+- Core has 12 tasks (6 original + 6 variant families); TK full mode scores 8 eval variants. With n≈8 task clusters the smallest exact sign-flip p is 1/256 ≈ 0.004; treat CIs as descriptive.
 - Prices in `lib/prices.mjs` are list prices copied by hand. Check them before quoting costs.

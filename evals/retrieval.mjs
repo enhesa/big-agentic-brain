@@ -7,13 +7,14 @@ import { parseArgs } from "node:util";
 import { assertBuilt, postLearning, startBab } from "./lib/bab-server.mjs";
 import { McpClient } from "./lib/mcp.mjs";
 import { resultIds, retrievalScores } from "./lib/metrics.mjs";
-import { EVALS_DIR, FIXTURES_DIR } from "./lib/paths.mjs";
+import { EVALS_DIR, FIXTURES_DIR, scratchRoot } from "./lib/paths.mjs";
 import { bootstrapCi, mean, quantile } from "./lib/stats.mjs";
 
 const { values: opt } = parseArgs({
   options: {
     corpus: { type: "string", default: "colleague" },
     distractors: { type: "string", default: "20" },
+    "hard-distractors": { type: "boolean", default: false },
     queries: { type: "string", default: "v1" },
     limit: { type: "string", default: "10" },
     "min-recall5": { type: "string", default: "0" },
@@ -23,10 +24,11 @@ const { values: opt } = parseArgs({
   },
 });
 if (opt.help) {
-  console.log(`Usage: node evals/retrieval.mjs [--corpus colleague|handwritten|tk|all] [--distractors 20|N] [--queries v1|v2|all]
-       [--limit N] [--min-recall5 X] [--min-mrr X] [--out DIR]
-  --distractors N  20 = the hand-picked set; more adds synthetic distractors (fixtures/distractors-synthetic.json, up to ~1000)
-  --queries        v1: symptom + observed (core families); v2: tk families + paraphrase/error-only; all: both
+  console.log(`Usage: node evals/retrieval.mjs [--corpus colleague|handwritten|tk|all] [--distractors 20|N] [--hard-distractors]
+       [--queries v1|v2|blind|all|hard] [--limit N] [--min-recall5 X] [--min-mrr X] [--out DIR]
+  --distractors N     20 = the hand-picked set; more adds synthetic distractors (fixtures/distractors-synthetic.json, up to ~1000)
+  --hard-distractors  also load fixtures/distractors-hard.json (share vendor/subsystem words, different facts)
+  --queries           v1: symptom + observed (core); v2: tk + paraphrase; blind: blind-written tk queries; hard: v2+blind; all: v1+v2+blind
 Exits 1 when recall@5 or MRR (plain search, all queries) falls below the given minimum.`);
   process.exit(0);
 }
@@ -51,7 +53,7 @@ function aggregate(rows) {
 async function main() {
   assertBuilt();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const outDir = path.resolve(opt.out ?? path.join(EVALS_DIR, "out", `${stamp}-retrieval`));
+  const outDir = path.resolve(opt.out ?? path.join(scratchRoot(), "out", `${stamp}-retrieval`));
   fs.mkdirSync(outDir, { recursive: true });
   const corpora = {
     colleague: () => read("colleague-learnings.json").learnings,
@@ -68,9 +70,25 @@ async function main() {
     if (nDistractors - distractors.length > extra.length) throw new Error(`only ${distractors.length + extra.length} distractors available`);
     distractors = [...distractors, ...extra.slice(0, nDistractors - distractors.length)];
   } else distractors = distractors.slice(0, nDistractors);
+  if (opt["hard-distractors"]) {
+    const hard = read("distractors-hard.json").learnings;
+    distractors = [...distractors, ...hard];
+  }
   const families = new Set(corpus.map((l) => l.family));
-  const qsets = { v1: () => read("retrieval-queries.json").queries, v2: () => read("retrieval-queries-v2.json").queries };
-  const queries = (opt.queries === "all" ? [...qsets.v1(), ...qsets.v2()] : qsets[opt.queries]()).filter((q) => families.has(q.family));
+  const qsets = {
+    v1: () => read("retrieval-queries.json").queries,
+    v2: () => read("retrieval-queries-v2.json").queries,
+    blind: () => read("retrieval-queries-blind.json").queries,
+  };
+  const pickQueries = () => {
+    if (opt.queries === "all") return [...qsets.v1(), ...qsets.v2(), ...qsets.blind()];
+    if (opt.queries === "hard") return [...qsets.v2(), ...qsets.blind()];
+    return qsets[opt.queries]();
+  };
+  if (!["v1", "v2", "blind", "all", "hard"].includes(opt.queries) && !(opt.queries in qsets)) {
+    throw new Error(`--queries must be v1|v2|blind|hard|all`);
+  }
+  const queries = pickQueries().filter((q) => families.has(q.family));
   const bab = await startBab({ dataDir: path.join(outDir, "bab-data"), logFile: path.join(outDir, "bab-server.log") });
   const rows = [];
   try {
@@ -109,7 +127,7 @@ async function main() {
   const misses = plain.filter((r) => r.rank === null || r.rank > 5);
   const md = [
     `# BAB retrieval eval (offline, no LLM)`, "",
-    `Corpus: ${corpus.length} target memories (${opt.corpus}) + ${distractors.length} distractors. ${queries.length} queries, each run through MCP \`bab_search\` (limit ${opt.limit}).`, "",
+    `Corpus: ${corpus.length} target memories (${opt.corpus}) + ${distractors.length} distractors${opt["hard-distractors"] ? " (includes hard vendor-overlap set)" : ""}. ${queries.length} queries (${opt.queries}), each run through MCP \`bab_search\` (limit ${opt.limit}).`, "",
     ...table(summary.byVariant, "Search variant"), "",
     "`kind-filter` adds `kind: [standard, decision, practice]`, the filter BAB's MCP instructions suggest before changing a repo. It excludes memories of kind `learning`.", "",
     ...table(summary.byType, "Query type (plain)"), "",
