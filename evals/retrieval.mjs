@@ -114,7 +114,19 @@ async function main() {
     await bab.stop();
     fs.rmSync(path.join(outDir, "bab-data"), { recursive: true, force: true });
   }
-  const summary = { corpus: opt.corpus, corpusSize: corpus.length, distractors: distractors.length, queries: queries.length, byVariant: {}, byType: {}, byFamily: {} };
+  const STOP = new Set("a an the and or of to in on for with from that this is are was were be been being it its our your their as at by not no".split(" "));
+  const toks = (t) => new Set([...(String(t).toLowerCase().match(/[a-z0-9]+/g) ?? [])].filter((w) => !STOP.has(w)));
+  const targetByFamily = Object.fromEntries(corpus.filter((l) => l.family).map((l) => [l.family, l]));
+  const blindOverlap = queries.filter((q) => q.type === "blind").map((q) => {
+    const L = targetByFamily[q.family];
+    if (!L) return { family: q.family, query: q.query, jaccard: null, coverage: null };
+    const qt = toks(q.query);
+    const lt = toks(`${L.title} ${L.body}`);
+    const inter = [...qt].filter((w) => lt.has(w)).length;
+    const union = new Set([...qt, ...lt]).size;
+    return { family: q.family, query: q.query, jaccard: union ? inter / union : 0, coverage: qt.size ? inter / qt.size : 0 };
+  });
+  const summary = { corpus: opt.corpus, corpusSize: corpus.length, distractors: distractors.length, queries: queries.length, hardDistractors: !!opt["hard-distractors"], blindOverlap, byVariant: {}, byType: {}, byFamily: {} };
   for (const v of Object.keys(VARIANTS)) summary.byVariant[v] = aggregate(rows.filter((r) => r.variant === v));
   const plain = rows.filter((r) => r.variant === "plain");
   for (const t of [...new Set(plain.map((r) => r.type))]) summary.byType[t] = aggregate(plain.filter((r) => r.type === t));
@@ -124,6 +136,10 @@ async function main() {
     `| ${label} | n | recall@1 | recall@3 | recall@5 (95% CI) | MRR (95% CI) | zero results | search ms p50/p95 |`, "|---|---|---|---|---|---|---|---|",
     ...Object.entries(obj).map(([k, s]) => `| ${k} | ${s.n} | ${f2(s["recall@1"])} | ${f2(s["recall@3"])} | ${f2(s["recall@5"])} (${f2(s.recall5Ci[0])}-${f2(s.recall5Ci[1])}) | ${f2(s.mrr)} (${f2(s.mrrCi[0])}-${f2(s.mrrCi[1])}) | ${f2(s.zeroResultRate)} | ${Math.round(s.latencyMsP50)}/${Math.round(s.latencyMsP95)} |`),
   ];
+  const overlapLines = blindOverlap.length
+    ? ["", `## Blind query token overlap vs target (stopwords excluded): n=${blindOverlap.length}, max coverage=${Math.max(0, ...blindOverlap.map((o) => o.coverage ?? 0)).toFixed(3)}, max Jaccard=${Math.max(0, ...blindOverlap.map((o) => o.jaccard ?? 0)).toFixed(3)}`, "",
+      ...blindOverlap.map((o) => `- [${o.family}] coverage=${(o.coverage ?? 0).toFixed(3)} jaccard=${(o.jaccard ?? 0).toFixed(3)} "${o.query}"`)]
+    : [];
   const misses = plain.filter((r) => r.rank === null || r.rank > 5);
   const md = [
     `# BAB retrieval eval (offline, no LLM)`, "",
@@ -132,6 +148,7 @@ async function main() {
     "`kind-filter` adds `kind: [standard, decision, practice]`, the filter BAB's MCP instructions suggest before changing a repo. It excludes memories of kind `learning`.", "",
     ...table(summary.byType, "Query type (plain)"), "",
     ...table(summary.byFamily, "Family (plain)"), "",
+    ...overlapLines,
     `## Misses (plain search, relevant memory not in top 5): ${misses.length}`, "",
     ...misses.map((r) => `- [${r.family}/${r.type}] "${r.query}" -> ${r.rank === null ? (r.nResults ? "not returned" : "no results") : `rank ${r.rank}`}`),
   ].join("\n") + "\n";

@@ -56,7 +56,7 @@ pnpm eval:retrieval --corpus all --queries all --distractors 100
 
 Offline retrieval also accepts `--distractors N` (adds synthetic distractors from `fixtures/distractors-synthetic.json`) and `--queries v1|v2|all`.
 
-Reference numbers for the TK / ablation / scale / hazard study live in the companion research notes (`GAPS.md` in the research tree that produced this package; not shipped here). Headline TK numbers measure the memory channel by construction — see Caveats below.
+Reference numbers for the TK / ablation / scale / hazard study live in the companion research notes (`GAPS.md` in the research tree that produced this package; not shipped here). Headline TK numbers measure the memory channel by construction - see Caveats below.
 
 ## Conditions (`--conditions`)
 
@@ -175,8 +175,15 @@ Agent eval with the same tasks and conditions (core: 12 tasks × A/B/C × 3 tria
 - **Retrieval recall is an upper bound** unless you pass `--hard-distractors` (vendor-overlap distractors) and `--queries blind|hard` (blind-written queries). The CI baseline still uses the original distractor set; the hard eval is reported alongside it.
 - Workspaces and default `--out` live under `$BAB_EVAL_SCRATCH` / `$TMPDIR/bab-evals-*`, outside the repo/tasks tree. `--sandbox none` is an explicit opt-in; CI always passes `--sandbox bwrap`.
 
+
+- Live memory mode draws colleague memory **once per `--out` directory** and shares that draw across all trials (frozen for `--resume`). Independent per-trial draws are not the default (they multiply seed cost).
+
 ## Limitations
 
 - The agent is a minimal MCP-capable loop with bash, read, write and finish tools, not Claude Code. The Claude Code plugin's hooks are not exercised, except that live seeding replays the Stop-hook capture nudge text.
 - Core has 12 tasks (6 original + 6 variant families); TK full mode scores 8 eval variants. With n≈8 task clusters the smallest exact sign-flip p is 1/256 ≈ 0.004; treat CIs as descriptive.
 - Prices in `lib/prices.mjs` are list prices copied by hand. Check them before quoting costs.
+
+## Leak / cheat audit
+
+`node evals/scripts/audit-leak-cheat.mjs [runsRoot]` scans completed run trees for symlink creation, `/proc/*/environ`, `hidden/`/`oracle/` access, `suspicious_cmds>0`, and `sk-ant-` material in transcripts. Point it at the **research** runs tree (not shipped here). Older metas may omit the `sandbox` field (345 in the Oct 2026 research tree); that is an older harness, not proof of a cheat.

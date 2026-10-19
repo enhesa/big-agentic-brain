@@ -3,83 +3,83 @@
     {
       "family": "tk-ledgerly",
       "type": "blind",
-      "query": "nightly finance file upload fails on the first row of our ERP import"
+      "query": "bookkeeping nightly bulk load dies on the opening record"
     },
     {
       "family": "tk-ledgerly",
       "type": "blind",
-      "query": "what delimiter and date format does the accounting system expect for inbound invoices"
+      "query": "which separators and calendar order does bookkeeping want inbound"
     },
     {
       "family": "tk-shipfast",
       "type": "blind",
-      "query": "carrier API rejects our signed requests even though the unit tests pass"
+      "query": "parcel provider refuses signed calls even though fixtures stay green"
     },
     {
       "family": "tk-shipfast",
       "type": "blind",
-      "query": "which header carries the HMAC for outbound shipping API calls"
+      "query": "name of outbound parcel HTTP field holding the MAC"
     },
     {
       "family": "tk-geo-api",
       "type": "blind",
-      "query": "geocoder tells us to wait but the header unit is unclear and some errors must not be retried"
+      "query": "map lookup says pause but wait unit is murky and some faults must stop"
     },
     {
       "family": "tk-geo-api",
       "type": "blind",
-      "query": "platform location service quota versus temporary throttle how to tell them apart"
+      "query": "tell a short throttle from a hard daily ceiling on the platform locator"
     },
     {
       "family": "tk-kestrel",
       "type": "blind",
-      "query": "payout value date lands on the wrong day around bank holidays and evening cut-offs"
+      "query": "money movement booking day shifts around public holidays and late evening windows"
     },
     {
       "family": "tk-kestrel",
       "type": "blind",
-      "query": "convert settlement timestamps to the bank clock before applying the daily deadline"
+      "query": "shift booking timestamps onto the lender clock before the daily deadline"
     },
     {
       "family": "tk-orion-ids",
       "type": "blind",
-      "query": "customer id validation rejects numbers that pass the usual card check digit"
+      "query": "party code validation rejects values that survive the usual card scheme"
     },
     {
       "family": "tk-orion-ids",
       "type": "blind",
-      "query": "CRM account codes use a different modulus scheme and allow legacy letter prefixes"
+      "query": "registry codes use another modulus and still allow old letter prefixes"
     },
     {
       "family": "tk-postbird",
       "type": "blind",
-      "query": "campaign messages show accepted but never arrive in inboxes"
+      "query": "blast messages look okay upstream yet never show up for readers"
     },
     {
       "family": "tk-postbird",
       "type": "blind",
-      "query": "marketing mail must not ride on the default transactional sending lane"
+      "query": "promo traffic must avoid the ordinary one-to-one sending lane"
     },
     {
       "family": "tk-gatekeeper",
       "type": "blind",
-      "query": "new service tokens fail introspection that still accepts the old auth format"
+      "query": "fresh machine credentials fail checks that still take the previous shape"
     },
     {
       "family": "tk-gatekeeper",
       "type": "blind",
-      "query": "audience and scope claims on internal JWTs changed shape and skew window"
+      "query": "who and what fields on internal bearer tickets changed plus skew window"
     },
     {
       "family": "tk-paylane",
       "type": "blind",
-      "query": "refund payload amounts are rejected when sent as decimals like the old API"
+      "query": "chargeback style payloads fail when money fields use dotted major units"
     },
     {
       "family": "tk-paylane",
       "type": "blind",
-      "query": "payment provider wants currency codes lower case and amounts as integer strings"
+      "query": "processor wants ISO codes in lower case and money as whole-number text"
     }
   ],
-  "note": "Written without copying target titles or exact error strings."
+  "note": "Blind-written with stopwords excluded from overlap checks against the target title+body."
 }
