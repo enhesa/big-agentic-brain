@@ -26,14 +26,31 @@ export const LOCAL_TOOLS = [
 export const CAPTURE_NUDGE =
   "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
 
-function resolveInside(ws, p) {
+function resolveInside(ws, p, { forWrite = false } = {}) {
   const rel = String(p).replace(/^\/work\/?/, "").replace(/^\/+/, "");
-  const full = path.resolve(ws, rel.startsWith(ws) ? path.relative(ws, rel) : rel);
-  if (!full.startsWith(path.resolve(ws) + path.sep)) throw new Error("path outside the repository");
-  return full;
+  const wsReal = fs.realpathSync(ws);
+  const full = path.resolve(wsReal, rel);
+  // String prefix alone is not enough: a symlink under ws can point outside.
+  if (forWrite) {
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    const parentReal = fs.realpathSync(path.dirname(full));
+    if (parentReal !== wsReal && !parentReal.startsWith(wsReal + path.sep)) {
+      throw new Error("path outside the repository");
+    }
+    if (fs.existsSync(full)) {
+      const real = fs.realpathSync(full);
+      if (real !== wsReal && !real.startsWith(wsReal + path.sep)) throw new Error("path outside the repository");
+      return real;
+    }
+    return path.join(parentReal, path.basename(full));
+  }
+  if (!fs.existsSync(full)) throw new Error(`no such file: ${p}`);
+  const real = fs.realpathSync(full);
+  if (real !== wsReal && !real.startsWith(wsReal + path.sep)) throw new Error("path outside the repository");
+  return real;
 }
 
-const SUSPICIOUS = /evals\/tasks|oracle|hidden/;
+const SUSPICIOUS = /evals\/tasks|oracle|hidden|\/proc\/\S*environ|ln\s+-s|symlink\s+/;
 
 // Integration ablations (see conditions.mjs). Lean: three tools with short descriptions and a short policy.
 export const LEAN_INSTRUCTIONS =
@@ -117,7 +134,9 @@ export async function runAgent({ prompt, ws, providerCfg, bab, sandbox, maxTurns
     for (;;) {
       if (m.turns >= maxTurns) { m.stopReason = "max_turns"; break; }
       if (Date.now() - t0 > maxSeconds * 1000) { m.stopReason = "timeout"; break; }
-      const r = await prov.chat(sys, tools, messages);
+      const turnBudgetMs = Math.min(300_000, maxSeconds * 1000 - (Date.now() - t0));
+      if (turnBudgetMs <= 0) { m.stopReason = "timeout"; break; }
+      const r = await prov.chat(sys, tools, messages, { timeoutMs: turnBudgetMs });
       m.turns++;
       for (const k of Object.keys(m.usage)) m.usage[k] += r.usage[k] ?? 0;
       log({ ev: "llm", text: r.text, toolCalls: r.toolCalls, usage: r.usage, stop: r.stop });
@@ -142,8 +161,7 @@ export async function runAgent({ prompt, ws, providerCfg, bab, sandbox, maxTurns
             const s = fs.readFileSync(resolveInside(ws, a.path), "utf8");
             out = s.length > 20_000 ? `${s.slice(0, 20_000)}\n...[truncated]` : s;
           } else if (c.name === "write_file") {
-            const p = resolveInside(ws, a.path);
-            fs.mkdirSync(path.dirname(p), { recursive: true });
+            const p = resolveInside(ws, a.path, { forWrite: true });
             fs.writeFileSync(p, a.content ?? "");
             out = `wrote ${(a.content ?? "").length} chars to ${a.path}`;
           } else if (c.name === "finish") {

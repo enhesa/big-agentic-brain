@@ -65,7 +65,7 @@ export class Anthropic {
     if (last?.role === "user" && Array.isArray(last.content)) last.content.push({ type: "text", text });
     else messages.push(this.userMsg(text));
   }
-  async chat(system, tools, messages) {
+  async chat(system, tools, messages, opts = {}) {
     // Prompt caching on the static prefix and the conversation tail, identical for every condition.
     const msgs = structuredClone(messages);
     const last = msgs.at(-1);
@@ -83,6 +83,7 @@ export class Anthropic {
         tools: tl,
         messages: msgs,
       },
+      { timeoutMs: opts.timeoutMs ?? 300_000 },
     );
     const u = r.usage ?? {};
     return {
@@ -120,11 +121,12 @@ export class OpenAICompat {
   appendText(messages, text) {
     messages.push(this.userMsg(text));
   }
-  async chat(system, tools, messages) {
+  async chat(system, tools, messages, opts = {}) {
     const r = await post(
       `${this.base}/chat/completions`,
       { authorization: `Bearer ${this.key}` },
       { model: this.model, messages: [{ role: "system", content: system }, ...messages], tools, max_completion_tokens: this.maxTokens },
+      { timeoutMs: opts.timeoutMs ?? 300_000 },
     );
     const m = r.choices[0].message;
     const u = r.usage ?? {};

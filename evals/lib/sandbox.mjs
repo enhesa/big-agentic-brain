@@ -1,6 +1,6 @@
 // Runs the agent's bash commands. With bubblewrap the repo is the only visible writable path (mounted at /work),
 // there is no network and the environment is cleared, so hidden tests and reference fixes are unreachable.
-// Without bubblewrap (e.g. a CI runner that forbids user namespaces) commands run in the workspace with a cleared env.
+// Unsandboxed mode ("none") is an explicit opt-in only — never a silent fallback.
 import { spawn, spawnSync } from "node:child_process";
 
 let probed;
@@ -14,11 +14,23 @@ export function bwrapAvailable() {
 
 const trunc = (s, n = 10_000) => (s.length <= n ? s : `${s.slice(0, n / 2)}\n...[${s.length - n} chars truncated]...\n${s.slice(-n / 2)}`);
 
-export function sandboxMode(requested) {
+/**
+ * Resolve the sandbox mode.
+ * - "bwrap": require bubblewrap (fail hard if missing)
+ * - "none": explicit opt-in to unsandboxed cleared-env bash
+ * - "auto" (default): use bwrap when available, otherwise fail with instructions to pass --sandbox none
+ */
+export function sandboxMode(requested = "auto") {
   if (requested === "none") return "none";
-  if (bwrapAvailable()) return "bwrap";
-  if (requested === "bwrap") throw new Error("--sandbox bwrap requested but bubblewrap is not usable here");
-  return "none";
+  if (requested === "bwrap" || requested === "auto") {
+    if (bwrapAvailable()) return "bwrap";
+    if (requested === "bwrap") throw new Error("--sandbox bwrap requested but bubblewrap is not usable here");
+    throw new Error(
+      "bubblewrap is not usable here. Pass --sandbox none to opt into unsandboxed agent commands " +
+        "(cleared env, repo as cwd; hidden/ and oracle/ must still be outside the workspace).",
+    );
+  }
+  throw new Error(`unknown --sandbox ${requested}; use auto|bwrap|none`);
 }
 
 export function workdirFor(mode, ws) {

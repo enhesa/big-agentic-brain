@@ -11,7 +11,7 @@ import { allTaskIds, applyOracle, grade, loadTask, makeWorkspace, useSuite } fro
 import { conditionSpec, CONDITIONS, memoriesFor } from "./lib/conditions.mjs";
 import { buildMemories } from "./lib/memory.mjs";
 import { memoryMetrics } from "./lib/metrics.mjs";
-import { EVALS_DIR, REPO_ROOT } from "./lib/paths.mjs";
+import { EVALS_DIR, REPO_ROOT, scratchRoot } from "./lib/paths.mjs";
 import { priceFor, PRICES_CHECKED } from "./lib/prices.mjs";
 import { costUsd } from "./lib/providers.mjs";
 import { writeReports } from "./lib/report.mjs";
@@ -42,9 +42,9 @@ const HELP = `Usage: node evals/run.mjs [options]
   --tasks id,id            task ids (default: all core tasks / all tk variants in full, 3 in smoke)
   --trials N               trials per task and condition
   --memory fixture|live    B memory: recorded fixture (cheap) or a live colleague agent run
-  --budget-usd X           stop starting new runs once spend reaches X
+  --budget-usd X           hard spend cap (USD); unknown model price is an error; skippedForBudget is reported
   --parallel N             concurrent runs (default 3)
-  --sandbox auto|bwrap|none  agent bash isolation (default auto: bubblewrap when usable)
+  --sandbox auto|bwrap|none  agent bash isolation (default auto: bwrap required unless --sandbox none)
   --max-turns N  --max-seconds N  --seed N  --out DIR
   --resume                 continue an interrupted run in --out: keep finished runs, redo unfinished ones
   --validate               no LLM: check every task fails as shipped and passes with its reference fix
@@ -83,7 +83,7 @@ async function validate() {
   let ok = true;
   for (const id of allTaskIds()) {
     const t = loadTask(id);
-    const dir = fs.mkdtempSync(path.join(EVALS_DIR, ".validate-"));
+    const dir = fs.mkdtempSync(path.join(scratchRoot(), ".validate-"));
     try {
       const ws = makeWorkspace(t, path.join(dir, "ws"));
       const before = await grade(t, ws);
@@ -138,7 +138,9 @@ async function main() {
   const keyEnv = providerCfg.keyEnv ?? (provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
   if (!process.env[keyEnv]) throw new Error(`Set ${keyEnv} (the key is read from the environment and never written to disk).`);
   const price = priceFor(model);
-  if (!price) log(`warning: no price known for ${model}; set BAB_EVAL_PRICE to get costs (budget cap cannot be enforced)`);
+  if (!price) {
+    throw new Error(`No price known for ${model}; set BAB_EVAL_PRICE="in,out,cacheRead,cacheWrite" (USD per 1M). Budget cannot be enforced without a price.`);
+  }
   const conditions = (opt.conditions ?? preset.conditions).split(",");
   conditions.forEach(conditionSpec);
   const presetTasks = opt.suite === "core" ? preset.tasks : preset.tkTasks;
@@ -151,7 +153,13 @@ async function main() {
   const maxTurns = Number(opt["max-turns"]);
   const maxSeconds = Number(opt["max-seconds"]);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const outDir = path.resolve(opt.out ?? path.join(EVALS_DIR, "out", `${stamp}-${opt.mode}`));
+  // Default under scratchRoot (outside the repo/tasks tree) so ws/out cannot climb into hidden/oracle.
+  const outDir = path.resolve(opt.out ?? path.join(scratchRoot(), "out", `${stamp}-${opt.mode}`));
+  // Refuse an outDir that sits inside the tasks tree.
+  const tasksReal = fs.realpathSync(EVALS_DIR);
+  if (outDir === tasksReal || outDir.startsWith(tasksReal + path.sep)) {
+    throw new Error(`--out must be outside ${EVALS_DIR} (got ${outDir}); use BAB_EVAL_SCRATCH or a path under /tmp`);
+  }
   fs.mkdirSync(path.join(outDir, "runs"), { recursive: true });
   let babCommit = "unknown";
   try {
@@ -184,16 +192,21 @@ async function main() {
     }
     log(`[eval] resume: ${rows.length} finished runs kept, ${jobs.filter((j) => !j.done).length} to go (spent so far $${spent.toFixed(3)})`);
   }
+  // Hard budget: reserve a pessimistic floor before starting a job so parallel runs cannot overshoot unbounded.
+  // Unknown prices already threw above. Floor = $0.01 so a free/mock provider still gates on the counter.
+  const reserveUsd = 0.01;
   await pool(jobs.filter((j) => !j.done), Number(opt.parallel), async (job) => {
-    if (spent >= budget) {
+    if (spent + reserveUsd > budget) {
       skipped++;
       return;
     }
+    spent += reserveUsd; // reserve; reconciled after the run
     const t = loadTask(job.task);
     const id = jobId(job);
     const d = path.join(outDir, "runs", id);
     fs.mkdirSync(d, { recursive: true });
-    const ws = makeWorkspace(t, path.join(d, "ws"));
+    // Workspace under scratch, never under the tasks tree.
+    const ws = makeWorkspace(t, path.join(scratchRoot(), "ws", id));
     const startedAt = new Date().toISOString();
     const common = { prompt: t.prompt, ws, providerCfg, sandbox, maxTurns, maxSeconds, logPath: path.join(d, "transcript.jsonl") };
     let run;
@@ -230,7 +243,7 @@ async function main() {
     const haz = new Set(snap?.hazard?.[t.family] ?? []);
     const mm = memoryMetrics(run, rel, haz);
     const cost = costUsd(run.usage, price);
-    spent += cost;
+    spent += cost - reserveUsd; // replace reservation with actual
     const u = run.usage;
     const row = {
       run_id: id, task: t.id, family: t.family, variant: t.variant, condition: job.condition, trial: job.trial, order_idx: job.order,
@@ -243,8 +256,12 @@ async function main() {
       zero_result_searches: mm.zeroResultSearches, injected_relevant: mm.injectedRelevant ? 1 : 0, relevant_seen: mm.relevantSeen ? 1 : 0,
       hazard_seen: mm.hazardSeen ? 1 : 0, hazard_flagged: mm.hazardFlagged ? 1 : 0, hazard_endorsed: mm.hazardEndorsed ? 1 : 0, suspicious_cmds: run.suspicious.length, error: run.error, started_at: startedAt,
     };
+    if (run.suspicious.length) {
+      row.success = 0;
+      log(`[eval] ${id}: FLAGGED suspicious_cmds=${run.suspicious.length}; excluded from paired stats`);
+    }
     rows.push(row);
-    fs.writeFileSync(path.join(d, "meta.json"), JSON.stringify({ ...row, summary: run.summary, babCalls: run.babCalls, learned: run.learned, reacts: run.reacts, injected: run.injected }, null, 2));
+    fs.writeFileSync(path.join(d, "meta.json"), JSON.stringify({ ...row, summary: run.summary, babCalls: run.babCalls, learned: run.learned, reacts: run.reacts, injected: run.injected, suspicious: run.suspicious }, null, 2));
     log(`[eval] ${id}: success=${g.pass} turns=${run.turns} $${cost.toFixed(4)} bab=${JSON.stringify(run.babCalls)} hit=${mm.hitRank ?? "-"} (spent $${spent.toFixed(3)})`);
   });
   rows.sort((a, b) => a.order_idx - b.order_idx);
