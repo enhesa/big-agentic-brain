@@ -1,0 +1,12 @@
+{
+  "id": "f5-var-slug-cdn",
+  "family": "regex-semantics",
+  "variant": "variant",
+  "prompt": "The CDN returns HTTP 400 for some article URLs whose slugs our CMS validator accepted (examples in tests/test_slugs.py). `bash run_tests.sh` fails. Fix the validation so it matches what the CDN accepts (see README), without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

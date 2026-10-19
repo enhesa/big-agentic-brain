@@ -1,0 +1,12 @@
+{
+  "id": "f2-var-disk-cache",
+  "family": "hash-randomization",
+  "variant": "variant",
+  "prompt": "Our geocoding bill is far too high. Metrics show the on-disk response cache has ~0% hit rate in production after every deploy or worker restart, although within one running process it seems to work. The cache dir is a persistent volume. `bash run_tests.sh` includes a reproduction. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

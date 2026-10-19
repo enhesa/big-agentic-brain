@@ -1,0 +1,12 @@
+{
+  "id": "f6-var-overdue-filter",
+  "family": "js-date-only-utc",
+  "variant": "variant",
+  "prompt": "Users on the US and NZ teams report the task board is wrong: tasks show as overdue on their due date, and the 'due this week' count is off. `bash run_tests.sh` (two CI time zones) fails. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "test",
+    "run_tests.sh"
+  ]
+}

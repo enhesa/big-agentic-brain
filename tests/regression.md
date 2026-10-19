@@ -31,3 +31,9 @@ show nothing there: a signed-in person is a proxy viewer. Run steps 4, 6 and 9 b
    Memories, messages and reminders are all there, a signed-in person still sees their own inbox and reminders,
    a device that identified before still resolves, and `/admin/links` still shows the sign-in email and name of
    existing browser links. Never run the new image on the only copy of a production volume.
+
+## Agent evals (optional)
+
+The agent/retrieval eval harness under `evals/` is covered by `evals-lib.test.ts` (stats and retrieval
+scoring) and by `pnpm eval:validate` / `pnpm eval:retrieval` in `.github/workflows/evals.yml`. It is not
+part of `pnpm check`.

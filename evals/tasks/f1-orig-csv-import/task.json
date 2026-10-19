@@ -1,0 +1,12 @@
+{
+  "id": "f1-orig-csv-import",
+  "family": "csv-bom",
+  "variant": "original",
+  "prompt": "The nightly ERP order import fails with `ImportFailed: row 1: missing required column 'order_id'`, but finance insists the column is there (see tests/fixtures/erp_export.csv). `bash run_tests.sh` reproduces it. Find the root cause and fix it so the test suite passes. Do not modify the tests or fixtures.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

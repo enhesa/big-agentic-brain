@@ -14,7 +14,8 @@ export default defineConfig({
     // must stay green with no server running.
     // Keep vitest defaults (node_modules, dist, ...) or the e2e build output
     // under .next/standalone gets collected as tests.
-    exclude: [...configDefaults.exclude, "tests/e2e/**", ".next/**"],
+    // evals/tasks holds the benchmark's own sample repos (with their own node:test files); evals run via `pnpm eval`.
+    exclude: [...configDefaults.exclude, "tests/e2e/**", ".next/**", "evals/**"],
     // Page render tests import the whole app tree on first run; 5s flakes under load.
     testTimeout: 20000,
     // node:sqlite (DatabaseSync) doesn't play well with vitest's default vm-forks

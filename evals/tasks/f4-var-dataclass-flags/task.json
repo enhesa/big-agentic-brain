@@ -1,0 +1,12 @@
+{
+  "id": "f4-var-dataclass-flags",
+  "family": "env-coercion",
+  "variant": "variant",
+  "prompt": "The nightly ingestion job has not written anything for days: it logs every table as 'log-only' (dry run), although the job sets INGEST_DRY_RUN=0. The job's env is reproduced in tests/test_settings.py; `bash run_tests.sh` fails. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

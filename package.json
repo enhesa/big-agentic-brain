@@ -28,7 +28,12 @@
     "check": "pnpm run docs:config:check && pnpm run typecheck && pnpm run coverage && pnpm run test:e2e && pnpm run check:vendor",
     "check:vendor": "bash scripts/check-vendor-names.sh",
     "docs:config": "node scripts/docs-config.mjs",
-    "docs:config:check": "node scripts/docs-config.mjs --check"
+    "docs:config:check": "node scripts/docs-config.mjs --check",
+    "eval": "node evals/run.mjs",
+    "eval:smoke": "node evals/run.mjs --mode smoke",
+    "eval:full": "node evals/run.mjs --mode full",
+    "eval:validate": "node evals/run.mjs --validate",
+    "eval:retrieval": "node evals/retrieval.mjs"
   },
   "dependencies": {
     "next": "16.4.2",

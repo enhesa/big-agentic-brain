@@ -1,0 +1,74 @@
+{
+  "_provenance": "Recorded by a claude-sonnet-5-5 'colleague' agent with bab_learn after solving the original tasks (BAB edeb801, 2026-10-19). Verbatim, unedited.",
+  "learnings": [
+    {
+      "family": "csv-bom",
+      "task": "f1-orig-csv-import",
+      "title": "CSV \"missing required column\" on first header: Excel UTF-8 BOM; read with utf-8-sig",
+      "body": "Symptom: a CSV importer reports a missing required column (e.g. 'order_id') for the first header only, though the column visibly exists in the file. Cause: files saved from Excel start with a UTF-8 BOM (bytes EF BB BF). Opening with encoding=\"utf-8\" leaves \\ufeff glued to the first header, so the dict key is '\\ufefforder_id'. str.strip() does not remove it. Diagnose with `od -c file | head` (xxd may not be installed). Fix: open with encoding=\"utf-8-sig\", which strips the BOM and also accepts BOM-less files. In the case I hit, the vendored tinycsv helper (read_rows) exposes an `encoding` parameter, so the caller passed utf-8-sig and the vendored code stayed untouched. The same file used ';' as delimiter and a decimal comma, and csv.Sniffer handled the delimiter fine; the BOM was the only problem.",
+      "tags": [
+        "engineering",
+        "csv",
+        "encoding",
+        "excel"
+      ]
+    },
+    {
+      "family": "hash-randomization",
+      "task": "f2-orig-flaky-digest",
+      "title": "Flaky tie-order in Python: Counter.most_common ties follow set iteration order (hash-randomized)",
+      "body": "Symptom: a test passes ~50% of runs and passes on re-run. Cause seen: a \"top N\" helper built a Counter from sets of strings (set comprehension to dedupe tags per event) and returned Counter.most_common(n). most_common breaks ties by insertion order, and insertion order came from iterating a set; string hashing is randomized per process (PYTHONHASHSEED), so tie order changed between runs even though the docstring promised alphabetical ties. Fix: sort explicitly, e.g. sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:n]. Reproduce/verify by running the suite under several seeds (PYTHONHASHSEED=0..N) or just repeating it 8+ times. Rule of thumb: never rely on set/dict-from-set order for output; make tie-breaking explicit.",
+      "tags": [
+        "engineering",
+        "testing",
+        "flaky-tests",
+        "python"
+      ]
+    },
+    {
+      "family": "money-rounding",
+      "task": "f3-orig-invoice-rounding",
+      "title": "Money maths: float round() gives off-by-one-cent; use Decimal with ROUND_HALF_UP",
+      "body": "Symptom: invoices off by 1 cent versus finance's spreadsheet or bank reconciliation. Cause: amounts were computed as float(qty)*float(price) and rounded with Python round(). Values like 2.675 and 1.005 are inexact in binary and round(x, 2) rounds them down, so half-cent amounts come out a cent low. Fix: parse the string inputs with Decimal(str(x)) and quantize to 0.01 with ROUND_HALF_UP. Round each line to cents first, sum the rounded lines, then compute VAT on the subtotal and round it half-up. This reproduced finance's reference cases. Checked in an invoice service whose tests are in tests/test_invoice.py and which runs with `bash run_tests.sh`. Caveat: this assumes finance uses round-half-up and per-line rounding. The reference cases confirmed that here, but check the rule against the spreadsheet in other systems.",
+      "tags": [
+        "engineering",
+        "finance",
+        "rounding",
+        "decimal"
+      ]
+    },
+    {
+      "family": "env-coercion",
+      "task": "f4-orig-env-bool",
+      "title": "Env-var config casting with type(default)(raw) turns \"false\"/\"0\" into True for booleans",
+      "body": "Gotcha: a config loader that casts NOTIFY_<KEY> env overrides with `type(default)(raw)` breaks bool settings. `bool(\"false\")` and `bool(\"0\")` are True (any non-empty string is truthy). Incident shape: prod set NOTIFY_SANDBOX=false but the service still used the sandbox gateway, so customers got no notifications. Fix: parse booleans explicitly (1/true/yes/on -> True; 0/false/no/off/empty -> False; anything else raises ValueError) and only fall back to type(default)(raw) for other types. Check for this whenever a bool flag seems to ignore its env value. Found in a Python notify/config.py; verified by running the repo's unittest suite after the fix.",
+      "tags": [
+        "engineering",
+        "config",
+        "python"
+      ]
+    },
+    {
+      "family": "regex-semantics",
+      "task": "f5-orig-username-newline",
+      "title": "Python regex validation: `^...$` with .match accepts a trailing newline; use fullmatch (and reject non-ASCII before .lower())",
+      "body": "Gotcha found in a username-signup bug (two accounts both displayed as \"alice\"; second used for phishing): the validator used re.compile(r\"^[a-z0-9_.]{3,20}$\") with .match(). In Python, `$` also matches just before a trailing \"\\n\", so \"alice\\n\" passed validation and was stored as a separate key from \"alice\", but rendered identically in the UI.\n\nFix: use pattern.fullmatch(value) (or \\Z instead of $) for any identifier/username/slug validation.\n\nRelated aliasing trap: str.lower() can map non-ASCII characters to ASCII (e.g. U+212A KELVIN SIGN -> \"k\"), so normalizing before validation can let lookalike accounts collide or spoof. Reject non-ASCII input (raw.isascii()) before lowercasing, or validate the raw string. Add a regression test with a trailing newline.",
+      "tags": [
+        "engineering",
+        "security",
+        "validation"
+      ]
+    },
+    {
+      "family": "js-date-only-utc",
+      "task": "f6-orig-due-date",
+      "title": "JS: new Date('YYYY-MM-DD') is UTC midnight; local getters then show the wrong day in US/NZ time zones",
+      "body": "Symptom: reminder e-mails showed the due date a day early or said \"due in 0 days\" a day early for US and NZ customers. Tests passed in UTC and failed under TZ=America/Los_Angeles and TZ=Pacific/Auckland.\n\nRoot cause: `new Date('2026-03-10')` parses a date-only ISO string as UTC midnight. Code then read it with local getters (getDate, getDay, getMonth), or subtracted a local-midnight \"today\". In zones behind UTC the date moves back a day. In zones ahead of UTC the day arithmetic is off.\n\nFix: for plain calendar dates, build a local date from the parts: `const [y,m,d] = s.slice(0,10).split('-').map(Number); new Date(y, m-1, d)`. Compare it with a local-midnight \"today\" and use Math.round((due - today)/DAY) so the 23h/25h days around DST changes don't matter. Add `+ 0` to the result to turn -0 into 0, because assert.strictEqual (Object.is) treats -0 and 0 as different.\n\nCheck: run the suite in at least two zones, e.g. `TZ=America/Los_Angeles node --test` and `TZ=Pacific/Auckland node --test`.",
+      "tags": [
+        "engineering",
+        "timezone",
+        "javascript"
+      ]
+    }
+  ]
+}

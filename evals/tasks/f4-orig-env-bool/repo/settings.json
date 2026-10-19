@@ -1,0 +1,7 @@
+{
+  "sandbox": true,
+  "debug": false,
+  "max_retries": 3,
+  "gateway_url": "https://sandbox.gw.example.com",
+  "batch_size": 50
+}

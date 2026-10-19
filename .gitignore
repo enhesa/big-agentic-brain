@@ -40,3 +40,7 @@ coverage/
 .dev/
 .gitleaks-report.json
 *.log
+
+# --- Agent evals output (pnpm eval) ---
+evals/out/
+evals/.validate-*/
