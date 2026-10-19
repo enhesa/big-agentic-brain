@@ -11,6 +11,7 @@ import { GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import {
   IDENTIFY_LOOP_THRESHOLD,
   MONTH_DAYS,
+  WINDOW_DAYS,
   QUIET_DAYS,
   NUDGE_FOLLOW_MINUTES,
   STANDING_SAMPLE_MAX,
@@ -49,6 +50,9 @@ function pct(part: number, whole: number): string | null {
   return whole > 0 ? `${Math.round((part / whole) * 100)}%` : null;
 }
 
+/** More weeks than this make the Authors-per-team grid compact. */
+const HEAT_DENSE_WEEKS = 13;
+
 const KIND_LABELS: Record<string, string> = {
   learning: "Learnings",
   practice: "Practices",
@@ -66,20 +70,11 @@ function teamLabel(tag: string): string {
   return tag === "hr" || tag === "it" ? tag.toUpperCase() : tag.charAt(0).toUpperCase() + tag.slice(1);
 }
 
-function Delta({ now, before }: { now: number; before: number }) {
-  const d = now - before;
-  const title = `This week so far: ${formatCount(now)}. Last week by this time: ${formatCount(before)}.`;
-  if (d === 0) {
-    return (
-      <span className={`${styles.delta} ${styles.deltaFlat}`} title={title}>
-        Same as last week
-      </span>
-    );
-  }
+/** How much a total grew this week. A total never goes down, so there is no down state. */
+function Grew({ n, what, title }: { n: number; what: "this week" | "new this week"; title: string }) {
   return (
-    <span className={`${styles.delta} ${d > 0 ? styles.deltaUp : styles.deltaDown}`} title={title}>
-      <span aria-hidden="true">{d > 0 ? "▲" : "▼"}</span> {`${d > 0 ? "+" : "−"}${formatCount(Math.abs(d))}`}{" "}
-      <span className={styles.deltaWhat}>vs last week</span>
+    <span className={`${styles.delta} ${n > 0 ? styles.deltaUp : styles.deltaFlat}`} title={title}>
+      {n > 0 ? `+${formatCount(n)} ${what}` : "none yet this week"}
     </span>
   );
 }
@@ -87,14 +82,17 @@ function Delta({ now, before }: { now: number; before: number }) {
 function HeroTile({
   label,
   value,
-  before,
+  grew,
+  what = "this week",
   spark,
   testId,
   title,
 }: {
   label: string;
   value: number;
-  before: number;
+  /** How much the total grew this week. */
+  grew: number;
+  what?: "this week" | "new this week";
   spark: { values: number[]; label: string };
   testId: string;
   title: string;
@@ -108,7 +106,7 @@ function HeroTile({
         </span>
         <Sparkline values={spark.values} label={spark.label} />
       </div>
-      <Delta now={value} before={before} />
+      <Grew n={grew} what={what} title={`${title} Grew by ${formatCount(grew)} this week so far.`} />
     </div>
   );
 }
@@ -214,7 +212,7 @@ export default async function UsagePage({
   const { activity, capture, identify, quality, growth, contents, upkeep } = report;
   const n = report.weeks.length;
   const current = activity[n - 1];
-  const before = report.lastWeekToDate;
+  const totals = report.totals;
 
   // Weeks before the first audit row, or before the first recorded activity, have no data at
   // all: they collapse into one note instead of a run of zeros. A page view alone (people) does
@@ -236,10 +234,13 @@ export default async function UsagePage({
   const shown = activity.filter((w) => w.week >= firstWeek);
   const hiddenWeeks = n - shown.length;
   const weekOf = (week: string) => `Week of ${dayMonth(week)}`;
-  const sparkOf = (key: "saves" | "searches" | "reactions" | "people", what: string) => ({
-    values: shown.map((w) => w[key]),
-    label: `${what} per week: ${shown.map((w) => `${dayMonth(w.week)} ${w[key]}`).join(", ")}`,
-  });
+  // Tile sparklines are running totals. People count once, in the week they first appeared, so the
+  // line ends on the distinct total. Weeks left out above are folded into the starting value.
+  const sparkOf = (key: "saves" | "searches" | "reactions" | "newPeople", what: string) => {
+    let run = activity.filter((w) => w.week < firstWeek).reduce((s, w) => s + w[key], 0);
+    const values = shown.map((w) => (run += w[key]));
+    return { values, label: `${what}, running total: ${shown.map((w, i) => `${dayMonth(w.week)} ${values[i]}`).join(", ")}` };
+  };
 
   // Health: Stop nudges and refusals only exist from USAGE_COLLECTING_SINCE.
   const collectWeek = weekStart(new Date(`${USAGE_COLLECTING_SINCE}T00:00:00Z`));
@@ -315,10 +316,14 @@ export default async function UsagePage({
     { name: "No team tag", tag: "", counts: teams.map((w) => w.noTeamTag) },
   ];
   const heatMax = Math.max(0, ...heatRows.flatMap((r) => r.counts));
+  // Past about a quarter of weeks the cells are too narrow for numbers and dates: they become
+  // plain colour blocks (the number stays in the tooltip) and the header names months, not weeks.
+  const heatDense = teams.length > HEAT_DENSE_WEEKS;
+  const monthStarts = teams.flatMap((w, i) => (Number(w.week.slice(8)) <= 7 ? [i] : []));
 
   const helpfulMax = Math.max(1, ...report.topHelpful.map((h) => h.total));
 
-  // Clean-up card (swarm garbage collection): what the votes cleaned, per week, last 8 weeks.
+  // Clean-up card (swarm garbage collection): what the votes cleaned, per week, last 12 months.
   const cleanup = report.cleanup;
   const cleanupWeeks = cleanup.map((w) => weekOf(w.week));
   const cleanupRows: MiniBarRow[] = [
@@ -341,7 +346,7 @@ export default async function UsagePage({
           <div>
             <span className="kicker">{maintainer ? <Link href="/admin">Admin</Link> : "BAB"}</span>
             <h1 className={styles.h1}>Usage</h1>
-            <p className={styles.subline}>How {branding().orgName} uses BAB, week by week.</p>
+            <p className={styles.subline}>How {branding().orgName} uses BAB, over the last 12 months.</p>
           </div>
           <div className={styles.headerMeta}>
             <time className={styles.updated} dateTime={report.generatedAt} title="Weeks run Monday to Sunday, UTC. Numbers refresh every 5 minutes.">
@@ -355,39 +360,40 @@ export default async function UsagePage({
           </div>
         </header>
 
-        {/* 1. This week */}
-        <section aria-label="This week" className={styles.heroes} data-testid="usage-tiles">
+        {/* 1. Totals over the last 12 months */}
+        <section aria-label="Last 12 months" className={styles.heroes} data-testid="usage-tiles">
           <HeroTile
             label="Memories saved"
-            value={current.saves}
-            before={before.saves}
+            value={totals.saves}
+            grew={current.saves}
             spark={sparkOf("saves", "Memories saved")}
             testId="tile-saved"
-            title="New memories saved this week, Monday to now (UTC)."
+            title="New memories saved over the last 12 months, added up."
           />
           <HeroTile
             label="Searches"
-            value={current.searches}
-            before={before.searches}
+            value={totals.searches}
+            grew={current.searches}
             spark={sparkOf("searches", "Searches")}
             testId="tile-searches"
-            title="Searches agents ran in BAB this week."
+            title="Searches agents ran in BAB over the last 12 months, added up."
           />
           <HeroTile
             label="Found it helpful"
-            value={current.reactions}
-            before={before.reactions}
+            value={totals.reactions}
+            grew={current.reactions}
             spark={sparkOf("reactions", "Helpful reactions")}
             testId="tile-helpful"
-            title="Helpful, kudos and confirm reactions on memories this week."
+            title="Helpful, kudos and confirm reactions on memories over the last 12 months, added up."
           />
           <HeroTile
             label="People using BAB"
-            value={current.people}
-            before={before.people}
-            spark={sparkOf("people", "People using BAB")}
+            value={totals.people}
+            grew={current.newPeople}
+            what="new this week"
+            spark={sparkOf("newPeople", "People using BAB")}
             testId="tile-people"
-            title="Everyone whose agent or browser used BAB this week."
+            title="Different people whose agent or browser used BAB in the last 12 months, each counted once."
           />
         </section>
 
@@ -510,9 +516,9 @@ export default async function UsagePage({
 
         {/* 5. Most helpful */}
         <div className={styles.grid}>
-          <Card title="Most helpful this month" span="s7" sub={`Last ${MONTH_DAYS} days`}>
+          <Card title="Most helpful" span="s7" sub="Last 12 months">
             {report.topHelpful.length === 0 ? (
-              <Empty>No helpful reactions in the last {MONTH_DAYS} days.</Empty>
+              <Empty>No helpful reactions in the last 12 months.</Empty>
             ) : (
               <ol className={styles.top} data-testid="top-helpful">
                 {report.topHelpful.map((h, i) => (
@@ -575,14 +581,22 @@ export default async function UsagePage({
               {heatMax === 0 ? (
                 <Empty>No memories saved in these weeks.</Empty>
               ) : (
-                <table className={styles.heat} aria-label="Distinct authors per team tag per week">
+                <table className={`${styles.heat} ${heatDense ? styles.heatDense : ""}`} aria-label="Distinct authors per team tag per week">
                   <thead>
                     <tr>
                       <th className={styles.heatTeam}>
                         <span className={styles.srOnly}>Team</span>
                       </th>
-                      {teams.map((w) => {
+                      {teams.map((w, i) => {
                         const [day, month] = dayMonth(w.week).split(" ");
+                        if (heatDense) {
+                          const k = monthStarts.indexOf(i);
+                          return (
+                            <th key={w.week} scope="col" title={weekOf(w.week)} className={k % 2 === 1 ? styles.heatAlt : undefined}>
+                              {k >= 0 ? month : <span className={styles.srOnly}>{dayMonth(w.week)}</span>}
+                            </th>
+                          );
+                        }
                         return (
                           <th key={w.week} scope="col" title={weekOf(w.week)}>
                             {day}
@@ -614,7 +628,7 @@ export default async function UsagePage({
                               }
                               title={`${r.name}, ${weekOf(teams[i].week).toLowerCase()}: ${plural(c, "author")}`}
                             >
-                              {c === 0 ? "·" : c}
+                              {heatDense ? null : c === 0 ? "·" : c}
                             </td>
                           );
                         })}
@@ -630,7 +644,7 @@ export default async function UsagePage({
         {/* 7. Upkeep */}
         <section className={styles.group} aria-labelledby="upkeep-h">
           <h2 id="upkeep-h" className={styles.h2}>
-            Upkeep <span className={styles.h2Note}>last {MONTH_DAYS} days</span>
+            Upkeep <span className={styles.h2Note}>last 12 months</span>
           </h2>
           <div className={styles.minis}>
             <MiniTile
@@ -658,11 +672,11 @@ export default async function UsagePage({
             />
           </div>
           <div className={styles.grid}>
-            <Card title="Clean-up" span="s7" sub="Last 8 weeks" id="cleanup">
+            <Card title="Clean-up" span="s7" sub="Last 12 months" id="cleanup">
               {cleanupTotal === 0 ? (
                 <Empty>No clean-up in these weeks.</Empty>
               ) : (
-                <MiniBars label="Memory clean-up per week, last 8 weeks" rows={cleanupRows} weeks={cleanupWeeks} />
+                <MiniBars label="Memory clean-up per week, last 12 months" rows={cleanupRows} weeks={cleanupWeeks} />
               )}
             </Card>
           </div>

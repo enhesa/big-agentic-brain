@@ -1180,27 +1180,38 @@ every time.
 - `/usage` (open to everyone, like `/memory`: an anonymous viewer is treated as a non-maintainer; linked
   from the top navigation after News and from `/admin`; `/admin/usage` redirects to it with a 307) is
   charts and numbers first, in plain words. Tool names appear only in the Health card. Weeks are ISO
-  weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Top to bottom:
-  1. Four tiles for this week so far: memories saved (audit `create` on a learning), searches
-     (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and
-     `confirm` reactions) and people using BAB (distinct audit actors, not `anonymous` or `system`).
-     Each has its change against last week up to the same moment, and an 8-week sparkline.
+  weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
+  last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
+  days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line and
+  "What's in BAB" are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
+  (`MONTH_DAYS`). Top to bottom:
+  1. Four tiles with the total over the last 12 months: memories saved (audit `create` on a
+     learning), searches (`bab_search` calls and GETs on `/api/learnings`), "found it helpful"
+     (`helpful`, `kudos` and `confirm` reactions), each the sum of its weekly counts, and people using
+     BAB: the distinct audit actors (not `anonymous` or `system`) in the window, each counted once,
+     not a sum of weekly people. Under the number, how much it grew this week so far: "+12 this week"
+     (people: "+2 new this week", the people whose first activity in the window is this week), or "none
+     yet this week". Always calm: a total never goes down, so there is no down arrow or red. The
+     sparkline is the running total per week; for people the running count of distinct people.
   2. Memories in BAB: live memories (status active) by the week they were saved, added up
      from the week of the oldest one (at most 156 weeks), with "+N this month" (saved in the last 30
      days). There is no archive date, so the line is "still live, by week saved".
   3. Activity per week: saves, searches and helpful reactions as grouped bars, with a numbers table.
+     At 52 weeks the bars thin out (no gap between them) and only about eight week labels are drawn
+     (four on a phone); every week keeps its bars and its tooltip.
   4. What's in BAB: live memories by kind and by team tag (a memory with two team tags counts for
      both; unreadable tags count as no team tag), and the standing mix (strong, fair, weak, from
      `standingsFor`, over the newest 5,000 live memories).
-  5. Most helpful this month: the 5 memories with the most helpful, kudos and confirm reactions in the
-     last 30 days (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
+  5. Most helpful: the 5 memories with the most helpful, kudos and confirm reactions in the
+     last 12 months (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
   6. Who writes: memories saved since 6 Oct by the model their author named (`learnings.model`;
      "not stated" for none; past six models fold into "other"), and distinct authors per team tag per
-     week as a heat grid.
-  7. Upkeep: live memories no agent has read for 9 months or more (quiet), those the sweep archived unread in the last 30 days, and keeps, restores and retires in the last 30.
+     week as a heat grid (past 13 weeks compact colour blocks with month names, the count in each
+     tooltip).
+  7. Upkeep: live memories no agent has read for 9 months or more (quiet), those the sweep archived unread in the last 12 months, and keeps, restores and retires in the last 12 months.
      Flags waiting links to the Health card. Below it a compact Clean-up card (swarm garbage collection,
-     see "Garbage collection"): the last 8 weeks as six rows of small bars (`MiniBars` in
-     `app/usage/charts.tsx`), each with its total: archived unread (`auto-archive`, reason `inactive`),
+     see "Garbage collection"): the last 12 months as six rows of small bars (`MiniBars` in
+     `app/usage/charts.tsx`, a wider track at 52 weeks), each with its total: archived unread (`auto-archive`, reason `inactive`),
      archived after not-helpful votes (`downvote_archived`), archived by flags (`auto_archive`), retired
      (`retire`), restored or kept (`restored`, `keep`) and old memories verified (`confirm` with details
      `verified`). `cleanupByWeek` is one query on `audit_log(action, at)`; weeks before an action was

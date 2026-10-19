@@ -464,7 +464,7 @@ function runMigrationV37(database: DatabaseSync) {
 }
 
 function runMigrationV38(database: DatabaseSync) {
-  // Admin usage page (/admin/usage, lib/usage.ts): weekly numbers over the last 8 weeks must not
+  // Admin usage page (/admin/usage, lib/usage.ts): weekly numbers over the last 52 weeks must not
   // scan the whole audit log at 50k rows. (path, at) serves the bab_learn call counts and the
   // nudge-to-learn lookup; (action, at) serves the identify, duplicate-rate and stop_nudge counts.
   database.exec(`

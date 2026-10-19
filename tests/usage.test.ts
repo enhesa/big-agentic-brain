@@ -17,7 +17,7 @@ const MAINT = "mia.maint@example.com";
 const A = "ann.a@example.com";
 const B = "bob.b@example.com";
 const LEARN = "/mcp#tools/call:bab_learn";
-// A Tuesday: the current ISO week starts Monday 2026-10-05, the first of the 8 on 2026-08-17.
+// A Tuesday: the current ISO week starts Monday 2026-10-05, the first of the 52 on 2025-10-13.
 const NOW = new Date("2026-10-06T12:00:00Z");
 
 beforeEach(() => {
@@ -56,26 +56,27 @@ const learnCall = (actor: string, at: string, cx?: string) => row(actor, "POST",
 
 describe("week helpers", () => {
   it("finds the Monday and the ISO label, across the year end", async () => {
-    const { weekStart, isoWeekLabel, lastWeeks } = await import("../lib/usage");
+    const { weekStart, isoWeekLabel, lastWeeks, USAGE_WEEKS } = await import("../lib/usage");
     expect(weekStart(new Date("2026-10-04T23:59:00Z"))).toBe("2026-09-28"); // Sunday
     expect(weekStart(new Date("2026-10-05T00:00:00Z"))).toBe("2026-10-05"); // Monday
     expect(isoWeekLabel("2026-10-05")).toBe("2026-W41");
     expect(isoWeekLabel("2026-12-28")).toBe("2026-W53");
     expect(isoWeekLabel("2027-01-04")).toBe("2027-W01");
     const weeks = lastWeeks(NOW);
-    expect(weeks).toHaveLength(8);
-    expect(weeks[0]).toBe("2026-08-17");
-    expect(weeks[7]).toBe("2026-10-05");
+    expect(USAGE_WEEKS).toBe(52); // the last 12 months
+    expect(weeks).toHaveLength(52);
+    expect(weeks[0]).toBe("2025-10-13");
+    expect(weeks[51]).toBe("2026-10-05");
   });
 });
 
 describe("capture", () => {
-  it("counts bab_learn calls, distinct sessions and people per week, and ignores rows older than 8 weeks", async () => {
+  it("counts bab_learn calls, distinct sessions and people per week, and ignores rows older than 12 months", async () => {
     await learnCall(A, "2026-10-05 08:00:00", "c:1");
     await learnCall(A, "2026-10-06 08:00:00", "c:1");
     await learnCall(B, "2026-10-07 08:00:00", "d:dev");
     await learnCall(B, "2026-09-28 08:00:00"); // previous week, an old row without cx
-    await learnCall(B, "2026-08-10 08:00:00", "c:old"); // before the window
+    await learnCall(B, "2025-10-12 08:00:00", "c:old"); // before the window
     await row(A, "POST", "2026-10-06 08:00:00", { path: "/mcp#tools/call:bab_search" });
     const { usageReport } = await import("../lib/usage");
     const weeks = usageReport(NOW).capture;
@@ -280,7 +281,7 @@ describe("performance at 50k audit rows", () => {
     );
     expect(top).toContain("idx_audit_action_at");
     expect(top).not.toMatch(/SCAN (TABLE )?audit_log(?! USING)/);
-    // The upkeep tiles: memories the sweep archived unread, and the keeps, restores and retires, over the last 30 days.
+    // The upkeep tiles: memories the sweep archived unread, and the keeps, restores and retires, over the last 12 months.
     expect(
       plan(
         "SELECT COUNT(*) FROM audit_log WHERE action = 'auto-archive' AND at >= ? AND +entity = 'learning' AND json_extract(details, '$.reason') = 'inactive'",
@@ -361,9 +362,9 @@ describe("activity per week and the hero tiles", () => {
   it("is all zeros, with nothing to divide by zero, on an empty database", async () => {
     const { usageReport } = await import("../lib/usage");
     const r = usageReport(NOW);
-    expect(r.activity).toHaveLength(8);
-    expect(r.activity.every((w) => w.saves + w.searches + w.reactions + w.people === 0)).toBe(true);
-    expect(r.lastWeekToDate).toEqual({ saves: 0, searches: 0, reactions: 0, people: 0 });
+    expect(r.activity).toHaveLength(52);
+    expect(r.activity.every((w) => w.saves + w.searches + w.reactions + w.people + w.newPeople === 0)).toBe(true);
+    expect(r.totals).toEqual({ saves: 0, searches: 0, reactions: 0, people: 0 });
     expect(r.growth).toEqual({ points: [], live: 0, lastMonth: 0 });
     expect(r.contents.byKind.map((k) => k.n)).toEqual([0, 0, 0, 0]);
     expect(r.contents.standing).toEqual({ strong: 0, fair: 0, weak: 0 });
@@ -391,10 +392,12 @@ describe("activity per week and the hero tiles", () => {
     const r = usageReport(NOW);
     expect(r.activity.at(-1)).toMatchObject({ week: "2026-10-05", saves: 2, searches: 5, reactions: 3, people: 2 });
     expect(r.activity.slice(0, -1).every((w) => w.saves + w.searches + w.reactions + w.people === 0)).toBe(true);
+    // One week in the window: the totals are that week.
+    expect(r.totals).toEqual({ saves: 2, searches: 5, reactions: 3, people: 2 });
   });
 
-  it("spreads a typical 8 weeks and compares with last week up to the same moment", async () => {
-    // Saves in five of the eight weeks, oldest first.
+  it("spreads a typical year and totals it: sums for the counts, distinct people for people", async () => {
+    // Saves in five of the last eight weeks, oldest first.
     const plan: Array<[string, number]> = [
       ["2026-08-18", 1],
       ["2026-09-01", 2],
@@ -403,18 +406,41 @@ describe("activity per week and the hero tiles", () => {
       ["2026-10-05", 5],
     ];
     for (const [day, n] of plan) for (let i = 0; i < n; i++) await row(A, "create", `${day} 0${i}:00:00`, { entity: "learning" });
-    await row(A, "create", "2026-08-10 08:00:00", { entity: "learning" }); // before the window
-    // Last week: Monday counts, Tuesday 11:59 counts, Tuesday 12:30 is after "the same moment".
+    await row(A, "create", "2025-10-12 08:00:00", { entity: "learning" }); // the Sunday before the window
+    await row(A, "create", "2025-10-13 00:00:00", { entity: "learning" }); // the first second of the window
     await row(B, "POST", "2026-09-28 08:00:00", { path: "/mcp#tools/call:bab_search" });
+    await row(B, "POST", "2026-10-06 08:00:00", { path: "/mcp#tools/call:bab_search" });
     await row(B, "helpful", "2026-09-29 11:59:00", { entity: "learning" });
     await row(MAINT, "GET", "2026-09-29 12:30:00", { path: "/usage" });
     const { usageReport } = await import("../lib/usage");
     const r = usageReport(NOW);
-    expect(r.activity.map((w) => w.saves)).toEqual([1, 0, 2, 0, 4, 0, 3, 5]);
-    expect(r.activity.map((w) => w.label.slice(5))).toEqual(["W34", "W35", "W36", "W37", "W38", "W39", "W40", "W41"]);
-    // Last Tuesday's saves were at 00:00-02:00, all before 12:00.
-    expect(r.lastWeekToDate).toEqual({ saves: 3, searches: 1, reactions: 1, people: 2 });
+    expect(r.activity[0]).toMatchObject({ week: "2025-10-13", saves: 1 });
+    expect(r.activity.slice(-8).map((w) => w.saves)).toEqual([1, 0, 2, 0, 4, 0, 3, 5]);
+    expect(r.activity.slice(-8).map((w) => w.label.slice(5))).toEqual(["W34", "W35", "W36", "W37", "W38", "W39", "W40", "W41"]);
     expect(r.activity.at(-2)).toMatchObject({ saves: 3, searches: 1, reactions: 1, people: 3 });
+    // The tiles: 1 + 1 + 2 + 4 + 3 + 5 saves, 2 searches, 1 reaction.
+    expect(r.totals).toMatchObject({ saves: 16, searches: 2, reactions: 1 });
+    // Three different people in the year (A, B, MAINT), though the weekly people counts add up to more.
+    expect(r.totals.people).toBe(3);
+    expect(r.activity.reduce((n, w) => n + w.people, 0)).toBeGreaterThan(3);
+    // Each person is new in exactly one week: A in the first, B and MAINT on 2026-09-28.
+    expect(r.activity[0].newPeople).toBe(1);
+    expect(r.activity.at(-2)!.newPeople).toBe(2);
+    expect(r.activity.at(-1)!.newPeople).toBe(0);
+    expect(r.activity.reduce((n, w) => n + w.newPeople, 0)).toBe(r.totals.people);
+  });
+
+  it("totals the same definitions as the weekly counts", async () => {
+    await row(A, "create", "2026-10-06 08:00:00", { entity: "learning" });
+    await row(A, "create", "2026-10-06 08:00:00", { entity: "feedback" }); // not a memory
+    await row(B, "GET", "2026-10-06 09:00:00", { path: "/api/learnings" });
+    await row(B, "POST", "2026-10-06 09:00:00", { path: "/api/learnings" }); // a save, not a search
+    await row("anonymous", "GET", "2026-10-06 10:00:00", { path: "/memory" });
+    await row("system", "device-expire", "2026-10-06 10:00:00", { entity: "device" });
+    const { usageReport, activityTotals } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.totals).toEqual({ saves: 1, searches: 1, reactions: 0, people: 2 });
+    expect(activityTotals(r.activity)).toEqual(r.totals);
   });
 });
 
@@ -498,8 +524,8 @@ describe("what is in BAB", () => {
 
 /* ------------------------------------------------------------- most helpful */
 
-describe("most helpful this month", () => {
-  it("ranks memories by helpful, kudos and confirm in the last 30 days, without deleted ones", async () => {
+describe("most helpful in the last 12 months", () => {
+  it("ranks memories by helpful, kudos and confirm in the last 12 months, without deleted ones", async () => {
     await people(A);
     const top = await memory(A, { title: "Kafka retries need idempotent consumers" });
     const second = await memory(A, { title: "Board deck cut-off is Thursday" });
@@ -509,12 +535,14 @@ describe("most helpful this month", () => {
     for (const action of ["helpful", "helpful", "kudos", "confirm"]) await row(B, action, at("2026-10-01"), { entity: "learning", entityId: top });
     await row(B, "not_helpful", at("2026-10-01"), { entity: "learning", entityId: top });
     for (const action of ["helpful", "confirm"]) await row(B, action, at("2026-09-20"), { entity: "learning", entityId: second });
-    for (let i = 0; i < 6; i++) await row(B, "helpful", at("2026-08-20"), { entity: "learning", entityId: old }); // over 30 days ago
+    // NOW is 2026-10-06 12:00 and the window is WINDOW_DAYS (364) days: it starts 2025-10-07 12:00.
+    await row(B, "helpful", "2025-10-07 12:30:00", { entity: "learning", entityId: second }); // just inside
+    for (let i = 0; i < 6; i++) await row(B, "helpful", "2025-10-07 11:30:00", { entity: "learning", entityId: old }); // just outside
     for (let i = 0; i < 6; i++) await row(B, "helpful", at("2026-10-02"), { entity: "learning", entityId: gone });
     const { topHelpful } = await import("../lib/usage");
     expect(topHelpful(NOW)).toEqual([
       { id: top, title: "Kafka retries need idempotent consumers", kind: "learning", helpful: 2, kudos: 1, confirm: 1, total: 4 },
-      { id: second, title: "Board deck cut-off is Thursday", kind: "learning", helpful: 1, kudos: 0, confirm: 1, total: 2 },
+      { id: second, title: "Board deck cut-off is Thursday", kind: "learning", helpful: 2, kudos: 0, confirm: 1, total: 3 },
     ]);
   });
 
@@ -563,19 +591,21 @@ describe("models", () => {
 // The quiet and archived-unread numbers are checked with their sweep in tests/agent-reads.test.ts;
 // these pin the windows and the day reads began, and the keeps, restores and retires.
 describe("upkeep", () => {
-  it("counts the keeps, restores and retires of the last 30 days", async () => {
+  it("counts the keeps, restores and retires of the last 12 months", async () => {
     await people(A);
     await memory(A); // saved just now: not quiet
     await row(A, "keep", "2026-10-03 10:00:00", { entity: "learning" });
     await row(A, "keep", "2026-10-01 10:00:00", { entity: "learning" });
     await row(A, "keep", "2026-09-30 10:00:00", { entity: "learning" });
-    await row(A, "keep", "2026-08-20 10:00:00", { entity: "learning" }); // over 30 days ago
+    await row(A, "keep", "2025-10-07 12:30:00", { entity: "learning" }); // just inside the window (WINDOW_DAYS)
+    await row(A, "keep", "2025-10-07 11:30:00", { entity: "learning" }); // just outside
     await row(A, "restored", "2026-10-02 10:00:00", { entity: "learning" });
     await row(A, "retire", "2026-09-20 10:00:00", { entity: "learning" });
     await row(A, "retire", "2026-09-10 10:00:00", { entity: "learning" });
-    await row(A, "retire", "2026-08-20 10:00:00", { entity: "learning" }); // over 30 days ago
+    await row(A, "retire", "2026-08-20 10:00:00", { entity: "learning" }); // 6 weeks ago: inside now
+    await row(A, "retire", "2025-10-07 11:30:00", { entity: "learning" }); // just outside
     const { upkeep } = await import("../lib/usage");
-    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 3, restored: 1, retired: 2 });
+    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 4, restored: 1, retired: 3 });
   });
 
   it("counts a live learning or practice as quiet 270 days after its last agent read, else its save day, never from before reads began", async () => {
@@ -602,15 +632,17 @@ describe("upkeep", () => {
     expect(quietAt("2028-03-01T12:00:00Z")).toBe(3); // the read memory, 274 days after its last read
   });
 
-  it("counts the memories the sweep archived unread in the last 30 days, not those archived for their date, by flags or long ago", async () => {
+  it("counts the memories the sweep archived unread in the last 12 months, not those archived for their date, by flags or long ago", async () => {
     const gone = (at: string, reason: string) => row("system", "auto-archive", at, { entity: "learning", details: { reason } });
     await gone("2026-10-01 10:00:00", "inactive");
     await gone("2026-09-10 10:00:00", "inactive");
-    await gone("2026-08-01 10:00:00", "inactive"); // over 30 days ago
+    await gone("2026-08-01 10:00:00", "inactive"); // 9 weeks ago: inside now
+    await gone("2025-10-07 12:30:00", "inactive"); // just inside the window (WINDOW_DAYS)
+    await gone("2025-10-07 11:30:00", "inactive"); // just outside
     await gone("2026-10-02 10:00:00", "valid-until"); // its author's own date
     await row(A, "auto_archive", "2026-10-02 10:00:00", { entity: "learning" }); // two flags, a different action
     const { upkeep } = await import("../lib/usage");
-    expect(upkeep(NOW).archivedUnread).toBe(2);
+    expect(upkeep(NOW).archivedUnread).toBe(4);
   });
 });
 
@@ -758,14 +790,15 @@ describe("/usage page", () => {
     expect(html).toContain("No saves, searches or reactions yet.");
     expect(html).toContain("No memories yet.");
     expect(html).toContain("No memories saved in these weeks.");
-    expect(html).toContain("No helpful reactions in the last 30 days.");
+    expect(html).toContain("No helpful reactions in the last 12 months.");
     // The page view itself is the only audit row, so every earlier week collapses into one note.
     expect(html).toContain(`No data before ${cur.short}`);
     expect(html).not.toMatch(/NaN|Infinity/);
     expect(html).not.toContain('viewBox="0 0 560'); // no chart of zeros
     expect(html).toMatch(/data-testid="tile-flags"[^>]*>0</);
     expect(html).toMatch(/data-testid="tile-saved"[^>]*>0</);
-    expect(html).toContain("Same as last week");
+    expect(html).toContain("none yet this week");
+    expect(html).not.toContain("vs last week");
     expect(html).not.toContain("this month</span>"); // no "+0 this month
     expect(html).toMatch(/Updated \d{1,2} [A-Z][a-z]{2,3}, \d{2}:\d{2} UTC/);
   });
@@ -807,7 +840,7 @@ describe("/usage page", () => {
     }
   });
 
-  it("fills the page: tiles with the change vs last week, charts, top memories, upkeep and health", async () => {
+  it("fills the page: tiles with totals and this week's growth, charts, top memories, upkeep and health", async () => {
     const cur = await weekOf(0);
     const prev = await weekOf(-1);
     await people(A, B);
@@ -832,11 +865,12 @@ describe("/usage page", () => {
     const s = create({ authorId: A, title: "Standard tile zq8", body: "Body zq8x.", kind: "standard", confirmNotDuplicate: true });
     flag(s.id, B, "mcp", "Moved to src/y.ts, 2026-10-01");
     const html = await render(MAINT);
-    // 3 seeded saves, plus the create rows of the older memory and the standard (both written now).
-    expect(html).toMatch(/data-testid="tile-saved"[^>]*>5</);
+    // 1 save last week and 3 seeded this week, plus the create rows of the older memory and the standard (both written now).
+    expect(html).toMatch(/data-testid="tile-saved"[^>]*>6</);
     expect(html).toMatch(/data-testid="tile-searches"[^>]*>2</);
     expect(html).toMatch(/data-testid="tile-helpful"[^>]*>2</);
-    expect(html).toContain("▲</span> +4");
+    expect(html).toContain("+5 this week"); // 5 of the 6 saves are this week
+    expect(html).not.toMatch(/▼|vs last week/);
     expect(html).toMatch(/data-testid="tile-conversion"[^>]*>50%</);
     expect(html).toContain("1 of 2 nudges");
     expect(html).toMatch(/data-testid="tile-identify"[^>]*>2</);
@@ -852,6 +886,51 @@ describe("/usage page", () => {
     // Plain words: tool names only in the Health card.
     const beforeHealth = html.slice(0, html.indexOf('id="health"'));
     expect(beforeHealth).not.toMatch(/bab_[a-z]+/);
+  });
+
+  it("shows the tiles as 12-month totals with this week's growth, and the people tile as distinct people", async () => {
+    await people(A, B);
+    const cur = await weekOf(0);
+    const prev = await weekOf(-1);
+    const old = await weekOf(-30);
+    // Saves: 2 thirty weeks ago, 1 last week, 1 this week. Searches: only this week.
+    for (const sec of [1, 2]) await row(A, "create", old.at(sec), { entity: "learning" });
+    await row(A, "create", prev.at(1), { entity: "learning" });
+    await row(A, "create", cur.at(1), { entity: "learning" });
+    await row(A, "POST", cur.at(2), { path: "/mcp#tools/call:bab_search" });
+    // A is active in two weeks, B only now, and the viewer's own page view counts too: 3 people, new this week 2 (B and the viewer).
+    await row(A, "GET", prev.at(5), { path: "/memory" });
+    await row(B, "GET", cur.at(5), { path: "/memory" });
+    const html = await render(B);
+    expect(html).toMatch(/data-testid="tile-saved"[^>]*>4</);
+    expect(html).toMatch(/data-testid="tile-searches"[^>]*>1</);
+    expect(html).toMatch(/data-testid="tile-helpful"[^>]*>0</);
+    expect(html).toMatch(/data-testid="tile-people"[^>]*>3</);
+    const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
+    expect(tiles).toContain("+1 this week"); // saves and searches both grew by 1
+    expect(tiles).toContain("+2 new this week"); // B and the viewer
+    expect(tiles).toContain("none yet this week"); // no helpful reactions
+    expect(tiles).toContain("over the last 12 months");
+    expect(html).toContain("over the last 12 months.");
+    expect(html).not.toContain("week by week");
+    // The sparklines are running totals: they only go up.
+    for (const m of tiles.matchAll(/running total: ([^"]+)"/g)) {
+      const values = m[1].split(", ").map((p) => Number(p.split(" ").at(-1)));
+      expect(values).toEqual([...values].sort((x, y) => x - y));
+    }
+  });
+
+  it("counts only people not seen before this week as new this week", async () => {
+    await people(A, B);
+    const cur = await weekOf(0);
+    const prev = await weekOf(-1);
+    await row(A, "GET", prev.at(1), { path: "/memory" });
+    await row(B, "GET", prev.at(2), { path: "/memory" });
+    const html = await render(A);
+    const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
+    // A and B were seen last week; only the viewer is new.
+    expect(tiles).toMatch(/data-testid="tile-people"[^>]*>3</);
+    expect(tiles).toContain("+1 new this week");
   });
 
   it("shows a compact Clean-up card: six rows of small weekly bars, with the totals", async () => {
@@ -875,7 +954,7 @@ describe("/usage page", () => {
     await act("confirm", cur.at(10));
     const html = await render(B);
     const card = html.slice(html.indexOf('aria-label="Clean-up"'), html.indexOf('id="users"'));
-    expect(card).toContain("Last 8 weeks");
+    expect(card).toContain("Last 12 months");
     for (const label of ["Archived unread", "Archived, not helpful", "Archived by flags", "Retired", "Restored or kept", "Old memories verified"]) {
       expect(card).toContain(label);
     }
