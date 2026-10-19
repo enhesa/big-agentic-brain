@@ -18,6 +18,13 @@ describe("CHANGELOG", () => {
     }
   });
 
+  it("is no older than the latest release, so a release cannot ship without its entry", async () => {
+    const { readFileSync } = await import("node:fs");
+    const released = readFileSync(path.join(process.cwd(), "CHANGELOG.md"), "utf8").match(/^## \[[^\]]+\]\([^)]*\) \((\d{4}-\d{2}-\d{2})\)/m);
+    expect(released, "CHANGELOG.md has no release heading").not.toBeNull();
+    expect(CHANGELOG[0].date >= released![1], `latest release ${released![1]} is newer than the newest entry in lib/changelog.ts`).toBe(true);
+  });
+
   it("gives every entry a title and short, plain lines", () => {
     for (const entry of CHANGELOG) {
       expect(entry.title.length).toBeGreaterThan(0);
