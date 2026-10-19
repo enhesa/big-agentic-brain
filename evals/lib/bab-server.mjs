@@ -42,7 +42,7 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
     env,
     stdio: ["ignore", out, out],
   });
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 240_000; // generous: a loaded CI runner or shared box can be slow to boot Next
   for (;;) {
     if (child.exitCode !== null) throw new Error(`BAB exited with ${child.exitCode}; see ${logFile}`);
     try {

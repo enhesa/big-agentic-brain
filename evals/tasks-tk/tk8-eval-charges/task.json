@@ -1,0 +1,12 @@
+{
+  "id": "tk8-eval-charges",
+  "family": "tk-paylane",
+  "variant": "variant",
+  "prompt": "Paylane charges for Japanese and Kuwaiti customers are off by orders of magnitude, and since Paylane's API v3 update some charges are rejected with 'amount must be a string'. Fix charge_payload() in payments/paylane.py. The unit tests (`bash run_tests.sh`) pass. Do not change the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

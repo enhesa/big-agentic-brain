@@ -1,20 +1,17 @@
 // results.csv / results.json / summary.md for an eval run.
 import fs from "node:fs";
 import path from "node:path";
+import { CONDITIONS } from "./conditions.mjs";
 import { mean, median, paired, quantile, wilson } from "./stats.mjs";
 
-export const COND_LABEL = {
-  A: "A: no BAB",
-  B: "B: BAB + colleague memory",
-  C: "C: BAB, no relevant memory",
-  H: "H: BAB + hand-written notes",
-};
+export const COND_LABEL = Object.fromEntries(Object.entries(CONDITIONS).map(([k, v]) => [k, v.label]));
 
 export const FIELDS = [
   "run_id", "task", "family", "variant", "condition", "trial", "order_idx", "model", "sandbox", "success", "finished",
   "stop_reason", "wall_s", "turns", "tool_calls", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
   "total_tokens", "cost_usd", "bab_calls_total", "bab_search_calls", "bab_learn_calls", "bab_react_calls", "bab_queried",
-  "memory_hit", "memory_hit_rank", "memory_reacted", "zero_result_searches", "suspicious_cmds", "error", "started_at",
+  "memory_hit", "memory_hit_rank", "memory_reacted", "zero_result_searches", "injected_relevant", "relevant_seen", "hazard_seen",
+  "hazard_flagged", "hazard_endorsed", "suspicious_cmds", "error", "started_at",
 ];
 
 const csvCell = (v) => {
@@ -48,7 +45,7 @@ function fmt(key, v, signed = false) {
 
 /** Summary statistics per condition and paired comparisons; returns { stats, markdown }. */
 export function summarize(rows, meta) {
-  const conds = ["A", "B", "C", "H"].filter((c) => rows.some((r) => r.condition === c));
+  const conds = Object.keys(CONDITIONS).filter((c) => rows.some((r) => r.condition === c));
   const stats = { meta, conditions: {}, paired: {} };
   const L = [];
   L.push(`# BAB eval summary (${meta.mode})`, "");
@@ -56,6 +53,7 @@ export function summarize(rows, meta) {
   L.push(`Runs: ${rows.length}; errored runs (counted as failures): ${rows.filter((r) => r.stop_reason === "error").length}. Spend: $${meta.spendUsd.toFixed(4)} (eval) + $${meta.seedCostUsd.toFixed(4)} (seeding).`, "");
   L.push("| Condition | Runs | Success (95% Wilson CI) | Cost/run mean (median) | Tokens/run median | Turns median [IQR] | Searched BAB | Retrieved relevant (mean rank) | Reacted helpful | Recorded a learning |");
   L.push("|---|---|---|---|---|---|---|---|---|---|");
+  const hazardRows = [];
   for (const c of conds) {
     const rs = rows.filter((r) => r.condition === c);
     const k = rs.filter((r) => r.success).length;
@@ -68,17 +66,22 @@ export function summarize(rows, meta) {
       turnsMedian: median(col("turns")), turnsIqr: [quantile(col("turns"), 0.25), quantile(col("turns"), 0.75)],
       searchRate: mean(col("bab_queried")), hitRate: mean(col("memory_hit")), meanHitRank: mean(ranks),
       reactedRate: mean(col("memory_reacted")), recordingRate: mean(rs.map((r) => (Number(r.bab_learn_calls) > 0 ? 1 : 0))),
+      relevantSeenRate: mean(col("relevant_seen")), hazardSeenRate: mean(col("hazard_seen")), hazardFlaggedRate: mean(col("hazard_flagged")),
     };
     stats.conditions[c] = s;
     const bab = c !== "A";
-    const mem = c === "B" || c === "H";
+    const mem = !["A", "C", "ST", "WR"].includes(c);
+    if (["ST", "CF", "WR"].includes(c)) hazardRows.push(`| ${COND_LABEL[c]} | ${pct(s.hazardSeenRate)} | ${pct(s.relevantSeenRate)} | ${pct(s.hazardFlaggedRate)} |`);
     L.push(
       `| ${COND_LABEL[c]} | ${s.runs} | ${k}/${s.runs} = ${pct(p)} (${pct(lo)}-${pct(hi)}) | $${s.costMean.toFixed(4)} ($${s.costMedian.toFixed(4)}) | ${Math.round(s.tokensMedian)} | ${s.turnsMedian} [${s.turnsIqr[0]}-${s.turnsIqr[1]}] | ${bab ? pct(s.searchRate) : "n/a"} | ${mem ? `${pct(s.hitRate)} (${Number.isFinite(s.meanHitRank) ? s.meanHitRank.toFixed(1) : "-"})` : "n/a"} | ${mem ? pct(s.reactedRate) : "n/a"} | ${bab ? pct(s.recordingRate) : "n/a"} |`,
     );
   }
+  if (hazardRows.length) L.push("", "| Hazard condition | Saw the bad memory | Saw the current memory | Flagged the bad memory |", "|---|---|---|---|", ...hazardRows);
   const comparisons = [];
   for (const c of conds) if (c !== "A" && conds.includes("A")) comparisons.push([c, "A"]);
   if (conds.includes("B") && conds.includes("C")) comparisons.push(["B", "C"]);
+  // Ablations and hazards against default BAB with the same memory.
+  for (const c of ["L", "F", "N", "R", "AR", "CF"]) if (conds.includes(c) && conds.includes("B")) comparisons.push([c, "B"]);
   if (comparisons.length) {
     L.push("", "## Paired comparisons (unit = task, trials averaged within task)", "");
     L.push("Ratio = mean(X)/mean(baseline). 95% CIs: bootstrap over tasks (10k). p: exact two-sided sign-flip permutation test.", "");

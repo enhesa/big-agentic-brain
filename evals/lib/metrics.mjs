@@ -11,18 +11,26 @@ export function resultIds(text) {
  * relevant: Set of learning ids that answer this task's family.
  * Returns { queried, hit, hitRank, reacted, zeroResultSearches }.
  */
-export function memoryMetrics(run, relevant) {
+export function memoryMetrics(run, relevant, hazard = new Set()) {
   let hitRank = null;
   let zero = 0;
+  let hazardSeen = (run.injected ?? []).some((id) => hazard.has(id));
   for (const s of run.searches) {
     const ids = resultIds(s.text);
     if (!ids.length) zero++;
     ids.forEach((id, i) => {
       if (hitRank === null && relevant.has(id)) hitRank = i + 1;
+      if (hazard.has(id)) hazardSeen = true;
     });
   }
   const reacted = run.reacts.some((r) => relevant.has(r.learningId) && ["helpful", "confirm"].includes(r.action));
-  return { queried: run.searches.length > 0, hit: hitRank !== null, hitRank, reacted, zeroResultSearches: zero };
+  const injectedRelevant = (run.injected ?? []).some((id) => relevant.has(id));
+  return {
+    queried: run.searches.length > 0, hit: hitRank !== null, hitRank, reacted, zeroResultSearches: zero,
+    injectedRelevant, relevantSeen: hitRank !== null || injectedRelevant, hazardSeen,
+    hazardFlagged: run.reacts.some((r) => hazard.has(r.learningId) && ["flag", "not_helpful", "retire"].includes(r.action)),
+    hazardEndorsed: run.reacts.some((r) => hazard.has(r.learningId) && ["helpful", "confirm"].includes(r.action)),
+  };
 }
 
 /** Rank-based retrieval scores for one query. rank is 1-based or null. */

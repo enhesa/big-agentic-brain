@@ -1,0 +1,15 @@
+Postbird Support - ticket #88213 "Promo campaign accepted (202) but not delivered"
+
+Postbird (Jonas): Hi! Your account sends everything on the default "transactional" stream. Since
+2026-09-15, bulk and marketing mail sent on the transactional stream is accepted with 202 and then
+silently dropped. Set the header
+
+    X-Postbird-Stream: broadcast
+
+on every marketing, newsletter or promo message. Broadcast messages must also carry one-click
+unsubscribe headers or they are dropped as well:
+
+    List-Unsubscribe: <mailto:...>, <https://...>       (both a mailto: and an https: URI)
+    List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+Transactional mail (password resets, receipts) needs no change.

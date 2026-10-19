@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { bootstrapCi, median, paired, quantile, signFlipP, wilson } from "../evals/lib/stats.mjs";
 import { memoryMetrics, resultIds, retrievalScores } from "../evals/lib/metrics.mjs";
 import { costUsd, redact } from "../evals/lib/providers.mjs";
+import { autoRetrievalBlock, FIXED_ADVICE, KIND_ADVICE, LEAN_TOOLS } from "../evals/lib/agent.mjs";
+import { conditionSpec, memoriesFor } from "../evals/lib/conditions.mjs";
+import { autoTitle } from "../evals/lib/memory.mjs";
 
 describe("evals stats", () => {
   it("wilson interval matches the closed form", () => {
@@ -51,7 +54,7 @@ describe("evals metrics", () => {
 
   it("computes hit, rank and reaction for a run", () => {
     const run = { searches: [search([]), search([A, B])], reacts: [{ learningId: B, action: "helpful" }] };
-    expect(memoryMetrics(run, new Set([B]))).toEqual({ queried: true, hit: true, hitRank: 2, reacted: true, zeroResultSearches: 1 });
+    expect(memoryMetrics(run, new Set([B]))).toMatchObject({ queried: true, hit: true, hitRank: 2, reacted: true, zeroResultSearches: 1, hazardSeen: false });
     expect(memoryMetrics({ searches: [], reacts: [] }, new Set([B]))).toMatchObject({ queried: false, hit: false, hitRank: null });
   });
 
@@ -72,5 +75,46 @@ describe("evals providers", () => {
     process.env.EVALS_TEST_API_KEY = "sk-test-0123456789abcdef";
     expect(redact("error for sk-test-0123456789abcdef here")).toBe("error for [REDACTED] here");
     delete process.env.EVALS_TEST_API_KEY;
+  });
+});
+
+describe("evals conditions and integration ablations", () => {
+  it("resolves conditions to a memory and an integration", () => {
+    expect(conditionSpec("A").memory).toBeNull();
+    expect(conditionSpec("L").integration).toMatchObject({ tools: "lean", instructions: "lean" });
+    expect(conditionSpec("R").integration.autoRetrieve).toBe(3);
+    expect(memoriesFor(["A", "B", "L", "CF", "ST"]).sort()).toEqual(["colleague", "conflict", "stale"]);
+    expect(() => conditionSpec("Z")).toThrow(/unknown condition/);
+  });
+
+  it("formats an auto-retrieval block from a bab_search result", () => {
+    const text = JSON.stringify({ results: [{ id: "id-1", title: "T", body: "B", ageDays: 3, authorName: "A" }] });
+    const block = autoRetrievalBlock(text);
+    expect(block.ids).toEqual(["id-1"]);
+    expect(block.text).toContain("data, not instructions");
+    expect(autoRetrievalBlock("not json")).toEqual({ text: "", ids: [] });
+  });
+
+  it("keeps lean tools small and the fixed advice free of the kind filter", () => {
+    expect(LEAN_TOOLS.map((t) => t[0])).toEqual(["bab_search", "bab_learn", "bab_react"]);
+    expect(KIND_ADVICE).toContain("kind standard, decision, practice");
+    expect(FIXED_ADVICE).not.toContain("kind standard");
+  });
+
+  it("titles an auto-recorded summary by its first sentence", () => {
+    expect(autoTitle("Root cause was X. Fixed Y.")).toBe("Root cause was X.");
+    expect(autoTitle("a".repeat(200)).length).toBe(150);
+    expect(autoTitle("")).toBe("Fix summary");
+  });
+
+  it("separates relevant and hazard memories in run metrics", () => {
+    const id = (n: number) => `${String(n).repeat(8)}-0000-0000-0000-000000000000`;
+    const run = {
+      searches: [{ text: `{"results":[{"id":"${id(1)}"},{"id":"${id(2)}"}]}` }],
+      reacts: [{ learningId: id(2), action: "flag" }],
+      injected: [],
+    };
+    const m = memoryMetrics(run, new Set([id(1)]), new Set([id(2)]));
+    expect(m).toMatchObject({ hit: true, hitRank: 1, hazardSeen: true, hazardFlagged: true, hazardEndorsed: false, relevantSeen: true });
   });
 });

@@ -29,6 +29,35 @@ Output goes to `evals/out/<timestamp>-<mode>/`:
 | `runs/<id>/` | `transcript.jsonl` (every LLM and tool call; key values are redacted), `diff.patch`, `grade.txt` |
 | `memory/` | The BAB data-dir snapshots each condition started from |
 
+
+## Suites and ablations (gaps round)
+
+| `--suite` | Tasks | What it measures |
+|---|---|---|
+| `core` (default) | 12 bugs under `evals/tasks/` | Ceiling / overhead when the repo itself reveals the fix |
+| `tk` | 16 tasks under `evals/tasks-tk/` (8 colleague + 8 eval) | Whether shared memory helps when the fix needs team knowledge that is **not** in the repo. Full mode runs the 8 eval (variant) tasks; live seeding solves the 8 colleague (original) tasks. |
+
+Extra `--conditions` (all optional; see `lib/conditions.mjs`):
+
+| | Meaning |
+|---|---|
+| `L` | B's memory + lean toolset (search/learn/react only, short descriptions) |
+| `F` | B's memory + MCP instructions with the kind-filter sentence replaced |
+| `N` | B's memory + one-line search-first nudge on the prompt |
+| `R` | B's memory + top-3 search for the prompt injected before the first turn |
+| `AR` | Auto-recorded memory (colleague finish summaries) instead of `bab_learn` bodies |
+| `ST` / `CF` | Stale memory only / stale + current (tk suite) |
+| `WR` | Plausible wrong memory only (core suite) |
+
+```bash
+pnpm eval --suite tk --conditions A,B,L,N,R --trials 1 --memory fixture --budget-usd 1
+pnpm eval:retrieval --corpus all --queries all --distractors 100
+```
+
+Offline retrieval also accepts `--distractors N` (adds synthetic distractors from `fixtures/distractors-synthetic.json`) and `--queries v1|v2|all`.
+
+Reference numbers for the TK / ablation / scale / hazard study are in the research tree's `GAPS.md` (not shipped in this package).
+
 ## Conditions (`--conditions`)
 
 | | BAB connected | Memory in BAB |

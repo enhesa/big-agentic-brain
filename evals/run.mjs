@@ -7,7 +7,8 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { runAgent } from "./lib/agent.mjs";
 import { assertBuilt, startBab } from "./lib/bab-server.mjs";
-import { allTaskIds, applyOracle, grade, loadTask, makeWorkspace } from "./lib/grading.mjs";
+import { allTaskIds, applyOracle, grade, loadTask, makeWorkspace, useSuite } from "./lib/grading.mjs";
+import { conditionSpec, CONDITIONS, memoriesFor } from "./lib/conditions.mjs";
 import { buildMemories } from "./lib/memory.mjs";
 import { memoryMetrics } from "./lib/metrics.mjs";
 import { EVALS_DIR, REPO_ROOT } from "./lib/paths.mjs";
@@ -22,6 +23,7 @@ const MODES = {
     model: "claude-haiku-5-5",
     tasks: "f1-var-pricelist,f4-orig-env-bool,f6-var-overdue-filter",
     conditions: "A,B",
+    tkTasks: "tk1-eval-invoices,tk3-eval-geocode,tk8-eval-charges",
     trials: 1,
     memory: "fixture",
     budget: 0.5,
@@ -31,14 +33,20 @@ const MODES = {
 
 const HELP = `Usage: node evals/run.mjs [options]
   --mode smoke|full        presets (default smoke). Flags below override the preset.
-  --conditions A,B,C,H     A no BAB; B BAB + colleague memory; C BAB + distractors only; H BAB + hand-written notes
-  --tasks id,id            task ids under evals/tasks (default: all in full, 3 in smoke)
+  --suite core|tk          core: bugs the repo itself reveals (evals/tasks); tk: team knowledge, the fix needs a
+                           fact that is only in a colleague's memory (evals/tasks-tk; eval tasks are its variants)
+  --conditions A,B,...     A no BAB; B BAB + colleague memory; C BAB + distractors only; H BAB + hand-written notes;
+                           ablations on B's memory: L lean toolset, F fixed search advice, N search-first nudge,
+                           R auto-retrieval (top 3 injected); AR auto-recorded memory; hazards: ST stale memory,
+                           CF stale + current (conflict), WR wrong memory (core). See evals/README.md.
+  --tasks id,id            task ids (default: all core tasks / all tk variants in full, 3 in smoke)
   --trials N               trials per task and condition
   --memory fixture|live    B memory: recorded fixture (cheap) or a live colleague agent run
   --budget-usd X           stop starting new runs once spend reaches X
   --parallel N             concurrent runs (default 3)
   --sandbox auto|bwrap|none  agent bash isolation (default auto: bubblewrap when usable)
   --max-turns N  --max-seconds N  --seed N  --out DIR
+  --resume                 continue an interrupted run in --out: keep finished runs, redo unfinished ones
   --validate               no LLM: check every task fails as shipped and passes with its reference fix
 Env: BAB_EVAL_PROVIDER (anthropic|openai), BAB_EVAL_MODEL, BAB_EVAL_BASE_URL, BAB_EVAL_API_KEY_ENV,
      ANTHROPIC_API_KEY / OPENAI_API_KEY, BAB_EVAL_PRICE="in,out,cacheRead,cacheWrite" (USD per 1M tokens),
@@ -47,6 +55,7 @@ Env: BAB_EVAL_PROVIDER (anthropic|openai), BAB_EVAL_MODEL, BAB_EVAL_BASE_URL, BA
 const { values: opt } = parseArgs({
   options: {
     mode: { type: "string", default: "smoke" },
+    suite: { type: "string", default: "core" },
     conditions: { type: "string" },
     tasks: { type: "string" },
     trials: { type: "string" },
@@ -59,6 +68,7 @@ const { values: opt } = parseArgs({
     seed: { type: "string", default: "20261019" },
     out: { type: "string" },
     validate: { type: "boolean", default: false },
+    resume: { type: "boolean", default: false },
     help: { type: "boolean", default: false },
   },
 });
@@ -99,14 +109,25 @@ function shuffle(xs, seed) {
   return xs;
 }
 
+// A job that throws (e.g. BAB would not start) is logged and left without meta.json, so --resume redoes it.
+let harnessErrors = 0;
 async function pool(items, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
-    while (i < items.length) await fn(items[i++]);
+    while (i < items.length) {
+      const item = items[i++];
+      try {
+        await fn(item);
+      } catch (e) {
+        harnessErrors++;
+        console.error(`[eval] job ${item.task}/${item.condition}/t${item.trial} failed in the harness: ${e.message}`);
+      }
+    }
   }));
 }
 
 async function main() {
+  useSuite(opt.suite);
   if (opt.validate) process.exit((await validate()) ? 0 : 1);
   const preset = MODES[opt.mode];
   if (!preset) throw new Error(`--mode must be smoke or full`);
@@ -119,7 +140,10 @@ async function main() {
   const price = priceFor(model);
   if (!price) log(`warning: no price known for ${model}; set BAB_EVAL_PRICE to get costs (budget cap cannot be enforced)`);
   const conditions = (opt.conditions ?? preset.conditions).split(",");
-  const tasks = (opt.tasks ?? preset.tasks) ? (opt.tasks ?? preset.tasks).split(",") : allTaskIds();
+  conditions.forEach(conditionSpec);
+  const presetTasks = opt.suite === "core" ? preset.tasks : preset.tkTasks;
+  const tasks = (opt.tasks ?? presetTasks) ? (opt.tasks ?? presetTasks).split(",")
+    : allTaskIds().filter((t) => opt.suite === "core" || loadTask(t).variant === "variant");
   const trials = Number(opt.trials ?? preset.trials);
   const memory = opt.memory ?? preset.memory;
   const budget = Number(opt["budget-usd"] ?? preset.budget);
@@ -134,38 +158,63 @@ async function main() {
     babCommit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: REPO_ROOT, encoding: "utf8" }).trim();
   } catch {}
   const meta = {
-    mode: opt.mode, provider, model, price, pricesChecked: PRICES_CHECKED, conditions, tasks, trials, memory, budget,
+    mode: opt.mode, suite: opt.suite, provider, model, price, pricesChecked: PRICES_CHECKED, conditions, tasks, trials, memory, budget,
     sandbox, maxTurns, maxSeconds, seed: Number(opt.seed), babCommit, date: new Date().toISOString(), node: process.version,
   };
   fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify(meta, null, 2));
   log(`[eval] ${opt.mode}: ${model} | tasks=${tasks.length} conditions=${conditions} trials=${trials} memory=${memory} sandbox=${sandbox} budget=$${budget} -> ${outDir}`);
   if (sandbox === "none") log("[eval] warning: no bubblewrap; agent commands run unsandboxed (cleared env, repo as cwd)");
 
-  const { snaps, seedCost } = await buildMemories({ outDir, conditions, memory, providerCfg, price, sandbox, maxTurns, maxSeconds, log });
+  const { snaps, seedCost } = await buildMemories({ outDir, suite: opt.suite, memories: memoriesFor(conditions), memory, providerCfg, price, sandbox, maxTurns, maxSeconds, log });
   let spent = seedCost;
   const jobs = shuffle(tasks.flatMap((task) => conditions.flatMap((condition) => Array.from({ length: trials }, (_, k) => ({ task, condition, trial: k + 1 })))), Number(opt.seed));
   jobs.forEach((j, i) => (j.order = i));
   const rows = [];
   let skipped = 0;
-  await pool(jobs, Number(opt.parallel), async (job) => {
+  const jobId = (job) => `${String(job.order).padStart(4, "0")}-${job.task}-${job.condition}-t${job.trial}`;
+  if (opt.resume) {
+    for (const job of jobs) {
+      const d = path.join(outDir, "runs", jobId(job));
+      if (fs.existsSync(path.join(d, "meta.json"))) {
+        const { summary, babCalls, learned, reacts, injected, ...row } = JSON.parse(fs.readFileSync(path.join(d, "meta.json"), "utf8"));
+        rows.push(row);
+        spent += Number(row.cost_usd);
+        job.done = true;
+      } else if (fs.existsSync(d)) fs.renameSync(d, `${d}.crashed-${Date.now()}`);
+    }
+    log(`[eval] resume: ${rows.length} finished runs kept, ${jobs.filter((j) => !j.done).length} to go (spent so far $${spent.toFixed(3)})`);
+  }
+  await pool(jobs.filter((j) => !j.done), Number(opt.parallel), async (job) => {
     if (spent >= budget) {
       skipped++;
       return;
     }
     const t = loadTask(job.task);
-    const id = `${String(job.order).padStart(4, "0")}-${t.id}-${job.condition}-t${job.trial}`;
+    const id = jobId(job);
     const d = path.join(outDir, "runs", id);
     fs.mkdirSync(d, { recursive: true });
     const ws = makeWorkspace(t, path.join(d, "ws"));
     const startedAt = new Date().toISOString();
     const common = { prompt: t.prompt, ws, providerCfg, sandbox, maxTurns, maxSeconds, logPath: path.join(d, "transcript.jsonl") };
     let run;
-    if (job.condition === "A") {
+    const spec = conditionSpec(job.condition);
+    const snap = spec.memory ? snaps[spec.memory] : null;
+    if (!snap) {
       run = await runAgent(common);
     } else {
-      const bab = await startBab({ dataDir: path.join(d, "bab-data"), seedFrom: snaps[job.condition].dir, logFile: path.join(d, "bab-server.log") });
+      let bab;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          bab = await startBab({ dataDir: path.join(d, "bab-data"), seedFrom: snap.dir, logFile: path.join(d, "bab-server.log") });
+          break;
+        } catch (e) {
+          if (attempt >= 3) throw e;
+          log(`[eval] ${id}: BAB start failed (${e.message}); retry ${attempt}`);
+          await new Promise((r) => setTimeout(r, 5000 * attempt));
+        }
+      }
       try {
-        run = await runAgent({ ...common, bab: { origin: bab.origin, identity: { email: `dev.agent.${job.order}@example.com`, name: "Dev Agent" } } });
+        run = await runAgent({ ...common, integration: spec.integration, bab: { origin: bab.origin, identity: { email: `dev.agent.${job.order}@example.com`, name: "Dev Agent" } } });
       } finally {
         await bab.stop();
         fs.rmSync(path.join(d, "bab-data"), { recursive: true, force: true });
@@ -177,8 +226,9 @@ async function main() {
       fs.writeFileSync(path.join(d, "diff.patch"), execFileSync("git", ["-C", ws, "diff"], { encoding: "utf8" }));
     } catch {}
     fs.rmSync(ws, { recursive: true, force: true });
-    const rel = new Set(snaps[job.condition]?.relevant?.[t.family] ?? []);
-    const mm = memoryMetrics(run, rel);
+    const rel = new Set(snap?.relevant?.[t.family] ?? []);
+    const haz = new Set(snap?.hazard?.[t.family] ?? []);
+    const mm = memoryMetrics(run, rel, haz);
     const cost = costUsd(run.usage, price);
     spent += cost;
     const u = run.usage;
@@ -190,17 +240,19 @@ async function main() {
       bab_calls_total: Object.values(run.babCalls).reduce((a, b) => a + b, 0), bab_search_calls: run.babCalls.bab_search ?? 0,
       bab_learn_calls: run.babCalls.bab_learn ?? 0, bab_react_calls: run.babCalls.bab_react ?? 0, bab_queried: mm.queried ? 1 : 0,
       memory_hit: mm.hit ? 1 : 0, memory_hit_rank: mm.hitRank ?? "", memory_reacted: mm.reacted ? 1 : 0,
-      zero_result_searches: mm.zeroResultSearches, suspicious_cmds: run.suspicious.length, error: run.error, started_at: startedAt,
+      zero_result_searches: mm.zeroResultSearches, injected_relevant: mm.injectedRelevant ? 1 : 0, relevant_seen: mm.relevantSeen ? 1 : 0,
+      hazard_seen: mm.hazardSeen ? 1 : 0, hazard_flagged: mm.hazardFlagged ? 1 : 0, hazard_endorsed: mm.hazardEndorsed ? 1 : 0, suspicious_cmds: run.suspicious.length, error: run.error, started_at: startedAt,
     };
     rows.push(row);
-    fs.writeFileSync(path.join(d, "meta.json"), JSON.stringify({ ...row, summary: run.summary, babCalls: run.babCalls }, null, 2));
+    fs.writeFileSync(path.join(d, "meta.json"), JSON.stringify({ ...row, summary: run.summary, babCalls: run.babCalls, learned: run.learned, reacts: run.reacts, injected: run.injected }, null, 2));
     log(`[eval] ${id}: success=${g.pass} turns=${run.turns} $${cost.toFixed(4)} bab=${JSON.stringify(run.babCalls)} hit=${mm.hitRank ?? "-"} (spent $${spent.toFixed(3)})`);
   });
   rows.sort((a, b) => a.order_idx - b.order_idx);
   const md = writeReports(outDir, rows, { ...meta, spendUsd: spent - seedCost, seedCostUsd: seedCost, skippedForBudget: skipped });
   log(`\n${md}`);
   log(`[eval] wrote ${path.join(outDir, "summary.md")}, results.json, results.csv${skipped ? ` (${skipped} runs skipped: budget reached)` : ""}`);
-  const errored = rows.filter((r) => r.stop_reason === "error").length;
+  const errored = rows.filter((r) => r.stop_reason === "error").length + harnessErrors;
+  if (harnessErrors) log(`[eval] ${harnessErrors} job(s) failed in the harness and have no result; rerun with --resume`);
   if (errored) {
     log(`[eval] ${errored} run(s) ended with an API/harness error`);
     process.exit(2);

@@ -1,0 +1,350 @@
+{
+ "_provenance": "Written 2026-10-19 before the gaps runs. tk families: symptom (as an agent would phrase the ticket, system name included), paraphrase (same meaning, reworded, system name left out), error-only (just the error text). Core families: paraphrase and error-only, to extend retrieval-queries.json.",
+ "queries": [
+  {
+   "family": "tk-ledgerly",
+   "type": "symptom",
+   "query": "Ledgerly import rejects invoice export E104 invalid record at line 1"
+  },
+  {
+   "family": "tk-ledgerly",
+   "type": "symptom",
+   "query": "Ledgerly ERP import file format"
+  },
+  {
+   "family": "tk-ledgerly",
+   "type": "symptom",
+   "query": "invoice export rejected by Ledgerly"
+  },
+  {
+   "family": "tk-ledgerly",
+   "type": "paraphrase",
+   "query": "finance ERP refuses our nightly CSV file at the first line"
+  },
+  {
+   "family": "tk-ledgerly",
+   "type": "paraphrase",
+   "query": "what layout does the accounting system expect for imported files"
+  },
+  {
+   "family": "tk-ledgerly",
+   "type": "error-only",
+   "query": "E104 invalid record at line 1"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "symptom",
+   "query": "Shipfast webhook 401 signature verification failed"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "symptom",
+   "query": "Shipfast signing change signature header"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "symptom",
+   "query": "how to sign requests to Shipfast"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "paraphrase",
+   "query": "carrier aggregator rejects our outgoing webhooks after they changed request signing"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "paraphrase",
+   "query": "HMAC header format expected by the shipping partner"
+  },
+  {
+   "family": "tk-shipfast",
+   "type": "error-only",
+   "query": "401 signature verification failed"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "symptom",
+   "query": "geo-api key suspended backoff retry"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "symptom",
+   "query": "geo-api 429 rate limit retry"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "symptom",
+   "query": "geo-api 503 retry"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "paraphrase",
+   "query": "internal geocoding service suspended our API key because the client kept retrying"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "paraphrase",
+   "query": "how long to wait when the geocoder rate limits us"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "error-only",
+   "query": "429 Too Many Requests"
+  },
+  {
+   "family": "tk-geo-api",
+   "type": "error-only",
+   "query": "503 Service Unavailable"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "symptom",
+   "query": "Kestrel Bank settlement date mismatch"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "symptom",
+   "query": "Kestrel settlement cut-off time"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "symptom",
+   "query": "payout settlement date differs from bank statement"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "paraphrase",
+   "query": "card payouts booked on the wrong day compared with the bank"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "paraphrase",
+   "query": "which day does the bank settle late-afternoon card captures"
+  },
+  {
+   "family": "tk-kestrel",
+   "type": "error-only",
+   "query": "reconciliation mismatch: settlement 2026-10-15 != statement 2026-10-14"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "symptom",
+   "query": "Orion CRM customer number check digit"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "symptom",
+   "query": "valid Orion customer numbers rejected C-48213-7"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "symptom",
+   "query": "Orion customer number without C- prefix"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "paraphrase",
+   "query": "signup form rejects valid CRM customer ids"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "paraphrase",
+   "query": "how is the check character of a customer number computed"
+  },
+  {
+   "family": "tk-orion-ids",
+   "type": "error-only",
+   "query": "ValueError: invalid Orion customer number: 'C-20000-X'"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "symptom",
+   "query": "Postbird newsletter accepted 202 but not delivered"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "symptom",
+   "query": "Postbird marketing email headers"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "symptom",
+   "query": "Postbird bulk mail dropped"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "paraphrase",
+   "query": "newsletter accepted by the email provider but nobody receives it, password resets arrive"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "paraphrase",
+   "query": "which headers do marketing emails need to be delivered"
+  },
+  {
+   "family": "tk-postbird",
+   "type": "error-only",
+   "query": "HTTP 202 Accepted"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "symptom",
+   "query": "Gatekeeper token claims 401 invalid token claims"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "symptom",
+   "query": "Gatekeeper aud scope claim format"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "symptom",
+   "query": "service-to-service auth after Gatekeeper migration"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "paraphrase",
+   "query": "after the identity service migration every internal call to the reports service gets 401"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "paraphrase",
+   "query": "which audience and scope claims do internal service tokens carry"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "type": "error-only",
+   "query": "401 invalid token claims"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "symptom",
+   "query": "Paylane amount must be a string"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "symptom",
+   "query": "Paylane API v3 currency amount format"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "symptom",
+   "query": "Paylane JPY KWD amounts wrong"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "paraphrase",
+   "query": "card provider charges Japanese customers 100 times too much"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "paraphrase",
+   "query": "minor units for zero-decimal and three-decimal currencies at the payment provider"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "error-only",
+   "query": "amount must be a string"
+  },
+  {
+   "family": "tk-paylane",
+   "type": "error-only",
+   "query": "unsupported currency"
+  },
+  {
+   "family": "csv-bom",
+   "type": "paraphrase",
+   "query": "spreadsheet export has the column but our importer says it is missing"
+  },
+  {
+   "family": "csv-bom",
+   "type": "paraphrase",
+   "query": "first header name looks different when reading an Excel-saved file"
+  },
+  {
+   "family": "csv-bom",
+   "type": "error-only",
+   "query": "KeyError: 'order_id'"
+  },
+  {
+   "family": "csv-bom",
+   "type": "error-only",
+   "query": "csv.DictReader fieldnames ['\\ufeffsku', 'price']"
+  },
+  {
+   "family": "hash-randomization",
+   "type": "paraphrase",
+   "query": "order of results changes between runs of the same input"
+  },
+  {
+   "family": "hash-randomization",
+   "type": "paraphrase",
+   "query": "cache lookups miss after the process restarts"
+  },
+  {
+   "family": "hash-randomization",
+   "type": "error-only",
+   "query": "AssertionError: Lists differ: ['b', 'a'] != ['a', 'b']"
+  },
+  {
+   "family": "money-rounding",
+   "type": "paraphrase",
+   "query": "totals come out one cent off"
+  },
+  {
+   "family": "money-rounding",
+   "type": "paraphrase",
+   "query": "split amount parts do not add back up to the original"
+  },
+  {
+   "family": "money-rounding",
+   "type": "error-only",
+   "query": "AssertionError: 2.67 != 2.68"
+  },
+  {
+   "family": "env-coercion",
+   "type": "paraphrase",
+   "query": "feature flag stays on although the environment sets it to false"
+  },
+  {
+   "family": "env-coercion",
+   "type": "paraphrase",
+   "query": "dry run mode active even though the variable is 0"
+  },
+  {
+   "family": "env-coercion",
+   "type": "error-only",
+   "query": "AssertionError: True is not false"
+  },
+  {
+   "family": "regex-semantics",
+   "type": "paraphrase",
+   "query": "two accounts can register what looks like the same name"
+  },
+  {
+   "family": "regex-semantics",
+   "type": "paraphrase",
+   "query": "validation accepts a name with a trailing line break"
+  },
+  {
+   "family": "regex-semantics",
+   "type": "error-only",
+   "query": "AssertionError: 'alice\\n' unexpectedly matched"
+  },
+  {
+   "family": "js-date-only-utc",
+   "type": "paraphrase",
+   "query": "reminder says the deadline is a day earlier for customers in America"
+  },
+  {
+   "family": "js-date-only-utc",
+   "type": "paraphrase",
+   "query": "date-only strings shift by one day depending on the user's time zone"
+  },
+  {
+   "family": "js-date-only-utc",
+   "type": "error-only",
+   "query": "AssertionError [ERR_ASSERTION]: '2026-03-09' !== '2026-03-10'"
+  }
+ ]
+}

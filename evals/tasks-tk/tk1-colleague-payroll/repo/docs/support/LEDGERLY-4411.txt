@@ -1,0 +1,22 @@
+From: support@ledgerly.example
+To: payroll-dev@acme-shop.example
+Subject: Re: [LEDGERLY-4411] Import fails with "E104 invalid record at line 1"
+
+Hello,
+
+E104 at line 1 means the file is not recognised as a Ledgerly v2 import file. Since the v2
+importer (all tenants were migrated in August) import files must follow this layout:
+
+1. The first line is exactly the marker   #LEDGERLY;2
+2. The second line is your column header row. All lines use ";" (semicolon) as the separator.
+   Quote a field that contains a semicolon.
+3. Dates are written DD.MM.YYYY (e.g. 31.12.2026).
+4. Amounts use a decimal comma and exactly two decimals, no thousands separator, and a minus
+   sign in front for negatives (e.g. -1234,50).
+5. Every line ends with CRLF, including the last one.
+
+Files in the old v1 layout (comma-separated, ISO dates) are rejected with E104.
+
+Kind regards,
+Mira
+Ledgerly Support

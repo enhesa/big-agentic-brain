@@ -1,0 +1,146 @@
+{
+ "_provenance": "Recorded 2026-10-19 by a claude-sonnet-5-5 colleague agent that solved the 8 tk colleague tasks live with BAB connected (runs/gaps/tk-seed-sonnet). It solved 8/8; it recorded 0/8 unprompted and 8/8 after one nudge with BAB's Stop-hook text. Verbatim bab_learn title/body/tags. summaries: the same runs' finish summaries, verbatim (used by the AR auto-record condition).",
+ "model": "claude-sonnet-5-5",
+ "learnings": [
+  {
+   "family": "tk-ledgerly",
+   "title": "Ledgerly E104 \"invalid record at line 1\": import needs the v2 layout (marker line, ; separator, DD.MM.YYYY, decimal comma, CRLF)",
+   "body": "Symptom: Ledgerly (Finance's ERP) rejects an import file with \"E104 invalid record at line 1\". Cause: the file is in the old v1 layout (comma-separated, ISO dates, dot decimals, no marker). Since the August migration all tenants use the v2 importer. Source: Ledgerly support reply to ticket LEDGERLY-4411.\n\nv2 layout:\n1. Line 1 is exactly `#LEDGERLY;2`.\n2. Line 2 is the column header row. The separator is `;` on every line, and a field containing `;` is quoted.\n3. Dates are DD.MM.YYYY.\n4. Amounts use a decimal comma, exactly two decimals, no thousands separator, and a leading minus for negatives (e.g. -1234,50).\n5. Every line ends in CRLF, including the last.\n\nFix in the payroll journal export: python csv.writer(delimiter=\";\", lineterminator=\"\\r\\n\"), write the marker line first, format dates with strftime(\"%d.%m.%Y\"), and format amounts with f\"{x:.2f}\".replace(\".\", \",\"). Also normalise \"-0,00\" to \"0,00\".\n\nGotcha: the unit tests only check record content (e.g. one line per entry), so they pass on the v1 layout too. Check the format by eye or add a format test. I did not test against a real Ledgerly import. I only ran the unit tests and inspected the output for a sample entry.",
+   "tags": [
+    "finance",
+    "engineering",
+    "ledgerly",
+    "csv-export"
+   ],
+   "task": "tk1-colleague-payroll"
+  },
+  {
+   "family": "tk-shipfast",
+   "title": "Shipfast 401 \"signature verification failed\": use Shipfast-Signature t=,v1= header (timestamp.body HMAC), not legacy X-Shipfast-Signature",
+   "body": "Symptom: Shipfast (carrier aggregator) returns 401 \"signature verification failed\" on API calls, while unit tests still pass.\nCause: the legacy `X-Shipfast-Signature` header (HMAC-SHA256 of the body alone) was switched off on 2026-09-01. Our returns/labels.py create_label_request() still used it, and its test only checked body and Content-Type, so it never caught this.\nFix: send `Shipfast-Signature: t=<unix seconds, int>,v1=<lowercase hex HMAC-SHA256>`. The HMAC is keyed with the signing secret over `<timestamp>.<raw body bytes>`: the timestamp, a literal dot, then the exact bytes sent. Requests with a timestamp more than 5 minutes old are rejected, so take the timestamp from the current time at signing, not a cached value. The spec says webhooks sent to Shipfast use the same scheme. Spec excerpt: docs/vendors/shipfast-signing-v1.md in the returns repo.\nGotcha: the existing test doesn't assert the signature header, so a green run proves nothing about auth. Check the header format against the vendor doc.",
+   "tags": [
+    "engineering",
+    "shipfast",
+    "hmac",
+    "api-auth"
+   ],
+   "task": "tk2-colleague-returns"
+  },
+  {
+   "family": "tk-geo-api",
+   "title": "geo-api client rules: 429 uses Retry-After-Ms (ms), 503 = quota, never retry",
+   "body": "Per the platform team's geo-api runbook (docs/geo-api-runbook.md in the route-planning batch repo):\n- 429: wait the number of MILLISECONDS in the non-standard `Retry-After-Ms` header (not the standard `Retry-After` in seconds). Default 1000 ms if missing. Retry at most 3 times (4 attempts total), then fail.\n- 503 means the daily quota is exhausted. Do NOT retry; fail at once with a quota error. Retrying 503s gets the API key suspended for the rest of the day.\n- Any other non-200: fail at once.\nGotcha: the original lookup() in routing/geo_batch.py treated 429 and 503 alike, read `Retry-After` in seconds and retried 10 times. That is what got the key suspended. The existing unit tests passed anyway because they only covered 200 and 404, so passing tests did not show it followed the runbook. Fixed by capping attempts at 4, raising QuotaExceeded on 503, and reading the header case-insensitively. I did not add tests for the retry and 503 behaviour.",
+   "tags": [
+    "engineering",
+    "geo-api",
+    "retry"
+   ],
+   "task": "tk3-colleague-routing"
+  },
+  {
+   "family": "tk-kestrel",
+   "title": "Bank settlement value dates: convert to bank-local tz, apply cut-off, then skip closures (passing tests can hide this)",
+   "body": "Gotcha from a treasury value-date fix: a value_date() function passed its unit tests but mismatched bank statements. Three causes, all visible only by reading the bank agreement excerpt (docs/), not the tests:\n1. It used the UTC date instead of the bank's local date (Europe/Amsterdam, CET/CEST). Use zoneinfo.ZoneInfo, not a fixed offset, so DST is handled.\n2. It ignored the intraday cut-off. Transactions captured at or after 16:30 local time settle on the next business day (>= comparison, not >).\n3. It treated only Sat/Sun as non-business days. The agreement also closed fixed dates: 1 Jan, 1 May, 25 Dec, 26 Dec.\nWorking order: convert to local time, add one day if at or after the cut-off, then roll forward to the first business day on or after that date.\nCaveat: the existing tests only covered a weekday morning and a Saturday, so they passed before and after. Read the agreement before trusting green tests, and check the cut-off boundary, DST and holiday cases yourself. I didn't add tests, because the task said not to change them.",
+   "tags": [
+    "finance",
+    "treasury",
+    "timezones"
+   ],
+   "task": "tk4-colleague-treasury"
+  },
+  {
+   "family": "tk-orion-ids",
+   "title": "Orion CRM customer numbers: mod-11 check (weights 6-5-4-3-2), not Luhn; accept lower case and legacy 6-digit form",
+   "body": "Gotcha from billing/orion_lookup.py: the original is_customer_no() used a Luhn check and only accepted upper-case `C-NNNNN-K`, so valid customer numbers were rejected. The existing unit test only covered garbage input, so it passed anyway.\n\nPer the Orion admin guide (docs/orion-crm-id-format.md in the billing repo):\n- Format `C-NNNNN-K`: C, five digits, one check character.\n- K = 11 - (sum(digit_i * weight_i) mod 11), weights 6,5,4,3,2 left to right. A result of 11 is written `0`, and 10 is written `X`. Example: C-48213-7.\n- Users type it in lower case, or in the pre-2019 printed form without prefix and hyphens (`482137`). Both are valid. Store the canonical form `C-NNNNN-K`.\n\nFix: strip and upper-case the input, then match `C-(\\d{5})-([0-9X])` or `(\\d{5})([0-9X])`. Recompute K and compare. parse_customer_no() always returns the canonical form.\n\nLesson: when a task points to a spec document, validate against the spec's worked example, because the passing tests may not exercise valid input at all.",
+   "tags": [
+    "engineering",
+    "validation",
+    "billing"
+   ],
+   "task": "tk5-colleague-billing"
+  },
+  {
+   "family": "tk-postbird",
+   "title": "Postbird: marketing mail on the default transactional stream is accepted (202) but silently dropped",
+   "body": "Symptom: promo/newsletter emails sent through Postbird return HTTP 202 but are never delivered. Cause (per Postbird support, since 2026-09-15): bulk/marketing mail sent on the default \"transactional\" stream is silently dropped. Fix: on every marketing/newsletter/promo message set headers `X-Postbird-Stream: broadcast`, plus one-click unsubscribe headers, which are mandatory on broadcast or the message is dropped too: `List-Unsubscribe: <mailto:...>, <https://...>` (both a mailto: and an https: URI) and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Transactional mail (password resets, receipts) needs no change. Gotcha: unit tests that only check payload shape pass without these headers, so a 202 is not proof of delivery. In the repo where I found this, the fix lived in the promo payload builder (mailer/promo.py build_promo), using per-recipient unsubscribe token templates from config. Note: the environment had no `python` binary, only `python3`.",
+   "tags": [
+    "engineering",
+    "email",
+    "postbird"
+   ],
+   "task": "tk6-colleague-promo"
+  },
+  {
+   "family": "tk-gatekeeper",
+   "title": "Gatekeeper tokens: claim format differs from old auth tokens (iss, aud svc:<name>, scp string, 120s skew)",
+   "body": "When migrating a service's claim check (e.g. check_claims in a billing API) from the old auth tokens to Gatekeeper tokens, per the platform team's migration guide:\n- iss is always https://gatekeeper.internal (old: auth.acme.example).\n- aud is \"svc:<service-name>\" (e.g. svc:billing), either a string OR a list when the token covers several services. Handle both.\n- scp is ONE space-separated string (old tokens had a `scopes` list). Use scp.split() and match whole scope names, never substring match.\n- exp and nbf are Unix seconds; accept 120 seconds of clock skew on both (exp + 120 > now; nbf - 120 <= now).\n- Gotcha: the existing unit test only checked that empty claims are rejected, so it passed before and after the fix. Passing tests did not prove the check was correct; add positive-case tests for the new format. The guide's scope example (billing.read) is only an example; keep the service's own required scope.",
+   "tags": [
+    "engineering",
+    "auth",
+    "gatekeeper"
+   ],
+   "task": "tk7-colleague-billing-api"
+  },
+  {
+   "family": "tk-paylane",
+   "title": "Paylane API v3 refunds: amount is a minor-unit string, currency lowercase, ISO 4217 exponents",
+   "body": "Paylane v3 rejects refund requests with \"amount must be a string\" and \"unsupported currency\" when the old v2 payload is sent. Rules from their changelog (docs/paylane-api-v3-changes.md in the payments repo):\n- `amount` is a STRING in the currency's minor unit (\"1050\" for EUR 10.50).\n- Zero-decimal currencies (JPY, KRW, CLP, VND) are multiplied by 1. Three-decimal currencies (BHD, KWD, OMR, JOD, TND) are multiplied by 1000. Everything else is multiplied by 100.\n- Round half up to the minor unit. Use Decimal with ROUND_HALF_UP, not int(), which truncates.\n- `currency` must be lowercase (\"eur\"). Uppercase is rejected.\nFix: refund_payload() in payments/refunds.py. The old version used int(amount*100) and currency.upper().\nGotcha: the existing unit test only checked the payload keys, so it passed before and after the fix. It did not catch the API change. Check the changelog, not the green tests, when a provider changes its API.",
+   "tags": [
+    "engineering",
+    "payments",
+    "api"
+   ],
+   "task": "tk8-colleague-refunds"
+  }
+ ],
+ "summaries": [
+  {
+   "family": "tk-ledgerly",
+   "task": "tk1-colleague-payroll",
+   "success": true,
+   "summary": "export_payroll() wrote the old Ledgerly v1 layout (comma-separated, ISO dates, dot decimals, no marker line), which Ledgerly rejects with E104. It now writes the v2 layout from the support reply. The file starts with the `#LEDGERLY;2` line, then the header row. Fields are separated by `;`, and fields containing `;` are quoted. Dates are DD.MM.YYYY. Amounts use a decimal comma with two decimals, and negatives get a leading minus. Every line, including the last, ends in CRLF. `bash run_tests.sh` passes. I also checked the output on one sample entry (negative net, `;` in the employee id), but I haven't tried the file against Ledgerly itself."
+  },
+  {
+   "family": "tk-shipfast",
+   "task": "tk2-colleague-returns",
+   "success": true,
+   "summary": "create_label_request() still sent the legacy X-Shipfast-Signature (HMAC of body only), which Shipfast switched off. It now sends `Shipfast-Signature: t=<int now>,v1=<hex HMAC-SHA256 over \"<timestamp>.<body>\">` per the v1 spec, with the same body bytes. Existing tests pass. I didn't add a test for the new header because I was told not to change tests."
+  },
+  {
+   "family": "tk-geo-api",
+   "task": "tk3-colleague-routing",
+   "success": true,
+   "summary": "lookup() now follows the runbook. It reads Retry-After-Ms (milliseconds, case-insensitive) and defaults to 1000 ms when the header is missing or invalid. It retries a 429 at most 3 times (4 attempts in total) and then raises GeoError. A 503 raises QuotaExceeded immediately with no retry, which is what got the key suspended. Any other non-200 status still fails at once. The old code retried 503s up to 10 times and read the standard Retry-After header in seconds. The existing tests pass; I didn't add tests for the new retry and 503 behaviour."
+  },
+  {
+   "family": "tk-kestrel",
+   "task": "tk4-colleague-treasury",
+   "success": true,
+   "summary": "value_date() used the UTC date, ignored the 16:30 Amsterdam cut-off, and only skipped weekends. It now converts to Europe/Amsterdam, rolls to the next day at or after 16:30, and skips weekends plus 1 Jan, 1 May, 25 Dec and 26 Dec. The existing tests pass. I didn't add tests for the cut-off, DST or holidays."
+  },
+  {
+   "family": "tk-orion-ids",
+   "task": "tk5-colleague-billing",
+   "success": true,
+   "summary": "The validator used a Luhn check, but the Orion guide specifies a weighted mod-11 check character (weights 6,5,4,3,2; K = 11 - sum%11, with 11 written 0 and 10 written X). It also rejected lower-case input and the legacy unprefixed form. I rewrote billing/orion_lookup.py to use the mod-11 check, allow X as the check character, and accept `C-NNNNN-K`, lower case, and `NNNNNK`. parse_customer_no() now always returns the canonical `C-NNNNN-K`. The existing test passes, and `c-48213-7` and `482137` both parse to `C-48213-7`. I didn't add tests because the tests are off limits."
+  },
+  {
+   "family": "tk-postbird",
+   "task": "tk6-colleague-promo",
+   "success": true,
+   "summary": "Root cause: build_promo() sent promo mail on Postbird's default transactional stream with empty headers, so Postbird accepted it (202) and silently dropped it. I changed it to set X-Postbird-Stream: broadcast, plus List-Unsubscribe (both a mailto: and an https: URI, built from the per-recipient token) and List-Unsubscribe-Post: List-Unsubscribe=One-Click. Transactional mail is unchanged. The existing tests pass, and I checked the generated headers by hand."
+  },
+  {
+   "family": "tk-gatekeeper",
+   "task": "tk7-colleague-billing-api",
+   "success": true,
+   "summary": "check_claims() still validated the old auth.acme.example token format. I updated billing_api/auth.py to the Gatekeeper format from the migration guide:\n- **Issuer:** must be `https://gatekeeper.internal`.\n- **Audience:** `aud` must be `svc:billing`, given either as a string or inside a list.\n- **Scope:** the `scp` claim is parsed as a space-separated string and matched on whole scope names, so `billing.write` no longer matches by substring. I kept `billing.write` as the required scope. The guide's `billing.read` is only an example.\n- **Clock skew:** `exp` and `nbf` accept 120 seconds of skew. A missing or non-numeric `exp` is treated as expired.\n\n`bash run_tests.sh` passes, but the only test covers empty claims. I did not run any checks against a real Gatekeeper token or add tests for the new rules."
+  },
+  {
+   "family": "tk-paylane",
+   "task": "tk8-colleague-refunds",
+   "success": true,
+   "summary": "refund_payload() still used the old v2 format. It sent the amount as an int multiplied by 100 and the currency in uppercase. I rewrote it to follow the v3 changelog:\n- The amount is now a string in minor units. Zero-decimal currencies (JPY, KRW, CLP, VND) use \u00d71, three-decimal currencies (BHD, KWD, OMR, JOD, TND) use \u00d71000, and everything else uses \u00d7100.\n- Rounding is half up.\n- The currency is sent in lowercase.\n\nThe existing test passes. I also checked three cases by hand: EUR 10.505 gives \"1051\", JPY 1500 gives \"1500\", and KWD 1.2345 gives \"1235\". I did not change the tests."
+  }
+ ]
+}

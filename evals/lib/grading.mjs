@@ -4,17 +4,24 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TASKS_DIR } from "./paths.mjs";
+import { SUITES } from "./paths.mjs";
+
+let tasksDir = SUITES.core;
+/** Select the benchmark suite (core or tk) the task helpers read from. */
+export function useSuite(name) {
+  if (!SUITES[name]) throw new Error(`unknown suite ${name}; use ${Object.keys(SUITES).join(" or ")}`);
+  tasksDir = SUITES[name];
+}
 
 export function allTaskIds() {
   return fs
-    .readdirSync(TASKS_DIR)
-    .filter((d) => fs.existsSync(path.join(TASKS_DIR, d, "task.json")))
+    .readdirSync(tasksDir)
+    .filter((d) => fs.existsSync(path.join(tasksDir, d, "task.json")))
     .sort();
 }
 
 export function loadTask(id) {
-  const dir = path.join(TASKS_DIR, id);
+  const dir = path.join(tasksDir, id);
   return { ...JSON.parse(fs.readFileSync(path.join(dir, "task.json"), "utf8")), dir };
 }
 
