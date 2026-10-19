@@ -1,0 +1,12 @@
+{
+  "id": "f1-var-pricelist",
+  "family": "csv-bom",
+  "variant": "variant",
+  "prompt": "The weekly supplier price sync imports 0 items from the supplier's file (tests/fixtures/supplier_weekly.csv) and nobody gets an error. `bash run_tests.sh` reproduces it. Find the root cause and fix it so the suite passes. Do not modify the tests or fixtures.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

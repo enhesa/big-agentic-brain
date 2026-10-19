@@ -1,0 +1,365 @@
+{
+  "learnings": [
+    {
+      "title": "Ledgerly SSO login uses SAML only",
+      "body": "Finance portal access for Ledgerly switched to SAML. The password form still returns 200 but those sessions cannot export. Point users at the IdP tile Ledgerly-Prod.",
+      "tags": [
+        "ledgerly",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Ledgerly report exports are comma CSV with ISO dates",
+      "body": "Outbound Ledgerly reports for analysts use comma CSV and YYYY-MM-DD. Do not confuse with inbound import templates.",
+      "tags": [
+        "ledgerly",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Ledgerly night jobs run in the EU-west vault",
+      "body": "Batch jobs that talk to Ledgerly must run in the EU-west runner pool. US runners get blocked by the finance firewall.",
+      "tags": [
+        "ledgerly",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Ledgerly API tokens expire after 90 days",
+      "body": "Rotate Ledgerly service tokens every 90 days. Vault path finance/ledgerly/api. Expired tokens return 401 token_expired.",
+      "tags": [
+        "ledgerly",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Ledgerly sandbox never posts to the GL",
+      "body": "Ledgerly sandbox accepts imports with 202 but never posts to the general ledger. Use the sandbox event log to inspect.",
+      "tags": [
+        "ledgerly",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast tracking webhooks use HMAC of the raw body",
+      "body": "Inbound Shipfast tracking webhooks sign the raw body with HMAC-SHA256; verify against Shipfast-Timestamp in seconds.",
+      "tags": [
+        "shipfast",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast rate limit is 120 requests per minute",
+      "body": "Shipfast returns 429 with Retry-After in seconds above 120 req/min per API key. Back off; do not rotate keys on 429.",
+      "tags": [
+        "shipfast",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast sandbox labels every label as TEST",
+      "body": "Sandbox labels always print TEST in the corner. Never ship them to warehouses.",
+      "tags": [
+        "shipfast",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast account ids are numeric only",
+      "body": "Shipfast account ids are digits. Passing a UUID returns 400 invalid_account.",
+      "tags": [
+        "shipfast",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Shipfast pickup windows are local warehouse time",
+      "body": "Pickup SLA windows are in the warehouse local timezone, not UTC.",
+      "tags": [
+        "shipfast",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api batch accepts at most 50 addresses",
+      "body": "The /v1/batch endpoint rejects larger batches with 400 batch too large. Split client-side.",
+      "tags": [
+        "geo",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api auth uses the X-Geo-Key header",
+      "body": "geo-api rejects Authorization Bearer tokens with 401. Pass the team key in X-Geo-Key.",
+      "tags": [
+        "geo",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api forward geocode is the only paid path",
+      "body": "Reverse geocode is free for internal apps. Forward geocode counts against the monthly quota.",
+      "tags": [
+        "geo",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api staging host is geo.staging.internal",
+      "body": "Point CI at geo.staging.internal. Production is geo.prod.internal.",
+      "tags": [
+        "geo",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "geo-api responses include a confidence field",
+      "body": "Scores below 0.6 should be shown to a human before routing trucks.",
+      "tags": [
+        "geo",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel holiday calendar lives on Confluence",
+      "body": "Treasury maintains Kestrel closures on the Confluence page Kestrel holidays. The bank API has no closures endpoint.",
+      "tags": [
+        "kestrel",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel sandbox host differs from production",
+      "body": "Sandbox is api.sandbox.kestrel-pay.test; production is api.kestrel-pay.com. Never point CI at prod.",
+      "tags": [
+        "kestrel",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel payouts need a unique client_ref",
+      "body": "Reuse of client_ref returns 409. Generate a new ref per payout attempt.",
+      "tags": [
+        "kestrel",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel supports SEPA and Faster Payments only",
+      "body": "Wire schemes outside SEPA/FPS are refused with 400 unsupported_rail.",
+      "tags": [
+        "kestrel",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Kestrel webhook secrets rotate yearly",
+      "body": "Vault path treasury/kestrel/webhook. Update receivers before 1 January.",
+      "tags": [
+        "kestrel",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM title-cases display names on save",
+      "body": "john smith becomes John Smith. Match on the stable customer number, not the display name.",
+      "tags": [
+        "orion",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM list APIs use cursor pagination",
+      "body": "next_cursor is returned; offset/limit pairs are ignored and re-read page 1.",
+      "tags": [
+        "orion",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM sandbox resets nightly",
+      "body": "Sandbox data is wiped at 03:00 UTC. Do not rely on fixtures across days.",
+      "tags": [
+        "orion",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM custom fields use cf_ prefixes",
+      "body": "Custom field keys must start with cf_. Other keys are dropped silently.",
+      "tags": [
+        "orion",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Orion CRM rate limit is 60 reads per minute",
+      "body": "Burst above 60 returns 429. Writes share a separate 20/min bucket.",
+      "tags": [
+        "orion",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird transactional templates need List-Unsubscribe",
+      "body": "Publishing a transactional template without List-Unsubscribe is refused. Marketing templates are exempt.",
+      "tags": [
+        "postbird",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird sandbox suppresses delivery",
+      "body": "Sandbox accepts with 202 and never delivers. Inspect the event log UI.",
+      "tags": [
+        "postbird",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird domains must pass DKIM before send",
+      "body": "Unverified domains return 403 domain_unverified. Complete DNS first.",
+      "tags": [
+        "postbird",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird attachment size cap is 10 MB",
+      "body": "Larger attachments return 413. Link to object storage instead.",
+      "tags": [
+        "postbird",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Postbird click tracking is off by default",
+      "body": "Enable click tracking per stream in the admin UI; it is not inherited.",
+      "tags": [
+        "postbird",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper service accounts rotate every 90 days",
+      "body": "Expired keys return 401 key revoked. Vault path gatekeeper/svc/<name>.",
+      "tags": [
+        "gatekeeper",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper admin UI is behind Okta",
+      "body": "Humans use Okta SAML for the admin console. Machine clients use Gatekeeper tokens.",
+      "tags": [
+        "gatekeeper",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper staging issuer is https://gk.staging.internal",
+      "body": "Do not mix staging tokens with the production audience.",
+      "tags": [
+        "gatekeeper",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper audit logs retain 180 days",
+      "body": "Export before then if compliance needs longer retention.",
+      "tags": [
+        "gatekeeper",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Gatekeeper mTLS is required for admin APIs",
+      "body": "Calls without a client cert return 401 mtls_required.",
+      "tags": [
+        "gatekeeper",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane dashboard refunds take decimal major units",
+      "body": "Dashboard refunds use amounts like 10.50. The API path is different.",
+      "tags": [
+        "paylane",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane webhooks retry for 24 hours",
+      "body": "Failed merchant webhooks use exponential backoff for a day, then drop. Idempotency keys are required.",
+      "tags": [
+        "paylane",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane test cards are listed in the merchant FAQ",
+      "body": "Use 4000 0000 0000 0002 for a generic decline in sandbox.",
+      "tags": [
+        "paylane",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane settlement reports land at 06:00 UTC",
+      "body": "Files appear in the SFTP drop under /settlements/YYYY-MM-DD/.",
+      "tags": [
+        "paylane",
+        "hard-distractor"
+      ],
+      "family": null
+    },
+    {
+      "title": "Paylane supports EUR and GBP only on v3",
+      "body": "Other currencies return 400 unsupported_currency on v3 endpoints.",
+      "tags": [
+        "paylane",
+        "hard-distractor"
+      ],
+      "family": null
+    }
+  ],
+  "note": "Share vendor/subsystem tokens with TK targets but state different facts. No contrast labels. Used by --hard-distractors."
+}

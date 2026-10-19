@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-19",
     title: "A year of usage, and an install screenshot",
     changes: [
+      "Agent and retrieval evals live under evals/; they measure whether shared memory helps coding agents.",
       "The usage page covers the last 12 months; its four tiles show totals and how much they grew this week.",
       "Most helpful and Upkeep on the usage page cover the same 12 months.",
       "The landing page shows how to add the plugin in the Claude app, above the install commands.",

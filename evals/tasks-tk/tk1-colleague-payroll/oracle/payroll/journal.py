@@ -1,0 +1,34 @@
+"""Monthly payroll journal export, imported by Finance into Ledgerly (our ERP)."""
+import csv
+import io
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+
+COLUMNS = ["employee_id", "period_end", "gross", "tax", "net"]
+
+
+@dataclass
+class Entry:
+    employee_id: str
+    period_end: date
+    gross: Decimal
+    tax: Decimal
+
+    @property
+    def net(self) -> Decimal:
+        return self.gross - self.tax
+
+
+def _amount(v) -> str:
+    return f"{v:.2f}".replace(".", ",")
+
+
+def export_payroll(entries: list[Entry]) -> str:
+    buf = io.StringIO()
+    buf.write("#LEDGERLY;2\r\n")
+    writer = csv.writer(buf, delimiter=";", lineterminator="\r\n")
+    writer.writerow(COLUMNS)
+    for e in entries:
+        writer.writerow([e.employee_id, e.period_end.strftime("%d.%m.%Y"), _amount(e.gross), _amount(e.tax), _amount(e.net)])
+    return buf.getvalue()

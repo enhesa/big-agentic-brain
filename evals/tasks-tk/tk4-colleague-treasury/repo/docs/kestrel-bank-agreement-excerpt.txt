@@ -1,0 +1,8 @@
+KESTREL BANK N.V. - MERCHANT SETTLEMENT AGREEMENT
+Schedule 3 - Settlement (excerpt)
+
+3.1 Business days are Monday to Friday, except 1 January, 1 May, 25 December and 26 December.
+3.2 Cut-off. Card transactions captured before 16:30 Amsterdam time (Europe/Amsterdam, CET/CEST)
+    on a business day settle on that business day. Transactions captured at or after 16:30, or on
+    a day that is not a business day, settle on the next business day.
+3.3 All dates in settlement statements are Amsterdam dates.

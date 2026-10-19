@@ -1,0 +1,250 @@
+{
+  "_provenance": "symptom: written from the task prompts before diagnosis (what an agent knows at the start). observed: bab_search queries real agents (claude-sonnet-5-5, claude-haiku-5-5) issued during the 2026-10-19 benchmark runs.",
+  "queries": [
+    {
+      "family": "csv-bom",
+      "query": "missing required column order_id but the column is in the file",
+      "type": "symptom"
+    },
+    {
+      "family": "csv-bom",
+      "query": "import reads 0 rows from supplier CSV, no error",
+      "type": "symptom"
+    },
+    {
+      "family": "csv-bom",
+      "query": "KeyError on first CSV header",
+      "type": "symptom"
+    },
+    {
+      "family": "csv-bom",
+      "query": "CSV BOM utf-8-sig Excel export missing column",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "CSV UTF-8 BOM utf-8-sig header sku skipped",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "ImportFailed missing required column order_id",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "UTF-8 BOM CSV header missing column",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "UTF-8 BOM CSV header sku utf-8-sig",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "UTF-8 BOM csv header missing column utf-8-sig",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "csv BOM utf-8-sig header sku skipped",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "supplier price sync imports 0 items csv",
+      "type": "observed"
+    },
+    {
+      "family": "csv-bom",
+      "query": "supplier weekly price sync CSV import 0 items",
+      "type": "observed"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "test fails half the time and passes on re-run",
+      "type": "symptom"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "flaky test passes locally fails in CI",
+      "type": "symptom"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "disk cache 0% hit rate after restart",
+      "type": "symptom"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "Counter most_common tie order PYTHONHASHSEED flaky",
+      "type": "observed"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "flaky test digest",
+      "type": "observed"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "flaky test_digest",
+      "type": "observed"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "geocoding disk cache hit rate restart",
+      "type": "observed"
+    },
+    {
+      "family": "hash-randomization",
+      "query": "python hash() PYTHONHASHSEED cache file names restart",
+      "type": "observed"
+    },
+    {
+      "family": "money-rounding",
+      "query": "invoice total off by one cent",
+      "type": "symptom"
+    },
+    {
+      "family": "money-rounding",
+      "query": "payout split parts do not add up to the total",
+      "type": "symptom"
+    },
+    {
+      "family": "money-rounding",
+      "query": "rounding 2.675 gives 2.67",
+      "type": "symptom"
+    },
+    {
+      "family": "money-rounding",
+      "query": "invoice rounding cents",
+      "type": "observed"
+    },
+    {
+      "family": "money-rounding",
+      "query": "invoice rounding one cent",
+      "type": "observed"
+    },
+    {
+      "family": "env-coercion",
+      "query": "env var set to false but feature still enabled",
+      "type": "symptom"
+    },
+    {
+      "family": "env-coercion",
+      "query": "NOTIFY_SANDBOX=false still uses sandbox gateway",
+      "type": "symptom"
+    },
+    {
+      "family": "env-coercion",
+      "query": "dry run env 0 still dry run",
+      "type": "symptom"
+    },
+    {
+      "family": "env-coercion",
+      "query": "INGEST_DRY_RUN log-only dry run env",
+      "type": "observed"
+    },
+    {
+      "family": "env-coercion",
+      "query": "NOTIFY_SANDBOX bool env parsing config",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "two accounts with the same username",
+      "type": "symptom"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "validator accepts a username with a trailing newline",
+      "type": "symptom"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "slug validation accepts unicode characters",
+      "type": "symptom"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "duplicate username homoglyph signup normalization",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "duplicate username signup homoglyph normalization",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "python regex $ matches before trailing newline fullmatch",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "signup username normalization duplicate",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "signup username uniqueness alice",
+      "type": "observed"
+    },
+    {
+      "family": "regex-semantics",
+      "query": "slug validation CDN",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "due date shown one day early for US customers",
+      "type": "symptom"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "task overdue on its due date in New Zealand",
+      "type": "symptom"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "date off by one day timezone javascript",
+      "type": "symptom"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "Date.parse date-only YYYY-MM-DD UTC local midnight timezone overdue",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "Date.parse date-only YYYY-MM-DD UTC midnight timezone overdue",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "new Date date-only ISO string UTC midnight local timezone off by one day",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "overdue due date timezone task board",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "reminder due date time zone",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "reminder due date timezone",
+      "type": "observed"
+    },
+    {
+      "family": "js-date-only-utc",
+      "query": "timezone due date overdue week",
+      "type": "observed"
+    }
+  ]
+}

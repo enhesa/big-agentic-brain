@@ -1,0 +1,85 @@
+{
+  "queries": [
+    {
+      "family": "tk-ledgerly",
+      "type": "blind",
+      "query": "bookkeeping nightly bulk load dies on the opening record"
+    },
+    {
+      "family": "tk-ledgerly",
+      "type": "blind",
+      "query": "which separators and calendar order does bookkeeping want inbound"
+    },
+    {
+      "family": "tk-shipfast",
+      "type": "blind",
+      "query": "parcel provider refuses signed calls even though fixtures stay green"
+    },
+    {
+      "family": "tk-shipfast",
+      "type": "blind",
+      "query": "name of outbound parcel HTTP field holding the MAC"
+    },
+    {
+      "family": "tk-geo-api",
+      "type": "blind",
+      "query": "map lookup says pause but wait unit is murky and some faults must stop"
+    },
+    {
+      "family": "tk-geo-api",
+      "type": "blind",
+      "query": "tell a short throttle from a hard daily ceiling on the platform locator"
+    },
+    {
+      "family": "tk-kestrel",
+      "type": "blind",
+      "query": "money movement booking day shifts around public holidays and late evening windows"
+    },
+    {
+      "family": "tk-kestrel",
+      "type": "blind",
+      "query": "shift booking timestamps onto the lender clock before the daily deadline"
+    },
+    {
+      "family": "tk-orion-ids",
+      "type": "blind",
+      "query": "party code validation rejects values that survive the usual card scheme"
+    },
+    {
+      "family": "tk-orion-ids",
+      "type": "blind",
+      "query": "registry codes use another modulus and still allow old letter prefixes"
+    },
+    {
+      "family": "tk-postbird",
+      "type": "blind",
+      "query": "blast messages look okay upstream yet never show up for readers"
+    },
+    {
+      "family": "tk-postbird",
+      "type": "blind",
+      "query": "promo traffic must avoid the ordinary one-to-one sending lane"
+    },
+    {
+      "family": "tk-gatekeeper",
+      "type": "blind",
+      "query": "fresh machine credentials fail checks that still take the previous shape"
+    },
+    {
+      "family": "tk-gatekeeper",
+      "type": "blind",
+      "query": "who and what fields on internal bearer tickets changed plus skew window"
+    },
+    {
+      "family": "tk-paylane",
+      "type": "blind",
+      "query": "chargeback style payloads fail when money fields use dotted major units"
+    },
+    {
+      "family": "tk-paylane",
+      "type": "blind",
+      "query": "processor wants ISO codes in lower case and money as whole-number text"
+    }
+  ],
+  "note": "Blind-written with stopwords excluded from overlap checks against the target title+body."
+}

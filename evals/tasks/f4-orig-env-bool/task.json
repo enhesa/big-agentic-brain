@@ -1,0 +1,12 @@
+{
+  "id": "f4-orig-env-bool",
+  "family": "env-coercion",
+  "variant": "original",
+  "prompt": "Incident: production notifications are being sent through the SANDBOX gateway, so customers never receive them, even though the deployment sets NOTIFY_SANDBOX=false (prod env is reproduced in tests/test_config.py). `bash run_tests.sh` fails. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

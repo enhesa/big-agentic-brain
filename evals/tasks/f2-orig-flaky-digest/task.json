@@ -1,0 +1,13 @@
+{
+  "id": "f2-orig-flaky-digest",
+  "family": "hash-randomization",
+  "variant": "original",
+  "prompt": "tests/test_digest.py is flaky in CI: it fails maybe half the time and passes on re-run, and we have been re-running the pipeline for weeks. Find the root cause and fix it properly (no retries, no skipping, do not change the tests). `bash run_tests.sh` runs the suite; run it several times.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash grade.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh",
+    "grade.sh"
+  ]
+}

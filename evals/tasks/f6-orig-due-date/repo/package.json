@@ -1,0 +1,7 @@
+{
+  "name": "acme-reminders",
+  "version": "1.4.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {"test": "bash run_tests.sh"}
+}

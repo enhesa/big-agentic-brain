@@ -1,0 +1,12 @@
+{
+  "id": "f3-var-payout-split",
+  "family": "money-rounding",
+  "variant": "variant",
+  "prompt": "Accounting flagged payout splits: sometimes the seller/platform/affiliate parts do not add up to the order total, and some parts are a cent off from what their rule (in the `split` docstring) says. `bash run_tests.sh` reproduces it. Fix payouts/split.py without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

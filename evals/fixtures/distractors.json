@@ -1,0 +1,197 @@
+{
+  "_provenance": "Distractor memories: the 10 demo learnings from scripts/seed-demo.sh plus 10 hand-written engineering near-misses that share vocabulary with the tasks but do not answer them.",
+  "learnings": [
+    {
+      "title": "UTM naming for campaigns: utm_campaign = q4-{region}-{product}",
+      "body": "Every paid and owned link uses utm_campaign=<quarter>-<region>-<product>, lowercase, hyphens only. Region codes: eu, us, apac. Product codes: esg, ehs, cmd. Example: q4-eu-esg. Anything else breaks the attribution dashboard.",
+      "tags": [
+        "marketing",
+        "campaigns"
+      ],
+      "source": "scripts/seed-demo.sh l1"
+    },
+    {
+      "title": "Brand toolkit 2026 lives in the Marketing SharePoint under Brand/2026",
+      "body": "Fonts: Urbanist for headings, Inter for body, Inconsolata for code. Primary teal #00B0A1, navy #1A3360. Never use the 2023 palette (the coral was retired).",
+      "tags": [
+        "marketing",
+        "brand"
+      ],
+      "source": "scripts/seed-demo.sh l2"
+    },
+    {
+      "title": "Pricing quotes need legal review before they leave the building",
+      "body": "Any quote with non-standard terms (multi-year, custom SLA, data residency) goes to Legal first. Standard price list quotes do not. Turnaround is usually two working days.",
+      "tags": [
+        "sales",
+        "legal",
+        "pricing"
+      ],
+      "source": "scripts/seed-demo.sh l3"
+    },
+    {
+      "title": "A customer in the automotive sector requires a signed NDA before any demo",
+      "body": "Ask the account owner for the NDA template; it is on the Sales SharePoint under Templates/NDA. Do not share screenshots or sample data before it is signed.",
+      "tags": [
+        "sales",
+        "clients",
+        "process"
+      ],
+      "source": "scripts/seed-demo.sh l4"
+    },
+    {
+      "title": "The export service needs the VPN for NuGet restore",
+      "body": "dotnet restore in acme.export.* fails with a timeout when off the VPN because nuget.config points at an internal package feed. This is a setup problem, not a broken repo.",
+      "tags": [
+        "engineering",
+        "ci",
+        "tooling"
+      ],
+      "source": "scripts/seed-demo.sh l5"
+    },
+    {
+      "title": "Run tests with the repo test script, never bare dotnet test",
+      "body": "The repo test script is what CI runs: it wires loggers, coverage and dependency containers. Check it starts with set -ex or a failing test exits 0 and CI goes silently green.",
+      "tags": [
+        "engineering",
+        "ci",
+        "testing"
+      ],
+      "source": "scripts/seed-demo.sh l6"
+    },
+    {
+      "title": "kubectl contexts: the dev cluster is the default, a prod one exists too",
+      "body": "Check the current context before running anything. It can be left on prod after an incident. Give az and kubectl calls an explicit timeout: they hang rather than fail when the VPN is down.",
+      "tags": [
+        "engineering",
+        "kubernetes",
+        "tooling"
+      ],
+      "source": "scripts/seed-demo.sh l7"
+    },
+    {
+      "title": "Client names never go into shared notes; describe the sector instead",
+      "body": "Write a customer in the pharma sector, not the company name. The memory masks what it recognises but recognition is best effort; the responsibility is ours.",
+      "tags": [
+        "legal",
+        "process",
+        "security"
+      ],
+      "source": "scripts/seed-demo.sh l8"
+    },
+    {
+      "title": "Board decks go through Sam before the Thursday cut-off",
+      "body": "Send the near-final deck to Sam by Wednesday noon. Thursday 16:00 is the cut-off for the board pack; anything after that waits a month.",
+      "tags": [
+        "management",
+        "process"
+      ],
+      "source": "scripts/seed-demo.sh l9"
+    },
+    {
+      "title": "Quarterly OKR reviews use the template in Management/OKR/2026",
+      "body": "One slide per objective, red-amber-green on the key results, no more than three risks. Reviews are the first Monday of the quarter.",
+      "tags": [
+        "management",
+        "process",
+        "templates"
+      ],
+      "source": "scripts/seed-demo.sh l10"
+    },
+    {
+      "title": "Postgres: timestamp without time zone silently drops the offset",
+      "body": "Store instants as timestamptz. A timestamp column keeps the wall-clock text and discards the offset, so data written from servers in different zones cannot be compared. Use AT TIME ZONE only for display.",
+      "tags": [
+        "postgres",
+        "timezone",
+        "sql"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "Docker builds: COPY . before installing deps busts the layer cache",
+      "body": "Copy package.json and the lockfile first, install, then COPY the rest. Otherwise every source change reinstalls all dependencies and CI builds take minutes longer.",
+      "tags": [
+        "docker",
+        "ci"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "pytest: tests pass alone but fail together - module-level state leaks",
+      "body": "A module-level cache or a monkeypatch without undo leaks between tests. Use fixtures with teardown or monkeypatch, and run with -p randomly to catch order dependence.",
+      "tags": [
+        "python",
+        "testing",
+        "flaky-tests"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "Node: JSON.stringify drops undefined and turns Dates into ISO strings",
+      "body": "Round-tripping objects through JSON loses undefined fields and Date instances become strings. Use a reviver for dates and explicit null for missing values in API payloads.",
+      "tags": [
+        "javascript",
+        "node",
+        "json"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "YAML: unquoted NO, off, yes become booleans in YAML 1.1 parsers",
+      "body": "Country code NO or a value like off is parsed as false by PyYAML and some CI systems. Quote string values in config files.",
+      "tags": [
+        "yaml",
+        "config"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "Python logging: basicConfig does nothing if a handler is already configured",
+      "body": "A library that logs at import time installs a handler first, so a later logging.basicConfig is a no-op. Pass force=True or configure logging before importing such libraries.",
+      "tags": [
+        "python",
+        "logging"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "Excel opens CSV with the system list separator, not always comma",
+      "body": "On EU locales Excel saves CSV with semicolons and decimal commas. Sniff the delimiter instead of assuming comma, and parse amounts per locale.",
+      "tags": [
+        "csv",
+        "excel",
+        "i18n"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "JavaScript: Array.prototype.sort sorts numbers as strings by default",
+      "body": "[10, 9, 1].sort() gives [1, 10, 9]. Always pass a comparator (a, b) => a - b for numbers.",
+      "tags": [
+        "javascript",
+        "sorting"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "HTTP clients: retry only idempotent requests",
+      "body": "Automatic retries of POST can create duplicate orders. Retry GET/PUT/DELETE, or send an Idempotency-Key with POST so the server can dedupe.",
+      "tags": [
+        "http",
+        "api",
+        "payments"
+      ],
+      "source": "near-miss"
+    },
+    {
+      "title": "Feature flags: read them once per request, not per call",
+      "body": "Reading a remote flag several times in one request can flip mid-request during a rollout and produce mixed behaviour. Snapshot flags at the start of the request.",
+      "tags": [
+        "config",
+        "feature-flags"
+      ],
+      "source": "near-miss"
+    }
+  ]
+}

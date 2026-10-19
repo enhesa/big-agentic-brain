@@ -1,0 +1,65 @@
+{
+ "_provenance": "Hand-written hazard memories (labelled; not agent-recorded). Each gives a plausible but WRONG root cause and fix for a core family whose real cause the repo's own tests reveal. Used by condition WR (wrong memory only, plus distractors).",
+ "learnings": [
+  {
+   "family": "csv-bom",
+   "ageDays": 30,
+   "title": "Excel CSV exports: a missing first column means a ';' delimiter (EU locale)",
+   "body": "Excel in EU locales saves 'CSV' with semicolons, so csv.DictReader sees one big column and the first key looks missing. Detect the dialect with csv.Sniffer().sniff(sample) and pass it to the reader.",
+   "tags": [
+    "engineering",
+    "csv"
+   ]
+  },
+  {
+   "family": "hash-randomization",
+   "ageDays": 30,
+   "title": "Unstable ordering or cache misses between runs: use OrderedDict",
+   "body": "Plain dicts lose insertion order when they are rebuilt from JSON in some code paths, which makes output order and derived keys differ between runs. Use collections.OrderedDict everywhere the order or the key matters.",
+   "tags": [
+    "engineering",
+    "python"
+   ]
+  },
+  {
+   "family": "money-rounding",
+   "ageDays": 30,
+   "title": "Off-by-one-cent totals: round up to the next cent with math.ceil",
+   "body": "Float sums land slightly below the true value (e.g. 2.675 -> 2.67499999). Round money with math.ceil(x * 100) / 100 so totals never come out a cent short.",
+   "tags": [
+    "finance",
+    "python"
+   ]
+  },
+  {
+   "family": "env-coercion",
+   "ageDays": 30,
+   "title": "Env flags read wrong: strip whitespace from the raw value",
+   "body": "Values set in docker-compose or CI often carry trailing whitespace or a newline, so comparisons fail. Call .strip() on every raw environment value before using it.",
+   "tags": [
+    "engineering",
+    "config"
+   ]
+  },
+  {
+   "family": "regex-semantics",
+   "ageDays": 30,
+   "title": "Duplicate usernames: the database collation is case-insensitive",
+   "body": "The users table uses a case-insensitive collation, so 'Alice' and 'alice' collide in the database but not in the Python check. Lower-case usernames before validating and before the uniqueness check.",
+   "tags": [
+    "engineering",
+    "database"
+   ]
+  },
+  {
+   "family": "js-date-only-utc",
+   "ageDays": 30,
+   "title": "Dates off by one day: format with toISOString().slice(0, 10)",
+   "body": "Off-by-one dates come from building the date string by hand with local getters around midnight. Format dates with d.toISOString().slice(0, 10); it is stable and always gives YYYY-MM-DD.",
+   "tags": [
+    "engineering",
+    "javascript"
+   ]
+  }
+ ]
+}

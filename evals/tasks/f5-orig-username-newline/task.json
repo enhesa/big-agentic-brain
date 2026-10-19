@@ -1,0 +1,12 @@
+{
+  "id": "f5-orig-username-newline",
+  "family": "regex-semantics",
+  "variant": "original",
+  "prompt": "Support ticket #4411: two different accounts both show up as \"alice\" in the admin UI, and the second one was used for phishing. tests/test_signup.py reproduces it and `bash run_tests.sh` fails. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "tests",
+    "run_tests.sh"
+  ]
+}

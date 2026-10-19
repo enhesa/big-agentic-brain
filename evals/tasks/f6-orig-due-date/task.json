@@ -1,0 +1,12 @@
+{
+  "id": "f6-orig-due-date",
+  "family": "js-date-only-utc",
+  "variant": "original",
+  "prompt": "Customers in the US (and New Zealand) complain that reminder e-mails show the wrong due date / say 'due in 0 days' a day early. `bash run_tests.sh` (runs the suite in two CI time zones) fails. Find the root cause and fix it without changing the tests.",
+  "test_cmd": "bash run_tests.sh",
+  "grade_cmd": "bash run_tests.sh",
+  "protected": [
+    "test",
+    "run_tests.sh"
+  ]
+}

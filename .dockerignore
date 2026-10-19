@@ -36,3 +36,6 @@ scripts
 *.sqlite
 *.sqlite3
 *.db
+
+# Eval fixtures and run outputs (large; not needed in the app image)
+evals/

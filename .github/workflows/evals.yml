@@ -1,0 +1,137 @@
+name: evals
+
+# Offline retrieval eval + task validation on PRs that touch search or the evals (no LLM, no secrets).
+# Agent evals (LLM, costs money) only on manual dispatch, reading the key from the ANTHROPIC_API_KEY secret.
+on:
+  pull_request:
+    paths:
+      - "lib/**"
+      - "app/api/**"
+      - "app/mcp/**"
+      - "evals/**"
+      - ".github/workflows/evals.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke (3 tasks, A/B, 1 trial, under $0.50 with Haiku) or full (12 tasks, A/B/C, 3 trials)"
+        type: choice
+        options: [smoke, full]
+        default: smoke
+      model:
+        description: "Model id (empty = mode default)"
+        type: string
+        default: ""
+      budget_usd:
+        description: "Hard spend cap in USD"
+        type: string
+        default: "0.50"
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  retrieval:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Task validation (each task fails as shipped, passes with its reference fix)
+        run: pnpm eval:validate
+      - name: Retrieval eval (recall@k over MCP bab_search)
+        run: pnpm eval:retrieval --out "$RUNNER_TEMP/retrieval" --min-recall5 0.85 --min-mrr 0.80
+      - name: Hard retrieval (vendor-overlap distractors + blind queries)
+        run: pnpm eval:retrieval --corpus tk --hard-distractors --queries hard --out "$RUNNER_TEMP/retrieval-hard" --min-recall5 0 --min-mrr 0
+      - if: always()
+        run: |
+          { echo '## Baseline retrieval'; cat "$RUNNER_TEMP/retrieval/retrieval.md" 2>/dev/null
+            echo '## Hard retrieval (vendor-overlap + blind)'
+            cat "$RUNNER_TEMP/retrieval-hard/retrieval.md" 2>/dev/null
+          } >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: retrieval-eval
+          path: |
+            ${{ runner.temp }}/retrieval/
+            ${{ runner.temp }}/retrieval-hard/
+
+  agent:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: evals
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install bubblewrap (required; no silent unsandboxed fallback)
+        run: sudo apt-get install -y bubblewrap && sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Agent eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BAB_EVAL_MODEL: ${{ inputs.model }}
+          BAB_EVAL_MODE: ${{ inputs.mode }}
+          BAB_EVAL_BUDGET_USD: ${{ inputs.budget_usd }}
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
+        run: |
+          [ -n "$BAB_EVAL_MODEL" ] || unset BAB_EVAL_MODEL
+          pnpm eval --mode "$BAB_EVAL_MODE" --budget-usd "$BAB_EVAL_BUDGET_USD" --sandbox bwrap --out "$BAB_EVAL_OUT"
+      - name: Redact artifacts and guard against key leakage
+        id: guard
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
+        run: |
+          set -euo pipefail
+          if [ ! -d "$BAB_EVAL_OUT" ]; then
+            echo "no agent out dir; skipping guard"
+            exit 0
+          fi
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            while IFS= read -r -d '' f; do
+              sed -i "s|${ANTHROPIC_API_KEY}|***REDACTED***|g" "$f" || true
+            done < <(find "$BAB_EVAL_OUT" -type f \( -name '*.md' -o -name '*.json' -o -name '*.csv' -o -name '*.jsonl' -o -name '*.txt' -o -name '*.patch' \) -print0 2>/dev/null)
+            if grep -R --fixed-strings -- "$ANTHROPIC_API_KEY" "$BAB_EVAL_OUT" 2>/dev/null; then
+              echo "::error::API key found in eval artifacts after redaction"
+              exit 1
+            fi
+          fi
+          if grep -R -E -- 'sk-ant-[A-Za-z0-9_-]+' "$BAB_EVAL_OUT" 2>/dev/null; then
+            echo "::error::sk-ant- pattern found in eval artifacts"
+            exit 1
+          fi
+          echo "key-guard: ok"
+      - if: always()
+        env:
+          BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
+        run: cat "$BAB_EVAL_OUT/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always() && steps.guard.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agent-eval
+          path: |
+            ${{ runner.temp }}/agent-out/summary.md
+            ${{ runner.temp }}/agent-out/results.json
+            ${{ runner.temp }}/agent-out/results.csv
+            ${{ runner.temp }}/agent-out/meta.json
+            ${{ runner.temp }}/agent-out/runs/*/transcript.jsonl
+            ${{ runner.temp }}/agent-out/runs/*/grade.txt
+            ${{ runner.temp }}/agent-out/runs/*/diff.patch

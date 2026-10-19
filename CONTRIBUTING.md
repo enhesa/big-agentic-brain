@@ -30,3 +30,7 @@ Settings are declared in `lib/config-spec.mjs`. After a change run `pnpm docs:co
 ## Conduct and security
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+## Agent evals
+
+The coding-agent eval harness lives under `evals/`. See [evals/README.md](evals/README.md).
