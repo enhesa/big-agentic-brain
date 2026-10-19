@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/enhesa/big-agentic-brain/compare/v2.2.0...v2.3.0) (2026-10-19)
+
+
+### Features
+
+* optional install screenshot on the landing page ([#23](https://github.com/enhesa/big-agentic-brain/issues/23)) ([47a59f5](https://github.com/enhesa/big-agentic-brain/commit/47a59f543b46fd1b6bade7ebe138c1d45f1ce319))
+* ship the Claude app install screenshot by default ([#25](https://github.com/enhesa/big-agentic-brain/issues/25)) ([8f78273](https://github.com/enhesa/big-agentic-brain/commit/8f7827343576937fa4b6ab89175ca267e3a7c506))
+
 ## [2.2.0](https://github.com/enhesa/big-agentic-brain/compare/v2.1.0...v2.2.0) (2026-10-19)
 
 
