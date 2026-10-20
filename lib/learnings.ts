@@ -759,17 +759,16 @@ function buildFtsQuery(query: string): string {
 }
 
 /**
- * Splits an identifier-like chunk (`KeyError`, `order_id`, `E104`, `2.67`, `a.b.c`) into the
+ * Splits an identifier-like chunk (`KeyError`, `order_id`, `2.67`, `a.b.c`) into the
  * parts an indexed text may carry separately. The index splits on punctuation, so a body that
  * says "order_id" holds the tokens `order` and `id`, while a body that says "KeyError" holds
- * one token. Case boundaries and letter-digit boundaries are split here too.
+ * one token. Case and punctuation boundaries split here. Letter-digit boundaries do not: `sha256`
+ * and `k8s` are names, and their halves are noise.
  */
 function identifierParts(chunk: string): string[] {
   return chunk
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/([A-Za-z])(\d)/g, "$1 $2")
-    .replace(/(\d)([A-Za-z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((p) => p.length > 0);
@@ -783,7 +782,7 @@ function identifierParts(chunk: string): string[] {
  * below sorts the partial matches sensibly, so the best of them still lands first.
  *
  * Identifiers get extra terms: the parts of `order_id` or `KeyError` as a phrase, and as
- * single terms when they are long enough or contain a digit. A bare error string has few
+ * single terms when they are at least three letters. A bare error string has few
  * plain words, and the phrase is the term that lines up with how the entry spells it.
  */
 function buildFtsAnyQuery(query: string): string {
@@ -796,8 +795,7 @@ function buildFtsAnyQuery(query: string): string {
     if (parts.length < 2) continue;
     terms.add(`"${parts.join(" ")}"`);
     for (const part of parts) {
-      const keep = /\d/.test(part) ? part.length >= 2 : normalizeTokens(part).length === 1;
-      if (keep) terms.add(quoteFtsToken(part));
+      if (part.length >= 3 && normalizeTokens(part).length === 1) terms.add(quoteFtsToken(part));
     }
   }
 
@@ -886,10 +884,10 @@ function searchFilterClauses(filters: ListFilters): { clauses: string[]; params:
 
 /**
  * Search via FTS5, returning ranked results with snippets. `offset` pages further into
- * the same result set (bab_search, lib/mcp.ts); the any-term widening below only ever
- * runs at offset 0 — at a later offset an empty page means "no more rows", not "widen
- * the query", so a page 2 request can't silently swap in a different, wider match set
- * than the page 1 the agent already saw (and than searchTotal() below already counted).
+ * the same result set (bab_search, lib/mcp.ts). By default the result is the all-terms
+ * matches followed by the any-term matches (ranked, de-duplicated), so a page 2 request
+ * continues the same list page 1 showed. With an explicit `sort` or a `stack`, one query
+ * over the any-term match is ordered once by that choice.
  */
 export function search(
   query: string,
@@ -952,26 +950,33 @@ export function search(
       off,
     ) as unknown as SearchRow[];
 
-  // Strict matches (every term) come first. When they cannot fill the page, the rest is
-  // filled from the any-term match, best first, skipping rows already shown. Widening only
-  // on an empty result left a query with one strict hit at one row, and the paraphrased
-  // or error-only query whose real answer matched some terms never saw it. The merged list
-  // is one stable ordering, so a page 2 request continues where page 1 stopped, and
-  // searchTotal() counts the same union.
+  // Default order: strict matches (every term) first, then, when they cannot fill the page,
+  // the any-term matches best first, skipping rows already shown. Widening only on an empty
+  // result left a query with one strict hit at one row, and the paraphrased or error-only
+  // query whose real answer matched some terms never saw it. The merged list is one stable
+  // ordering, so page 2 continues where page 1 stopped, and searchTotal() counts the union.
+  // An explicit sort or a stack is a user-chosen order over the whole result: two blocks
+  // sorted separately would not be sorted. Those run ONE de-duplicated query over the
+  // any-term match (a superset of the strict one), or the strict match alone when the query
+  // has no wider form.
   const need = offset + limit;
-  const strictCount = (
-    db.prepare(`SELECT COUNT(*) AS n FROM learnings_fts CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid WHERE ${clauses.join(" AND ")}`)
-      .get(ftsQuery, ...filterParams) as { n: number }
-  ).n;
   let rows: SearchRow[];
-  if (strictCount >= need) {
-    rows = run(ftsQuery);
+  if (filters.sort || filters.stack) {
+    rows = run(buildFtsAnyQuery(query) || ftsQuery);
   } else {
-    const strict = strictCount > 0 ? run(ftsQuery, strictCount, 0) : [];
-    const anyQuery = buildFtsAnyQuery(query);
-    const seen = new Set(strict.map((r) => r.id));
-    const wide = anyQuery ? run(anyQuery, need + strictCount, 0).filter((r) => !seen.has(r.id)) : [];
-    rows = [...strict, ...wide].slice(offset, need);
+    const strictCount = (
+      db.prepare(`SELECT COUNT(*) AS n FROM learnings_fts CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid WHERE ${clauses.join(" AND ")}`)
+        .get(ftsQuery, ...filterParams) as { n: number }
+    ).n;
+    if (strictCount >= need) {
+      rows = run(ftsQuery);
+    } else {
+      const strict = strictCount > 0 ? run(ftsQuery, strictCount, 0) : [];
+      const anyQuery = buildFtsAnyQuery(query);
+      const seen = new Set(strict.map((r) => r.id));
+      const wide = anyQuery ? run(anyQuery, need + strictCount, 0).filter((r) => !seen.has(r.id)) : [];
+      rows = [...strict, ...wide].slice(offset, need);
+    }
   }
 
   const authorNames = getAuthorNames(rows.map((r) => r.author_id));
@@ -1219,10 +1224,9 @@ export function standingsFor(
 
 /**
  * Total rows search() would page through for the same query/filters, ignoring
- * limit/offset — bab_search's `total` (lib/mcp.ts). Mirrors search()'s own
- * all-terms-then-any-term decision (a query that needs the any-term widening
- * to match anything counts against that wider match, same as page 1 of search()
- * would return), so the two never disagree about how many rows exist at offset 0.
+ * limit/offset — bab_search's `total` (lib/mcp.ts). It counts the same union search()
+ * lists: the all-terms matches plus the any-term matches (the larger of the two counts,
+ * since the any-term match contains the strict one).
  */
 export function searchTotal(query: string, filters: ListFilters = {}): number {
   const db = getDb();

@@ -317,13 +317,17 @@ function runMigrationV46(database: DatabaseSync) {
   // finds "rounded". Only the tokenizer changes; the columns, content table and triggers stay.
   // DROP IF EXISTS plus CREATE plus rebuild can run twice, so a process that died half way
   // boots again. The triggers keep working because they name the table, not its definition.
-  database.exec(`
-    DROP TABLE IF EXISTS learnings_fts;
-    CREATE VIRTUAL TABLE learnings_fts USING fts5(
-      title, body, tags, content='learnings', content_rowid='rowid', tokenize='porter unicode61'
-    );
-    INSERT INTO learnings_fts(learnings_fts) VALUES ('rebuild');
-  `);
+  // One transaction: a failure in the rebuild rolls the DROP back instead of leaving search
+  // without an index.
+  inTransaction(database, () => {
+    database.exec(`
+      DROP TABLE IF EXISTS learnings_fts;
+      CREATE VIRTUAL TABLE learnings_fts USING fts5(
+        title, body, tags, content='learnings', content_rowid='rowid', tokenize='porter unicode61'
+      );
+      INSERT INTO learnings_fts(learnings_fts) VALUES ('rebuild');
+    `);
+  });
 }
 
 function runMigrationV45(database: DatabaseSync) {

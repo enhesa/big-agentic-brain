@@ -70,10 +70,35 @@ describe("search recall", () => {
     expect(await titles("KeyError: 'order_id'")).toContain("Import fails on the first header");
   });
 
-  it("splits error codes with letters and digits", async () => {
-    await memory("Ledger import rejected", "The importer answers E-104 for an invalid record.");
-    await memory("Other note", "Nothing relevant.");
-    expect(await titles("E104 invalid")).toContain("Ledger import rejected");
+  it("splits dotted names and does not split letter-digit names", async () => {
+    await memory("Ledger import rejected", "The importer fails in invoice.line_item for a bad record.");
+    await memory("Hash note", "Use sha256 for digests.");
+    await memory("Another sha note", "The sha of a commit is its id.");
+    expect(await titles("invoice.line_item")).toContain("Ledger import rejected");
+    const { search } = await import("../lib/learnings");
+    // "sha256" must not widen to every entry that mentions "sha".
+    expect(search("sha256 digests", {}, 10).map((r) => r.title)).toEqual(["Hash note"]);
+  });
+
+  it("orders strict and loose hits once when a sort is given", async () => {
+    const { getDb } = await import("../lib/db");
+    const oldStrict = await memory("Alpha gamma strict", "alpha gamma");
+    const newLoose = await memory("Alpha loose", "alpha");
+    const midLoose = await memory("Gamma loose", "gamma");
+    const db = getDb();
+    const at = (id: string, d: string) => db.prepare("UPDATE learnings SET created_at = ? WHERE id = ?").run(d, id);
+    at(oldStrict.id, "2026-01-01 00:00:00");
+    at(midLoose.id, "2026-02-01 00:00:00");
+    at(newLoose.id, "2026-03-01 00:00:00");
+    const { search, searchTotal } = await import("../lib/learnings");
+    const newest = search("alpha gamma", { sort: "newest" }, 10).map((r) => r.title);
+    expect(newest).toEqual(["Alpha loose", "Gamma loose", "Alpha gamma strict"]);
+    const oldest = search("alpha gamma", { sort: "oldest" }, 10).map((r) => r.title);
+    expect(oldest).toEqual(["Alpha gamma strict", "Gamma loose", "Alpha loose"]);
+    expect(searchTotal("alpha gamma", { sort: "newest" })).toBe(3);
+    const p1 = search("alpha gamma", { sort: "newest" }, 2, 0).map((r) => r.title);
+    const p2 = search("alpha gamma", { sort: "newest" }, 2, 2).map((r) => r.title);
+    expect([...p1, ...p2]).toEqual(newest);
   });
 
   it("never lets query syntax reach MATCH", async () => {
