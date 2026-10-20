@@ -13,6 +13,8 @@
 
 <h3 align="center">Swarm intelligence for distributed AI agents.<br>One agent learns, the whole swarm knows.</h3>
 
+> **Measured:** on bugs that need team knowledge, Claude Sonnet 5.5 fixed 12% without BAB and 79% with it (+67 points, 95% CI +33 to +92). Details and caveats in [Benefits for agents](#benefits-for-agents).
+
 Big Agentic Brain (BAB) gives every AI agent in your organization shared memories, ranked by agents' feedback, plus private reminders and agent-to-agent messages. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team.
 
 It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. People follow along in the web UI, including a detailed stats page with weekly activity, memories by team and project, the most helpful memories and what waits for a maintainer.
@@ -90,22 +92,47 @@ These rows are examples. Agents are told to record the shape of a rule or a fix,
 
 ### Measured
 
-In a first study, agents fixed bugs whose fix needs a fact that is not in the repo, only in a colleague's memory: a vendor's new webhook signature, a partner's ID check digit. Across the whole study, hidden tests graded 1,104 runs, for about USD 29.
+On bugs that need team knowledge, Claude Sonnet 5.5 fixed 12% without BAB and 79% with it (+67 points, 95% CI +33 to +92). Told to search first, it fixed all 24 of 24 runs.
 
-| Bugs that need team knowledge | No memory | BAB | BAB, told to search first |
+<p align="center">
+  <img src="docs/images/measured.svg" width="900" alt="Bugs that need team knowledge, 24 runs per bar. Haiku: 0% without memory, 75% with BAB, 88% when told to search first. Sonnet: 12%, 79%, 100%. Opus: 12%, 88%, 92%.">
+</p>
+
+Each fix needed a fact that is not in the repo, only in a colleague's memory, such as a vendor's new webhook signature or a partner's ID check digit. Hidden tests graded every run.
+
+| Share of runs fixed | No memory | BAB | BAB, told to search first |
 |---|---|---|---|
-| Claude Haiku 5.5 | 0% | 75% | 88% |
-| Claude Sonnet 5.5 | 12% | 79% | 100% |
-| Claude Opus 5.5 | 12% | 88% | 92% |
+| Bugs that need team knowledge, Claude Haiku 5.5 | 0% | 75% | 88% |
+| Bugs that need team knowledge, Claude Sonnet 5.5 | 12% | 79% | 100% |
+| Bugs that need team knowledge, Claude Opus 5.5 | 12% | 88% | 92% |
+| Bugs the code explains (12 tasks, Sonnet and Haiku) | 100% | 100% | not run |
 
-- **A bigger model is no substitute.** Opus solves 12% without the memory, the same as Sonnet.
+- **Cheaper per fix.** On Sonnet, a fixed bug cost USD 0.164 without memory and USD 0.039 with BAB. The no-memory figure rests on only 3 fixes.
+- **A bigger model is no substitute.** Opus fixes 12% without the memory, the same as Sonnet.
 - **A nudge helps.** Without one, agents may skip the memory or stop after one weak search.
-- **No gain when the code explains the bug.** On 12 such bugs every setup solved every task, and BAB only added cost (about 1.5 times per run on Sonnet).
+- **No gain when the code explains the bug.** There BAB only adds cost, about 1.5 times per run on Sonnet.
+- **The overhead shrinks.** A lean set of three tools kept most of the gain at 1.18 times the cost of a run without memory.
 - **Outdated memories do not help.** With only stale memories, success falls back to the no-memory level.
 
-The tasks were built so that the fact exists only in memory. That shows the memory channel works, not how often this happens in real work. Each cell is 8 tasks with 3 trials, so the gaps between the BAB variants are within noise. Agents ran in a small custom loop on one shared server, not in Claude Code, and an agent wrote the tasks. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code). Run it yourself: [evals/README.md](evals/README.md).
+**What this does not show**
 
-### Estimated savings
+- The tasks were built so that the fact exists only in memory. This shows the memory channel works, not how often that happens in your work.
+- 8 tasks with 3 trials each. BAB against no memory is a real gap; the gaps between the BAB variants are noise.
+- An agent wrote the tasks, and a BAB maintainer ran the study. Tasks and hypotheses were frozen before the runs.
+- Agents ran in a small custom loop on one shared server, not in Claude Code and not across machines.
+
+The whole study took 1,104 graded runs and about USD 29. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code).
+
+**Reproduce it**
+
+```bash
+pnpm install && pnpm build
+ANTHROPIC_API_KEY=... BAB_EVAL_MODEL=claude-sonnet-5-5 pnpm eval --mode full --suite tk --conditions A,B,N --budget-usd 10
+```
+
+More options and the retrieval eval, which needs no LLM: [evals/README.md](evals/README.md).
+
+### Estimated savings (a model, not a measurement)
 
 <p align="center">
   <img src="docs/images/savings.svg" width="900" alt="Five agents, one error. Without BAB all five debug it: 150 minutes and about 500,000 tokens. With BAB one agent debugs and four reuse the answer: 50.5 minutes and about 162,000 tokens. An estimate.">
@@ -117,7 +144,10 @@ The tasks were built so that the fact exists only in memory. That shows the memo
 | Time (estimate) | 150 minutes | 50.5 minutes |
 | Tokens (estimate) | About 500,000 | About 162,000 |
 
-**Net savings per month**
+The estimate leaves out BAB's own token cost, about 1.2 to 1.5 times per run in the study.
+
+<details>
+<summary>Net savings per month for a team, a department and a company</summary>
 
 | Group | People | Hours a month | Tokens a month | USD a month |
 |---|---|---|---|---|
@@ -126,6 +156,8 @@ The tasks were built so that the fact exists only in memory. That shows the memo
 | Company | 300 | 450 | 90 million | About 34,000 |
 
 These figures are estimates, not measurements. They assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. BAB has no license fee and runs as one container you host. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
+
+</details>
 
 ## Quick start
 
