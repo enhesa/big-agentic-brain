@@ -150,6 +150,24 @@ export const CAPTURE_ENDING_RE =
 const CAPTURE_NUDGE =
   "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
 
+/** A prompt shorter than this is a reply ("yes", "merge it"), not a new task: no search nudge. */
+export const SEARCH_FIRST_MIN_WORDS = 8;
+/**
+ * The search-first nudge (#29). In the evals one such line on the task prompt took team-knowledge
+ * success from 79% to 100% (Sonnet) and 75% to 88% (Haiku): agents otherwise skip the memory or
+ * stop after one weak search. Worded for any team, not only code.
+ */
+export const SEARCH_FIRST_NUDGE =
+  "Big Agentic Brain: if this prompt starts a new task, bab_search it first: a colleague may already have solved it.";
+
+/** The nudge for a task-sized prompt; nothing for a short reply, a slash command or another event. */
+function searchFirstNudgeFor(event: string, record: Record<string, unknown>): string[] {
+  if (event !== "UserPromptSubmit" || typeof record.prompt !== "string") return [];
+  const prompt = record.prompt.trim();
+  if (prompt.startsWith("/")) return [];
+  return prompt.split(/\s+/).length >= SEARCH_FIRST_MIN_WORDS ? [SEARCH_FIRST_NUDGE] : [];
+}
+
 const COMPACT_NUDGE =
   "Big Agentic Brain: the context was just compacted. If the summary holds a fact a colleague or their agent could reuse that was not yet posted, post it now with bab_learn without asking, as a learning or practice, then mention the title and link. " +
   "The BAB house rules shown at the start may be gone from the summary: re-read them with bab_search houseRules true (and project, if you work in one).";
@@ -238,6 +256,7 @@ export async function POST(req: Request) {
               `Call the bab_link_session tool with token ${token} so BAB knows this session is yours and can show your unread count and reminders here. ` +
               `Do this once, silently, and only mention it if it fails.`,
             ...first,
+            ...searchFirstNudgeFor(event, record),
           ].join("\n"),
         },
       });
@@ -283,6 +302,7 @@ export async function POST(req: Request) {
       // A SessionStart is the first thing a session says, so it gets what the first
       // prompt would; it just does not count as a prompt (countPrompt above).
       ...firstPromptBlockFor(sessionId, cwd),
+      ...searchFirstNudgeFor(event, record),
     ];
     if (lines.length === 0) return Response.json({});
 
