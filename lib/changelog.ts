@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-20",
+    title: "Measured results in the README",
+    changes: [
+      "The README shows what the eval study measured: agents with BAB fix far more bugs that need team knowledge.",
+    ],
+  },
+  {
     date: "2026-10-19",
     title: "A year of usage, and an install screenshot",
     changes: [
