@@ -759,16 +759,50 @@ function buildFtsQuery(query: string): string {
 }
 
 /**
- * The same tokens joined with OR, used only when the all-terms query matched nothing.
- * A question typed as a sentence ("how do we size kafka messages") rarely has every
- * word present in one entry, and returning nothing sends the agent off to guess. Any
- * term matching is a far better answer than no answer, and the ranking above sorts the
- * partial matches sensibly, so the best of them still lands first.
+ * Splits an identifier-like chunk (`KeyError`, `order_id`, `E104`, `2.67`, `a.b.c`) into the
+ * parts an indexed text may carry separately. The index splits on punctuation, so a body that
+ * says "order_id" holds the tokens `order` and `id`, while a body that says "KeyError" holds
+ * one token. Case boundaries and letter-digit boundaries are split here too.
+ */
+function identifierParts(chunk: string): string[] {
+  return chunk
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((p) => p.length > 0);
+}
+
+/**
+ * The widened match expression, used when the all-terms query cannot fill the page. A
+ * question typed as a sentence ("how do we size kafka messages") rarely has every word
+ * present in one entry, and returning nothing, or only a few strict matches, sends the agent
+ * off to guess. Any term matching is a far better answer than no answer, and the ranking
+ * below sorts the partial matches sensibly, so the best of them still lands first.
+ *
+ * Identifiers get extra terms: the parts of `order_id` or `KeyError` as a phrase, and as
+ * single terms when they are long enough or contain a digit. A bare error string has few
+ * plain words, and the phrase is the term that lines up with how the entry spells it.
  */
 function buildFtsAnyQuery(query: string): string {
-  const tokens = normalizeTokens(query);
-  if (tokens.length < 2) return "";
-  return Array.from(new Set(tokens)).map(quoteFtsToken).join(" OR ");
+  const terms = new Set<string>();
+  for (const token of normalizeTokens(query)) terms.add(quoteFtsToken(token));
+  const plain = terms.size;
+
+  for (const chunk of query.match(/[\p{L}\p{N}]+(?:[._\-:/][\p{L}\p{N}]+)*/gu) ?? []) {
+    const parts = identifierParts(chunk);
+    if (parts.length < 2) continue;
+    terms.add(`"${parts.join(" ")}"`);
+    for (const part of parts) {
+      const keep = /\d/.test(part) ? part.length >= 2 : normalizeTokens(part).length === 1;
+      if (keep) terms.add(quoteFtsToken(part));
+    }
+  }
+
+  if (terms.size < 2 && plain < 2) return "";
+  return Array.from(terms).join(" OR ");
 }
 
 // Search ranking. Until now search ordered by vote score alone and ignored how well a
@@ -779,9 +813,12 @@ function buildFtsAnyQuery(query: string): string {
 // negated below. Its column weights follow the FTS table's column order
 // (title, body, tags): a term in the title is worth far more than the same term buried
 // in a body, and a tag hit sits between the two because tags are deliberate.
-const BM25_TITLE_WEIGHT = 10.0;
+// Title 5 and tags 3 (were 10 and 5): at org scale a 10x title weight let any entry whose title
+// shared one common word ("error", "key") outrank the entry whose body held the rare, specific
+// term. Measured with the offline retrieval eval at 1000 distractors.
+const BM25_TITLE_WEIGHT = 5.0;
 const BM25_BODY_WEIGHT = 1.0;
-const BM25_TAGS_WEIGHT = 5.0;
+const BM25_TAGS_WEIGHT = 3.0;
 
 // The boosts MULTIPLY relevance, they do not add to it. Measured on a two-row corpus,
 // bm25 came back around -1e-6: its magnitude depends on corpus statistics (IDF, average
@@ -915,15 +952,26 @@ export function search(
       off,
     ) as unknown as SearchRow[];
 
-  let rows = run(ftsQuery);
-  // Nothing matched every term: widen to any term rather than answering "nothing
-  // found" to a question typed as a sentence. Past page 1 an empty page can also
-  // mean "ran out of all-terms matches", so widen only when all-terms matches
-  // nothing at all, the same decision searchTotal() makes, or page 2 of a widened
-  // search comes back empty while `total` says there is more.
-  if (rows.length === 0 && (offset === 0 || run(ftsQuery, 1, 0).length === 0)) {
+  // Strict matches (every term) come first. When they cannot fill the page, the rest is
+  // filled from the any-term match, best first, skipping rows already shown. Widening only
+  // on an empty result left a query with one strict hit at one row, and the paraphrased
+  // or error-only query whose real answer matched some terms never saw it. The merged list
+  // is one stable ordering, so a page 2 request continues where page 1 stopped, and
+  // searchTotal() counts the same union.
+  const need = offset + limit;
+  const strictCount = (
+    db.prepare(`SELECT COUNT(*) AS n FROM learnings_fts CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid WHERE ${clauses.join(" AND ")}`)
+      .get(ftsQuery, ...filterParams) as { n: number }
+  ).n;
+  let rows: SearchRow[];
+  if (strictCount >= need) {
+    rows = run(ftsQuery);
+  } else {
+    const strict = strictCount > 0 ? run(ftsQuery, strictCount, 0) : [];
     const anyQuery = buildFtsAnyQuery(query);
-    if (anyQuery) rows = run(anyQuery);
+    const seen = new Set(strict.map((r) => r.id));
+    const wide = anyQuery ? run(anyQuery, need + strictCount, 0).filter((r) => !seen.has(r.id)) : [];
+    rows = [...strict, ...wide].slice(offset, need);
   }
 
   const authorNames = getAuthorNames(rows.map((r) => r.author_id));
@@ -1195,10 +1243,11 @@ export function searchTotal(query: string, filters: ListFilters = {}): number {
     (countStatement.get(matchExpr, ...filterParams) as { n: number }).n;
 
   const allCount = countFor(ftsQuery);
-  if (allCount > 0) return allCount;
-
   const anyQuery = buildFtsAnyQuery(query);
-  return anyQuery ? countFor(anyQuery) : 0;
+  if (!anyQuery) return allCount;
+  // The union of strict and any-term matches: strict rows are a subset of the any-term
+  // rows except for the extra identifier terms, so count what any-term adds.
+  return Math.max(allCount, countFor(anyQuery));
 }
 
 export interface ProjectSummary {

@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 45;
+export const CURRENT_VERSION = 46;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -299,6 +299,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(45);
     appliedVersion = 45;
   }
+  if (appliedVersion < 46) {
+    runMigrationV46(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(46);
+    appliedVersion = 46;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -306,6 +311,20 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV46(database: DatabaseSync) {
+  // Search recall: index with the porter stemmer so "restarts" finds "restart" and "rounding"
+  // finds "rounded". Only the tokenizer changes; the columns, content table and triggers stay.
+  // DROP IF EXISTS plus CREATE plus rebuild can run twice, so a process that died half way
+  // boots again. The triggers keep working because they name the table, not its definition.
+  database.exec(`
+    DROP TABLE IF EXISTS learnings_fts;
+    CREATE VIRTUAL TABLE learnings_fts USING fts5(
+      title, body, tags, content='learnings', content_rowid='rowid', tokenize='porter unicode61'
+    );
+    INSERT INTO learnings_fts(learnings_fts) VALUES ('rebuild');
+  `);
+}
 
 function runMigrationV45(database: DatabaseSync) {
   // A person's home team (one of the team tags, kept apart from post tags) and the knowledge

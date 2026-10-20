@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-20",
     title: "Sort the memory list, search advice for every team",
     changes: [
+      "Search finds more: word forms match, error codes split into parts, and loose matches fill the page.",
       "The eval symlink tests skip on machines that cannot create symlinks, such as Windows without admin rights.",
       "Sort the memory list by top, newest, oldest, recently updated or recently used.",
       "Agents search all kinds of memory before any task, in any team; the old advice hid learnings.",

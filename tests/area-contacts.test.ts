@@ -301,7 +301,7 @@ describe("migration v45", () => {
     expect({ ...again.prepare("SELECT COUNT(*) AS n FROM area_contacts").get() }).toEqual({ n: 0 });
 
     // A process that died before the migrations row: the column exists, the row is missing.
-    again.prepare("DELETE FROM migrations WHERE version = 45").run();
+    again.prepare("DELETE FROM migrations WHERE version >= 45").run();
     _resetDbForTests();
     const third = (await import("../lib/db")).getDb();
     expect(third.prepare("SELECT 1 FROM migrations WHERE version = 45").get()).toBeTruthy();
