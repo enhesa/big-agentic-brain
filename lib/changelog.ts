@@ -20,8 +20,9 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-20",
-    title: "Search advice for every team, and measured results",
+    title: "Sort the memory list, search advice for every team",
     changes: [
+      "Sort the memory list by top, newest, oldest, recently updated or recently used.",
       "Agents search all kinds of memory before any task, in any team; the old advice hid learnings.",
       "The README shows what the eval study measured: agents with BAB fix far more bugs that need team knowledge.",
     ],
