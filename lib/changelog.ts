@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "Add ?tools=lean to the MCP URL for a smaller tool list; tool descriptions are shorter too.",
       "Search finds more: word forms match, error codes split into parts, and loose matches fill the page.",
+      "The Author filter on the memory page now lists every author, with the most active first.",
       "An old, unchecked memory in search results now says it may be out of date, next to its title.",
       "On a new task, agents see the titles of up to three matching memories before they start.",
       "After a finished task, agents are asked for a structured learning with exact values, not a session summary.",

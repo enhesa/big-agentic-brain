@@ -74,6 +74,11 @@ export function generalProjectCount(): number {
  * must only ever offer someone worth filtering by.
  */
 export function topAuthors(limit = 12): Array<{ authorId: string; name: string; n: number }> {
+  return allAuthors().slice(0, Math.max(0, limit));
+}
+
+/** Every author with active memories, most first (same rule and order as topAuthors, no cutoff). */
+export function allAuthors(): Array<{ authorId: string; name: string; n: number }> {
   const rows = getDb()
     .prepare(
       `SELECT l.author_id AS authorId, u.name AS name, COUNT(*) AS n
@@ -85,6 +90,5 @@ export function topAuthors(limit = 12): Array<{ authorId: string; name: string; 
     .all() as Array<{ authorId: string; name: string | null; n: number | bigint }>;
   return rows
     .map((r) => ({ authorId: r.authorId, name: r.name ?? r.authorId, n: Number(r.n) }))
-    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))
-    .slice(0, Math.max(0, limit));
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }

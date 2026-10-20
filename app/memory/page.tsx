@@ -9,7 +9,7 @@ import type { ListFilters } from "@/lib/learnings";
 import { parseAppliesToFilter, STACK_LABELS, platformLabels, EVERYWHERE } from "@/lib/applies-to";
 import { standingText } from "@/lib/standing";
 import type { LearningKind, LearningStatus } from "@/lib/types";
-import { liveNumbers, topTags, topProjects, topAuthors, generalProjectCount } from "@/lib/stats";
+import { liveNumbers, topTags, topProjects, allAuthors, generalProjectCount } from "@/lib/stats";
 import { formatAge, formatExpiry } from "@/lib/relative-time";
 import FilterBar from "./FilterBar";
 import type { FilterField } from "./FilterBar";
@@ -151,7 +151,20 @@ export default async function BoardPage({
   const tags = topTags(14);
   const projects = topProjects(14);
   const generalCount = generalProjectCount();
-  const authors = topAuthors(14);
+  const authors = allAuthors();
+  const authorOptions = authors.map((a) => ({ value: a.authorId, label: `${a.name} (${a.n})` }));
+  // Past this many, the long tail moves to an A-Z group so a native select stays easy to scan.
+  const MOST_ACTIVE_AUTHORS = 14;
+  const authorChoices: FilterField["options"] =
+    authorOptions.length > MOST_ACTIVE_AUTHORS
+      ? [
+          { group: "Most active", options: authorOptions.slice(0, MOST_ACTIVE_AUTHORS) },
+          {
+            group: "Everyone else",
+            options: authorOptions.slice(MOST_ACTIVE_AUTHORS).sort((a, b) => a.label.localeCompare(b.label)),
+          },
+        ]
+      : authorOptions;
   const filtered = Boolean(q || tag || repo || project || author || status || kind || applies);
 
   const href = (next: Partial<FilterValues>) => memoryHref({ q, tag, repo, project, author, status, kind, applies, sort, ...next });
@@ -221,7 +234,7 @@ export default async function BoardPage({
             label: "Author",
             options: [
               { value: "", label: "All authors" },
-              ...authors.map((a) => ({ value: a.authorId, label: `${a.name} (${a.n})` })),
+              ...authorChoices,
               ...(author && !authors.some((a) => a.authorId === author) ? [{ value: author, label: authorName(author) }] : []),
             ],
           },

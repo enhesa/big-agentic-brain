@@ -424,3 +424,25 @@ describe("/memory filter bar", () => {
     expect(babOnly).not.toContain(general.title);
   });
 });
+
+describe("/memory Author filter lists every author", () => {
+  it("includes an author with one memory when more than 14 authors exist, grouped", async () => {
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
+    const { upsertUser } = await import("../lib/users");
+    for (let i = 1; i <= 16; i++) {
+      const id = `author${String(i).padStart(2, "0")}@example.com`;
+      upsertUser({ id, email: id, name: `Author ${String(i).padStart(2, "0")}`, roles: [] });
+      // Author 01 has the most memories, author 16 the fewest (one).
+      for (let j = 0; j < 17 - i; j++) {
+        await insertRawLearning({ id: `m-${i}-${j}`, authorId: id, title: `Note ${i}-${j}`, status: "active" });
+      }
+    }
+    const { default: MemoryPage } = await import("../app/memory/page");
+    const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({}) }));
+
+    expect(html).toContain(`<option value="author16@example.com">Author 16 (1)</option>`);
+    expect(html).toContain(`<option value="author01@example.com">Author 01 (16)</option>`);
+    expect(html).toContain(`label="Most active"`);
+    expect(html).toContain(`label="Everyone else"`);
+  });
+});
