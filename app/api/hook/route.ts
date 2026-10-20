@@ -15,6 +15,7 @@ import {
   type HouseRule,
 } from "@/lib/learnings";
 import { formatAge } from "@/lib/relative-time";
+import { normalizeTokens } from "@/lib/similarity";
 import { deriveProjectFromRepo, GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import { todayUtc } from "@/lib/dates";
 import { downvotedLive } from "@/lib/swarm-gc";
@@ -170,7 +171,8 @@ export const SEARCH_FIRST_NUDGE =
 /** The prompt text when it looks like a new task: 8+ words and not a slash command; null otherwise. */
 function taskPrompt(event: string, record: Record<string, unknown>): string | null {
   if (event !== "UserPromptSubmit" || typeof record.prompt !== "string") return null;
-  const prompt = record.prompt.trim();
+  // Only the start counts: a pasted 900 KB log must not be split into words on every prompt.
+  const prompt = record.prompt.slice(0, 2000).trim();
   if (prompt.startsWith("/")) return null;
   return prompt.split(/\s+/).length >= SEARCH_FIRST_MIN_WORDS ? prompt : null;
 }
@@ -188,12 +190,23 @@ const RETRIEVE_QUERY_MAX_CHARS = 400;
  * alone, so bodies only ever travel over the authenticated MCP connection. A memory is offered
  * once per session (session_nudges kind "seen:<id>"). The prompt is searched, never stored.
  */
-function promptRetrievalFor(event: string, record: Record<string, unknown>, sessionId: string): string[] {
+function promptRetrievalFor(event: string, record: Record<string, unknown>, sessionId: string, linked: boolean): string[] {
   const prompt = taskPrompt(event, record);
   if (!prompt) return [];
+  // An unlinked session gets the plain nudge only: retrieval answers to a session BAB knows the owner of.
+  if (!linked) return [SEARCH_FIRST_NUDGE];
+  const query = prompt.slice(0, RETRIEVE_QUERY_MAX_CHARS);
+  const words = new Set(normalizeTokens(query));
+  // Nothing searchable (symbols, stopwords): search() would fall back to a plain listing.
+  if (words.size === 0) return [SEARCH_FIRST_NUDGE];
   let hits: Array<{ id: string; title: string; ageDays: number }> = [];
   try {
-    hits = search(prompt.slice(0, RETRIEVE_QUERY_MAX_CHARS), {}, RETRIEVE_LIMIT + 5).filter((r) => !nudgedKind(sessionId, `seen:${r.id}`)).slice(0, RETRIEVE_LIMIT);
+    hits = search(query, {}, RETRIEVE_LIMIT + 5)
+      // Only memories whose title shares a word with the prompt: a match in the body alone would
+      // let a probe learn what bodies hold, and bodies stay on the authenticated MCP connection.
+      .filter((r) => normalizeTokens(r.title).some((t) => words.has(t)))
+      .filter((r) => !nudgedKind(sessionId, `seen:${r.id}`))
+      .slice(0, RETRIEVE_LIMIT);
   } catch {
     hits = [];
   }
@@ -294,7 +307,7 @@ export async function POST(req: Request) {
               `Call the bab_link_session tool with token ${token} so BAB knows this session is yours and can show your unread count and reminders here. ` +
               `Do this once, silently, and only mention it if it fails.`,
             ...first,
-            ...promptRetrievalFor(event, record, sessionId),
+            ...promptRetrievalFor(event, record, sessionId, false),
           ].join("\n"),
         },
       });
@@ -340,7 +353,7 @@ export async function POST(req: Request) {
       // A SessionStart is the first thing a session says, so it gets what the first
       // prompt would; it just does not count as a prompt (countPrompt above).
       ...firstPromptBlockFor(sessionId, cwd),
-      ...promptRetrievalFor(event, record, sessionId),
+      ...promptRetrievalFor(event, record, sessionId, true),
     ];
     if (lines.length === 0) return Response.json({});
 
@@ -710,9 +723,10 @@ function projectLine(sessionId: string, key: string | null, skip: Set<string>): 
   if (n === 0) return null;
 
   recordNudge(sessionId, "project");
-  const newest = matches
-    .filter((r) => !skip.has(r.id))
-    .slice(0, PROJECT_NUDGE_TITLES)
+  const listed = matches.filter((r) => !skip.has(r.id)).slice(0, PROJECT_NUDGE_TITLES);
+  // Named here, so the prompt retrieval in the same answer does not name them again.
+  for (const r of listed) recordNudge(sessionId, `seen:${r.id}`);
+  const newest = listed
     .map((r) => `"${capTitle(r.title).replace(/"/g, "'")}" (${r.id})`)
     .join(", ");
   return (

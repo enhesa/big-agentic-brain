@@ -1468,11 +1468,52 @@ describe("prompt auto-retrieval (#28)", () => {
     expect(text).toContain(SEARCH_FIRST_NUDGE);
   });
 
-  it("also serves an unlinked session's first prompt, after the link notice", async () => {
+  it("gives an unlinked session the plain nudge only, never titles", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
     const m = await seedVat();
     const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-3", prompt: TASK })).json();
     const text: string = out.hookSpecificOutput.additionalContext;
-    expect(text.indexOf("bab_link_session")).toBeLessThan(text.indexOf(m.id));
+    expect(text).not.toContain(m.id);
+    expect(text).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("never names a memory that matches in the body only", async () => {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    const hidden = create({ authorId: ME, title: "Quarterly pricing review", body: "The invoice export VAT bravo region detail.", confirmNotDuplicate: true });
+    await linkSession("sess-ret-5", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-5", prompt: TASK });
+    expect(JSON.stringify(await out.json())).not.toContain(hidden.id);
+  });
+
+  it("names no memory for a prompt of stopwords and symbols", async () => {
+    const m = await seedVat();
+    await linkSession("sess-ret-6", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-6", prompt: "the and for with that this from have what ??? !!!" });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
+  });
+
+  it("never names an archived memory", async () => {
+    const m = await seedVat();
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE learnings SET status = 'archived' WHERE id = ?").run(m.id);
+    await linkSession("sess-ret-7", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-7", prompt: TASK });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
+  });
+
+  it("does not repeat a title the project line already named in the same answer", async () => {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    const m = create({ authorId: ME, title: "Invoice export drops VAT lines for the bravo region", body: "Uppercase the region code.", project: "billing.api", confirmNotDuplicate: true });
+    await linkSession("sess-ret-8", ME);
+    const out = await (
+      await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-8", cwd: "C:\\Users\\x\\acme\\acme.billing.api", prompt: TASK })
+    ).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text.split(m.id).length - 1).toBe(1);
   });
 
   it("does not search for a short reply", async () => {
