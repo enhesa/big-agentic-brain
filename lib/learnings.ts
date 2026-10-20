@@ -489,7 +489,38 @@ export function findSupersededBy(id: string): LearningRow | undefined {
     .get(id) as unknown as LearningRow | undefined;
 }
 
+/** Orders a list or search can ask for instead of its default (score, or relevance when searching). */
+export const LEARNING_SORTS = ["top", "newest", "oldest", "updated", "used"] as const;
+export type LearningSort = (typeof LEARNING_SORTS)[number];
+
+/** A known sort, or undefined for anything else: the caller then keeps its default order. */
+export function parseSort(value: string | undefined): LearningSort | undefined {
+  return (LEARNING_SORTS as readonly string[]).includes(value ?? "") ? (value as LearningSort) : undefined;
+}
+
+/** ORDER BY terms for an explicit sort. Ties fall back to newest first, then rowid, so pages never overlap. */
+function sortSql(sort: LearningSort | undefined, prefix = ""): string | null {
+  const c = (col: string) => `${prefix}${col}`;
+  switch (sort) {
+    case "top":
+      return `${c("score")} DESC, ${c("created_at")} DESC, ${c("rowid")} DESC`;
+    case "newest":
+      return `${c("created_at")} DESC, ${c("rowid")} DESC`;
+    case "oldest":
+      return `${c("created_at")} ASC, ${c("rowid")} ASC`;
+    case "updated":
+      return `${c("updated_at")} DESC, ${c("created_at")} DESC, ${c("rowid")} DESC`;
+    case "used":
+      // Never read by an agent goes last.
+      return `${c("last_accessed_at")} IS NULL, ${c("last_accessed_at")} DESC, ${c("created_at")} DESC, ${c("rowid")} DESC`;
+    default:
+      return null;
+  }
+}
+
 export interface ListFilters {
+  /** An explicit order (the /memory page's Sort). Omitted keeps the default: score, or relevance when searching. */
+  sort?: LearningSort;
   /**
    * Omitted => active only (the default a human or agent browsing wants).
    * "all" => every status including archived and deleted. Any explicit status
@@ -671,7 +702,7 @@ export function list(filters: ListFilters = {}): LearningRow[] {
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const stackRank = stackRankSql(filters.stack);
   return db
-    .prepare(`SELECT * FROM learnings ${where} ORDER BY ${stackRank ? `${stackRank}, ` : ""}score DESC, created_at DESC`)
+    .prepare(`SELECT * FROM learnings ${where} ORDER BY ${stackRank ? `${stackRank}, ` : ""}${sortSql(filters.sort) ?? "score DESC, created_at DESC"}`)
     .all(...params) as unknown as LearningRow[];
 }
 
@@ -868,7 +899,7 @@ export function search(
      FROM learnings_fts
      CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
      WHERE ${clauses.join(" AND ")}
-     ORDER BY ${stackRank ? `${stackRank}, ` : ""}${RANK_EXPRESSION} DESC, learnings.created_at DESC
+     ORDER BY ${stackRank ? `${stackRank}, ` : ""}${sortSql(filters.sort, "learnings.") ?? `${RANK_EXPRESSION} DESC, learnings.created_at DESC`}
      LIMIT ? OFFSET ?`,
   );
 

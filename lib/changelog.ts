@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-20",
     title: "Measured results in the README",
     changes: [
+      "Sort the memory list by top, newest, oldest, recently updated or recently used.",
       "The README shows what the eval study measured: agents with BAB fix far more bugs that need team knowledge.",
     ],
   },

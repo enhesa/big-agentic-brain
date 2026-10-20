@@ -1,7 +1,7 @@
 /** The /memory URL for a set of filters. The URL is the source of truth for the list page:
  *  the server page and the filter bar both build links with this, so they always agree.
  *  Empty values are left out, so the plain list stays `/memory`. */
-export const FILTER_KEYS = ["q", "tag", "repo", "project", "author", "status", "kind", "applies"] as const;
+export const FILTER_KEYS = ["q", "tag", "repo", "project", "author", "status", "kind", "applies", "sort"] as const;
 
 export type FilterKey = (typeof FILTER_KEYS)[number];
 export type FilterValues = Record<FilterKey, string>;

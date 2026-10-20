@@ -3,7 +3,7 @@ import { createFilterController, SEARCH_DEBOUNCE_MS } from "../app/memory/filter
 import { memoryHref } from "../app/memory/memory-url";
 import type { FilterValues } from "../app/memory/memory-url";
 
-const EMPTY: FilterValues = { q: "", tag: "", repo: "", project: "", author: "", status: "", kind: "", applies: "" };
+const EMPTY: FilterValues = { q: "", tag: "", repo: "", project: "", author: "", status: "", kind: "", applies: "", sort: "" };
 
 let calls: Array<[string, string]>;
 let shown: FilterValues;

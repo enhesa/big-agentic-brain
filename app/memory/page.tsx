@@ -4,7 +4,7 @@ import LiveUpdates from "@/app/components/shell/LiveUpdates";
 import Avatar from "@/app/components/shell/Avatar";
 import { getSessionUser } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { search, searchTotal, list, expiryState, voteCounts, parseKindFilter, LEARNING_KINDS, GENERAL_PROJECT_KEY } from "@/lib/learnings";
+import { search, searchTotal, list, expiryState, voteCounts, parseKindFilter, parseSort, LEARNING_KINDS, GENERAL_PROJECT_KEY } from "@/lib/learnings";
 import type { ListFilters } from "@/lib/learnings";
 import { parseAppliesToFilter, STACK_LABELS, platformLabels, EVERYWHERE } from "@/lib/applies-to";
 import { standingText } from "@/lib/standing";
@@ -17,7 +17,7 @@ import { memoryHref } from "./memory-url";
 import type { FilterValues } from "./memory-url";
 import styles from "./memory.module.css";
 
-type MemoryFilters = { q?: string; tag?: string; repo?: string; project?: string; author?: string; status?: string; kind?: string; applies?: string; page?: string };
+type MemoryFilters = { q?: string; tag?: string; repo?: string; project?: string; author?: string; status?: string; kind?: string; applies?: string; sort?: string; page?: string };
 
 /** Rows per page — matches search()'s own historical default, so an unfiltered
  *  first page looks exactly as it always did. */
@@ -103,6 +103,9 @@ export default async function BoardPage({
     appliesFilter = undefined;
   }
   const applies = appliesFilter?.join(",") ?? "";
+  // An unknown ?sort= keeps the default order, like a bad ?kind= above.
+  const sortOrder = parseSort(params.sort);
+  const sort = sortOrder ?? "";
   // 1-based; anything unparsable or below 1 collapses to page 1 rather than erroring.
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 
@@ -121,6 +124,7 @@ export default async function BoardPage({
     status: listStatus,
     kind: kindFilter,
     appliesTo: appliesFilter,
+    sort: sortOrder,
   };
 
   // The count behind "Showing X-Y of N" for THESE filters, not the global count
@@ -149,11 +153,11 @@ export default async function BoardPage({
   const authors = topAuthors(14);
   const filtered = Boolean(q || tag || repo || project || author || status || kind || applies);
 
-  const href = (next: Partial<FilterValues>) => memoryHref({ q, tag, repo, project, author, status, kind, applies, ...next });
+  const href = (next: Partial<FilterValues>) => memoryHref({ q, tag, repo, project, author, status, kind, applies, sort, ...next });
 
   /** Same filters as href(), plus a `page` param (omitted for page 1, so the plain
    *  unfiltered/first-page URL never grows one it doesn't need). */
-  const pageHref = (targetPage: number) => memoryHref({ q, tag, repo, project, author, status, kind, applies, page: targetPage });
+  const pageHref = (targetPage: number) => memoryHref({ q, tag, repo, project, author, status, kind, applies, sort, page: targetPage });
 
   const authorName = (id: string) => authors.find((a) => a.authorId === id)?.name ?? id;
 
@@ -259,6 +263,21 @@ export default async function BoardPage({
         { group: "Platform", options: platformLabels().map((l) => ({ value: l, label: l })) },
       ],
     },
+    {
+      name: "sort",
+      id: "memory-filter-sort",
+      label: "Sort",
+      description: "Top ranks by colleagues' votes. Recently used means last read by an agent.",
+      options: [
+        // The default follows the search: relevance while searching, votes otherwise.
+        { value: "", label: q ? "Best match" : "Top" },
+        ...(q || sort === "top" ? [{ value: "top", label: "Top" }] : []),
+        { value: "newest", label: "Newest" },
+        { value: "oldest", label: "Oldest" },
+        { value: "updated", label: "Recently updated" },
+        { value: "used", label: "Recently used" },
+      ],
+    },
   ];
 
   return (
@@ -274,7 +293,7 @@ export default async function BoardPage({
         <LiveUpdates topics="learning,vote,kudos,flag" />
       </div>
 
-      <FilterBar values={{ q, tag, repo, project, author, status, kind, applies }} fields={filterFields} />
+      <FilterBar values={{ q, tag, repo, project, author, status, kind, applies, sort }} fields={filterFields} />
 
       {tags.length > 0 ? (
         <div className={styles.chips} aria-label="Filter by tag">
