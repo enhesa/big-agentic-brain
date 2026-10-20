@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/enhesa/big-agentic-brain/compare/v2.4.0...v2.4.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **evals:** skip the symlink tests where symlinks cannot be created ([#43](https://github.com/enhesa/big-agentic-brain/issues/43)) ([ac1d148](https://github.com/enhesa/big-agentic-brain/commit/ac1d1481fb13f196d4e484ac0fbeb38f70fd9c35))
+
 ## [2.4.0](https://github.com/enhesa/big-agentic-brain/compare/v2.3.1...v2.4.0) (2026-10-20)
 
 
