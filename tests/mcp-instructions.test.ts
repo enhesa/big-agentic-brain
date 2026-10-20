@@ -43,9 +43,9 @@ describe("MCP instructions length", () => {
 describe("MCP instructions content", () => {
   it("tells a stuck agent to search BAB before it debugs", () => {
     const text = mcpInstructions(LIVE);
-    expect(text).toContain("Stuck on an error, a failing build or a refusing tool? bab_search the error text or the system first: another agent may have fixed it.");
+    expect(text).toContain("Stuck on an error, a failing build or a refusing tool? bab_search the error or system first: another agent may have fixed it.");
     // Before the repo rule, so a session that only skims gets the cheaper habit first.
-    expect(text.indexOf("Stuck on an error")).toBeLessThan(text.indexOf("Before changing a repo"));
+    expect(text.indexOf("Stuck on an error")).toBeLessThan(text.indexOf("Before any task"));
   });
 
   const text = mcpInstructions(LIVE);
@@ -99,14 +99,14 @@ describe("MCP instructions content", () => {
     expect(text).not.toContain("/memory/<id>");
   });
 
-  it("tells the agent to check standards, decisions and practices before changing a repo", () => {
-    at("Before changing a repo, bab_search kind standard, decision, practice;");
-    at("weigh by standing, verify against the code");
+  it("tells the agent to search all kinds before any task", () => {
+    at("Before any task, bab_search its topic, all kinds; in a repo also kind standard, decision;");
+    at("weigh by standing, verify at the source");
     at("PRs get a short BAB section");
   });
 
   it("puts the new line before the stale rule and before the cut", () => {
-    expect(at("Before changing a repo")).toBeLessThan(at("may be stale"));
+    expect(at("Before any task")).toBeLessThan(at("may be stale"));
     expect(at("PRs get a short BAB section.") + 28).toBeLessThan(2048);
   });
 
