@@ -23,6 +23,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Sort the memory list, search advice for every team",
     changes: [
       "Add ?tools=lean to the MCP URL for a smaller tool list; tool descriptions are shorter too.",
+      "An old, unchecked memory in search results now says it may be out of date, next to its title.",
+      "On a new task, agents see the titles of up to three matching memories before they start.",
+      "After a finished task, agents are asked for a structured learning with exact values, not a session summary.",
+      "On a new task, the Claude Code plugin reminds the agent to search BAB first.",
       "The eval symlink tests skip on machines that cannot create symlinks, such as Windows without admin rights.",
       "Sort the memory list by top, newest, oldest, recently updated or recently used.",
       "Agents search all kinds of memory before any task, in any team; the old advice hid learnings.",

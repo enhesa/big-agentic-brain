@@ -144,5 +144,5 @@ export function verifyDueIds(
 
 /** What search sends next to a result marked `verify: true`: who checks it, how, and the four ways to answer. */
 export const VERIFY_HINT =
-  "Results marked verify: true are over 90 days old and nobody has confirmed or kept them lately. If you use one, check it against code or docs in this task first, " +
+  "Results marked verify: true (with a stale warning) are over 90 days old and nobody has confirmed or kept them lately. Do not act on one until you have checked it against the code, docs or system in this task; " +
   "then confirm it (bab_react confirm, note: where you checked), correct it (bab_learn with supersedes), or flag or retire it (note: the evidence).";

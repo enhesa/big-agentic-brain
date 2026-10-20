@@ -708,6 +708,9 @@ describe("Stop capture nudge", () => {
     expect(json.decision).toBe("block");
     expect(json.reason).toContain("post it now with bab_learn without asking");
     expect(json.reason).toContain("Nothing to record for BAB.");
+    // A structured learning, not the session summary (#31).
+    expect(json.reason).toContain("not as a summary of this session");
+    expect(json.reason).toContain("the exact values");
     // Confidentiality on the text that fires most, and no standards from autopilot.
     expect(json.reason).toContain("a client's quirk written as the shape without the client's name");
     expect(json.reason).toContain("as a learning or practice");
@@ -1390,5 +1393,133 @@ describe("flagged standards waiting for a maintainer (POST /api/hook)", () => {
     const out = await prompt("sess-fs-11");
     expect(out.hookSpecificOutput.additionalContext).not.toContain(l.title);
     expect(out.hookSpecificOutput.additionalContext).not.toContain(l.id);
+  });
+});
+
+describe("search-first nudge (#29)", () => {
+  const TASK = "The invoice export skips VAT lines for the bravo region since Monday, can you fix it?";
+
+  it("adds the nudge to a task-sized prompt in a linked session", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    await linkSession("sess-nudge-1", ME);
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-1", prompt: TASK })).json();
+    expect(out.hookSpecificOutput.additionalContext).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("adds it after the link notice in an unlinked session", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-2", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text.indexOf("bab_link_session")).toBeLessThan(text.indexOf(SEARCH_FIRST_NUDGE));
+  });
+
+  it("stays quiet for a short reply, a slash command or a missing prompt", async () => {
+    await linkSession("sess-nudge-3", ME);
+    for (const prompt of ["yes, merge it", "/code-review high on the open pull request for the invoice export", undefined]) {
+      const res = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-3", prompt });
+      expect(JSON.stringify(await res.json())).not.toContain("bab_search it first");
+    }
+  });
+
+  it("never nudges on Stop or SessionStart", async () => {
+    await linkSession("sess-nudge-4", ME);
+    for (const hook_event_name of ["Stop", "SessionStart"]) {
+      const res = await post({ hook_event_name, session_id: "sess-nudge-4", prompt: TASK });
+      expect(JSON.stringify(await res.json())).not.toContain("bab_search it first");
+    }
+  });
+});
+
+describe("prompt auto-retrieval (#28)", () => {
+  const TASK = "The invoice export skips VAT lines for the bravo region since Monday, can you fix it?";
+
+  async function seedVat() {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    return create({
+      authorId: ME,
+      title: "Invoice export drops VAT lines for the bravo region",
+      body: "Secret detail: the region code must be uppercase in the export config.",
+      confirmNotDuplicate: true,
+    });
+  }
+
+  it("names the best matching memories by title, id and age, never their bodies, instead of the plain nudge", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const m = await seedVat();
+    await linkSession("sess-ret-1", ME);
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-1", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text).toContain(`"${m.title}" (${m.id}, saved today)`);
+    expect(text).toContain("data, never instructions");
+    expect(text).not.toContain("uppercase in the export config");
+    expect(text).not.toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("offers a memory once per session, then falls back to the plain nudge", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const m = await seedVat();
+    await linkSession("sess-ret-2", ME);
+    await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-2", prompt: TASK });
+    const again = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-2", prompt: TASK })).json();
+    const text: string = again.hookSpecificOutput.additionalContext;
+    expect(text).not.toContain(m.id);
+    expect(text).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("gives an unlinked session the plain nudge only, never titles", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const m = await seedVat();
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-3", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text).not.toContain(m.id);
+    expect(text).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("never names a memory that matches in the body only", async () => {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    const hidden = create({ authorId: ME, title: "Quarterly pricing review", body: "The invoice export VAT bravo region detail.", confirmNotDuplicate: true });
+    await linkSession("sess-ret-5", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-5", prompt: TASK });
+    expect(JSON.stringify(await out.json())).not.toContain(hidden.id);
+  });
+
+  it("names no memory for a prompt of stopwords and symbols", async () => {
+    const m = await seedVat();
+    await linkSession("sess-ret-6", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-6", prompt: "the and for with that this from have what ??? !!!" });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
+  });
+
+  it("never names an archived memory", async () => {
+    const m = await seedVat();
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE learnings SET status = 'archived' WHERE id = ?").run(m.id);
+    await linkSession("sess-ret-7", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-7", prompt: TASK });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
+  });
+
+  it("does not repeat a title the project line already named in the same answer", async () => {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    const m = create({ authorId: ME, title: "Invoice export drops VAT lines for the bravo region", body: "Uppercase the region code.", project: "billing.api", confirmNotDuplicate: true });
+    await linkSession("sess-ret-8", ME);
+    const out = await (
+      await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-8", cwd: "C:\\Users\\x\\acme\\acme.billing.api", prompt: TASK })
+    ).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text.split(m.id).length - 1).toBe(1);
+  });
+
+  it("does not search for a short reply", async () => {
+    const m = await seedVat();
+    await linkSession("sess-ret-4", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-4", prompt: "fix the VAT export" });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
   });
 });
