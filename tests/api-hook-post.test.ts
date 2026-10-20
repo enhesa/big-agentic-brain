@@ -708,6 +708,9 @@ describe("Stop capture nudge", () => {
     expect(json.decision).toBe("block");
     expect(json.reason).toContain("post it now with bab_learn without asking");
     expect(json.reason).toContain("Nothing to record for BAB.");
+    // A structured learning, not the session summary (#31).
+    expect(json.reason).toContain("not as a summary of this session");
+    expect(json.reason).toContain("the exact values");
     // Confidentiality on the text that fires most, and no standards from autopilot.
     expect(json.reason).toContain("a client's quirk written as the shape without the client's name");
     expect(json.reason).toContain("as a learning or practice");
@@ -1390,5 +1393,39 @@ describe("flagged standards waiting for a maintainer (POST /api/hook)", () => {
     const out = await prompt("sess-fs-11");
     expect(out.hookSpecificOutput.additionalContext).not.toContain(l.title);
     expect(out.hookSpecificOutput.additionalContext).not.toContain(l.id);
+  });
+});
+
+describe("search-first nudge (#29)", () => {
+  const TASK = "The invoice export skips VAT lines for the bravo region since Monday, can you fix it?";
+
+  it("adds the nudge to a task-sized prompt in a linked session", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    await linkSession("sess-nudge-1", ME);
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-1", prompt: TASK })).json();
+    expect(out.hookSpecificOutput.additionalContext).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("adds it after the link notice in an unlinked session", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-2", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text.indexOf("bab_link_session")).toBeLessThan(text.indexOf(SEARCH_FIRST_NUDGE));
+  });
+
+  it("stays quiet for a short reply, a slash command or a missing prompt", async () => {
+    await linkSession("sess-nudge-3", ME);
+    for (const prompt of ["yes, merge it", "/code-review high on the open pull request for the invoice export", undefined]) {
+      const res = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-nudge-3", prompt });
+      expect(JSON.stringify(await res.json())).not.toContain("bab_search it first");
+    }
+  });
+
+  it("never nudges on Stop or SessionStart", async () => {
+    await linkSession("sess-nudge-4", ME);
+    for (const hook_event_name of ["Stop", "SessionStart"]) {
+      const res = await post({ hook_event_name, session_id: "sess-nudge-4", prompt: TASK });
+      expect(JSON.stringify(await res.json())).not.toContain("bab_search it first");
+    }
   });
 });
