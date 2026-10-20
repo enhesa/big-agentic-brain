@@ -1382,11 +1382,10 @@ it("bab_react action=keep refuses on a superseded memory", async () => {
 it("bab_react describes the restore: keep on an archived memory, with a note unless you are the author", async () => {
   const out = await rpc("tools/list", {}, ACTOR);
   const react = out.result.tools.find((t: { name: string }) => t.name === "bab_react");
-  expect(react.description).toMatch(/keep restores it to active: a non-author gives a note saying why/);
-  expect(react.description).toMatch(/one a correction replaced comes back by superseding its replacement/);
-  expect(react.description).toMatch(/On a memory that was retired, flagged away or archived for lack of reads, keep restores it to active/);
-  expect(react.inputSchema.properties.action.description).toMatch(/On an archived memory \(retired, flagged away or unread for a year\) "keep" restores it, with a note unless you are the author/);
-  expect(react.inputSchema.properties.note.description).toMatch(/keep on an archived memory \(a restore\) by a non-author: required/);
+  expect(react.description).toMatch(/on an archived one it restores it \(a non-author gives a note/);
+  expect(react.description).toMatch(/keep: anyone may say a memory is still true; on an archived one it restores it/);
+  expect(react.inputSchema.properties.action.description).toMatch(/restores an archived one \(a non-author needs a note\)/);
+  expect(react.inputSchema.properties.note.description).toMatch(/a non-author's restore by keep/);
 });
 
 it("bab_react action=retire archives the caller's own learning, author-only, with no replacement", async () => {
@@ -1455,20 +1454,19 @@ it("bab_react action=keep lets any identified actor keep someone else's memory, 
 it("bab_react says helpful, confirm, kudos and keep count as a read that keeps a memory from being archived, and keep is open to anyone", async () => {
   const out = await rpc("tools/list", {}, ACTOR);
   const react = out.result.tools.find((t: { name: string }) => t.name === "bab_react");
-  expect(react.description).toMatch(/helpful, confirm and kudos on someone else's memory, and keep, count as a read/);
-  expect(react.description).toMatch(/BAB archives a learning or practice that no agent has read for a year \(standards, decisions and house rules are exempt\)/);
+  expect(react.description).toMatch(/helpful, confirm, kudos and keep count as a read/);
+  expect(react.description).toMatch(/an unread learning or practice is archived after a year/);
   expect(react.description).toMatch(/not_helpful and flag do not count/);
   expect(react.description).toMatch(/keep: anyone may say a memory is still true/);
   expect(react.description).not.toMatch(/author-only\) keeps/i);
-  expect(react.inputSchema.properties.action.description).toMatch(/"keep" is open to anyone/);
+  expect(react.inputSchema.properties.action.description).toMatch(/keep says you verified the memory is still true/);
   expect(react.inputSchema.properties.action.description).toMatch(/counts as a read/);
 });
 
 it("bab_react says a keep does not move a valid-until date its author set, and that the answer then says why", async () => {
   const out = await rpc("tools/list", {}, ACTOR);
   const react = out.result.tools.find((t: { name: string }) => t.name === "bab_react");
-  expect(react.description).toMatch(/a keep does not move a valid-until date its author set/);
-  expect(react.inputSchema.properties.action.description).toMatch(/it does not move a valid-until date its author set; the answer then says why/);
+  expect(react.inputSchema.properties.action.description).toMatch(/does not move an author's valid-until date/);
 });
 
 it("no tool text teaches the retired expiry: no 6-month expiry, no 180 days, no reset by use, no expiring status", async () => {
@@ -1655,9 +1653,8 @@ it('bab_learn stores no expiry by default, accepts expiresAt "never" as no date,
   const tools = await rpc("tools/list", {}, ACTOR);
   const learn = tools.result.tools.find((t: { name: string }) => t.name === "bab_learn");
   const described = learn.inputSchema.properties.expiresAt.description;
-  expect(described).toMatch(/^Only for a time-bound fact \(a campaign, a code freeze\): YYYY-MM-DD, the last day it is valid; the memory is archived the day after\./);
-  expect(described).toMatch(/memories do not expire, but one that no agent reads for a year is archived \(bab_react keep restores it\)/);
-  expect(described).toMatch(/"never" is accepted and means no date/);
+  expect(described).toMatch(/^Only for a time-bound fact \(a campaign, a code freeze\): YYYY-MM-DD, the last valid day; archived the day after\./);
+  expect(described).toMatch(/"never" means no date/);
   expect(described).not.toMatch(/180 days|defaults to/);
 });
 

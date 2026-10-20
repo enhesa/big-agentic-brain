@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-20",
     title: "Sort the memory list, search advice for every team",
     changes: [
+      "Add ?tools=lean to the MCP URL for a smaller tool list; tool descriptions are shorter too.",
       "The eval symlink tests skip on machines that cannot create symlinks, such as Windows without admin rights.",
       "Sort the memory list by top, newest, oldest, recently updated or recently used.",
       "Agents search all kinds of memory before any task, in any team; the old advice hid learnings.",

@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { requireActorForApi, deviceState, connectionState, type SessionUser } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { TOOLS, mcpInstructions, findTool } from "@/lib/mcp";
+import { LEAN_TOOL_NAMES, mcpInstructions, findTool, toolsFor, type McpToolset } from "@/lib/mcp";
+import { config } from "@/lib/config";
 import { publicOrigin } from "@/lib/origin";
 import { clientIp, clientIpVerified } from "@/lib/client-ip";
 import { checkRateLimit, ANON_RATE_LIMIT_PER_MINUTE, ANON_GLOBAL_LIMIT_PER_MINUTE } from "@/lib/rate-limit";
@@ -131,6 +132,14 @@ export async function POST(req: Request): Promise<Response> {
   const id = body?.id ?? null;
   const method = body?.method;
 
+  // The tool list is chosen per connection by ?tools=lean or ?tools=full on the MCP URL;
+  // without it BAB_MCP_TOOLS decides (default full). An unknown value is refused, not guessed.
+  const toolsParam = new URL(req.url).searchParams.get("tools");
+  if (toolsParam !== null && toolsParam !== "lean" && toolsParam !== "full") {
+    return rpcError(id, -32602, `Unknown tools value "${toolsParam.slice(0, 20)}": use ?tools=lean or ?tools=full.`);
+  }
+  const toolset: McpToolset = toolsParam ?? config().mcpTools;
+
   const h = await headers();
   const origin = publicOrigin(h);
   const ip = clientIp(h);
@@ -217,7 +226,7 @@ export async function POST(req: Request): Promise<Response> {
           protocolVersion: "2025-06-18",
           capabilities: { tools: {} },
           serverInfo: { name: "bab", version: "1" },
-          instructions: mcpInstructions(origin),
+          instructions: mcpInstructions(origin, toolset),
         },
         sessionId ? { "Mcp-Session-Id": sessionId } : undefined,
       );
@@ -229,7 +238,7 @@ export async function POST(req: Request): Promise<Response> {
 
     case "tools/list":
       return rpcResult(id, {
-        tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+        tools: toolsFor(toolset).map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
       });
 
     case "tools/call": {
@@ -257,11 +266,18 @@ export async function POST(req: Request): Promise<Response> {
 
       if (!actor) {
         // Fixed server text, never colleague content.
-        return rpcResult(id, { content: [{ type: "text", text: identifyRequiredText(deviceError) }], isError: false });
+        const hint = toolset === "lean" ? ` This connection uses the lean tool list: if bab_identify is not in your tools, connect to ${origin}/mcp?tools=full.` : "";
+        return rpcResult(id, { content: [{ type: "text", text: identifyRequiredText(deviceError) + hint }], isError: false });
       }
       const tool = findTool(toolName);
       if (!tool) {
         return rpcError(id, -32602, `Unknown tool: ${toolName}`);
+      }
+      if (toolset === "lean" && !LEAN_TOOL_NAMES.includes(toolName)) {
+        return rpcResult(id, {
+          content: [{ type: "text", text: `${toolName} is not in the lean tool list. Connect to ${origin}/mcp?tools=full (the full URL) to use it.` }],
+          isError: true,
+        });
       }
       try {
         const text = tool.run(actor, args, { origin });

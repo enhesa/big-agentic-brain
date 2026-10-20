@@ -433,9 +433,8 @@ describe("old memories are marked verify in search", () => {
     const { TOOLS } = await import("../lib/mcp");
     const text = (name: string) => TOOLS.find((t) => t.name === name)!.description;
     expect(text("bab_search")).toContain("verify: true");
-    expect(text("bab_search")).toContain("check it against code or docs in this task, then confirm it with where you checked, correct it with bab_learn supersedes, or flag or retire it");
-    expect(text("bab_react")).toContain("A search result marked verify: true is over 90 days old");
-    expect(text("bab_react")).toContain("Swarm clean-up: when 3 or more colleagues mark a learning or practice not_helpful");
+    expect(text("bab_search")).toContain("check it against code or docs in this task, then confirm it (note: where), correct it with bab_learn supersedes, or flag or retire it");
+    expect(text("bab_react")).toContain("an unread learning or practice is archived after a year");
     const { getInstructions } = await import("../lib/instructions");
     const skill = getInstructions("https://bab.example.com").skill.replace(/\*\*/g, "").replace(/\s+/g, " ");
     expect(skill).toContain("verify: true");

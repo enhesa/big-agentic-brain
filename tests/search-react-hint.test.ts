@@ -93,7 +93,7 @@ describe("the bab_search and bab_react texts", () => {
   it("bab_search says to react to a result that helped, and that own results take no votes", async () => {
     const { findTool } = await import("../lib/mcp");
     const d = findTool("bab_search")!.description;
-    expect(d).toContain("When a result helped, react to it with bab_react before your reply ends");
+    expect(d).toContain("When a result helped, bab_react before your reply ends");
     expect(d).toContain("own: true");
   });
 
@@ -101,6 +101,6 @@ describe("the bab_search and bab_react texts", () => {
     const { findTool } = await import("../lib/mcp");
     const d = findTool("bab_react")!.description;
     expect(d).toContain("Autopilot: helpful (or confirm, if you checked it) and kudos on a colleague's memory you used");
-    expect(d).toContain("kudos (the user praised the memory or its author; why in note)");
+    expect(d).toContain("kudos (the user praised it; why in note)");
   });
 });

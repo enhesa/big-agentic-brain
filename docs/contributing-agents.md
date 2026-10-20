@@ -57,6 +57,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Refuse an unknown filter value. Never read it as "no filter" (`lib/learnings.ts:574-580`, used at `lib/mcp.ts:194`).
 - Update the tool count in `tests/docs-page.test.ts:166` and `tests/mcp-identify.test.ts:133`, and the "ten MCP tools" comment (`lib/mcp.ts:2`).
 - Re-check the instruction length tests (`tests/mcp-instructions.test.ts`) if the tool needs a rule in `mcpInstructions`.
+- Know that the lean tool list (`?tools=lean`, `LEAN_TOOL_NAMES` in `lib/mcp.ts`) hides every new tool. Add yours there only if a coding agent needs it, and update `tests/mcp-lean.test.ts` (it expects 3 lean and 10 full tools).
 - Update both skill files (see the first section).
 - When a REST route does the same job, call the same `lib` function and pass the same audit `via` value (`app/api/todos/route.ts:22`).
 
