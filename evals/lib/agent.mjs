@@ -110,7 +110,7 @@ export const LEAN_TOOLS = [
 ];
 // The one sentence the "F" variant swaps: BAB's current advice (all kinds) back to the old advice that filtered by
 // kind, which hid kind=learning, what agents record (#30). F now measures what the old advice cost.
-export const CURRENT_ADVICE = "Before any task, bab_search what it names, all kinds; weigh by standing, verify at the source.";
+export const CURRENT_ADVICE = "Before any task, bab_search its topic, all kinds; in a repo also kind standard, decision; weigh by standing, verify at the source.";
 export const KIND_ADVICE = "Before changing a repo, bab_search kind standard, decision, practice; weigh by standing, verify against the code.";
 export const SEARCH_FIRST = "Before you start, search the team memory (bab_search) for this problem: a colleague may already have solved it.";
 
@@ -142,7 +142,7 @@ export async function runAgent({ prompt, ws, providerCfg, bab, sandbox, maxTurns
     mcp = await new McpClient(bab.origin, bab.identity.email, bab.identity.name).init();
     let instructions = mcp.instructions ?? "";
     if (integration.instructions === "lean") instructions = LEAN_INSTRUCTIONS;
-    else if (integration.instructions === "fixed") {
+    else if (integration.instructions === "old") {
       if (!instructions.includes(CURRENT_ADVICE)) throw new Error("old-advice ablation: BAB's search sentence not found in its MCP instructions");
       instructions = instructions.replace(CURRENT_ADVICE, KIND_ADVICE);
     }

@@ -43,7 +43,7 @@ describe("MCP instructions length", () => {
 describe("MCP instructions content", () => {
   it("tells a stuck agent to search BAB before it debugs", () => {
     const text = mcpInstructions(LIVE);
-    expect(text).toContain("Stuck on an error, a failing build or a refusing tool? bab_search the error text or the system first: another agent may have fixed it.");
+    expect(text).toContain("Stuck on an error, a failing build or a refusing tool? bab_search the error or system first: another agent may have fixed it.");
     // Before the repo rule, so a session that only skims gets the cheaper habit first.
     expect(text.indexOf("Stuck on an error")).toBeLessThan(text.indexOf("Before any task"));
   });
@@ -100,9 +100,8 @@ describe("MCP instructions content", () => {
   });
 
   it("tells the agent to search all kinds before any task", () => {
-    at("Before any task, bab_search what it names, all kinds;");
+    at("Before any task, bab_search its topic, all kinds; in a repo also kind standard, decision;");
     at("weigh by standing, verify at the source");
-    expect(text).not.toContain("kind standard, decision, practice");
     at("PRs get a short BAB section");
   });
 
