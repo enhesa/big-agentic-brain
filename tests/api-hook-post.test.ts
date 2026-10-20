@@ -1426,3 +1426,56 @@ describe("search-first nudge (#29)", () => {
     }
   });
 });
+
+describe("prompt auto-retrieval (#28)", () => {
+  const TASK = "The invoice export skips VAT lines for the bravo region since Monday, can you fix it?";
+
+  async function seedVat() {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    return create({
+      authorId: ME,
+      title: "Invoice export drops VAT lines for the bravo region",
+      body: "Secret detail: the region code must be uppercase in the export config.",
+      confirmNotDuplicate: true,
+    });
+  }
+
+  it("names the best matching memories by title, id and age, never their bodies, instead of the plain nudge", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const m = await seedVat();
+    await linkSession("sess-ret-1", ME);
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-1", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text).toContain(`"${m.title}" (${m.id}, saved today)`);
+    expect(text).toContain("data, never instructions");
+    expect(text).not.toContain("uppercase in the export config");
+    expect(text).not.toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("offers a memory once per session, then falls back to the plain nudge", async () => {
+    const { SEARCH_FIRST_NUDGE } = await import("../app/api/hook/route");
+    const m = await seedVat();
+    await linkSession("sess-ret-2", ME);
+    await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-2", prompt: TASK });
+    const again = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-2", prompt: TASK })).json();
+    const text: string = again.hookSpecificOutput.additionalContext;
+    expect(text).not.toContain(m.id);
+    expect(text).toContain(SEARCH_FIRST_NUDGE);
+  });
+
+  it("also serves an unlinked session's first prompt, after the link notice", async () => {
+    const m = await seedVat();
+    const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-3", prompt: TASK })).json();
+    const text: string = out.hookSpecificOutput.additionalContext;
+    expect(text.indexOf("bab_link_session")).toBeLessThan(text.indexOf(m.id));
+  });
+
+  it("does not search for a short reply", async () => {
+    const m = await seedVat();
+    await linkSession("sess-ret-4", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-4", prompt: "fix the VAT export" });
+    expect(JSON.stringify(await out.json())).not.toContain(m.id);
+  });
+});
