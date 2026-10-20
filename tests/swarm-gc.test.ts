@@ -411,11 +411,16 @@ describe("old memories are marked verify in search", () => {
     const run = (q: string) => JSON.parse(findTool("bab_search")!.run(actor, { query: q }));
 
     expect(run("zqhint").verifyHint).toBeUndefined();
+    expect(run("zqhint").results[0].stale).toBeUndefined();
     await makeOld(old.id, 100);
     const out = run("zqhint");
     expect(out.results[0].verify).toBe(true);
     expect(out.verifyHint).toBe(VERIFY_HINT);
     expect(out.verifyHint).toMatch(/confirm it.*correct it.*flag or retire it/);
+    // #32: the warning sits on the result itself, right after its title.
+    expect(Object.keys(out.results[0]).slice(0, 3)).toEqual(["id", "title", "stale"]);
+    expect(out.results[0].stale).toMatch(/^Saved 3 months ago and not confirmed since: it may be out of date\. Check it at the source/);
+    expect(run("zqhint").results.length).toBe(1);
 
     vi.doMock("next/headers", () => ({
       headers: async () => new Headers({ "x-bab-actor-email": KEEPER, "x-bab-actor-name": "Kim" }),

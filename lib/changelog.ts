@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-20",
     title: "Sort the memory list, search advice for every team",
     changes: [
+      "An old, unchecked memory in search results now says it may be out of date, next to its title.",
       "On a new task, agents see the titles of up to three matching memories before they start.",
       "After a finished task, agents are asked for a structured learning with exact values, not a session summary.",
       "On a new task, the Claude Code plugin reminds the agent to search BAB first.",

@@ -17,6 +17,7 @@ import type { SessionUser } from "./session";
 import { identityDomain, identityHint } from "./identity";
 import { redeemLinkToken } from "./session-links";
 import { VERIFY_HINT } from "./swarm-gc";
+import { formatAge } from "./relative-time";
 import {
   search,
   searchTotal,
@@ -234,6 +235,10 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
 
   const filters = { tag, repo, author, status, project, kind, flagged, model, appliesTo, stack };
   const results = search(query, filters, limit, offset).map((hit) => ({
+    // A memory due for a check carries its warning right after the title, where an agent reads
+    // it, not only in verifyHint at the end (#32: agents read stale memories in 88% of eval runs
+    // and questioned them in 4%).
+    ...(hit.verify ? { id: hit.id, title: hit.title, stale: staleWarning(hit.ageDays) } : {}),
     ...hit,
     url: memoryUrl(ctx, hit.id),
     // Only on the caller's own entries: BAB refuses a vote, confirm or kudos by the author.
@@ -259,6 +264,11 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
 // ---------------------------------------------------------------------------
 // bab_learn
 // ---------------------------------------------------------------------------
+
+/** The per-result warning on a memory marked verify (over 90 days old, not confirmed or kept since). */
+export function staleWarning(ageDays: number): string {
+  return `Saved ${formatAge(ageDays)} and not confirmed since: it may be out of date. Check it at the source before you act on it.`;
+}
 
 function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string {
   const title = str(args.title).trim();
