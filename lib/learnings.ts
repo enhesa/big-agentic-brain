@@ -498,9 +498,10 @@ export function parseSort(value: string | undefined): LearningSort | undefined {
   return (LEARNING_SORTS as readonly string[]).includes(value ?? "") ? (value as LearningSort) : undefined;
 }
 
-/** ORDER BY terms for an explicit sort. Ties fall back to newest first, then rowid, so pages never overlap. */
+/** ORDER BY terms for an explicit sort. Ties fall back to newest first, then rowid, so pages never overlap.
+ *  Dates go through julianday(): writers mix datetime('now') and ISO strings, which do not sort as text. */
 function sortSql(sort: LearningSort | undefined, prefix = ""): string | null {
-  const c = (col: string) => `${prefix}${col}`;
+  const c = (col: string) => (col.endsWith("_at") ? `julianday(${prefix}${col})` : `${prefix}${col}`);
   switch (sort) {
     case "top":
       return `${c("score")} DESC, ${c("created_at")} DESC, ${c("rowid")} DESC`;

@@ -53,6 +53,15 @@ describe("list() and search() sort", () => {
     expect(ids("used")).toEqual([b, a, c]); // never read goes last
   });
 
+  it("orders mixed date formats by time, not text", async () => {
+    const { a, b } = await seed();
+    const { list } = await import("../lib/learnings");
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE learnings SET updated_at = ? WHERE id = ?").run("2026-06-01 12:00:00", a);
+    getDb().prepare("UPDATE learnings SET updated_at = ? WHERE id = ?").run("2026-06-01T08:00:00Z", b);
+    expect(list({ sort: "updated" }).map((r) => r.id).slice(0, 2)).toEqual([a, b]);
+  });
+
   it("keeps the search matches and only changes their order", async () => {
     const { a, b } = await seed();
     const { search } = await import("../lib/learnings");
@@ -97,6 +106,13 @@ describe("/memory sort", () => {
     await seed();
     expect(await renderList({})).toMatch(/<option value="" selected="">Top<\/option>/);
     expect(await renderList({ q: "kiosk" })).toMatch(/<option value="" selected="">Best match<\/option>/);
+  });
+
+  it("?sort=top without a search is the plain list, with one Top option", async () => {
+    await seed();
+    const html = await renderList({ sort: "top" });
+    expect(html.match(/>Top<\/option>/g)).toHaveLength(1);
+    expect(html).not.toContain("sort=top");
   });
 
   it("an unknown ?sort= keeps the default order", async () => {

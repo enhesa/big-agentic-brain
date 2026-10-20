@@ -105,7 +105,8 @@ export default async function BoardPage({
   const applies = appliesFilter?.join(",") ?? "";
   // An unknown ?sort= keeps the default order, like a bad ?kind= above.
   const sortOrder = parseSort(params.sort);
-  const sort = sortOrder ?? "";
+  // Top is already the default without a search, so ?sort=top shows (and links) as the plain list.
+  const sort = sortOrder === "top" && !q ? "" : (sortOrder ?? "");
   // 1-based; anything unparsable or below 1 collapses to page 1 rather than erroring.
   const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 
@@ -271,7 +272,7 @@ export default async function BoardPage({
       options: [
         // The default follows the search: relevance while searching, votes otherwise.
         { value: "", label: q ? "Best match" : "Top" },
-        ...(q || sort === "top" ? [{ value: "top", label: "Top" }] : []),
+        ...(q ? [{ value: "top", label: "Top" }] : []),
         { value: "newest", label: "Newest" },
         { value: "oldest", label: "Oldest" },
         { value: "updated", label: "Recently updated" },
