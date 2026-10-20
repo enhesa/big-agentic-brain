@@ -54,6 +54,8 @@ export interface BabConfig {
   };
   retention: { staleAfterDays: number; auditDays: number };
   devices: boolean;
+  /** Default MCP tool list (BAB_MCP_TOOLS): full, or lean (bab_search, bab_learn, bab_react). A connection can override it with ?tools=. */
+  mcpTools: "full" | "lean";
   inboxPage: boolean;
   clientIpHeader: "x-real-ip" | "x-forwarded-for-rightmost" | null;
   /** The unrecognised BAB_CLIENT_IP_HEADER value (lowercased) that was ignored, for a one-time warning; else null. */
@@ -93,6 +95,13 @@ function bool(env: Env, name: string, def: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(v)) return true;
   if (["0", "false", "no", "off"].includes(v)) return false;
   throw new ConfigError(name + ' must be a boolean (1/0, true/false), got "' + v + '"');
+}
+
+function mcpToolsOf(env: Env): "full" | "lean" {
+  const v = read(env, "BAB_MCP_TOOLS")?.trim().toLowerCase();
+  if (v === undefined || v === "" || v === "full") return "full";
+  if (v === "lean") return "lean";
+  throw new ConfigError('BAB_MCP_TOOLS must be full or lean, got "' + v + '"');
 }
 
 function int(env: Env, name: string, def: number): number {
@@ -274,6 +283,7 @@ function parse(env: Env): BabConfig {
     },
     retention: { staleAfterDays: int(env, "BAB_STALE_AFTER_DAYS", 90), auditDays: int(env, "BAB_AUDIT_RETENTION_DAYS", 365) },
     devices: bool(env, "BAB_DEVICES", true),
+    mcpTools: mcpToolsOf(env),
     inboxPage: bool(env, "BAB_INBOX_PAGE", true),
     clientIpHeader: clientIp,
     clientIpHeaderInvalid: clientIpInvalid,

@@ -269,9 +269,8 @@ describe("MCP", () => {
     const learn = findTool("bab_learn")!;
     expect(learn.description).toContain("appliesTo");
     const prop = (learn.inputSchema as { properties: Record<string, { description: string }> }).properties.appliesTo.description;
-    expect(prop).toContain(".csproj");
-    expect(prop).toContain("package.json");
-    expect(prop).toContain("bab_feedback");
+    expect(prop).toContain("aliases");
+    expect(prop).toContain("unknown is an error");
     const search = findTool("bab_search")!;
     expect((search.inputSchema as { properties: Record<string, unknown> }).properties.stack).toBeTruthy();
     expect(search.description).toContain("stack");
