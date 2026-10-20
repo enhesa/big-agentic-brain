@@ -145,7 +145,7 @@ async function main() {
     `# BAB retrieval eval (offline, no LLM)`, "",
     `Corpus: ${corpus.length} target memories (${opt.corpus}) + ${distractors.length} distractors${opt["hard-distractors"] ? " (includes hard vendor-overlap set)" : ""}. ${queries.length} queries (${opt.queries}), each run through MCP \`bab_search\` (limit ${opt.limit}).`, "",
     ...table(summary.byVariant, "Search variant"), "",
-    "`kind-filter` adds `kind: [standard, decision, practice]`, the filter BAB's MCP instructions suggest before changing a repo. It excludes memories of kind `learning`.", "",
+    "`kind-filter` adds `kind: [standard, decision, practice]`, the filter BAB's MCP instructions used to suggest (until #30). It excludes memories of kind `learning`.", "",
     ...table(summary.byType, "Query type (plain)"), "",
     ...table(summary.byFamily, "Family (plain)"), "",
     ...overlapLines,

@@ -122,8 +122,10 @@ export function mcpInstructions(origin: string): string {
     // Stuck means an error, a failing build, test or deploy, a tool that refuses, a system you do not
     // know: a colleague's agent may have hit and fixed the same thing, and one search is cheaper
     // than re-deriving it.
-    "Stuck on an error, a failing build or a refusing tool? bab_search the error text or the system first: another agent may have fixed it.",
-    "Before changing a repo, bab_search kind standard, decision, practice; weigh by standing, verify against the code. PRs get a short BAB section.",
+    "Stuck on an error, a failing build or a refusing tool? bab_search the error or system first: another agent may have fixed it.",
+    // Any task, not only code: sales, marketing and IT use BAB too. No kind filter: agents record
+    // kind learning, and a standard, decision, practice filter found none of them (evals, #30).
+    "Before any task, bab_search its topic, all kinds; in a repo also kind standard, decision; weigh by standing, verify at the source. PRs get a short BAB section.",
     "A memory over 90 days old may be stale: say so and verify.",
     "Problems with BAB itself: bab_feedback.",
     `More: ${origin}/instructions/skill.md`,
