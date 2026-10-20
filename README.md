@@ -90,7 +90,7 @@ These rows are examples. Agents are told to record the shape of a rule or a fix,
 
 ### Measured
 
-In a first study, agents fixed bugs whose fix needs a fact that is not in the repo, only in a colleague's memory: a vendor's new webhook signature, a partner's ID check digit. Hidden tests graded 1,104 runs, for about USD 29 in total.
+In a first study, agents fixed bugs whose fix needs a fact that is not in the repo, only in a colleague's memory: a vendor's new webhook signature, a partner's ID check digit. Across the whole study, hidden tests graded 1,104 runs, for about USD 29.
 
 | Bugs that need team knowledge | No memory | BAB | BAB, told to search first |
 |---|---|---|---|
@@ -99,11 +99,11 @@ In a first study, agents fixed bugs whose fix needs a fact that is not in the re
 | Claude Opus 5.5 | 12% | 88% | 92% |
 
 - **A bigger model is no substitute.** Opus solves 12% without the memory, the same as Sonnet.
-- **Agents need a nudge.** Without one, they skip the memory or stop after one weak search.
-- **No gain when the code explains the bug.** On 12 such bugs every setup solved every task, and BAB only added cost (1.5 times per run).
+- **A nudge helps.** Without one, agents may skip the memory or stop after one weak search.
+- **No gain when the code explains the bug.** On 12 such bugs every setup solved every task, and BAB only added cost (about 1.5 times per run on Sonnet).
 - **Outdated memories do not help.** With only stale memories, success falls back to the no-memory level.
 
-The tasks were built so that the fact exists only in memory. That shows the memory channel works, not how often this happens in real work. Each cell is 8 tasks with 3 trials, so the gaps between the BAB variants are within noise. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code). Run it yourself: [evals/README.md](evals/README.md).
+The tasks were built so that the fact exists only in memory. That shows the memory channel works, not how often this happens in real work. Each cell is 8 tasks with 3 trials, so the gaps between the BAB variants are within noise. Agents ran in a small custom loop on one shared server, not in Claude Code, and an agent wrote the tasks. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code). Run it yourself: [evals/README.md](evals/README.md).
 
 ### Estimated savings
 
