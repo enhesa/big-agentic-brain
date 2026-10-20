@@ -105,9 +105,9 @@ Each fix needed a fact that is not in the repo, only in a colleague's memory, su
 | Bugs that need team knowledge, Claude Haiku 5.5 | 0% | 75% | 88% |
 | Bugs that need team knowledge, Claude Sonnet 5.5 | 12% | 79% | 100% |
 | Bugs that need team knowledge, Claude Opus 5.5 | 12% | 88% | 92% |
-| Bugs the code explains (12 tasks, Sonnet and Haiku) | 100% | 100% | not run |
+| Bugs the code explains (12 tasks, Sonnet and Haiku) | 100% | 100% | not reported |
 
-- **Cheaper per fix.** On Sonnet, a fixed bug cost USD 0.164 without memory and USD 0.039 with BAB. The no-memory figure rests on only 3 fixes.
+- **Cheaper per fix.** On Sonnet, a fixed bug cost USD 0.164 without memory and USD 0.039 with BAB. This is cost per run divided by success rate, and the no-memory figure rests on only 3 fixes.
 - **A bigger model is no substitute.** Opus fixes 12% without the memory, the same as Sonnet.
 - **A nudge helps.** Without one, agents may skip the memory or stop after one weak search.
 - **No gain when the code explains the bug.** There BAB only adds cost, about 1.5 times per run on Sonnet.
@@ -118,7 +118,7 @@ Each fix needed a fact that is not in the repo, only in a colleague's memory, su
 
 - The tasks were built so that the fact exists only in memory. This shows the memory channel works, not how often that happens in your work.
 - 8 tasks with 3 trials each. BAB against no memory is a real gap; the gaps between the BAB variants are noise.
-- An agent wrote the tasks, and a BAB maintainer ran the study. Tasks and hypotheses were frozen before the runs.
+- An agent wrote the tasks, and a BAB maintainer ran the study. Tasks and hypotheses for the team-knowledge runs were frozen before they started; the Opus runs were added the same day.
 - Agents ran in a small custom loop on one shared server, not in Claude Code and not across machines.
 
 The whole study took 1,104 graded runs and about USD 29. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code).
@@ -127,10 +127,10 @@ The whole study took 1,104 graded runs and about USD 29. Write-up: [Unlocking sw
 
 ```bash
 pnpm install && pnpm build
-ANTHROPIC_API_KEY=... BAB_EVAL_MODEL=claude-sonnet-5-5 pnpm eval --mode full --suite tk --conditions A,B,N --budget-usd 10
+ANTHROPIC_API_KEY=... BAB_EVAL_MODEL=claude-sonnet-5-5 pnpm eval --mode full --suite tk --conditions A,B,N --memory fixture --budget-usd 10
 ```
 
-More options and the retrieval eval, which needs no LLM: [evals/README.md](evals/README.md).
+It needs Node 24, `python3` and bubblewrap for the sandbox. Results vary from run to run. More options and the retrieval eval, which needs no LLM: [evals/README.md](evals/README.md).
 
 ### Estimated savings (a model, not a measurement)
 
@@ -144,7 +144,7 @@ More options and the retrieval eval, which needs no LLM: [evals/README.md](evals
 | Time (estimate) | 150 minutes | 50.5 minutes |
 | Tokens (estimate) | About 500,000 | About 162,000 |
 
-The estimate leaves out BAB's own token cost, about 1.2 to 1.5 times per run in the study.
+The estimate leaves out BAB's own token cost, about 1.2 to 1.7 times per run in the study.
 
 <details>
 <summary>Net savings per month for a team, a department and a company</summary>
