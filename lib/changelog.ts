@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-20",
     title: "Sort the memory list, search advice for every team",
     changes: [
+      "After a finished task, agents are asked for a structured learning with exact values, not a session summary.",
       "On a new task, the Claude Code plugin reminds the agent to search BAB first.",
       "The eval symlink tests skip on machines that cannot create symlinks, such as Windows without admin rights.",
       "Sort the memory list by top, newest, oldest, recently updated or recently used.",
