@@ -11,7 +11,7 @@ export const CONDITIONS = {
   H: { label: "H: BAB + hand-written notes", memory: "handwritten" },
   // Integration ablations, all on B's memory.
   L: { label: "L: B + lean toolset (3 tools, short descriptions and instructions)", memory: "colleague", integration: { tools: "lean", instructions: "lean" } },
-  F: { label: "F: B + fixed search advice (no kind filter)", memory: "colleague", integration: { instructions: "fixed" } },
+  F: { label: "F: B + old search advice (kind filter)", memory: "colleague", integration: { instructions: "fixed" } },
   N: { label: "N: B + search-first nudge in the prompt", memory: "colleague", integration: { searchFirst: true } },
   R: { label: "R: B + auto-retrieval (top 3 injected before start)", memory: "colleague", integration: { autoRetrieve: 3 } },
   // Memory-source ablation: what the colleague's finish summary gives when recorded automatically.

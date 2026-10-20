@@ -36,7 +36,7 @@ const HELP = `Usage: node evals/run.mjs [options]
   --suite core|tk          core: bugs the repo itself reveals (evals/tasks); tk: team knowledge, the fix needs a
                            fact that is only in a colleague's memory (evals/tasks-tk; eval tasks are its variants)
   --conditions A,B,...     A no BAB; B BAB + colleague memory; C BAB + distractors only; H BAB + hand-written notes;
-                           ablations on B's memory: L lean toolset, F fixed search advice, N search-first nudge,
+                           ablations on B's memory: L lean toolset, F old kind-filter search advice, N search-first nudge,
                            R auto-retrieval (top 3 injected); AR auto-recorded memory; hazards: ST stale memory,
                            CF stale + current (conflict), WR wrong memory (core). See evals/README.md.
   --tasks id,id            task ids (default: all core tasks / all tk variants in full, 3 in smoke)

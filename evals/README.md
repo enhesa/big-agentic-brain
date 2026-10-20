@@ -42,7 +42,7 @@ Extra `--conditions` (all optional; see `lib/conditions.mjs`):
 | | Meaning |
 |---|---|
 | `L` | B's memory + lean toolset (search/learn/react only, short descriptions) |
-| `F` | B's memory + MCP instructions with the kind-filter sentence replaced |
+| `F` | B's memory + the old MCP search advice, which filtered by kind standard, decision, practice (replaced in #30) |
 | `N` | B's memory + one-line search-first nudge on the prompt |
 | `R` | B's memory + top-3 search for the prompt injected before the first turn |
 | `AR` | Auto-recorded memory (colleague finish summaries) instead of `bab_learn` bodies |
@@ -144,7 +144,7 @@ The queries are in `fixtures/retrieval-queries.json`, each tagged with the famil
 
 Each query runs twice:
 - plain;
-- with `kind: [standard, decision, practice]`, the filter BAB's MCP instructions suggest before changing a repo. That filter excludes kind `learning`, which is what agents record, so this variant shows how much the suggested filter hides.
+- with `kind: [standard, decision, practice]`, the filter BAB's MCP instructions used to suggest before changing a repo (until #30). That filter excludes kind `learning`, which is what agents record, so this variant shows how much it hid.
 
 The run exits non-zero below the thresholds. CI uses thresholds just under the values measured when the eval was added.
 

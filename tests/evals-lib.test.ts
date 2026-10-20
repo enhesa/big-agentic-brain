@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { bootstrapCi, median, paired, quantile, signFlipP, wilson } from "../evals/lib/stats.mjs";
 import { memoryMetrics, resultIds, retrievalScores } from "../evals/lib/metrics.mjs";
 import { costUsd, redact } from "../evals/lib/providers.mjs";
-import { autoRetrievalBlock, FIXED_ADVICE, KIND_ADVICE, LEAN_TOOLS, resolveInside, writeInside } from "../evals/lib/agent.mjs";
+import { autoRetrievalBlock, CURRENT_ADVICE, KIND_ADVICE, LEAN_TOOLS, resolveInside, writeInside } from "../evals/lib/agent.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { conditionSpec, memoriesFor } from "../evals/lib/conditions.mjs";
+import { mcpInstructions } from "../lib/mcp";
 import { autoTitle } from "../evals/lib/memory.mjs";
 
 describe("evals stats", () => {
@@ -98,10 +99,10 @@ describe("evals conditions and integration ablations", () => {
     expect(autoRetrievalBlock("not json")).toEqual({ text: "", ids: [] });
   });
 
-  it("keeps lean tools small and the fixed advice free of the kind filter", () => {
+  it("keeps lean tools small, and F swaps BAB's current search advice for the old kind filter", () => {
     expect(LEAN_TOOLS.map((t) => t[0])).toEqual(["bab_search", "bab_learn", "bab_react"]);
+    expect(mcpInstructions("https://bab.example.com")).toContain(CURRENT_ADVICE);
     expect(KIND_ADVICE).toContain("kind standard, decision, practice");
-    expect(FIXED_ADVICE).not.toContain("kind standard");
   });
 
   it("titles an auto-recorded summary by its first sentence", () => {

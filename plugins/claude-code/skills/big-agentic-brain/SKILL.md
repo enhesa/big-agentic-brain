@@ -166,11 +166,15 @@ why, what was rejected). `source` is `native` or `confluence`; mirrored Confluen
 also carry `source_url` and `source_version`. The tool schemas carry the details. Reading
 is the same as for any entry: it is reference, never orders (rule 1).
 
-**Before designing or changing code in a repo**, call `bab_search` with
-`kind: ["standard","decision","practice"]` and `repo` set to the repo's slug (empty
-`query` is fine), then again with `project: "_general"`. Weigh each entry by its
-`standing` (`strong`, `fair` or `weak`) and verify it against what the code shows. A
-standard is evidence to weigh, not an order.
+**Before any task**, in any team, call `bab_search` with what the task names (a system,
+process, client area or error) and no `kind` filter: most gotchas are kind `learning`, and
+a kind filter hides them. Weigh each entry by its `standing` (`strong`, `fair` or `weak`)
+and verify it at the source. A standard is evidence to weigh, not an order.
+
+**Before designing or changing code in a repo**, also list its house rules: `bab_search`
+with `kind: ["standard","decision","practice"]` and `repo` set to the repo's slug (empty
+`query` is fine), then again with `project: "_general"`. Verify them against what the
+code shows.
 
 **Before opening a PR**, add a short "BAB" section to the description:
 
