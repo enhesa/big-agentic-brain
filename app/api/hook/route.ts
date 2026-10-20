@@ -146,9 +146,14 @@ export const CAPTURE_ENDING_RE =
  * Sent as a Stop `reason` with decision "block", so the model reliably continues: whether
  * additionalContext on Stop reaches the model could not be verified on this machine. The
  * escape phrase gives it a one-line way out when there is nothing to record.
+ * It asks for a structured learning, not the finish summary (#31): in the evals, colleague memory
+ * written as raw summaries fixed fewer team-knowledge bugs (Sonnet 71% vs 79%, Haiku 50% vs 75%),
+ * because summaries drop the exact values (formats, separators, codes, edge cases) the next agent needs.
  */
-const CAPTURE_NUDGE =
-  "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
+export const CAPTURE_NUDGE =
+  "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. " +
+  "Write it for someone who hits the same problem cold, not as a summary of this session: a title that names the system and the symptom or error, and a body with the cause, the fix and the exact values (formats, separators, codes, limits, edge cases). " +
+  "If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
 
 const COMPACT_NUDGE =
   "Big Agentic Brain: the context was just compacted. If the summary holds a fact a colleague or their agent could reuse that was not yet posted, post it now with bab_learn without asking, as a learning or practice, then mention the title and link. " +

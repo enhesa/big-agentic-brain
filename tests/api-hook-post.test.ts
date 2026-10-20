@@ -708,6 +708,9 @@ describe("Stop capture nudge", () => {
     expect(json.decision).toBe("block");
     expect(json.reason).toContain("post it now with bab_learn without asking");
     expect(json.reason).toContain("Nothing to record for BAB.");
+    // A structured learning, not the session summary (#31).
+    expect(json.reason).toContain("not as a summary of this session");
+    expect(json.reason).toContain("the exact values");
     // Confidentiality on the text that fires most, and no standards from autopilot.
     expect(json.reason).toContain("a client's quirk written as the shape without the client's name");
     expect(json.reason).toContain("as a learning or practice");
