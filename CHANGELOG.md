@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/enhesa/big-agentic-brain/compare/v2.3.1...v2.4.0) (2026-10-20)
+
+
+### Features
+
+* **memory:** sort the memory list ([#41](https://github.com/enhesa/big-agentic-brain/issues/41)) ([96b3b39](https://github.com/enhesa/big-agentic-brain/commit/96b3b39e8b7222f357786099df06b6bbb2a44f10))
+
+
+### Bug Fixes
+
+* **mcp:** search all kinds before any task, not only before repo changes ([#40](https://github.com/enhesa/big-agentic-brain/issues/40)) ([d5d4e93](https://github.com/enhesa/big-agentic-brain/commit/d5d4e93e04977e6b1b80bc19a4054df5cc2ce1a5))
+
 ## [2.3.1](https://github.com/enhesa/big-agentic-brain/compare/v2.3.0...v2.3.1) (2026-10-19)
 
 
