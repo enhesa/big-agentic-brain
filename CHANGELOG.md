@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.0](https://github.com/enhesa/big-agentic-brain/compare/v2.4.1...v2.5.0) (2026-10-20)
+
+
+### Features
+
+* **hook:** ask for a structured learning after a finished task ([#46](https://github.com/enhesa/big-agentic-brain/issues/46)) ([65a6ae3](https://github.com/enhesa/big-agentic-brain/commit/65a6ae3b880049293085623223d49ffccfa1ce97)), closes [#31](https://github.com/enhesa/big-agentic-brain/issues/31)
+* **hook:** nudge agents to search BAB first on a new task ([#45](https://github.com/enhesa/big-agentic-brain/issues/45)) ([95c55e5](https://github.com/enhesa/big-agentic-brain/commit/95c55e5b35c4ef7bfbc6032e23476cb42f4848ee)), closes [#29](https://github.com/enhesa/big-agentic-brain/issues/29)
+* **hook:** show the best matching memories on a new task ([#48](https://github.com/enhesa/big-agentic-brain/issues/48)) ([cda79e1](https://github.com/enhesa/big-agentic-brain/commit/cda79e16ccd3118823c5329b72da808cd46dadab))
+* **mcp:** lean tool list and shorter tool descriptions ([#51](https://github.com/enhesa/big-agentic-brain/issues/51)) ([a465c8f](https://github.com/enhesa/big-agentic-brain/commit/a465c8f734c391073ed52780b5452a4d6acbcc79))
+* **search:** improve recall for paraphrase and error-only queries ([#49](https://github.com/enhesa/big-agentic-brain/issues/49)) ([97cc1ec](https://github.com/enhesa/big-agentic-brain/commit/97cc1ec5b3c36671a8447203017beac3bde0fd84))
+* **search:** warn next to the title when a memory may be out of date ([#50](https://github.com/enhesa/big-agentic-brain/issues/50)) ([c8c960a](https://github.com/enhesa/big-agentic-brain/commit/c8c960a2d706ead080275466f98d0c75abf5121d)), closes [#32](https://github.com/enhesa/big-agentic-brain/issues/32)
+
+
+### Bug Fixes
+
+* **memory:** list every author in the Author filter ([#52](https://github.com/enhesa/big-agentic-brain/issues/52)) ([b76e54b](https://github.com/enhesa/big-agentic-brain/commit/b76e54b39d795f4831f629da13687f08ae62cc03))
+
 ## [2.4.1](https://github.com/enhesa/big-agentic-brain/compare/v2.4.0...v2.4.1) (2026-10-20)
 
 
