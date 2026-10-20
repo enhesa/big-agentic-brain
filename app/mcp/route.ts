@@ -134,9 +134,10 @@ export async function POST(req: Request): Promise<Response> {
 
   // The tool list is chosen per connection by ?tools=lean or ?tools=full on the MCP URL;
   // without it BAB_MCP_TOOLS decides (default full). An unknown value is refused, not guessed.
-  const toolsParam = new URL(req.url).searchParams.get("tools");
+  const rawTools = new URL(req.url).searchParams.get("tools");
+  const toolsParam = rawTools === null ? null : rawTools.trim().toLowerCase();
   if (toolsParam !== null && toolsParam !== "lean" && toolsParam !== "full") {
-    return rpcError(id, -32602, `Unknown tools value "${toolsParam.slice(0, 20)}": use ?tools=lean or ?tools=full.`);
+    return rpcError(id, -32602, `Unknown tools value "${(rawTools ?? "").slice(0, 20)}": use ?tools=lean or ?tools=full.`);
   }
   const toolset: McpToolset = toolsParam ?? config().mcpTools;
 
@@ -266,8 +267,7 @@ export async function POST(req: Request): Promise<Response> {
 
       if (!actor) {
         // Fixed server text, never colleague content.
-        const hint = toolset === "lean" ? ` This connection uses the lean tool list: if bab_identify is not in your tools, connect to ${origin}/mcp?tools=full.` : "";
-        return rpcResult(id, { content: [{ type: "text", text: identifyRequiredText(deviceError) + hint }], isError: false });
+        return rpcResult(id, { content: [{ type: "text", text: identifyRequiredText(deviceError) }], isError: false });
       }
       const tool = findTool(toolName);
       if (!tool) {

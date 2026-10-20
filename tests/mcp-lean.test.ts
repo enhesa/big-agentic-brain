@@ -48,8 +48,8 @@ async function rpc(method: string, params: unknown, query = "", headers: Record<
 const names = (out: { result: { tools: { name: string }[] } }) => out.result.tools.map((t) => t.name);
 
 describe("lean tool list", () => {
-  it("?tools=lean lists exactly bab_search, bab_learn and bab_react", async () => {
-    expect(names(await rpc("tools/list", {}, "?tools=lean")).sort()).toEqual(["bab_learn", "bab_react", "bab_search"]);
+  it("?tools=lean lists exactly bab_search, bab_learn, bab_react and bab_identify", async () => {
+    expect(names(await rpc("tools/list", {}, "?tools=lean")).sort()).toEqual(["bab_identify", "bab_learn", "bab_react", "bab_search"]);
   });
 
   it("the default list is unchanged: all ten tools", async () => {
@@ -76,9 +76,12 @@ describe("lean tool list", () => {
     expect(out.result.isError).toBeUndefined();
   });
 
-  it("a lean caller BAB does not know is told how to identify", async () => {
+  it("a lean caller BAB does not know can identify, and the tools value is case-insensitive", async () => {
     const out = await rpc("tools/call", { name: "bab_search", arguments: { query: "x" } }, "?tools=lean", {});
-    expect(out.result.content[0].text).toContain("/mcp?tools=full");
+    expect(out.result.content[0].text).toContain("bab_identify");
+    expect(out.result.content[0].text).not.toContain("tools=full");
+    expect(names(await rpc("tools/list", {}, "?tools=LEAN"))).toHaveLength(4);
+    expect(names(await rpc("tools/list", {}, "?tools=Full"))).toHaveLength(10);
   });
 
   it("lean instructions are short, drop the hidden tools and keep the safety rules", async () => {
@@ -90,13 +93,14 @@ describe("lean tool list", () => {
     expect(text).toContain("delete needs the user's yes");
     expect(text).toContain("maintainers only");
     expect(text).not.toContain("bab_send");
+    expect(text).toContain("bab_identify");
     expect((await rpc("initialize", {})).result.instructions).toContain("bab_send");
   });
 
   it("BAB_MCP_TOOLS=lean makes lean the server default and ?tools=full overrides it", async () => {
     process.env.BAB_MCP_TOOLS = "lean";
     (await import("../lib/config"))._resetConfigForTests();
-    expect(names(await rpc("tools/list", {}))).toHaveLength(3);
+    expect(names(await rpc("tools/list", {}))).toHaveLength(4);
     expect(names(await rpc("tools/list", {}, "?tools=full"))).toHaveLength(10);
   });
 
@@ -124,4 +128,4 @@ describe("tool description size", () => {
 });
 
 const CEILING_FULL = 20000;
-const CEILING_LEAN = 10500;
+const CEILING_LEAN = 11200;
