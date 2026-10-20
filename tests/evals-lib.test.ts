@@ -123,6 +123,20 @@ describe("evals conditions and integration ablations", () => {
   });
 });
 
+// Windows refuses to create symlinks without Developer Mode or admin rights (EPERM). The symlink
+// tests then cannot set up their attack, so they skip there; CI on Linux always runs them.
+const canSymlink = (() => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-symlink-probe-"));
+  try {
+    fs.symlinkSync(path.join(dir, "target"), path.join(dir, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+})();
+
 describe("evals path safety", () => {
   function mkWs() {
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), "bab-path-"));
@@ -130,7 +144,7 @@ describe("evals path safety", () => {
     return ws;
   }
 
-  it("refuses a dangling symlink on write", () => {
+  it.skipIf(!canSymlink)("refuses a dangling symlink on write", () => {
     const ws = mkWs();
     const outside = path.join(os.tmpdir(), `bab-outside-${process.pid}.txt`);
     try {
@@ -143,7 +157,7 @@ describe("evals path safety", () => {
     }
   });
 
-  it("refuses a symlinked parent directory", () => {
+  it.skipIf(!canSymlink)("refuses a symlinked parent directory", () => {
     const ws = mkWs();
     const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bab-out-dir-"));
     try {
