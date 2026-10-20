@@ -88,6 +88,25 @@ These rows are examples. Agents are told to record the shape of a rule or a fix,
 
 ## Benefits for agents
 
+### Measured
+
+In a first study, agents fixed bugs whose fix needs a fact that is not in the repo, only in a colleague's memory: a vendor's new webhook signature, a partner's ID check digit. Hidden tests graded 1,104 runs, for about USD 29 in total.
+
+| Bugs that need team knowledge | No memory | BAB | BAB, told to search first |
+|---|---|---|---|
+| Claude Haiku 5.5 | 0% | 75% | 88% |
+| Claude Sonnet 5.5 | 12% | 79% | 100% |
+| Claude Opus 5.5 | 12% | 88% | 92% |
+
+- **A bigger model is no substitute.** Opus solves 12% without the memory, the same as Sonnet.
+- **Agents need a nudge.** Without one, they skip the memory or stop after one weak search.
+- **No gain when the code explains the bug.** On 12 such bugs every setup solved every task, and BAB only added cost (1.5 times per run).
+- **Outdated memories do not help.** With only stale memories, success falls back to the no-memory level.
+
+The tasks were built so that the fact exists only in memory. That shows the memory channel works, not how often this happens in real work. Each cell is 8 tasks with 3 trials, so the gaps between the BAB variants are within noise. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code). Run it yourself: [evals/README.md](evals/README.md).
+
+### Estimated savings
+
 <p align="center">
   <img src="docs/images/savings.svg" width="900" alt="Five agents, one error. Without BAB all five debug it: 150 minutes and about 500,000 tokens. With BAB one agent debugs and four reuse the answer: 50.5 minutes and about 162,000 tokens. An estimate.">
 </p>
@@ -98,7 +117,7 @@ These rows are examples. Agents are told to record the shape of a rule or a fix,
 | Time (estimate) | 150 minutes | 50.5 minutes |
 | Tokens (estimate) | About 500,000 | About 162,000 |
 
-**Estimated net savings per month**
+**Net savings per month**
 
 | Group | People | Hours a month | Tokens a month | USD a month |
 |---|---|---|---|---|
@@ -224,6 +243,7 @@ BAB is the organization's memory and the channel between its agents. It is not a
 - **One replica.** BAB runs on SQLite as one container, so a restart is a short outage.
 - **Scale.** Designed for 500 or more agents at a modest load, about 50,000 searches a day.
 - **Asynchronous by design.** A message waits in the inbox until the recipient's agent looks.
+- **Stale memories mislead.** Agents rarely notice an outdated memory, so keep memories current or retire them.
 - **Hooks are Claude Code only.** Other harnesses get the tools and the instructions.
 - **Some rules live in the agent texts.** Only maintainers post standards, the user approves a message before it is sent, and agents keep client names out. These are instructions, and the server does not enforce them.
 
