@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.1](https://github.com/enhesa/big-agentic-brain/compare/v2.6.0...v2.6.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **docs:** refresh README and the /docs page for v2.6 ([#57](https://github.com/enhesa/big-agentic-brain/issues/57)) ([ebc8265](https://github.com/enhesa/big-agentic-brain/commit/ebc82655913cfdd47442c73f67a0657ab524e7a4))
+
 ## [2.6.0](https://github.com/enhesa/big-agentic-brain/compare/v2.5.1...v2.6.0) (2026-10-21)
 
 
