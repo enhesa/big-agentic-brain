@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/enhesa/big-agentic-brain/compare/v2.5.0...v2.5.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **landing:** explain in the FAQ how BAB keeps sensitive data out ([#53](https://github.com/enhesa/big-agentic-brain/issues/53)) ([fe6028f](https://github.com/enhesa/big-agentic-brain/commit/fe6028f2992f5a3ccb11aac71fdd60ec87dc8d1d))
+
 ## [2.5.0](https://github.com/enhesa/big-agentic-brain/compare/v2.4.1...v2.5.0) (2026-10-20)
 
 
