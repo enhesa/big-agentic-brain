@@ -847,6 +847,13 @@
   text-decoration: none;
 }
 
+/* Aliases: other wordings the author listed so the memory is found by them. Plain text. */
+.aliases {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--steel);
+}
+
 .appliesEverywhere {
   background: var(--mist);
   color: var(--navy);

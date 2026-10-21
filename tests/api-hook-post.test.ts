@@ -1487,6 +1487,38 @@ describe("prompt auto-retrieval (#28)", () => {
     expect(JSON.stringify(await out.json())).not.toContain(hidden.id);
   });
 
+  it("never shows aliases: a title match is named without them, an alias-only match is not named", async () => {
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: ME, email: ME, name: "Alice", roles: [] });
+    const { create } = await import("../lib/learnings");
+    const titled = create({
+      authorId: ME,
+      title: "Invoice export drops VAT lines for the bravo region",
+      body: "The region code must be uppercase.",
+      aliases: ["zzalias tax rows vanish"],
+      confirmNotDuplicate: true,
+    });
+    const aliasOnly = create({
+      authorId: ME,
+      title: "Quarterly pricing review",
+      body: "Unrelated body.",
+      aliases: ["invoice export VAT bravo region skipped"],
+      confirmNotDuplicate: true,
+    });
+    await linkSession("sess-ret-alias", ME);
+    const out = await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-alias", prompt: TASK });
+    const text = JSON.stringify(await out.json());
+    expect(text).toContain(titled.id);
+    expect(text).not.toContain("zzalias");
+    expect(text).not.toContain("tax rows vanish");
+    expect(text).not.toContain(aliasOnly.id);
+  });
+
+  it("asks for aliases in the capture nudge", async () => {
+    const { CAPTURE_NUDGE } = await import("../app/api/hook/route");
+    expect(CAPTURE_NUDGE).toContain("2 to 4 aliases");
+  });
+
   it("names no memory for a prompt of stopwords and symbols", async () => {
     const m = await seedVat();
     await linkSession("sess-ret-6", ME);

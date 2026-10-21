@@ -60,6 +60,8 @@ export interface LearningRow {
   model: string | null;
   /** JSON array of stack or platform labels the memory holds for (lib/applies-to.ts); '[]' means everywhere. */
   applies_to: string;
+  /** JSON array of other wordings, symptoms and error strings an author listed so the memory is found by them; '[]' for none. Indexed in search, never shown by the hook. */
+  aliases: string;
   /** 1 when the memory is a house rule (a pinned standard or practice), 0 otherwise. See houseRulesFor in lib/learnings.ts. */
   pinned: number;
   /** Who pinned it and when (UTC, SQLite datetime); NULL when unpinned or pinned before migration v43. */

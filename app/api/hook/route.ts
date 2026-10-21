@@ -156,6 +156,7 @@ export const CAPTURE_ENDING_RE =
 export const CAPTURE_NUDGE =
   "Big Agentic Brain: this looks like a finished task. If it taught a fact a colleague or their agent could reuse (a gotcha, a house rule, a deploy step, a client's quirk written as the shape without the client's name, a verified answer), post it now with bab_learn without asking, as a learning or practice, one learning per fact, and end with the title and link. " +
   "Write it for someone who hits the same problem cold, not as a summary of this session: a title that names the system and the symptom or error, and a body with the cause, the fix and the exact values (formats, separators, codes, limits, edge cases). " +
+  "Pass 2 to 4 aliases: other wordings, symptoms and error strings someone would search for. " +
   "If nothing here is reusable beyond this session, reply with exactly: Nothing to record for BAB.";
 
 /** A prompt shorter than this is a reply ("yes", "merge it"), not a new task: no search nudge. */

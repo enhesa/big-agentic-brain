@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 46;
+export const CURRENT_VERSION = 47;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -304,6 +304,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(46);
     appliedVersion = 46;
   }
+  if (appliedVersion < 47) {
+    runMigrationV47(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(47);
+    appliedVersion = 47;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -311,6 +316,45 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV47(database: DatabaseSync) {
+  // Search recall: an author can list other wordings, symptoms and error strings a colleague
+  // would search for (bab_learn aliases). They live in learnings.aliases (JSON text, like tags)
+  // and in a fourth FTS column, so a memory is found by its alias alone. The column add is
+  // guarded (ALTER TABLE has no IF NOT EXISTS). The FTS table is rebuilt as in v46, and the three
+  // triggers are recreated because they name the columns. Everything is idempotent and runs in ONE
+  // transaction: a failure rolls the DROPs back instead of leaving search without an index.
+  inTransaction(database, () => {
+    const cols = database.prepare("PRAGMA table_info(learnings)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "aliases")) database.exec("ALTER TABLE learnings ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'");
+    database.exec(`
+      DROP TRIGGER IF EXISTS learnings_ai;
+      DROP TRIGGER IF EXISTS learnings_ad;
+      DROP TRIGGER IF EXISTS learnings_au;
+      DROP TABLE IF EXISTS learnings_fts;
+      CREATE VIRTUAL TABLE learnings_fts USING fts5(
+        title, body, tags, aliases, content='learnings', content_rowid='rowid', tokenize='porter unicode61'
+      );
+      CREATE TRIGGER learnings_ai AFTER INSERT ON learnings BEGIN
+        INSERT INTO learnings_fts(rowid, title, body, tags, aliases)
+        VALUES (new.rowid, new.title, new.body, new.tags, new.aliases);
+      END;
+      CREATE TRIGGER learnings_ad AFTER DELETE ON learnings BEGIN
+        INSERT INTO learnings_fts(learnings_fts, rowid, title, body, tags, aliases)
+        VALUES ('delete', old.rowid, old.title, old.body, old.tags, old.aliases);
+      END;
+      CREATE TRIGGER learnings_au AFTER UPDATE ON learnings
+      WHEN old.title IS NOT new.title OR old.body IS NOT new.body OR old.tags IS NOT new.tags OR old.aliases IS NOT new.aliases
+      BEGIN
+        INSERT INTO learnings_fts(learnings_fts, rowid, title, body, tags, aliases)
+        VALUES ('delete', old.rowid, old.title, old.body, old.tags, old.aliases);
+        INSERT INTO learnings_fts(rowid, title, body, tags, aliases)
+        VALUES (new.rowid, new.title, new.body, new.tags, new.aliases);
+      END;
+      INSERT INTO learnings_fts(learnings_fts) VALUES ('rebuild');
+    `);
+  });
+}
 
 function runMigrationV46(database: DatabaseSync) {
   // Search recall: index with the porter stemmer so "restarts" finds "restart" and "rounding"

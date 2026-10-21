@@ -56,6 +56,24 @@ pnpm eval:retrieval --corpus all --queries all --distractors 100
 
 Offline retrieval also accepts `--distractors N` (adds synthetic distractors from `fixtures/distractors-synthetic.json`) and `--queries v1|v2|all`.
 
+### Aliases and several phrasings (#33)
+
+Two flags measure the two recall features without embeddings. Both use blind fixtures, so the text was not tuned to the queries:
+
+- `--aliases` loads the corpus through `bab_learn` with `fixtures/aliases-blind.json` (keyed by exact title). A model that saw only the memories wrote the aliases.
+- `--multi-query` sends each query plus 2 rephrasings from `fixtures/rephrasings-blind.json` as `bab_search` `queries`. A model that saw only the queries wrote the rephrasings.
+
+Run `pnpm build` first. Recall@5 at `--corpus all --queries all --distractors 1000` (134 queries):
+
+| Run | symptom | observed | paraphrase | error-only | blind | all |
+|---|---|---|---|---|---|---|
+| plain | 0.95 | 0.84 | 0.71 | 0.82 | 0.19 | 0.77 |
+| `--aliases` | 0.95 | 0.87 | 0.89 | 0.88 | 0.31 | 0.84 |
+| `--multi-query` | 0.93 | 0.81 | 0.71 | 0.82 | 0.25 | 0.76 |
+| both | 0.98 | 0.81 | 0.89 | 0.88 | 0.44 | 0.84 |
+
+Aliases carry the gain on this corpus. The blind rephrasings alone did not move paraphrase or error-only recall. Only 14 memories have aliases, so read the table as a direction, not a precise rate.
+
 Reference numbers for the TK / ablation / scale / hazard study live in the companion research notes (`GAPS.md` in the research tree that produced this package; not shipped here). Headline TK numbers measure the memory channel by construction - see Caveats below.
 
 ## Conditions (`--conditions`)

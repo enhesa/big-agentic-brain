@@ -20,9 +20,10 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-21",
-    title: "How BAB keeps sensitive data out",
+    title: "How BAB keeps sensitive data out, better recall",
     changes: [
       "The FAQ explains how BAB keeps personal and sensitive data out, and what no filter can catch.",
+      "bab_search takes several phrasings in one call, and bab_learn takes aliases that search can find.",
     ],
   },
   {

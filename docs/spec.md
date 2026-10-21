@@ -54,6 +54,14 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    inner whitespace/underscores to hyphens, `[a-z0-9.-]` only, 80 chars max), and `project` is
    auto-derived from `repo`'s last path segment when a caller sets `repo` but not `project`, so
    the two never disagree. Indexed for exact-match filtering (migration v9).
+- **Aliases and several phrasings.** `learnings.aliases` (migration v47, JSON text, default `[]`) holds up to 5
+   other wordings, symptoms or error strings (120 characters each, redacted, trimmed, de-duplicated) that
+   `bab_learn` takes as `aliases`. They are a fourth `learnings_fts` column, weighted like tags in bm25,
+   shown on the memory page as plain text, and never in the hook or in the duplicate guard. A correction of
+   exactly one entry that passes none keeps that entry's aliases. `bab_search` takes `queries` (up to 3
+   phrasings, 300 characters each) with or instead of `query`: one search per phrasing with the same filters,
+   fused by reciprocal rank fusion (k=60), de-duplicated by id. `nextOffset` is null, and `total` is the
+   number of distinct ids among each phrasing's first 50 hits (approximate).
 - **Which model wrote a memory.** `learnings.model` (migration v37) is optional and NULL for every
    older row and for any write that passes none. `bab_learn` and `POST /api/learnings` accept
    `model`, a short model id the agent reads from its own system prompt (for example

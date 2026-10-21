@@ -36,6 +36,16 @@ const BODY_MAX = 8000;
 const TAGS_MAX = 10;
 const TAG_MAX = 40;
 const REPO_MAX = 120;
+/** Other wordings, symptoms and error strings an author lists so a colleague's different words still find the memory. */
+export const ALIASES_MAX = 5;
+export const ALIAS_MAX = 120;
+/** bab_search `queries`: up to this many extra phrasings of one question, each this long at most. */
+export const QUERIES_MAX = 3;
+export const QUERY_MAX = 300;
+/** How deep into each phrasing's results a multi-phrasing search reads before it fuses them. */
+export const MULTI_QUERY_DEPTH = 50;
+/** Reciprocal rank fusion constant: the usual 60, so one first place does not drown a consistent second. */
+export const RRF_K = 60;
 export const MODEL_MAX = 64;
 const MODEL_RE = /^[a-z0-9.-]+$/;
 /** Whatever survives normalization: lowercase letters, digits, dot, hyphen. */
@@ -195,6 +205,12 @@ export interface CreateLearningInput {
   title: string;
   body: string;
   tags?: string[];
+  /**
+   * Up to ALIASES_MAX other wordings, symptoms or error strings someone would search for. Validated by
+   * create() with parseAliases(); omit to carry over the aliases of the single entry this one
+   * supersedes, [] for none.
+   */
+  aliases?: string[] | null;
   repo?: string | null;
   /**
    * General-purpose scope: a repo, client, campaign, product or system.
@@ -306,6 +322,49 @@ function normalizeTags(tags: string[] | undefined): string[] {
     .slice(0, TAGS_MAX);
 }
 
+/**
+ * `aliases` as callers send it: absent or null, or an array of strings. Anything else is a 400.
+ */
+export function parseAliases(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined;
+  if (!Array.isArray(raw) || !raw.every((a) => typeof a === "string")) {
+    throw new ValidationError("aliases must be an array of strings");
+  }
+  return raw as string[];
+}
+
+/**
+ * Trimmed, redacted free text, blanks dropped, repeats (ignoring case) dropped, then the limits:
+ * a list over ALIASES_MAX or an alias over ALIAS_MAX is a 400, never silently cut.
+ */
+function normalizeAliases(raw: string[] | null | undefined): string[] | undefined {
+  const given = parseAliases(raw);
+  if (given === undefined) return undefined;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of given) {
+    const alias = redact(a.trim());
+    if (!alias) continue;
+    if (alias.length > ALIAS_MAX) throw new ValidationError(`each alias must be ${ALIAS_MAX} characters or fewer`);
+    const key = alias.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(alias);
+  }
+  if (out.length > ALIASES_MAX) throw new ValidationError(`aliases must hold ${ALIASES_MAX} entries or fewer`);
+  return out;
+}
+
+/** The stored aliases of a row (JSON text); a damaged value reads as none rather than breaking a page. */
+export function readAliases(raw: string | null | undefined): string[] {
+  try {
+    const v = JSON.parse(raw || "[]");
+    return Array.isArray(v) ? v.filter((a): a is string => typeof a === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 function normalizeRepo(repo: string | null | undefined): string | null {
   if (repo == null) return null;
   const trimmed = redact(repo.trim());
@@ -342,6 +401,8 @@ function normalizeRepo(repo: string | null | undefined): string | null {
  */
 export interface InheritedFields {
   appliesTo?: string[];
+  /** A consolidation of several entries carries no aliases: pass [] so create() does not copy the first one's. */
+  aliases?: string[];
 }
 
 export function create(input: CreateLearningInput, via: AuditVia = "ui", inherited?: InheritedFields): LearningRow {
@@ -355,6 +416,7 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
   assertMaxLength("body", body, BODY_MAX);
 
   const tags = normalizeTags(input.tags);
+  const aliasesGiven = normalizeAliases(input.aliases);
   const repo = normalizeRepo(input.repo);
   // An EXPLICIT null means "company-wide, on purpose": a guardrail or best practice
   // written while sitting in a repo must not inherit that repo as its scope. Only an
@@ -387,6 +449,8 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
   const model = normalizeModel(input.model);
   // A correction keeps the applies-to labels of what it replaces unless given (an empty list is given).
   const appliesTo = parseAppliesTo(input.appliesTo) ?? inherited?.appliesTo ?? (target ? readAppliesTo(target.applies_to) : []);
+  // A correction of exactly one entry keeps that entry's aliases unless it passes its own (an empty list is its own).
+  const aliases = aliasesGiven ?? inherited?.aliases ?? (target ? readAliases(target.aliases) : []);
   const provenance = resolveProvenance(
     target && input.source == null && input.sourceUrl == null && input.sourceVersion == null
       ? { source: target.source, sourceUrl: target.source_url, sourceVersion: target.source_version }
@@ -422,8 +486,8 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
   db.prepare(
     `INSERT INTO learnings
        (id, author_id, title, body, tags, repo, project, confidence, status, expires_at, expires_explicit,
-        supersedes_id, kind, source, source_url, source_version, model, applies_to)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        supersedes_id, kind, source, source_url, source_version, model, applies_to, aliases)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.authorId,
@@ -443,6 +507,7 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
     provenance.sourceVersion,
     model,
     JSON.stringify(appliesTo),
+    JSON.stringify(aliases),
   );
 
   audit(db, input.authorId, "create", "learning", id, via);
@@ -809,7 +874,7 @@ function buildFtsAnyQuery(query: string): string {
 //
 // bm25() returns a NEGATIVE number, more negative meaning a better match, so it is
 // negated below. Its column weights follow the FTS table's column order
-// (title, body, tags): a term in the title is worth far more than the same term buried
+// (title, body, tags, aliases): a term in the title is worth far more than the same term buried
 // in a body, and a tag hit sits between the two because tags are deliberate.
 // Title 5 and tags 3 (were 10 and 5): at org scale a 10x title weight let any entry whose title
 // shared one common word ("error", "key") outrank the entry whose body held the rare, specific
@@ -817,6 +882,8 @@ function buildFtsAnyQuery(query: string): string {
 const BM25_TITLE_WEIGHT = 5.0;
 const BM25_BODY_WEIGHT = 1.0;
 const BM25_TAGS_WEIGHT = 3.0;
+// Aliases are the author's own other wordings of the title, as deliberate as tags.
+const BM25_ALIASES_WEIGHT = 3.0;
 
 // The boosts MULTIPLY relevance, they do not add to it. Measured on a two-row corpus,
 // bm25 came back around -1e-6: its magnitude depends on corpus statistics (IDF, average
@@ -847,7 +914,7 @@ const RECENCY_HALF_LIFE_DAYS = 90.0;
 // by ~0, NULL the whole product, and sort LAST under DESC. That is, a clock skew or a
 // bad import would silently bury a perfect match rather than fail loudly.
 const RANK_EXPRESSION = `(
-  (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}))
+  (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}, ${BM25_ALIASES_WEIGHT}))
   * (1.0 + MIN(MAX(COALESCE(learnings.score, 0), ${VOTE_SCORE_MIN}), ${VOTE_SCORE_MAX}) * ${VOTE_FACTOR_PER_POINT})
   * (1.0 + ${RECENCY_FACTOR_MAX} / (1.0 + MAX(julianday('now') - julianday(learnings.created_at), 0) / ${RECENCY_HALF_LIFE_DAYS}))
 )`;
@@ -1254,6 +1321,66 @@ export function searchTotal(query: string, filters: ListFilters = {}): number {
   return Math.max(allCount, countFor(anyQuery));
 }
 
+/**
+ * `queries` as callers send it: absent or null, or an array of up to QUERIES_MAX strings of
+ * QUERY_MAX characters or fewer. Anything else is a 400, never cut.
+ */
+export function parseQueries(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined;
+  if (!Array.isArray(raw) || !raw.every((q) => typeof q === "string")) {
+    throw new ValidationError("queries must be an array of strings");
+  }
+  if (raw.length > QUERIES_MAX) throw new ValidationError(`queries must hold ${QUERIES_MAX} phrasings or fewer`);
+  if (raw.some((q) => q.length > QUERY_MAX)) throw new ValidationError(`each query must be ${QUERY_MAX} characters or fewer`);
+  return raw as string[];
+}
+
+/**
+ * Reciprocal rank fusion: each list gives a hit 1/(k + rank), ranks counted from 1, and the hits
+ * are summed by id. Ties go to the hit that ranked best in any list, then to the earlier list.
+ * The hit object kept is the one from the list where it ranked best. Returns every distinct hit,
+ * best first; the caller cuts.
+ */
+export function fuseRankings<T extends { id: string }>(lists: T[][], k: number = RRF_K): T[] {
+  const fused = new Map<string, { hit: T; score: number; best: number; list: number }>();
+  lists.forEach((hits, listIndex) => {
+    hits.forEach((hit, i) => {
+      const rank = i + 1;
+      const seen = fused.get(hit.id);
+      if (!seen) {
+        fused.set(hit.id, { hit, score: 1 / (k + rank), best: rank, list: listIndex });
+        return;
+      }
+      seen.score += 1 / (k + rank);
+      if (rank < seen.best) {
+        seen.best = rank;
+        seen.hit = hit;
+        seen.list = listIndex;
+      }
+    });
+  });
+  return [...fused.values()]
+    .sort((a, b) => b.score - a.score || a.best - b.best || a.list - b.list)
+    .map((f) => f.hit);
+}
+
+/**
+ * One search per phrasing with the same filters, fused by rank (fuseRankings). Each phrasing is read
+ * MULTI_QUERY_DEPTH deep, so `total` is the number of distinct memories among those first hits: an
+ * approximation, not a count of every match. Callers pass two or more phrasings; paging past the
+ * first page is not offered (the depth is fixed), `offset` only skips within the fused list.
+ */
+export function searchFused(
+  phrasings: string[],
+  filters: ListFilters = {},
+  limit = 20,
+  offset = 0,
+): { results: LearningSearchResult[]; total: number } {
+  const lists = phrasings.map((q) => search(q, filters, MULTI_QUERY_DEPTH, 0));
+  const fused = fuseRankings(lists);
+  return { results: fused.slice(offset, offset + limit), total: fused.length };
+}
+
 export interface ProjectSummary {
   project: string;
   count: number;
@@ -1368,7 +1495,8 @@ export function findSimilar(
     return draftTagsEarly.length > 0 ? findSimilarByTagsOnly(draftTagsEarly, limit) : [];
   }
 
-  const ftsQuery = Array.from(new Set(tokens)).map(quoteFtsToken).join(" OR ");
+  // Title, body and tags only: the duplicate guard ignores aliases, which are other wordings of the same fact.
+  const ftsQuery = `{title body tags} : (${Array.from(new Set(tokens)).map(quoteFtsToken).join(" OR ")})`;
 
   // Best bm25 match first, not newest first: with created_at DESC a common token let 20
   // newer rows crowd out an older true duplicate. A draft with a project compares that
@@ -1587,7 +1715,10 @@ export function createWithSupersedes(
     };
     // create() sees one target only: a merge carries the union of all their applies-to labels. Passed
     // as inherited, not as input.appliesTo, so stored labels that are no longer listed are not re-validated.
-    inherited = { appliesTo: mergeAppliesTo(supersedesIds.map((id) => readAppliesTo(getById(id)!.applies_to))) };
+    inherited = {
+      appliesTo: mergeAppliesTo(supersedesIds.map((id) => readAppliesTo(getById(id)!.applies_to))),
+      aliases: [],
+    };
   }
   const archived: Array<{ id: string; title: string }> = [];
   const created = inTransaction(db, () => {
@@ -2489,7 +2620,7 @@ export function deleteOwn(learningId: string, actorId: string, via: AuditVia = "
 
   const db = getDb();
   db.prepare(
-    "UPDATE learnings SET status = 'deleted', title = ?, body = ?, tags = '[]', updated_at = datetime('now') WHERE id = ?",
+    "UPDATE learnings SET status = 'deleted', title = ?, body = ?, tags = '[]', aliases = '[]', updated_at = datetime('now') WHERE id = ?",
   ).run(DELETED_PLACEHOLDER, DELETED_PLACEHOLDER, learningId);
   audit(db, actorId, "delete", "learning", learningId, via);
 
