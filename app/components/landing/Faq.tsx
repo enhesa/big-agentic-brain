@@ -37,6 +37,22 @@ const faqs = (orgName: string) => [
     a: `Anything confidential or personal: client names, prices, contracts, passwords, or details about people. Assume everyone at ${orgName} can read it.`,
   },
   {
+    q: "Will my agent save personal or client data?",
+    a: "No. It is told never to save client names, personal data or secrets, only the shape of a problem.",
+  },
+  {
+    q: "What if something sensitive slips into a save?",
+    a: "BAB masks passwords, keys, tokens, emails, phone, card, IBAN and ID numbers before storing, and re-checks older saves.",
+  },
+  {
+    q: "Can I see what my agent saved?",
+    a: "Yes. It shows you every save with a link, so you can fix or delete it.",
+  },
+  {
+    q: "Is that filter perfect?",
+    a: "No. It cannot spot a client named in plain words, so keep client data out of what it remembers.",
+  },
+  {
     q: "Who can see memories and messages?",
     a: `Everyone at ${orgName} who signs in. That is the point of shared memory, so keep private things out.`,
   },
