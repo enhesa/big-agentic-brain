@@ -18,6 +18,7 @@ import {
   standingsFor,
   recentNotes,
   lastRetire,
+  readAliases,
 } from "@/lib/learnings";
 import { formatRelativeTime, formatAge, formatExpiry } from "@/lib/relative-time";
 import { getDb } from "@/lib/db";
@@ -67,6 +68,7 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
   const archivedWhy = learning.status === "archived" ? autoArchiveReason(learning.id, learning.updated_at) : null;
   const tags: string[] = JSON.parse(learning.tags || "[]");
   const appliesTo = readAppliesTo(learning.applies_to);
+  const aliases = readAliases(learning.aliases);
   const supersedes = learning.supersedes_id ? getById(learning.supersedes_id) : undefined;
   const supersededBy = findSupersededBy(learning.id);
   const votes = voteCounts(learning.id);
@@ -175,6 +177,10 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
             <span className={styles.appliesEverywhere}>everywhere</span>
           )}
         </p>
+
+        {aliases.length > 0 ? (
+          <p className={styles.aliases}>Also searched as: {aliases.join(", ")}</p>
+        ) : null}
 
         <Markdown source={learning.body} className={styles.body} />
 

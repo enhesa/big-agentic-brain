@@ -15,6 +15,8 @@ const { values: opt } = parseArgs({
     corpus: { type: "string", default: "colleague" },
     distractors: { type: "string", default: "20" },
     "hard-distractors": { type: "boolean", default: false },
+    aliases: { type: "boolean", default: false },
+    "multi-query": { type: "boolean", default: false },
     queries: { type: "string", default: "v1" },
     limit: { type: "string", default: "10" },
     "min-recall5": { type: "string", default: "0" },
@@ -25,9 +27,11 @@ const { values: opt } = parseArgs({
 });
 if (opt.help) {
   console.log(`Usage: node evals/retrieval.mjs [--corpus colleague|handwritten|tk|all] [--distractors 20|N] [--hard-distractors]
-       [--queries v1|v2|blind|all|hard] [--limit N] [--min-recall5 X] [--min-mrr X] [--out DIR]
+       [--queries v1|v2|blind|all|hard] [--limit N] [--aliases] [--multi-query] [--min-recall5 X] [--min-mrr X] [--out DIR]
   --distractors N     20 = the hand-picked set; more adds synthetic distractors (fixtures/distractors-synthetic.json, up to ~1000)
   --hard-distractors  also load fixtures/distractors-hard.json (share vendor/subsystem words, different facts)
+  --aliases           load the corpus with its blind aliases (fixtures/aliases-blind.json, by exact title) through bab_learn
+  --multi-query       send each query plus its 2 blind rephrasings (fixtures/rephrasings-blind.json) as bab_search \`queries\`
   --queries           v1: symptom + observed (core); v2: tk + paraphrase; blind: blind-written tk queries; hard: v2+blind; all: v1+v2+blind
 Exits 1 when recall@5 or MRR (plain search, all queries) falls below the given minimum.`);
   process.exit(0);
@@ -89,20 +93,42 @@ async function main() {
     throw new Error(`--queries must be v1|v2|blind|hard|all`);
   }
   const queries = pickQueries().filter((q) => families.has(q.family));
+  // Blind fixtures: both were written without sight of the other side (see each file's _provenance).
+  const aliasesByTitle = opt.aliases ? read("aliases-blind.json") : {};
+  const rephrasings = opt["multi-query"] ? read("rephrasings-blind.json") : {};
+  if (opt["multi-query"]) {
+    const missing = queries.filter((q) => !rephrasings[q.query]);
+    if (missing.length) throw new Error(`no rephrasings for ${missing.length} queries, first: ${missing[0].query}`);
+  }
   const bab = await startBab({ dataDir: path.join(outDir, "bab-data"), logFile: path.join(outDir, "bab-server.log") });
   const rows = [];
   try {
     for (const l of distractors) await postLearning(bab.origin, { email: "demo.colleague@example.com", name: "Demo Colleague" }, { title: l.title, body: l.body, tags: l.tags });
     const relevant = {};
+    const colleague = opt.aliases ? await new McpClient(bab.origin, "colleague.agent@example.com", "Colleague Agent").init() : null;
+    let aliased = 0;
     for (const l of corpus) {
-      const created = await postLearning(bab.origin, { email: "colleague.agent@example.com", name: "Colleague Agent" }, { title: l.title, body: l.body, tags: l.tags });
+      let created;
+      const aliases = aliasesByTitle[l.title];
+      if (colleague && aliases) {
+        // REST /api/learnings does not take aliases; bab_learn does.
+        const { text, isError } = await colleague.call("bab_learn", { title: l.title, body: l.body, tags: l.tags, aliases, confirmNotDuplicate: true });
+        if (isError) throw new Error(`bab_learn failed for "${l.title}": ${text.slice(0, 300)}`);
+        created = JSON.parse(text).learning;
+        aliased++;
+      } else {
+        created = await postLearning(bab.origin, { email: "colleague.agent@example.com", name: "Colleague Agent" }, { title: l.title, body: l.body, tags: l.tags });
+      }
       (relevant[l.family] ??= new Set()).add(created.id);
     }
+    if (opt.aliases) console.log(`loaded ${aliased} of ${corpus.length} corpus memories with aliases`);
     const mcp = await new McpClient(bab.origin, "retrieval.eval@example.com", "Retrieval Eval").init();
     for (const q of queries) {
       for (const [variant, extra] of Object.entries(VARIANTS)) {
         const t0 = performance.now();
-        const { text } = await mcp.call("bab_search", { query: q.query, limit: Number(opt.limit), ...extra });
+        const args = { query: q.query, limit: Number(opt.limit), ...extra };
+        if (opt["multi-query"]) args.queries = rephrasings[q.query];
+        const { text } = await mcp.call("bab_search", args);
         const ms = performance.now() - t0;
         const ids = resultIds(text);
         const idx = ids.findIndex((id) => relevant[q.family]?.has(id));
@@ -126,7 +152,7 @@ async function main() {
     const union = new Set([...qt, ...lt]).size;
     return { family: q.family, query: q.query, jaccard: union ? inter / union : 0, coverage: qt.size ? inter / qt.size : 0 };
   });
-  const summary = { corpus: opt.corpus, corpusSize: corpus.length, distractors: distractors.length, queries: queries.length, hardDistractors: !!opt["hard-distractors"], blindOverlap, byVariant: {}, byType: {}, byFamily: {} };
+  const summary = { corpus: opt.corpus, corpusSize: corpus.length, distractors: distractors.length, queries: queries.length, hardDistractors: !!opt["hard-distractors"], aliases: opt.aliases, multiQuery: opt["multi-query"], blindOverlap, byVariant: {}, byType: {}, byFamily: {} };
   for (const v of Object.keys(VARIANTS)) summary.byVariant[v] = aggregate(rows.filter((r) => r.variant === v));
   const plain = rows.filter((r) => r.variant === "plain");
   for (const t of [...new Set(plain.map((r) => r.type))]) summary.byType[t] = aggregate(plain.filter((r) => r.type === t));
@@ -143,7 +169,7 @@ async function main() {
   const misses = plain.filter((r) => r.rank === null || r.rank > 5);
   const md = [
     `# BAB retrieval eval (offline, no LLM)`, "",
-    `Corpus: ${corpus.length} target memories (${opt.corpus}) + ${distractors.length} distractors${opt["hard-distractors"] ? " (includes hard vendor-overlap set)" : ""}. ${queries.length} queries (${opt.queries}), each run through MCP \`bab_search\` (limit ${opt.limit}).`, "",
+    `Corpus: ${corpus.length} target memories (${opt.corpus}) + ${distractors.length} distractors${opt["hard-distractors"] ? " (includes hard vendor-overlap set)" : ""}. ${queries.length} queries (${opt.queries}), each run through MCP \`bab_search\` (limit ${opt.limit}). Aliases: ${opt.aliases ? "on" : "off"}. Multi-query: ${opt["multi-query"] ? "on (query plus 2 rephrasings)" : "off"}.`, "",
     ...table(summary.byVariant, "Search variant"), "",
     "`kind-filter` adds `kind: [standard, decision, practice]`, the filter BAB's MCP instructions used to suggest (until #30). It excludes memories of kind `learning`.", "",
     ...table(summary.byType, "Query type (plain)"), "",

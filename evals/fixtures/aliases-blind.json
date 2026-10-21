@@ -1,0 +1,87 @@
+{
+  "_provenance": "written by a model that saw only the memories, never the queries",
+  "CSV \"missing required column\" on first header: Excel UTF-8 BOM; read with utf-8-sig": [
+    "Excel CSV first column header not found, but the column is visibly in the file",
+    "utf-8 BOM breaks CSV header key with invisible \\ufeff prefix",
+    "Python csv import KeyError on first column after saving from Excel",
+    "Importer rejects CSV from Excel: required column missing on line 1"
+  ],
+  "Flaky tie-order in Python: Counter.most_common ties follow set iteration order (hash-randomized)": [
+    "Test passes sometimes, fails sometimes; top-N ranking order changes between runs",
+    "Counter most_common nondeterministic ties, PYTHONHASHSEED",
+    "Set iteration order makes output unstable across test runs",
+    "Flaky ordering of tied counts in a top-N helper, need deterministic sort"
+  ],
+  "Money maths: float round() gives off-by-one-cent; use Decimal with ROUND_HALF_UP": [
+    "Invoice total off by one cent versus finance spreadsheet",
+    "Python round() half-cent wrong, float money rounding error",
+    "Decimal ROUND_HALF_UP quantize for VAT and line totals",
+    "Reconciliation mismatch by 0.01 on invoices, float arithmetic"
+  ],
+  "Env-var config casting with type(default)(raw) turns \"false\"/\"0\" into True for booleans": [
+    "Env var false still enables a feature flag in Python config",
+    "bool('false') returns True, config override from environment variable",
+    "NOTIFY env override ignored, sandbox gateway still used in prod",
+    "Config casting type(default)(raw) bug for boolean settings"
+  ],
+  "Python regex validation: `^...$` with .match accepts a trailing newline; use fullmatch (and reject non-ASCII before .lower())": [
+    "Username validation lets a trailing newline through, duplicate-looking accounts",
+    "Python re $ matches before newline, use fullmatch for slugs and usernames",
+    "Two accounts display the same username, lookalike unicode signup spoof",
+    "Kelvin sign lowercase collision in username normalization"
+  ],
+  "JS: new Date('YYYY-MM-DD') is UTC midnight; local getters then show the wrong day in US/NZ time zones": [
+    "Due date shows one day early for US and NZ users in reminder emails",
+    "new Date ISO date-only string gives a timezone off-by-one day in tests",
+    "TZ=America/Los_Angeles test fails, date-only parse shifts to previous day",
+    "Days-until calculation returns -0 or the wrong day across time zones"
+  ],
+  "Ledgerly E104 \"invalid record at line 1\": import needs the v2 layout (marker line, ; separator, DD.MM.YYYY, decimal comma, CRLF)": [
+    "Ledgerly import error E104 invalid record at line 1",
+    "ERP journal import rejected, semicolon CSV with decimal comma and DD.MM.YYYY",
+    "Payroll export format for the Ledgerly v2 importer, CRLF marker line",
+    "Finance import fails after the August migration, old CSV layout rejected"
+  ],
+  "Shipfast 401 \"signature verification failed\": use Shipfast-Signature t=,v1= header (timestamp.body HMAC), not legacy X-Shipfast-Signature": [
+    "Shipfast 401 signature verification failed on label creation",
+    "Carrier API HMAC header rejected, Shipfast-Signature t= v1= format",
+    "X-Shipfast-Signature no longer accepted, timestamp replay window",
+    "Carrier aggregator returns 401 though unit tests pass, signing header"
+  ],
+  "geo-api client rules: 429 uses Retry-After-Ms (ms), 503 = quota, never retry": [
+    "geo-api 429 retry wait: Retry-After-Ms in milliseconds vs Retry-After seconds",
+    "Geocoding API key suspended after retries on 503 quota",
+    "Batch route lookup exhausted daily quota, retry storm on geo calls",
+    "Retry-After header ignored, too many retries on geo lookup"
+  ],
+  "Bank settlement value dates: convert to bank-local tz, apply cut-off, then skip closures (passing tests can hide this)": [
+    "Settlement value date off by one versus bank statement",
+    "Treasury cut-off time 16:30 and holiday roll-forward wrong",
+    "value_date Amsterdam timezone DST bank business day bug",
+    "Payment settlement dates mismatch bank agreement, tests still pass"
+  ],
+  "Orion CRM customer numbers: mod-11 check (weights 6-5-4-3-2), not Luhn; accept lower case and legacy 6-digit form": [
+    "Valid customer number rejected by Orion lookup, check digit wrong",
+    "mod-11 check character X in customer ID validation, Python",
+    "Luhn check wrong for CRM customer number, legacy 6-digit format",
+    "C-NNNNN-K customer number lowercase input rejected"
+  ],
+  "Postbird: marketing mail on the default transactional stream is accepted (202) but silently dropped": [
+    "Newsletter emails return 202 but never arrive via Postbird",
+    "Marketing mail silently dropped by the transactional email stream",
+    "X-Postbird-Stream broadcast header missing, promo email not delivered",
+    "List-Unsubscribe one-click headers needed for bulk mail delivery"
+  ],
+  "Gatekeeper tokens: claim format differs from old auth tokens (iss, aud svc:<name>, scp string, 120s skew)": [
+    "JWT claim check fails after moving to Gatekeeper token, aud is a list",
+    "scp scope string versus scopes list in auth token migration",
+    "Token issuer mismatch with gatekeeper.internal, authorization failing",
+    "Service auth migration: 120 second clock skew on exp and nbf claims"
+  ],
+  "Paylane API v3 refunds: amount is a minor-unit string, currency lowercase, ISO 4217 exponents": [
+    "Paylane refund rejected: amount must be a string, v3 API",
+    "Refund fails with unsupported currency, uppercase EUR, minor units wrong",
+    "JPY or BHD refund amount off by a factor of 100 or 1000",
+    "Payment provider refund payload int truncation, ROUND_HALF_UP needed"
+  ]
+}

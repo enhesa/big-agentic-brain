@@ -1,0 +1,539 @@
+{
+  "_provenance": "written by a model that saw only the queries, never the memories",
+  "401 invalid token claims": [
+    "unauthorized: token claims rejected with HTTP 401",
+    "invalid token claims 401 auth"
+  ],
+  "401 signature verification failed": [
+    "HTTP 401, token signature check failed",
+    "401 signature verification failed auth"
+  ],
+  "429 Too Many Requests": [
+    "rate limit hit, HTTP 429 response",
+    "429 too many requests rate limit"
+  ],
+  "503 Service Unavailable": [
+    "HTTP 503 unavailable server error response",
+    "503 service unavailable"
+  ],
+  "AssertionError [ERR_ASSERTION]: '2026-03-09' !== '2026-03-10'": [
+    "ERR_ASSERTION date strings not equal 2026-03-09 vs 2026-03-10",
+    "ERR_ASSERTION 2026-03-09 2026-03-10 mismatch"
+  ],
+  "AssertionError: 'alice\\n' unexpectedly matched": [
+    "assertion alice newline unexpectedly matched regex",
+    "AssertionError alice newline matched"
+  ],
+  "AssertionError: 2.67 != 2.68": [
+    "assertion float 2.67 not equal 2.68",
+    "AssertionError 2.67 2.68"
+  ],
+  "AssertionError: Lists differ: ['b', 'a'] != ['a', 'b']": [
+    "assert lists differ order b a versus a b",
+    "AssertionError Lists differ ['b','a']"
+  ],
+  "AssertionError: True is not false": [
+    "assertion expected false but got true",
+    "AssertionError True is not false"
+  ],
+  "CSV BOM utf-8-sig Excel export missing column": [
+    "Excel CSV byte order mark column not found utf-8-sig",
+    "CSV BOM utf-8-sig missing column"
+  ],
+  "CSV UTF-8 BOM utf-8-sig header sku skipped": [
+    "CSV byte order mark header sku ignored, utf-8-sig",
+    "CSV BOM header sku skipped"
+  ],
+  "Counter most_common tie order PYTHONHASHSEED flaky": [
+    "Python Counter most_common ties nondeterministic order hash seed",
+    "Counter most_common PYTHONHASHSEED flaky"
+  ],
+  "Date.parse date-only YYYY-MM-DD UTC local midnight timezone overdue": [
+    "date-only string parsed as UTC midnight shows overdue in local zone",
+    "Date.parse YYYY-MM-DD timezone overdue"
+  ],
+  "Date.parse date-only YYYY-MM-DD UTC midnight timezone overdue": [
+    "date-only ISO string UTC midnight timezone makes task overdue early",
+    "Date.parse date-only UTC midnight overdue"
+  ],
+  "E104 invalid record at line 1": [
+    "error E104 invalid record first line",
+    "E104 invalid record line 1"
+  ],
+  "Gatekeeper aud scope claim format": [
+    "Gatekeeper audience and scope claim format expected",
+    "Gatekeeper aud scope claim"
+  ],
+  "Gatekeeper token claims 401 invalid token claims": [
+    "Gatekeeper token rejected 401 invalid claims",
+    "Gatekeeper 401 invalid token claims"
+  ],
+  "HMAC header format expected by the shipping partner": [
+    "shipping partner HMAC signature header format required",
+    "HMAC header format shipping partner"
+  ],
+  "HTTP 202 Accepted": [
+    "HTTP 202 response accepted status meaning",
+    "HTTP 202 Accepted"
+  ],
+  "INGEST_DRY_RUN log-only dry run env": [
+    "INGEST_DRY_RUN env log only dry run mode",
+    "INGEST_DRY_RUN dry run env"
+  ],
+  "ImportFailed missing required column order_id": [
+    "import failed, required column order_id not found",
+    "ImportFailed order_id missing column"
+  ],
+  "Kestrel Bank settlement date mismatch": [
+    "Kestrel Bank settlement date does not match",
+    "Kestrel settlement date mismatch"
+  ],
+  "Kestrel settlement cut-off time": [
+    "Kestrel settlement cutoff time",
+    "Kestrel cut-off time settlement"
+  ],
+  "KeyError on first CSV header": [
+    "KeyError first CSV column header read",
+    "KeyError CSV first header"
+  ],
+  "KeyError: 'order_id'": [
+    "KeyError order_id lookup failed",
+    "KeyError order_id"
+  ],
+  "Ledgerly ERP import file format": [
+    "Ledgerly ERP import file layout expected",
+    "Ledgerly import file format"
+  ],
+  "Ledgerly import rejects invoice export E104 invalid record at line 1": [
+    "Ledgerly rejects invoice export, E104 invalid record line 1",
+    "Ledgerly invoice export E104"
+  ],
+  "NOTIFY_SANDBOX bool env parsing config": [
+    "NOTIFY_SANDBOX boolean env variable parsing",
+    "NOTIFY_SANDBOX bool env parse"
+  ],
+  "NOTIFY_SANDBOX=false still uses sandbox gateway": [
+    "NOTIFY_SANDBOX false but sandbox gateway still used",
+    "NOTIFY_SANDBOX false sandbox gateway"
+  ],
+  "Orion CRM customer number check digit": [
+    "Orion CRM customer number checksum digit",
+    "Orion customer number check digit"
+  ],
+  "Orion customer number without C- prefix": [
+    "Orion customer number missing C- prefix",
+    "Orion customer number C- prefix"
+  ],
+  "Paylane API v3 currency amount format": [
+    "Paylane API v3 currency amount formatting",
+    "Paylane v3 currency amount format"
+  ],
+  "Paylane JPY KWD amounts wrong": [
+    "Paylane JPY and KWD amounts incorrect",
+    "Paylane JPY KWD amounts"
+  ],
+  "Paylane amount must be a string": [
+    "Paylane amount field requires string type",
+    "Paylane amount must be string"
+  ],
+  "Postbird bulk mail dropped": [
+    "Postbird bulk email dropped or lost",
+    "Postbird bulk mail dropped"
+  ],
+  "Postbird marketing email headers": [
+    "Postbird marketing email required headers",
+    "Postbird marketing headers"
+  ],
+  "Postbird newsletter accepted 202 but not delivered": [
+    "Postbird newsletter 202 accepted but never delivered",
+    "Postbird newsletter 202 not delivered"
+  ],
+  "Shipfast signing change signature header": [
+    "Shipfast request signing changed, signature header",
+    "Shipfast signature header change"
+  ],
+  "Shipfast webhook 401 signature verification failed": [
+    "Shipfast webhook rejected 401 signature check failed",
+    "Shipfast webhook 401 signature"
+  ],
+  "UTF-8 BOM CSV header missing column": [
+    "UTF-8 byte order mark CSV column not found",
+    "UTF-8 BOM CSV missing column"
+  ],
+  "UTF-8 BOM CSV header sku utf-8-sig": [
+    "UTF-8 BOM CSV sku header, utf-8-sig encoding",
+    "UTF-8 BOM header sku utf-8-sig"
+  ],
+  "UTF-8 BOM csv header missing column utf-8-sig": [
+    "utf-8-sig BOM CSV header column missing",
+    "utf-8-sig CSV missing column"
+  ],
+  "ValueError: invalid Orion customer number: 'C-20000-X'": [
+    "ValueError invalid Orion customer number C-20000-X",
+    "Orion ValueError invalid customer number"
+  ],
+  "after the identity service migration every internal call to the reports service gets 401": [
+    "reports service internal calls 401 after identity migration",
+    "reports service 401 identity migration"
+  ],
+  "amount must be a string": [
+    "amount value must be string type",
+    "amount must be string"
+  ],
+  "blast messages look okay upstream yet never show up for readers": [
+    "bulk messages fine upstream but readers never see them",
+    "blast messages never shown to readers"
+  ],
+  "bookkeeping nightly bulk load dies on the opening record": [
+    "nightly bookkeeping bulk load fails on first record",
+    "bookkeeping bulk load opening record fails"
+  ],
+  "cache lookups miss after the process restarts": [
+    "cache misses after process restart",
+    "cache miss after restart"
+  ],
+  "card payouts booked on the wrong day compared with the bank": [
+    "card payout booking date differs from bank",
+    "card payouts wrong day vs bank"
+  ],
+  "card provider charges Japanese customers 100 times too much": [
+    "card provider overcharges Japanese customers 100x",
+    "card provider Japanese customers 100 times"
+  ],
+  "carrier aggregator rejects our outgoing webhooks after they changed request signing": [
+    "aggregator rejects outgoing webhooks after signing change",
+    "carrier aggregator webhook signing rejected"
+  ],
+  "chargeback style payloads fail when money fields use dotted major units": [
+    "chargeback payloads fail, money fields dotted major units",
+    "chargeback payload dotted major units"
+  ],
+  "csv BOM utf-8-sig header sku skipped": [
+    "csv byte order mark utf-8-sig sku header skipped",
+    "csv BOM header sku skipped"
+  ],
+  "csv.DictReader fieldnames ['\\ufeffsku', 'price']": [
+    "csv.DictReader fieldnames BOM prefix sku price",
+    "DictReader ufeff sku fieldnames"
+  ],
+  "date off by one day timezone javascript": [
+    "javascript date shifted one day timezone",
+    "javascript date off by one day"
+  ],
+  "date-only strings shift by one day depending on the user's time zone": [
+    "date-only string shifts a day with user time zone",
+    "date-only strings shift one day timezone"
+  ],
+  "disk cache 0% hit rate after restart": [
+    "disk cache zero hit rate after restart",
+    "disk cache 0% hit rate restart"
+  ],
+  "dry run env 0 still dry run": [
+    "dry run env set to 0 still active",
+    "dry run env 0 still on"
+  ],
+  "dry run mode active even though the variable is 0": [
+    "dry run mode on although variable equals 0",
+    "dry run mode active variable 0"
+  ],
+  "due date shown one day early for US customers": [
+    "due date displayed a day early, US customers",
+    "due date one day early US"
+  ],
+  "duplicate username homoglyph signup normalization": [
+    "signup duplicate username homoglyph normalization",
+    "username homoglyph signup duplicate"
+  ],
+  "duplicate username signup homoglyph normalization": [
+    "duplicate usernames homoglyph normalization on signup",
+    "signup homoglyph duplicate username"
+  ],
+  "env var set to false but feature still enabled": [
+    "env var false yet feature still on",
+    "env var false feature enabled"
+  ],
+  "feature flag stays on although the environment sets it to false": [
+    "feature flag remains on, environment sets false",
+    "feature flag on despite env false"
+  ],
+  "finance ERP refuses our nightly CSV file at the first line": [
+    "finance ERP rejects nightly CSV first line",
+    "finance ERP CSV first line rejected"
+  ],
+  "first header name looks different when reading an Excel-saved file": [
+    "Excel-saved file first header name differs",
+    "Excel saved CSV first header differs"
+  ],
+  "flaky test digest": [
+    "digest test flaky, intermittent failures",
+    "flaky test digest"
+  ],
+  "flaky test passes locally fails in CI": [
+    "test passes locally but fails in CI",
+    "flaky test local pass CI fail"
+  ],
+  "flaky test_digest": [
+    "test_digest flaky intermittent failure",
+    "flaky test_digest"
+  ],
+  "fresh machine credentials fail checks that still take the previous shape": [
+    "fresh machine credentials fail, checks expect old shape",
+    "fresh machine credentials checks old shape"
+  ],
+  "geo-api 429 rate limit retry": [
+    "geo-api rate limited 429 retry strategy",
+    "geo-api 429 retry"
+  ],
+  "geo-api 503 retry": [
+    "geo-api 503 response retry handling",
+    "geo-api 503 retry"
+  ],
+  "geo-api key suspended backoff retry": [
+    "geo-api key suspended, retry backoff",
+    "geo-api suspended key backoff"
+  ],
+  "geocoding disk cache hit rate restart": [
+    "geocoding disk cache hit rate after restart",
+    "geocoding disk cache hit rate"
+  ],
+  "how is the check character of a customer number computed": [
+    "customer number check character calculation",
+    "customer number check character"
+  ],
+  "how long to wait when the geocoder rate limits us": [
+    "geocoder rate limit wait duration",
+    "geocoder rate limit wait time"
+  ],
+  "how to sign requests to Shipfast": [
+    "how to sign Shipfast requests",
+    "Shipfast request signing"
+  ],
+  "import reads 0 rows from supplier CSV, no error": [
+    "supplier CSV import reads zero rows silently",
+    "supplier CSV import 0 rows"
+  ],
+  "internal geocoding service suspended our API key because the client kept retrying": [
+    "geocoding API key suspended after repeated client retries",
+    "geocoding key suspended retries"
+  ],
+  "invoice export rejected by Ledgerly": [
+    "Ledgerly rejected invoice export",
+    "Ledgerly invoice export rejected"
+  ],
+  "invoice rounding cents": [
+    "invoice rounding to cents",
+    "invoice rounding cents"
+  ],
+  "invoice rounding one cent": [
+    "invoice rounding off by one cent",
+    "invoice rounding one cent"
+  ],
+  "invoice total off by one cent": [
+    "invoice total one cent difference",
+    "invoice total off one cent"
+  ],
+  "map lookup says pause but wait unit is murky and some faults must stop": [
+    "map lookup pause wait unit unclear, faults must stop",
+    "map lookup pause wait unit"
+  ],
+  "minor units for zero-decimal and three-decimal currencies at the payment provider": [
+    "payment provider minor units zero and three decimal currencies",
+    "payment minor units three-decimal currency"
+  ],
+  "missing required column order_id but the column is in the file": [
+    "order_id column reported missing though present",
+    "missing column order_id present in file"
+  ],
+  "money movement booking day shifts around public holidays and late evening windows": [
+    "money movement booking day shifts holidays late evening",
+    "money movement booking day holidays shift"
+  ],
+  "name of outbound parcel HTTP field holding the MAC": [
+    "outbound parcel HTTP field name for MAC",
+    "parcel HTTP MAC field name"
+  ],
+  "new Date date-only ISO string UTC midnight local timezone off by one day": [
+    "new Date date-only ISO string off by one day timezone",
+    "new Date ISO date-only off by one day"
+  ],
+  "newsletter accepted by the email provider but nobody receives it, password resets arrive": [
+    "newsletter accepted by provider, not received, resets arrive",
+    "newsletter accepted not received email provider"
+  ],
+  "order of results changes between runs of the same input": [
+    "result order differs between runs, same input",
+    "result order changes between runs"
+  ],
+  "overdue due date timezone task board": [
+    "task board overdue due date timezone",
+    "task board overdue timezone"
+  ],
+  "parcel provider refuses signed calls even though fixtures stay green": [
+    "parcel provider rejects signed calls, fixtures pass",
+    "parcel provider signed calls refused"
+  ],
+  "party code validation rejects values that survive the usual card scheme": [
+    "party code validation rejects values passing card scheme",
+    "party code validation rejects valid values"
+  ],
+  "payout settlement date differs from bank statement": [
+    "payout settlement date mismatch with bank statement",
+    "payout settlement date vs bank statement"
+  ],
+  "payout split parts do not add up to the total": [
+    "payout split parts don't sum to total",
+    "payout split parts total mismatch"
+  ],
+  "processor wants ISO codes in lower case and money as whole-number text": [
+    "processor requires lowercase ISO codes, amounts as integer text",
+    "processor lowercase ISO codes money text"
+  ],
+  "promo traffic must avoid the ordinary one-to-one sending lane": [
+    "promo email must avoid one-to-one sending lane",
+    "promo traffic one-to-one sending lane"
+  ],
+  "python hash() PYTHONHASHSEED cache file names restart": [
+    "python hash cache file names change after restart",
+    "PYTHONHASHSEED cache file names restart"
+  ],
+  "python regex $ matches before trailing newline fullmatch": [
+    "python regex $ trailing newline fullmatch behavior",
+    "python regex $ trailing newline"
+  ],
+  "reconciliation mismatch: settlement 2026-10-15 != statement 2026-10-14": [
+    "reconciliation settlement 2026-10-15 vs statement 2026-10-14",
+    "reconciliation mismatch settlement statement dates"
+  ],
+  "registry codes use another modulus and still allow old letter prefixes": [
+    "registry codes different modulus, old letter prefixes allowed",
+    "registry codes modulus letter prefixes"
+  ],
+  "reminder due date time zone": [
+    "reminder due date timezone handling",
+    "reminder due date time zone"
+  ],
+  "reminder due date timezone": [
+    "reminder due date time zone issue",
+    "reminder due date timezone"
+  ],
+  "reminder says the deadline is a day earlier for customers in America": [
+    "reminder deadline shows a day early for American customers",
+    "reminder deadline day early America"
+  ],
+  "rounding 2.675 gives 2.67": [
+    "rounding 2.675 yields 2.67",
+    "rounding 2.675 2.67"
+  ],
+  "service-to-service auth after Gatekeeper migration": [
+    "service-to-service auth post Gatekeeper migration",
+    "Gatekeeper migration service auth"
+  ],
+  "shift booking timestamps onto the lender clock before the daily deadline": [
+    "booking timestamps shifted to lender clock before deadline",
+    "booking timestamps lender clock deadline"
+  ],
+  "signup form rejects valid CRM customer ids": [
+    "signup form rejects valid CRM customer IDs",
+    "signup CRM customer id rejected"
+  ],
+  "signup username normalization duplicate": [
+    "signup username normalization yields duplicates",
+    "signup username normalization duplicate"
+  ],
+  "signup username uniqueness alice": [
+    "signup username uniqueness, alice taken",
+    "signup username alice uniqueness"
+  ],
+  "slug validation CDN": [
+    "CDN slug validation rules",
+    "slug validation CDN"
+  ],
+  "slug validation accepts unicode characters": [
+    "slug validation lets unicode characters through",
+    "slug validation unicode accepted"
+  ],
+  "split amount parts do not add back up to the original": [
+    "split amount parts don't sum to original amount",
+    "split amount parts sum mismatch"
+  ],
+  "spreadsheet export has the column but our importer says it is missing": [
+    "spreadsheet has column, importer reports it missing",
+    "spreadsheet importer column missing"
+  ],
+  "supplier price sync imports 0 items csv": [
+    "supplier price sync CSV imports zero items",
+    "supplier price sync 0 items"
+  ],
+  "supplier weekly price sync CSV import 0 items": [
+    "weekly supplier price sync CSV imports zero items",
+    "supplier price sync CSV 0 items"
+  ],
+  "task overdue on its due date in New Zealand": [
+    "task shows overdue on due date, New Zealand",
+    "task overdue due date New Zealand"
+  ],
+  "tell a short throttle from a hard daily ceiling on the platform locator": [
+    "platform locator short throttle vs hard daily limit",
+    "platform locator throttle daily ceiling"
+  ],
+  "test fails half the time and passes on re-run": [
+    "test intermittently fails, passes on rerun",
+    "test fails half the time rerun"
+  ],
+  "timezone due date overdue week": [
+    "timezone due date overdue this week",
+    "due date overdue timezone week"
+  ],
+  "totals come out one cent off": [
+    "totals off by one cent",
+    "totals one cent off"
+  ],
+  "two accounts can register what looks like the same name": [
+    "two accounts register look-alike names",
+    "accounts same name registration"
+  ],
+  "two accounts with the same username": [
+    "duplicate accounts with same username",
+    "two accounts same username"
+  ],
+  "unsupported currency": [
+    "currency not supported error",
+    "unsupported currency"
+  ],
+  "valid Orion customer numbers rejected C-48213-7": [
+    "valid Orion customer number C-48213-7 rejected",
+    "Orion customer number C-48213-7 rejected"
+  ],
+  "validation accepts a name with a trailing line break": [
+    "name validation accepts trailing line break",
+    "validation trailing line break name"
+  ],
+  "validator accepts a username with a trailing newline": [
+    "username validator accepts trailing newline",
+    "username validator trailing newline"
+  ],
+  "what layout does the accounting system expect for imported files": [
+    "accounting system expected import file layout",
+    "accounting system import file layout"
+  ],
+  "which audience and scope claims do internal service tokens carry": [
+    "internal service tokens audience and scope claims",
+    "internal service tokens aud scope claims"
+  ],
+  "which day does the bank settle late-afternoon card captures": [
+    "bank settlement day for late-afternoon card captures",
+    "bank settle card captures late afternoon"
+  ],
+  "which headers do marketing emails need to be delivered": [
+    "marketing email headers required for delivery",
+    "marketing email delivery headers"
+  ],
+  "which separators and calendar order does bookkeeping want inbound": [
+    "bookkeeping inbound separators and date order",
+    "bookkeeping inbound separators calendar order"
+  ],
+  "who and what fields on internal bearer tickets changed plus skew window": [
+    "internal bearer tickets changed fields and skew window",
+    "internal bearer ticket fields skew window"
+  ]
+}
