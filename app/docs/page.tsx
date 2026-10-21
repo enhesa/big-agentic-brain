@@ -58,7 +58,7 @@ const SAVING: Flow = {
   lanes: [YOU, AGENT, BRAIN],
   steps: [
     { at: "agent", note: "a task ends with a lasting fact" },
-    { from: "agent", to: "brain", label: "save it, with its stack, no asking" },
+    { from: "agent", to: "brain", label: "save it, with aliases" },
     { from: "brain", to: "agent", label: "stored, everyone can find it", back: true },
     { from: "agent", to: "you", label: "tells you the title and link", back: true },
     { at: "agent", note: "a decision waits for your yes" },
@@ -70,9 +70,9 @@ const ANSWERING: Flow = {
   lanes: [YOU, AGENT, BRAIN],
   steps: [
     { from: "you", to: "agent", label: "how do we do X?" },
-    { from: "agent", to: "brain", label: "search, this project and stack first" },
+    { from: "agent", to: "brain", label: "search, up to 3 phrasings" },
     { from: "brain", to: "agent", label: "what we know, and who wrote it", back: true },
-    { at: "agent", note: "verify: old and unchecked, check it first" },
+    { at: "agent", note: "stale warning: check first" },
     { from: "agent", to: "you", label: "the answer, or nothing found", back: true },
   ],
 };
@@ -159,6 +159,7 @@ const TOLD: Flow = {
   steps: [
     { from: "brain", to: "agent", label: "first prompt: rules, project titles", back: true },
     { from: "brain", to: "agent", label: "each prompt: unread, due, retired", back: true },
+    { from: "brain", to: "agent", label: "new task: 3 titles", back: true },
     { from: "agent", to: "you", label: "BAB: 2 unread messages", back: true },
     { from: "brain", to: "agent", label: "Stop: a nudge to record", back: true },
     { from: "brain", to: "agent", label: "after a compaction: re-read rules", back: true },
@@ -220,7 +221,7 @@ const REQUEST_PATH: Flow = {
     { from: "proxy", to: "brain", label: "public path, no login" },
     { at: "brain", note: `who, then ${RATE_LIMIT_PER_MINUTE} a minute limit` },
     { from: "brain", to: "sqlite", label: "one audit_log row" },
-    { from: "brain", to: "sqlite", label: "FTS5 search" },
+    { from: "brain", to: "sqlite", label: "FTS5 search, stemmed" },
     { from: "brain", to: "sqlite", label: "record agent reads" },
     { from: "brain", to: "agent", label: "JSON, ranked matches", back: true },
   ],
@@ -233,7 +234,7 @@ const REQUEST_PATH: Flow = {
 const PIECES = [
   { what: "Four skills", detail: "a policy and three commands" },
   { what: "Three hooks", detail: "each prompt, stop, compaction" },
-  { what: "Ten tools", detail: "search, learn, react, message" },
+  { what: "Ten tools", detail: "four with ?tools=lean" },
 ];
 
 /** "a year" for 365 days, so the diagram reads like people talk, and a plain count otherwise. */
@@ -266,7 +267,7 @@ export default async function DocsPage() {
           className={styles.diagram}
           viewBox="0 0 880 236"
           role="img"
-          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and ten tools to search, learn, react and message. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
+          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and ten tools to search, learn, react and message, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
         >
           <rect className={styles.zone} x="8" y="30" width="236" height="192" rx="16" />
           <rect className={styles.zone} x="322" y="30" width="236" height="192" rx="16" />
@@ -345,6 +346,17 @@ export default async function DocsPage() {
           ]}
           footer={{ tone: "waiting", text: "Names are not masked: keep them out" }}
         />
+        <ChoiceDiagram
+          title="How search ranks"
+          from={{ lines: ["A search", "in SQLite"] }}
+          options={[
+            { chip: "words", text: "title and tags count more" },
+            { chip: "stems", text: "restarts finds restart" },
+            { chip: "boost", text: "votes and age lift a hit" },
+            { chip: "phrasings", text: "up to 3, merged" },
+          ]}
+          footer={{ tone: "plain", text: "No vector database" }}
+        />
         <FlowDiagram {...ANSWERING} />
         <FlowDiagram {...BEFORE_A_CHANGE} />
       </DocsSection>
@@ -393,7 +405,7 @@ export default async function DocsPage() {
           title="Seeing how BAB is used"
           from={{ lines: ["Anyone at", orgName], sub: ["signed in"] }}
           options={[
-            { chip: "Memory", text: "search, read, see last agent read" },
+            { chip: "Memory", text: "search, sort, filter by author" },
             { chip: "Usage", text: "tiles, charts, upkeep, users" },
             { chip: "News", text: "what changed, by day" },
           ]}
