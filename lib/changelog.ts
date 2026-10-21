@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "The FAQ explains how BAB keeps personal and sensitive data out, and what no filter can catch.",
       "bab_search takes several phrasings in one call, and bab_learn takes aliases that search can find.",
+      "The README and the How it works page now cover the lean tool list, search, nudges and stale warnings.",
     ],
   },
   {

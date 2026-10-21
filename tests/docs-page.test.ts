@@ -57,6 +57,7 @@ const DIAGRAMS = [
   "Saving something worth keeping",
   "Duplicate guard",
   "Masking",
+  "How search ranks",
   "Answering a question",
   "Before a change",
   // Trust and care
@@ -143,6 +144,7 @@ describe("/docs", () => {
     expect(html).toContain("Four skills");
     expect(html).toContain("Three hooks");
     expect(html).toContain("Ten tools");
+    expect(html).toContain("four with ?tools=lean");
     expect(html).not.toMatch(/listen\.mjs|hook\.mjs|guard\.mjs/);
     // The old install, with its curl hooks and permission rules, is not what the card draws any more.
     expect(html).not.toMatch(/Two curl hooks|Two permission rules/);
@@ -157,6 +159,13 @@ describe("/docs", () => {
     const html = await render();
     expect(html).toContain(`Next.js ${nextMajor} `);
     expect(html).toContain(`Node ${nodeMajor} `);
+  });
+
+  it("draws the lean tool list the way the code does", async () => {
+    const { LEAN_TOOL_NAMES } = await import("../lib/mcp");
+    const html = await render();
+    expect(html).toContain("?tools=lean");
+    expect(LEAN_TOOL_NAMES).toHaveLength(4);
   });
 
   it("counts the tools the way the code does", async () => {
