@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/enhesa/big-agentic-brain/compare/v2.5.1...v2.6.0) (2026-10-21)
+
+
+### Features
+
+* **search:** multi-phrasing search and aliases at save time ([#55](https://github.com/enhesa/big-agentic-brain/issues/55)) ([e6570bf](https://github.com/enhesa/big-agentic-brain/commit/e6570bf780c6d1abcf5fc7247ab8021a2073ca24))
+
 ## [2.5.1](https://github.com/enhesa/big-agentic-brain/compare/v2.5.0...v2.5.1) (2026-10-21)
 
 
