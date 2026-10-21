@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-21",
+    title: "How BAB keeps sensitive data out",
+    changes: [
+      "The FAQ explains how BAB keeps personal and sensitive data out, and what no filter can catch.",
+    ],
+  },
+  {
     date: "2026-10-20",
     title: "Sort the memory list, search advice for every team",
     changes: [
