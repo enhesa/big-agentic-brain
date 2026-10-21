@@ -77,7 +77,7 @@ type Db = ReturnType<typeof getDb>;
 
 /** Column groups the sweep re-redacts. Every free-text field an agent can write. */
 const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
-  { table: "learnings", id: "id", columns: ["title", "body", "tags", "repo"] },
+  { table: "learnings", id: "id", columns: ["title", "body", "tags", "repo", "aliases"] },
   { table: "todos", id: "id", columns: ["title", "body", "related_key"] },
   { table: "threads", id: "id", columns: ["subject"] },
   { table: "messages", id: "id", columns: ["body"] },

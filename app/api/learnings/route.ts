@@ -6,6 +6,7 @@ import {
   recordSearchRead,
   parseSupersedes,
   parseTags,
+  parseAliases,
   createWithSupersedes,
   normalizeProjectKey,
   parseFlaggedFilter,
@@ -136,6 +137,8 @@ export async function POST(req: NextRequest) {
 
       const tagsRaw = (payload as Record<string, unknown>).tags;
       const tags = parseTags(tagsRaw);
+      // Redacted, trimmed, de-duplicated and limited by create() (5 x 120); absent keeps a superseded entry's aliases.
+      const aliases = parseAliases((payload as Record<string, unknown>).aliases);
 
       const repoRaw = (payload as Record<string, unknown>).repo;
       const repo = repoRaw == null ? undefined : String(repoRaw);
@@ -169,6 +172,7 @@ export async function POST(req: NextRequest) {
         title,
         body,
         tags,
+        aliases,
         repo,
         project,
         confidence: confidenceRaw as LearningConfidence | undefined,

@@ -355,3 +355,57 @@ describe("memory page", () => {
     expect(await renderDetail(m.id)).not.toContain("Also searched as");
   });
 });
+
+describe("review fixes", () => {
+  it("the maintenance sweep re-redacts stored aliases", async () => {
+    const m = await make("Sweep alias", "Body for the sweep.", { aliases: ["fine wording"] });
+    const { getDb } = await import("../lib/db");
+    const { redactStoredRows } = await import("../lib/maintenance");
+    const secret = ["pass", "word=hunter2"].join("");
+    getDb().prepare("UPDATE learnings SET aliases = ? WHERE id = ?").run(JSON.stringify([`ask ${secret}`]), m.id);
+    expect(redactStoredRows(getDb())).toBe(1);
+    const row = getDb().prepare("SELECT aliases FROM learnings WHERE id = ?").get(m.id) as { aliases: string };
+    expect(row.aliases).not.toContain("hunter2");
+    expect(redactStoredRows(getDb())).toBe(0);
+  });
+
+  async function postRest(body: unknown) {
+    current = { "x-bab-actor-email": ME, "x-bab-actor-name": ME };
+    const { POST } = await import("../app/api/learnings/route");
+    return POST(
+      new Request(`${ORIGIN}/api/learnings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) as never,
+    );
+  }
+
+  it("REST POST accepts aliases, redacted, trimmed and de-duplicated", async () => {
+    const res = await postRest({ title: "Rest post alias", body: "Body of the REST post.", aliases: ["  one wording ", "ONE wording", "error sk-test-0123456789abcdef"] });
+    expect(res.status).toBe(201);
+    const { learning } = await res.json();
+    const stored = JSON.parse(learning.aliases) as string[];
+    expect(stored).toHaveLength(2);
+    expect(stored[0]).toBe("one wording");
+    expect(learning.aliases).not.toContain("sk-test-0123456789abcdef");
+  });
+
+  it("REST POST refuses more than 5 aliases, one over 120 characters, or a non-array", async () => {
+    const six = ["a1", "b2", "c3", "d4", "e5", "f6"];
+    expect((await postRest({ title: "Rest six", body: "Body six.", aliases: six })).status).toBe(400);
+    expect((await postRest({ title: "Rest long", body: "Body long.", aliases: ["x".repeat(121)] })).status).toBe(400);
+    expect((await postRest({ title: "Rest odd", body: "Body odd.", aliases: "nope" })).status).toBe(400);
+  });
+
+  it("uses at most 3 phrasings, query included", async () => {
+    const fourth = await make("Zanzibar quokka tracking", "Quokka notes.");
+    const out = await search({ query: "alpha one", queries: ["beta two", "gamma three", "zanzibar quokka"] });
+    expect(out.isError).toBe(false);
+    expect(out.json.results.map((r: { id: string }) => r.id)).not.toContain(fourth.id);
+    const three = await search({ query: "alpha one", queries: ["beta two", "zanzibar quokka"] });
+    expect(three.json.results.map((r: { id: string }) => r.id)).toContain(fourth.id);
+  });
+
+  it("bab_search returns aliases as a list, not the stored JSON text", async () => {
+    await make("Alias in results", "Body in results.", { aliases: ["wording one", "wording two"] });
+    const out = await search({ query: "alias in results" });
+    expect(out.json.results[0].aliases).toEqual(["wording one", "wording two"]);
+  });
+});

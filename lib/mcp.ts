@@ -45,6 +45,8 @@ import {
   readProvenance,
   parseAliases,
   parseQueries,
+  readAliases,
+  QUERIES_MAX,
   searchFused,
   GENERAL_PROJECT_KEY,
   LEARNINGS_LIST_LIMIT_MAX,
@@ -207,7 +209,8 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   const query = str(args.query);
   // Extra phrasings of the same question: one search each, fused by rank. Blank and repeated ones drop out.
   const extra = parseQueries(args.queries) ?? [];
-  const phrasings = [...new Set([query, ...extra].map((q) => q.trim()).filter(Boolean))];
+  // At most QUERIES_MAX phrasings in all (query counts), so the cost of one call stays bounded.
+  const phrasings = [...new Set([query, ...extra].map((q) => q.trim()).filter(Boolean))].slice(0, QUERIES_MAX);
   const multi = phrasings.length > 1;
   const hasText = phrasings.length > 0;
   const tag = args.tag == null ? undefined : str(args.tag);
@@ -276,6 +279,8 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
     // and questioned them in 4%).
     ...(hit.verify ? { id: hit.id, title: hit.title, stale: staleWarning(hit.ageDays) } : {}),
     ...hit,
+    // The stored JSON text becomes a list, like appliesTo.
+    aliases: readAliases(hit.aliases),
     url: memoryUrl(ctx, hit.id),
     // Only on the caller's own entries: BAB refuses a vote, confirm or kudos by the author.
     ...(hit.author_id === actor.id ? { own: true } : {}),
@@ -763,7 +768,7 @@ export const TOOLS: Tool[] = [
         get email() {
           return { type: "string", description: `The user's long work address, ${identityHint()}.` };
         },
-        name: { type: "string", description: "The user's display name (2-80 characters). Optional: derived from the address when empty." },
+        name: { type: "string", description: "The user's display name (2-80 characters); optional." },
       },
       required: ["email"],
     },
@@ -785,7 +790,7 @@ export const TOOLS: Tool[] = [
       type: "object",
       properties: {
         query: { type: "string", description: "A question, error, system or tool name. Empty lists active learnings by vote score." },
-        queries: { type: "array", items: { type: "string" }, description: "Up to 3." },
+        queries: { type: "array", items: { type: "string" }, description: "Up to 3 phrasings in all, query counts." },
         tag: { type: "string", description: "Exact tag." },
         repo: { type: "string", description: "Repo slug." },
         project: {
@@ -813,9 +818,9 @@ export const TOOLS: Tool[] = [
             );
           },
         },
-        appliesTo: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }], description: "Only memories with one of these applies-to labels, or everywhere." },
-        flagged: { type: "boolean", description: "true: only the flagged standards and decisions that wait for a maintainer." },
-        houseRules: { type: "boolean", description: "true: the house rules digest with bodies (company-wide, plus project's). Ignores other filters." },
+        appliesTo: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }], description: "Only memories with one of these applies-to labels, or everywhere. An unknown label is an error." },
+        flagged: { type: "boolean", description: "true: only flagged standards and decisions awaiting a maintainer." },
+        houseRules: { type: "boolean", description: "true: the house rules digest with bodies (company-wide, plus project's if you pass project). Ignores other filters." },
         limit: { type: "number", description: "Max results (default 5; 20 for a text search, 50 for a listing)." },
         offset: { type: "number", description: "Skip this many matches (default 0); pass the previous nextOffset." },
       },
@@ -857,9 +862,9 @@ export const TOOLS: Tool[] = [
         confidence: { type: "string", enum: ["low", "medium", "high"], description: "Author's confidence, self-declared; default medium. Not the same as standing, which colleagues' reactions set." },
         expiresAt: { type: "string", description: "Only for a time-bound fact (a campaign, a code freeze): YYYY-MM-DD, the last valid day; archived the day after. Omit otherwise (\"never\" means no date)." },
         supersedes: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }], description: "Id (or list of ids, for a consolidation) of learnings this one corrects and archives; none if any id is bad. Never supersede someone else's standard or decision, unless you are a BAB maintainer: flag it. Correcting your own decision needs the user's yes." },
-        confirmNotDuplicate: { type: "boolean", description: "true: write anyway after being shown similar learnings." },
+        confirmNotDuplicate: { type: "boolean", description: "true: write anyway after seeing similar ones." },
         kind: { type: "string", enum: ["learning", "practice", "standard", "decision"], description: "learning (default), practice (should), decision (an ADR, needs the user's yes), standard (posted and changed by BAB maintainers only). A correction keeps the replaced kind unless you pass one." },
-        source: { type: "string", enum: ["native", "confluence"], description: "confluence only for a mirror of a Confluence page (needs source_url and source_version). Default native." },
+        source: { type: "string", enum: ["native", "confluence"], description: "confluence only for a mirror of a Confluence page (needs source_url and source_version)." },
         source_url: {
           type: "string",
           get description() {
