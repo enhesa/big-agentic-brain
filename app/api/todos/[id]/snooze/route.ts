@@ -7,7 +7,7 @@ import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** POST /api/todos/[id]/snooze — owner only, +7 days. */
+/** POST /api/todos/[id]/snooze — owner only. Optional { dueAt }; else +7 days. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let user;
   try {
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   return withIdempotency(req, user.id, async () => {
     try {
-      const todo = snooze(id, user.id, "mcp");
+      const payload = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+      const todo = snooze(id, user.id, "mcp", payload?.dueAt);
       return { status: 200, body: { todo } };
     } catch (err) {
       return toApiError(err);

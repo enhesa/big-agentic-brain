@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-22",
+    title: "A time of day on reminders",
+    changes: [
+      "Reminders can have a time: bab_remind takes a date-time with an offset, and it is due then.",
+    ],
+  },
+  {
     date: "2026-10-21",
     title: "How BAB keeps sensitive data out, better recall",
     changes: [

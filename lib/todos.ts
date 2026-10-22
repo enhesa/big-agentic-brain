@@ -3,8 +3,8 @@ import { getDb } from "./db";
 import { audit } from "./audit";
 import { emit } from "./events";
 import { redact, assertMaxLength, assertRawLength } from "./redact";
-import { addDaysUtc, todayUtc } from "./dates";
-import { NotFoundError, ConflictError } from "./errors";
+import { addDaysUtc, todayUtc, nowUtcInstant, parseDueAt, DUE_AT_FORM } from "./dates";
+import { NotFoundError, ConflictError, ValidationError } from "./errors";
 import type { AuditVia, TodoRow } from "./types";
 
 const SNOOZE_DAYS = 7;
@@ -38,10 +38,21 @@ export function create(input: CreateTodoInput, via: AuditVia = "ui"): TodoRow {
   const relatedKey = input.relatedKey != null ? redact(input.relatedKey.trim()) : null;
   if (relatedKey) assertMaxLength("relatedKey", relatedKey, RELATED_KEY_MAX);
 
+  // A date-only day, or a date-time with an offset stored as a UTC instant. Refuse anything else here
+  // too, so no caller can store a due value the due logic cannot read.
+  let dueAt: string | null = null;
+  let hasTime = 0;
+  if (input.dueAt != null) {
+    const parsed = parseDueAt(input.dueAt);
+    if (!parsed) throw new ValidationError(`dueAt must be ${DUE_AT_FORM}`);
+    dueAt = parsed.dueAt;
+    hasTime = parsed.hasTime ? 1 : 0;
+  }
+
   db.prepare(
-    `INSERT INTO todos (id, owner_id, title, body, due_at, status, related_key)
-     VALUES (?, ?, ?, ?, ?, 'open', ?)`,
-  ).run(id, input.ownerId, title, body, input.dueAt ?? null, relatedKey);
+    `INSERT INTO todos (id, owner_id, title, body, due_at, due_has_time, status, related_key)
+     VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`,
+  ).run(id, input.ownerId, title, body, dueAt, hasTime, relatedKey);
 
   audit(db, input.ownerId, "create", "todo", id, via);
   // No title: reminders are private and /api/events is public (review, 2026-10-01).
@@ -60,29 +71,36 @@ export const TODO_TABS = ["overdue", "due_soon", "open", "done"] as const;
 export type TodoFilter = (typeof TODO_TABS)[number];
 
 /**
- * due_at is a UTC calendar date ("YYYY-MM-DD"); overdue/due_soon are computed
- * against today's UTC calendar date. Older rows may still hold a full ISO
- * datetime, so comparisons use substr(due_at, 1, 10) to stay tolerant of that.
+ * due_at is a UTC calendar date ("YYYY-MM-DD"), or, when due_has_time is 1, a UTC instant
+ * ("YYYY-MM-DDTHH:MM:SSZ"). A date-only reminder is due for its whole UTC day and overdue the day
+ * after; a timed one is overdue once its instant has passed. Older rows may still hold a full ISO
+ * datetime with due_has_time 0, so date-only comparisons use substr(due_at, 1, 10) to stay tolerant.
  */
 export function listMine(ownerId: string, filter: TodoFilter = "open"): TodoRow[] {
   const db = getDb();
   const today = todayUtc();
+  const now = nowUtcInstant();
 
   if (filter === "overdue") {
     return db
       .prepare(
-        "SELECT * FROM todos WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL AND substr(due_at, 1, 10) < ? ORDER BY due_at ASC",
+        `SELECT * FROM todos WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL
+           AND ((due_has_time = 1 AND due_at <= ?) OR (due_has_time = 0 AND substr(due_at, 1, 10) < ?))
+         ORDER BY due_at ASC`,
       )
-      .all(ownerId, today) as unknown as TodoRow[];
+      .all(ownerId, now, today) as unknown as TodoRow[];
   }
 
   if (filter === "due_soon") {
     const windowEnd = addDaysUtc(today, DUE_SOON_DAYS);
     return db
       .prepare(
-        "SELECT * FROM todos WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL AND substr(due_at, 1, 10) >= ? AND substr(due_at, 1, 10) <= ? ORDER BY due_at ASC",
+        `SELECT * FROM todos WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL
+           AND substr(due_at, 1, 10) <= ?
+           AND ((due_has_time = 1 AND due_at > ?) OR (due_has_time = 0 AND substr(due_at, 1, 10) >= ?))
+         ORDER BY due_at ASC`,
       )
-      .all(ownerId, today, windowEnd) as unknown as TodoRow[];
+      .all(ownerId, windowEnd, now, today) as unknown as TodoRow[];
   }
 
   if (filter === "done") {
@@ -122,7 +140,13 @@ export function complete(id: string, actorId: string, via: AuditVia = "ui"): Tod
   return getById(id)!;
 }
 
-export function snooze(id: string, actorId: string, via: AuditVia = "ui"): TodoRow {
+/**
+ * Pushes a reminder back. With `dueAt` (a day, or a date-time with an offset) it moves to exactly that.
+ * Without, a date-only one moves 7 days from the later of today and its day; a timed one moves 7 days
+ * from the later of now and its instant, keeping its time of day. Either way the due value changes, so
+ * the hook announces it again when the new time comes.
+ */
+export function snooze(id: string, actorId: string, via: AuditVia = "ui", dueAt?: unknown): TodoRow {
   const db = getDb();
   const todo = getById(id);
   if (!todo || todo.owner_id !== actorId) throw new NotFoundError("Reminder not found");
@@ -133,14 +157,28 @@ export function snooze(id: string, actorId: string, via: AuditVia = "ui"): TodoR
   // From the later of today and the due date: snoozing a reminder that is already
   // overdue must push it past today, not just a week past its old date (review,
   // 2026-09-25), matching bab_remind's own description.
-  const today = todayUtc();
-  const due = todo.due_at ? todo.due_at.slice(0, 10) : today;
-  const base = due > today ? due : today;
-  const newDueAt = addDaysUtc(base, SNOOZE_DAYS);
+  let newDueAt: string;
+  let hasTime: number;
+  if (dueAt != null && dueAt !== "") {
+    const parsed = parseDueAt(dueAt);
+    if (!parsed) throw new ValidationError(`dueAt must be ${DUE_AT_FORM}`);
+    newDueAt = parsed.dueAt;
+    hasTime = parsed.hasTime ? 1 : 0;
+  } else if (todo.due_has_time === 1 && todo.due_at) {
+    const base = Math.max(Date.now(), Date.parse(todo.due_at));
+    newDueAt = new Date(base + SNOOZE_DAYS * 86_400_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    hasTime = 1;
+  } else {
+    const today = todayUtc();
+    const due = todo.due_at ? todo.due_at.slice(0, 10) : today;
+    const base = due > today ? due : today;
+    newDueAt = addDaysUtc(base, SNOOZE_DAYS);
+    hasTime = 0;
+  }
 
   const result = db.prepare(
-    "UPDATE todos SET status = 'open', due_at = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-  ).run(newDueAt, id, actorId);
+    "UPDATE todos SET status = 'open', due_at = ?, due_has_time = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+  ).run(newDueAt, hasTime, id, actorId);
   if (result.changes === 0) throw new NotFoundError("Reminder not found");
   audit(db, actorId, "snooze", "todo", id, via);
   emit("todo.changed", id, { id, kind: "snoozed" });

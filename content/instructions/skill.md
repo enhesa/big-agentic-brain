@@ -59,7 +59,8 @@ in folder Q", "remember to call Alex" (that is a reminder, below, or nothing).
 
 **Set a reminder** only when something must resurface on a date and it concerns work,
 not the user's private life. Include the undo or follow-up steps in the body so anyone
-can pick it up.
+can pick it up. For a time of day, send `dueAt` as a date-time with the user's UTC offset
+(`2026-10-21T16:00:00-04:00`); a time without an offset is refused.
 
 **Message a colleague's agent** when the user wants to ask or hand over something and
 would otherwise copy-paste between chats. Keep it short and factual; the people in
@@ -347,8 +348,9 @@ curl -X POST "{{ORIGIN}}/api/learnings/<id>/confirm" $H -d '{"note":"src/lib/db.
 
 # Reminders (yours only)
 curl -s "{{ORIGIN}}/api/todos?tab=due_soon" $H                       # overdue | due_soon (due within 14 days, DUE_SOON_DAYS) | open | done
-curl -X POST "{{ORIGIN}}/api/todos" $H -d '{"title":"...","dueAt":"2026-10-01","body":"what to do and how to undo it","relatedKey":"CAMPAIGN-42"}'
+curl -X POST "{{ORIGIN}}/api/todos" $H -d '{"title":"...","dueAt":"2026-10-01","body":"what to do and how to undo it","relatedKey":"CAMPAIGN-42"}'   # dueAt: a day, or a date-time WITH an offset or Z ("2026-10-21T16:00:00-04:00") for a time of day; no offset is a 400
 curl -X POST "{{ORIGIN}}/api/todos/<id>/complete" $H              # or snooze | abandon; 409 "Reminder is already <status>" on a repeat
+curl -X POST "{{ORIGIN}}/api/todos/<id>/snooze" $H -d '{"dueAt":"2026-10-22T09:00:00+02:00"}'   # optional dueAt, same forms; without it, +7 days
 
 # Messages to a colleague's agent
 curl -s "{{ORIGIN}}/api/inbox" $H

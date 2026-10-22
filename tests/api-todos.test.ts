@@ -118,7 +118,7 @@ describe("POST /api/todos", () => {
     const { POST } = await import("../app/api/todos/route");
     const res = await POST(postReq({ title: "T", dueAt }) as never);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "dueAt must be a real calendar date, YYYY-MM-DD" });
+    expect(await res.json()).toEqual({ error: "dueAt must be YYYY-MM-DD, or an ISO 8601 date-time with an offset or Z, e.g. 2026-10-21T16:00:00-04:00" });
     const { listMine } = await import("../lib/todos");
     expect(listMine("owner.t@example.com", "open")).toHaveLength(0);
   });
