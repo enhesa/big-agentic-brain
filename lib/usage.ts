@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import { flaggedStandardsWaitingIds, INACTIVITY_CLOCK_START, LEARNING_KINDS, standingsFor } from "./learnings";
 import { generalProjectCount, topProjects } from "./stats";
+import { teamTags } from "./teams";
 import type { StandingLevel } from "./standing";
 
 /**
@@ -56,12 +57,6 @@ const HELPFUL_ACTIONS = "('helpful', 'kudos', 'confirm')";
 const NOT_PEOPLE = "('anonymous', 'system')";
 const LIVE = "('active')";
 const DAY_MS = 86_400_000;
-
-/** The team tags from the bab_learn tool description. */
-export const TEAM_TAGS = [
-  "engineering", "product", "marketing", "sales", "content", "legal", "regulatory",
-  "finance", "hr", "management", "operations", "it", "data",
-] as const;
 
 /** Monday of the week containing a UTC date, as YYYY-MM-DD. */
 export function weekStart(d: Date): string {
@@ -413,7 +408,8 @@ export function contents(): Contents {
   ];
 
   // tags is a JSON array of strings; an unreadable value counts as untagged instead of failing the page.
-  const teamList = TEAM_TAGS.map((t) => `'${t}'`).join(", ");
+  const teams = teamTags();
+  const teamList = teams.map(() => "?").join(", ");
   const safeTags = "json_each(CASE WHEN json_valid(l.tags) THEN l.tags ELSE '[]' END)";
   const teamRows = db
     .prepare(
@@ -422,14 +418,14 @@ export function contents(): Contents {
        WHERE l.status IN ${LIVE} AND j.type = 'text' AND lower(j.value) IN (${teamList})
        GROUP BY tag ORDER BY n DESC, tag`,
     )
-    .all() as Array<{ tag: string; n: number }>;
+    .all(...teams) as Array<{ tag: string; n: number }>;
   const noTeam = db
     .prepare(
       `SELECT COUNT(*) AS n FROM learnings l
        WHERE l.status IN ${LIVE}
          AND NOT EXISTS (SELECT 1 FROM ${safeTags} j WHERE j.type = 'text' AND lower(j.value) IN (${teamList}))`,
     )
-    .get() as { n: number };
+    .get(...teams) as { n: number };
 
   const rows = db
     .prepare(
@@ -632,7 +628,7 @@ export function authorsPerTeamByWeek(weeks: string[]): TeamWeek[] {
        FROM learnings WHERE created_at >= ? AND status != 'deleted'`,
     )
     .all(sqlDate(weeks[0])) as Array<{ author_id: string; tags: string; week: string }>;
-  const known = new Set<string>(TEAM_TAGS);
+  const known = new Set<string>(teamTags());
   return weeks.map((week) => {
     const authors = new Map<string, Set<string>>();
     const noTeam = new Set<string>();

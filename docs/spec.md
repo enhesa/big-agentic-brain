@@ -344,7 +344,8 @@ example to ask a maintainer to promote a practice (`bab_send`, with the user's y
 `self`, the caller's own id, so a client such as the plugin's inbox panel can tell its own messages
 apart.
 
-**Home team and area contacts.** A person has an optional home team (one of the team tags, kept
+**Home team and area contacts.** A person has an optional home team (one of the team tags, set with
+`BAB_TEAM_TAGS`; a slug such as `expert-services` shows as "Expert services"; kept
 apart from post tags: a tag says what a memory is about, the home team says where the person
 works) and may opt in as a named contact for knowledge areas, for example `toxicology`. An area is
 a free label, lowercased and hyphenated, at most 40 characters; the optional note (at most 200

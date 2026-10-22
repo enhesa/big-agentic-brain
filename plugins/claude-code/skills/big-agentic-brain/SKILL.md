@@ -133,7 +133,7 @@ in a thread read it at `<BAB URL>/inbox`.
 ## Categories and tags
 
 Every learning carries tags. Use one team tag plus one or two topic tags, lowercase,
-hyphenated. Team tags: `engineering`, `product`, `marketing`, `sales`, `content`,
+hyphenated. Team tags (the bab_learn tool description lists the ones your BAB uses; these are the defaults): `engineering`, `product`, `marketing`, `sales`, `content`,
 `legal`, `regulatory`, `finance`, `hr`, `management`, `operations`, `it`, `data`.
 Topic tags: what it is about (`pricing`, `brand`, `campaigns`, `clients`, `process`,
 `tooling`, `security`, `ci`, `kubernetes`, `onboarding`, `templates`, ...).

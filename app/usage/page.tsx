@@ -15,12 +15,12 @@ import {
   QUIET_DAYS,
   NUDGE_FOLLOW_MINUTES,
   STANDING_SAMPLE_MAX,
-  TEAM_TAGS,
   USAGE_COLLECTING_SINCE,
   cachedUsageReport,
   weekStart,
 } from "@/lib/usage";
 import { AreaLine, GroupedBars, HBars, MiniBars, Sparkline, StackedBar, formatCount, type BarRow, type MiniBarRow } from "./charts";
+import { teamLabel, teamTags } from "@/lib/teams";
 import styles from "./usage.module.css";
 
 /**
@@ -64,10 +64,6 @@ const KIND_LABELS: Record<string, string> = {
 function modelLabel(id: string): string | null {
   const m = /^claude-([a-z]+)-(\d+(?:-\d+)*)$/.exec(id);
   return m ? `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)} ${m[2].replace(/-/g, ".")}` : null;
-}
-
-function teamLabel(tag: string): string {
-  return tag === "hr" || tag === "it" ? tag.toUpperCase() : tag.charAt(0).toUpperCase() + tag.slice(1);
 }
 
 /** How much a total grew this week. A total never goes down, so there is no down state. */
@@ -310,7 +306,7 @@ export default async function UsagePage({
 
   // Authors per team per week, as a heat grid over the weeks with data.
   const teams = report.teams.filter((w) => w.week >= firstWeek);
-  const teamsInUse = TEAM_TAGS.filter((t) => teams.some((w) => (w.byTeam[t] ?? 0) > 0));
+  const teamsInUse = teamTags().filter((t) => teams.some((w) => (w.byTeam[t] ?? 0) > 0));
   const heatRows = [
     ...teamsInUse.map((t) => ({ name: teamLabel(t), tag: t as string, counts: teams.map((w) => w.byTeam[t] ?? 0) })),
     { name: "No team tag", tag: "", counts: teams.map((w) => w.noTeamTag) },
@@ -709,7 +705,7 @@ export default async function UsagePage({
                   <tr key={u.id}>
                     <td>{u.name ?? u.id}</td>
                     <td className={styles.wide}>{u.email ?? "-"}</td>
-                    <td>{u.home_team ?? "-"}</td>
+                    <td>{u.home_team ? teamLabel(u.home_team) : "-"}</td>
                     <td>{(areaCounts.get(u.id) ?? []).map((a) => a.area).join(", ") || "-"}</td>
                     <td className={styles.nowrap}>{parseDbTime(u.last_seen_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</td>
                     <td className={styles.num}>{memoryCounts[u.id] ?? 0}</td>

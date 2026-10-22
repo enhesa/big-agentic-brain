@@ -69,8 +69,7 @@ a thread read it at `{{ORIGIN}}/inbox`, and its link opens only for them and for
 ## Categories and tags
 
 Every learning carries tags. Use one team tag plus one or two topic tags, lowercase,
-hyphenated. Team tags: `engineering`, `product`, `marketing`, `sales`, `content`,
-`legal`, `regulatory`, `finance`, `hr`, `management`, `operations`, `it`, `data`.
+hyphenated. Team tags: {{TEAM_TAGS}}.
 Topic tags: what it is about (`pricing`, `brand`, `campaigns`, `clients`, `process`,
 `tooling`, `security`, `ci`, `kubernetes`, `onboarding`, `templates`, ...).
 

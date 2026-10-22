@@ -2,6 +2,7 @@ import { RATE_LIMIT_PER_MINUTE } from "@/lib/rate-limit";
 import { FEEDBACK_DAILY_LIMIT } from "@/lib/feedback";
 import { identityHint } from "@/lib/identity";
 import { sourceLinkText } from "@/lib/config";
+import { teamTags } from "@/lib/teams";
 export const dynamic = "force-dynamic";
 
 /**
@@ -44,7 +45,7 @@ export async function GET() {
       "GET /api/people": "User directory, each with `learningCount`, `homeTeam` (a team tag or null) and `areas` (the knowledge areas they are a contact for). ?area=toxicology lists the named contacts for that area instead: { area, contacts[{ area, id, name, note }] }. Use them when a search finds nothing: suggest one, or with the user's yes send only that person the question (POST /api/messages).",
       "GET /api/me": "The resolved actor plus their counts, your `homeTeam` (a team tag or null) and your `areas` ([{ area, note }])",
       "POST /api/me": "{ name } — the only way to change your display name (identity is fixed to your email at first use). Audited as `rename`.",
-      "POST /api/me/team": "{ team } — sets your own home team to a team tag (engineering, product, marketing, sales, content, legal, regulatory, finance, hr, management, operations, it, data); empty clears it. Audited as `home_team_set`.",
+      "POST /api/me/team": `{ team } — sets your own home team to a team tag (${teamTags().join(", ")}); empty clears it. Audited as \`home_team_set\`.`,
       "GET /api/me/areas": "The knowledge areas you are a contact for: { areas[{ area, note }] }.",
       "POST /api/me/areas": "{ area, note? (<=200 characters) } — opt in as a contact for an area (a free label, lowercased and hyphenated, <=40 characters); the same area again changes the note. At most 3 contacts per area and 10 areas per person (400 otherwise). Audited as `area_contact_add`.",
       "DELETE /api/me/areas": "?area=&user= — drop yourself from an area. user is for maintainers only, to remove someone else (403 otherwise); a maintainer never adds anyone. -> { removed }.",

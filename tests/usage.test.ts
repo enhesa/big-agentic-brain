@@ -507,6 +507,25 @@ describe("what is in BAB", () => {
     expect(c.noTeamTag).toBe(2);
   });
 
+  it("groups by the configured teams, including a slug with a hyphen", async () => {
+    process.env.BAB_TEAM_TAGS = "engineering,expert-services";
+    try {
+      await people(A);
+      await memory(A, { tags: ["expert-services", "kafka"] });
+      await memory(A, { tags: ["Engineering"] });
+      await memory(A, { tags: ["sales"] }); // not a configured team here
+      const { contents } = await import("../lib/usage");
+      const c = contents();
+      expect(c.byTeam).toEqual([
+        { key: "engineering", n: 1 },
+        { key: "expert-services", n: 1 },
+      ]);
+      expect(c.noTeamTag).toBe(1);
+    } finally {
+      delete process.env.BAB_TEAM_TAGS;
+    }
+  });
+
   it("sorts live memories into strong, fair and weak standing from their votes", async () => {
     const C = "cy.c@example.com";
     await people(A, B, MAINT, C);
