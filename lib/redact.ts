@@ -52,6 +52,36 @@ function isKeyValueProse(match: string, offset: number, text: string): boolean {
   return /\S/.test(before) && /^[ \t]+[A-Za-z]/.test(after);
 }
 
+/** Header-style credentials: Authorization: xxx, X-Api-Key: xxx, api-key=xxx. */
+const HEADER_STYLE_SECRET =
+  /\b(?:authorization|x-api-key|x-auth-token|api-key|x-functions-key|ocp-apim-subscription-key)\s*[:=]\s*[^\s;,]+/gi;
+const AWS_SECRET_KEY = /\baws_secret_access_key\s*[:=]\s*[^\s;,]+/gi;
+const SPLUNK_TOKEN = /\bsplunk[_-]?token\s*[:=]\s*[^\s;,]+/gi;
+
+/** Patterns of the form `label[:=]value`, where a documentation placeholder as the value is not a secret. */
+const LABELLED = new Set<RegExp>([KEY_VALUE_SECRET, HEADER_STYLE_SECRET, AWS_SECRET_KEY, SPLUNK_TOKEN]);
+
+/**
+ * A documentation placeholder, not a credential: a short word-like value in angle brackets (`<token>`, `<address>`, no digits)
+ * or the bare word token, secret, password or xxx. Real values never look like this.
+ */
+function isPlaceholder(value: string): boolean {
+  const v = value.replace(/^["']+|["']+$/g, "");
+  return /^<[A-Za-z][A-Za-z _-]{0,30}>$/.test(v) || /^(?:token|secret|password|x{3,})$/i.test(v);
+}
+
+/** True when a `label[:=]value` match carries only a placeholder; `after` is the text following the match. */
+function holdsPlaceholder(match: string, after: string): boolean {
+  const m = /[:=][ \t]*(?:\r?\n[ \t]+)?(\S+)$/.exec(match);
+  if (!m) return false;
+  // "Authorization: Bearer <token>": the match ends at the scheme word, the value follows it.
+  if (/^(?:bearer|basic)$/i.test(m[1])) {
+    const next = /^[ \t]+([^\s;,]+)/.exec(after);
+    return !!next && isPlaceholder(next[1]);
+  }
+  return isPlaceholder(m[1]);
+}
+
 // Order matters: more specific patterns first so we don't partially mask a match
 // that a later, broader pattern would have caught more cleanly.
 const SECRET_PATTERNS: RegExp[] = [
@@ -66,10 +96,10 @@ const SECRET_PATTERNS: RegExp[] = [
   // "plain Basic auth" stays readable (feedback f8942f33, 2026-10-07).
   /\b(?:[Bb]earer|BEARER|[Bb]asic|BASIC)\s+(?=[A-Za-z0-9\-._~+/]{12,})(?=[A-Za-z0-9\-._~+/]*(?:[0-9+/_.~-]|[a-z][A-Z]))[A-Za-z0-9\-._~+/]+=*/g,
   // Header-style credentials: Authorization: xxx, X-Api-Key: xxx, api-key=xxx
-  /\b(?:authorization|x-api-key|x-auth-token|api-key|x-functions-key|ocp-apim-subscription-key)\s*[:=]\s*[^\s;,]+/gi,
+  HEADER_STYLE_SECRET,
   // AWS access key ids and secret access keys next to their label.
   /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
-  /\baws_secret_access_key\s*[:=]\s*[^\s;,]+/gi,
+  AWS_SECRET_KEY,
   // Azure: storage account keys, SAS signatures, shared access signatures.
   /\b(?:AccountKey|SharedAccessKey)\s*=\s*[A-Za-z0-9+/=]{20,}/gi,
   /\bSharedAccessSignature\s*=\s*[^\s;,]+/gi,
@@ -103,7 +133,7 @@ const SECRET_PATTERNS: RegExp[] = [
   // `:<x>` as in a basic-auth string): a bare 52-char run is too common in prose and ids.
   /(?<![A-Za-z0-9_])pat[\s=:]+(?=[a-z2-7]{0,51}\d)(?=[a-z2-7]{0,51}[a-z])[a-z2-7]{52}(?![A-Za-z0-9])/gi,
   /(?<=:)(?=[a-z2-7]{0,51}\d)(?=[a-z2-7]{0,51}[a-z])[a-z2-7]{52}(?![A-Za-z0-9])/g,
-  /\bsplunk[_-]?token\s*[:=]\s*[^\s;,]+/gi,
+  SPLUNK_TOKEN,
   // key=value style secrets: password=..., token=..., secret=..., apikey=...
   // The key may carry a prefix (ENH_NUGET_PASSWORD, clientSecret) and be quoted as JSON
   // does ("password": "x"). A lookbehind, not a word boundary: an underscore is a word character, so
@@ -230,10 +260,10 @@ export function redact(text: string, opts: { emails?: boolean } = {}): string {
   let result = text;
   for (const pattern of SECRET_PATTERNS) {
     result = result.replace(pattern, (whole, ...groups: unknown[]) => {
-      if (pattern === KEY_VALUE_SECRET) {
-        const offset = groups[groups.length - 2] as number;
-        if (isKeyValueProse(whole, offset, groups[groups.length - 1] as string)) return whole;
-      }
+      const offset = groups[groups.length - 2] as number;
+      const full = groups[groups.length - 1] as string;
+      if (pattern === KEY_VALUE_SECRET && isKeyValueProse(whole, offset, full)) return whole;
+      if (LABELLED.has(pattern) && holdsPlaceholder(whole, full.slice(offset + whole.length))) return whole;
       // URL-credential pattern keeps its scheme (first capture group).
       const scheme = typeof groups[0] === "string" && /:\/\/$/.test(groups[0]) ? groups[0] : "";
       return scheme ? `${scheme}${REDACTED}@` : REDACTED;

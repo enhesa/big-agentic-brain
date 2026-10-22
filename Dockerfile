@@ -42,6 +42,7 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
+COPY --from=build --chown=app:app /app/collapse-slashes.cjs ./collapse-slashes.cjs
 
 RUN mkdir -p /data && chown app:app /data
 USER app
@@ -49,6 +50,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATA_DIR=/data
+# Collapses repeated slashes (//api/hook) before Next.js sees the request. NODE_OPTIONS, not a CMD flag,
+# so a launcher that spawns server.js as a child still loads it: launchers must keep NODE_OPTIONS.
+ENV NODE_OPTIONS="--require /app/collapse-slashes.cjs"
 VOLUME /data
 EXPOSE 3000
 
