@@ -25,6 +25,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Reminders can have a time: bab_remind takes a date-time with an offset, and it is due then.",
       "An organisation can set its own teams with BAB_TEAM_TAGS, such as Expert Services.",
       "A bab_url with a trailing slash no longer breaks the hooks.",
+      "Fewer permission prompts: read tools are marked read-only, and the inbox panel pauses when a tool is refused.",
       "Placeholders such as token=<address> or Bearer <token> are no longer masked as secrets.",
     ],
   },

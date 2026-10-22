@@ -12,7 +12,7 @@
     "bab_url": {
       "type": "string",
       "title": "BAB server URL",
-      "description": "Origin of your BAB instance, for example https://bab.example.com, no trailing slash",
+      "description": "Origin of your BAB instance, for example https://bab.example.com. No trailing slash: some proxies reject a // path and the hooks and MCP then fail. Restart Claude after you change it.",
       "required": true
     },
     "bab_token": {

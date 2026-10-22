@@ -41,7 +41,10 @@ export default function GetStarted() {
             <CopyPrompt text={installCommands.install} />
           </Reveal>
         </div>
-        <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address.</p>
+        <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
+        <p className={styles.cliSub}>Fewer prompts: add <code>mcp__plugin_bab_bab</code> to <code>permissions.allow</code> in <code>~/.claude/settings.json</code>.</p>
+        <p className={styles.cliSub}>In the Claude desktop app, set BAB&apos;s tools to Always allow.</p>
+        <p className={styles.cliSub}>Search, people and inbox only read. Messages, decisions and deletes still ask first.</p>
       </div>
     </section>
   );

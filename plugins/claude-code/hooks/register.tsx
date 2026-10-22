@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
+import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, looksLikeRefusal } from './poll-backoff'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
 // BAB's watcher: everything goes through
@@ -189,6 +190,14 @@ let names: Record<string, string> = {}
 let peopleAt = 0
 let whoTriedAt = 0
 let busy = false
+// Poll back-off. After a refusal (the host denied bab_inbox) the 15 s poll stops until /bab-check or ↻;
+// after any other failure the ticks wait 30 s, 60 s ... up to 5 minutes, and one success resets it.
+let isPaused = false
+let failures = 0
+let retryAt = 0
+
+/** The host (not BAB) declined a tool call: a person or a policy said no. */
+class RefusedError extends Error {}
 let isLoadingThreads = false
 let loadAgain = false
 
@@ -337,8 +346,13 @@ function within<T>($: EngineInterface, work: Promise<T>, ms: number, what: strin
 
 /** A BAB tool's text answer; throws on a transport or tool error, or after CALL_TIMEOUT_MS, so an error is never "zero". */
 async function call($: EngineInterface, tool: string, args: Record<string, unknown>): Promise<string> {
-  const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool)
-  const text = result.isError ? null : result.content?.find(c => c.type === 'text')?.text
+  const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool).catch(err => {
+    // A host may reject a denied call instead of returning an error result.
+    throw looksLikeRefusal(String(err)) ? new RefusedError(`${tool} was refused`) : err
+  })
+  const first = result.content?.find(c => c.type === 'text')?.text
+  if (result.isError && first != null && looksLikeRefusal(first)) throw new RefusedError(`${tool} was refused`)
+  const text = result.isError ? null : first
   if (text == null) throw new Error(`${tool} failed`)
   if ((await read($, connectProblemAtom)) !== null) await update($, connectProblemAtom, () => null)
   return text
@@ -661,9 +675,17 @@ type Shared = { owner: string; until: number; at: number; snap: Snapshot | null 
 /** One tick: poll BAB if this session holds (or can take) the lease, else reuse the shared result. */
 async function check($: EngineInterface, force = false): Promise<string> {
   if (busy && !force) return 'BAB: a check is already running'
+  if (force) {
+    isPaused = false
+    failures = 0
+    retryAt = 0
+  } else if (isPaused) {
+    return 'BAB: inbox paused, /bab-check resumes it'
+  }
   busy = true
   try {
     const now = await $.clock.now()
+    if (!force && now < retryAt) return 'BAB: waiting to retry'
     const sessionId = await $.session.id()
     // Lease and result in one key, so they can never disagree.
     const shared = (await $.store.get('inbox')) as Shared | undefined
@@ -676,13 +698,24 @@ async function check($: EngineInterface, force = false): Promise<string> {
     // poll() throws on a failure, so a failing holder stops renewing and loses the lease.
     const snap = await poll($).catch(async (err: unknown) => {
       await update($, view, v => ({ ...v, isDown: true }))
+      if (err instanceof RefusedError) {
+        isPaused = true
+        await update($, connectProblemAtom, () => PAUSED_TEXT)
+        $.ui.status('✉ paused')
+      } else {
+        failures += 1
+        retryAt = now + backoffMs(failures)
+      }
       throw err
     })
+    failures = 0
+    retryAt = 0
     await $.store.set('inbox', { owner: sessionId, until: now + LEASE_MS, at: now, snap } satisfies Shared)
     return await apply($, snap, now)
   } catch (err) {
     // The reason goes to the debug log; this text is read by the model, so it carries no error text.
     $.ui.log(`inbox check failed: ${why(err)}`, { to: 'debug' })
+    if (err instanceof RefusedError) return 'BAB: inbox paused, allow bab_inbox then run /bab-check'
     return 'BAB: inbox check failed'
   } finally {
     busy = false
@@ -838,7 +871,7 @@ async function showPane($: EngineInterface): Promise<void> {
   void loadThreads($)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   // A failed command is the moment an agent is stuck. The MCP instructions and the skill already
   // say "search BAB before you debug", and happy-path evals
   // showed a Sonnet agent still fixes from the code alone. So the reminder rides the
@@ -869,6 +902,7 @@ export const register: Register = on => {
     await update($, hiddenAt, () => -1)
     await $.command.register({ name: 'bab', description: 'Open the BAB Inbox panel' })
     await $.command.register({ name: 'bab-check', description: 'Check the BAB inbox now' })
+    if (hasTrailingSlash(options?.bab_url)) $.ui.toast(SLASH_WARNING, { timeoutMs: 15000 })
     $.clock.every(PERIOD_MS, () => void check($))
     void linkSession($)
     void check($)

@@ -239,7 +239,7 @@ export async function POST(req: Request): Promise<Response> {
 
     case "tools/list":
       return rpcResult(id, {
-        tools: toolsFor(toolset).map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+        tools: toolsFor(toolset).map(({ name, title, description, inputSchema, annotations }) => ({ name, title, description, inputSchema, annotations })),
       });
 
     case "tools/call": {

@@ -59,6 +59,18 @@ describe("lean tool list", () => {
     expect(names(await rpc("tools/list", {}, "?tools=full"))).toEqual(all);
   });
 
+  it("tools/list carries each tool's title and annotations, lean or full", async () => {
+    for (const q of ["", "?tools=lean"]) {
+      const out = await rpc("tools/list", {}, q);
+      for (const t of out.result.tools) {
+        expect(typeof t.title).toBe("string");
+        expect(typeof t.annotations.readOnlyHint).toBe("boolean");
+      }
+    }
+    const inbox = (await rpc("tools/list", {})).result.tools.find((t: { name: string }) => t.name === "bab_inbox");
+    expect(inbox.annotations.readOnlyHint).toBe(true);
+  });
+
   it("refuses an unknown tools value instead of guessing", async () => {
     const out = await rpc("tools/list", {}, "?tools=tiny");
     expect(out.error.code).toBe(-32602);
