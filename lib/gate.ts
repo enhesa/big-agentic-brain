@@ -80,7 +80,8 @@ function json(status: number, error: string): Response {
  */
 export function gate(req: Request): Response | null {
   const c = config();
-  const pathname = new URL(req.url).pathname;
+  // collapse-slashes.cjs already cleans the URL; collapse again so this gate never sees a different path than the routes.
+  const pathname = new URL(req.url).pathname.replace(/\/{2,}/g, "/");
   const length = Number(req.headers.get("content-length"));
   // /api/hook must always answer 200 {}: a hook failing loudly would break the agent session.
   if (pathname !== "/api/hook" && pathname !== "/api/hook/" && Number.isFinite(length) && length > c.network.maxBodyBytes) return json(413, "request body too large");

@@ -19,6 +19,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-22",
+    title: "Hook and redaction fixes",
+    changes: [
+      "A bab_url with a trailing slash no longer breaks the hooks.",
+      "Placeholders such as token=<address> or Bearer <token> are no longer masked as secrets.",
+    ],
+  },
+  {
     date: "2026-10-21",
     title: "How BAB keeps sensitive data out, better recall",
     changes: [

@@ -82,7 +82,7 @@ export async function bootServer(extraEnv: Record<string, string> = {}): Promise
   const port = await findFreePort();
   const origin = `http://127.0.0.1:${port}`;
 
-  const proc = spawn(process.execPath, ["server.js"], {
+  const proc = spawn(process.execPath, ["--require", "./collapse-slashes.cjs", "server.js"], {
     cwd: STANDALONE_DIR,
     env: {
       ...process.env,
@@ -147,6 +147,9 @@ export async function setup(): Promise<void> {
   const publicSrc = path.join(ROOT, "public");
   const publicDest = path.join(STANDALONE_DIR, "public");
   if (existsSync(publicSrc)) cpSync(publicSrc, publicDest, { recursive: true });
+
+  // The Dockerfile preloads this file; mirror it.
+  cpSync(path.join(ROOT, "collapse-slashes.cjs"), path.join(STANDALONE_DIR, "collapse-slashes.cjs"));
 
   const main = await bootServer();
   const origin = main.origin;
