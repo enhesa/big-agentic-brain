@@ -20,9 +20,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-22",
-    title: "A time of day on reminders",
+    title: "Reminders get a time of day, hook and redaction fixes",
     changes: [
       "Reminders can have a time: bab_remind takes a date-time with an offset, and it is due then.",
+      "A bab_url with a trailing slash no longer breaks the hooks.",
+      "Placeholders such as token=<address> or Bearer <token> are no longer masked as secrets.",
     ],
   },
   {

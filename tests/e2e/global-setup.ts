@@ -93,6 +93,8 @@ export async function bootServer(extraEnv: Record<string, string> = {}): Promise
       HOSTNAME: "127.0.0.1",
       DATA_DIR: dir,
       NODE_ENV: "production",
+      // Same as the Dockerfile runtime stage.
+      NODE_OPTIONS: "--require ./collapse-slashes.cjs",
       // e2e hits the real handler chain. The proxy identity headers are trusted so the device tests can
       // act as a signed-in viewer; every other e2e file sends none, and X-Bab-Actor-* still
       // resolves identity for them.
@@ -147,6 +149,9 @@ export async function setup(): Promise<void> {
   const publicSrc = path.join(ROOT, "public");
   const publicDest = path.join(STANDALONE_DIR, "public");
   if (existsSync(publicSrc)) cpSync(publicSrc, publicDest, { recursive: true });
+
+  // The Dockerfile preloads this file; mirror it.
+  cpSync(path.join(ROOT, "collapse-slashes.cjs"), path.join(STANDALONE_DIR, "collapse-slashes.cjs"));
 
   const main = await bootServer();
   const origin = main.origin;
