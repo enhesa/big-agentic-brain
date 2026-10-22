@@ -105,6 +105,24 @@ describe("/me/devices profile section", () => {
     }
   });
 
+  it("leaves a home team that is no longer configured out of the select", async () => {
+    process.env.BAB_TEAM_TAGS = "engineering,expert-services";
+    const { _resetConfigForTests } = await import("../lib/config");
+    try {
+      _resetConfigForTests();
+      const { setHomeTeam } = await import("../lib/area-contacts");
+      setHomeTeam(ALICE, "expert-services", "ui");
+      process.env.BAB_TEAM_TAGS = "engineering";
+      _resetConfigForTests();
+      const html = await render();
+      expect(html).not.toContain('value="expert-services"');
+      expect(setHomeTeam(ALICE, "expert-services", "ui")).toBe("expert-services");
+    } finally {
+      delete process.env.BAB_TEAM_TAGS;
+      _resetConfigForTests();
+    }
+  });
+
   it("says one fixed line after a refusal", async () => {
     expect(await render({ profile: "invalid" })).toContain("That did not work.");
     expect(await render({ profile: "<script>" })).not.toContain("That did not work.");

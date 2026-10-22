@@ -155,9 +155,9 @@ const DEFAULT_TEAM_TAGS = CONFIG_SPEC.find((e) => e.env === "BAB_TEAM_TAGS")!.de
 
 function teamTagsOf(env: Env): string[] {
   const name = "BAB_TEAM_TAGS";
-  const raw = read(env, name);
+  const raw = env[name]; // only undefined means unset: an empty value must fail, not fall back
   const slugs = (raw === undefined ? DEFAULT_TEAM_TAGS : raw).split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
-  if (slugs.length === 0) throw new ConfigError(name + " must hold at least one team slug");
+  if (slugs.length === 0) throw new ConfigError(name + " must hold at least one team slug (unset it to use the default)");
   for (const slug of slugs) {
     if (!TEAM_SLUG_SHAPE.test(slug)) {
       throw new ConfigError(name + ' holds a team that is not lowercase letters, digits and hyphens, got "' + slug + '"');

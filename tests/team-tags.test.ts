@@ -38,10 +38,11 @@ describe("BAB_TEAM_TAGS", () => {
     expect(CONFIG_SPEC.find((e) => e.env === "BAB_TEAM_TAGS")!.default).toBe(DEFAULT.join(","));
   });
 
-  it("treats an empty value as unset", async () => {
+  it("refuses an empty value at startup", async () => {
     process.env.BAB_TEAM_TAGS = "";
-    const { teamTags } = await import("../lib/teams");
-    expect([...teamTags()]).toEqual(DEFAULT);
+    const { config, ConfigError } = await import("../lib/config");
+    expect(() => config()).toThrow(ConfigError);
+    expect(() => config()).toThrow(/BAB_TEAM_TAGS/);
   });
 
   it("reads a custom list, lowercased, trimmed and without duplicates", async () => {
@@ -72,6 +73,18 @@ describe("BAB_TEAM_TAGS", () => {
     expect(setHomeTeam(USER, "Expert-Services", "mcp")).toBe("expert-services");
     expect(() => setHomeTeam(USER, "sales", "mcp")).toThrow(/team must be one of engineering, expert-services/);
     expect(setHomeTeam(USER, "", "mcp")).toBeNull();
+  });
+
+  it("setHomeTeam keeps an unchanged home team whose team left the list", async () => {
+    process.env.BAB_TEAM_TAGS = "engineering,expert-services";
+    await user();
+    const { setHomeTeam } = await import("../lib/area-contacts");
+    setHomeTeam(USER, "expert-services", "mcp");
+    process.env.BAB_TEAM_TAGS = "engineering";
+    const { _resetConfigForTests } = await import("../lib/config");
+    _resetConfigForTests();
+    expect(setHomeTeam(USER, "expert-services", "mcp")).toBe("expert-services");
+    expect(() => setHomeTeam(USER, "marketing", "mcp")).toThrow(/team must be one of engineering/);
   });
 
   it("setHomeTeam refuses expert-services on the default list", async () => {

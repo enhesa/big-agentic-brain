@@ -84,12 +84,14 @@ export function setHomeTeam(userId: string, team: unknown, via: AuditVia): strin
   if (team === undefined) throw new ValidationError("team is required (a team tag, or an empty string to clear it)");
   requireUser(userId);
   const raw = team === null ? "" : String(team).trim().toLowerCase();
-  if (raw && !isTeamTag(raw)) {
+  const current = getUser(userId)?.home_team ?? null;
+  // An unchanged value is always accepted, even when its team has left the configured list.
+  if (raw && raw !== current && !isTeamTag(raw)) {
     throw new ValidationError(`team must be one of ${teamTags().join(", ")}`);
   }
   const next = raw || null;
   const db = getDb();
-  const from = getUser(userId)?.home_team ?? null;
+  const from = current;
   db.prepare("UPDATE users SET home_team = ? WHERE id = ?").run(next, userId);
   audit(db, userId, "home_team_set", "user", userId, via, { details: { from, to: next } });
   return next;

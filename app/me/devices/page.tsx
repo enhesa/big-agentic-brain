@@ -168,7 +168,7 @@ function Profile({ email, error }: { email: string; error: boolean }) {
         <label htmlFor="team">Home team</label>
         <select id="team" name="team" defaultValue={homeTeam}>
           <option value="">None</option>
-          {(homeTeam && !teamTags().includes(homeTeam) ? [homeTeam, ...teamTags()] : teamTags()).map((t) => (
+          {teamTags().map((t) => (
             <option key={t} value={t}>
               {teamLabel(t)}
             </option>
