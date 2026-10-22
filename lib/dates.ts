@@ -45,3 +45,39 @@ export function parseDbTime(value: string): Date {
   const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?$/.exec(value);
   return m ? new Date(`${m[1]}T${m[2]}Z`) : new Date(value);
 }
+
+/** Time zone marker a due date-time must carry: Z or a numeric offset. */
+const DUE_DATETIME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** What a due date-time must look like, for error texts. */
+export const DUE_AT_FORM =
+  "YYYY-MM-DD, or an ISO 8601 date-time with an offset or Z, e.g. 2026-10-21T16:00:00-04:00";
+
+/** A parsed reminder due value: a stored string and whether it carries a time of day. */
+export interface ParsedDueAt {
+  /** "YYYY-MM-DD" (date-only) or "YYYY-MM-DDTHH:MM:SSZ" (an instant in UTC). */
+  dueAt: string;
+  hasTime: boolean;
+}
+
+/** Now as "YYYY-MM-DDTHH:MM:SSZ", the format of a timed due_at (compares lexically). */
+export function nowUtcInstant(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * Parses a reminder's dueAt: a real "YYYY-MM-DD" day, or an ISO 8601 date-time WITH an offset or Z,
+ * stored as a UTC instant. A date-time with no offset is refused, because the server cannot know
+ * whose clock it was written on. Returns null for anything else; the caller names DUE_AT_FORM.
+ */
+export function parseDueAt(value: unknown): ParsedDueAt | null {
+  if (isCalendarDate(value)) return { dueAt: value, hasTime: false };
+  if (typeof value !== "string") return null;
+  const m = DUE_DATETIME_RE.exec(value);
+  if (!m) return null;
+  const [, date, hh, mm, ss] = m;
+  if (!isCalendarDate(date) || Number(hh) > 23 || Number(mm) > 59 || Number(ss ?? 0) > 59) return null;
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return null;
+  return { dueAt: new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"), hasTime: true };
+}

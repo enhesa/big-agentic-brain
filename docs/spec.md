@@ -188,7 +188,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    compaction nudge says so.
 - `learnings_fts` (FTS5 over title, body, tags)
 - `votes(learning_id, voter_id, kind TEXT /* helpful|not_helpful|flag|cited|kudos|confirm */, note, created_at, PK(learning_id, voter_id, kind))`
-- `todos(id, owner_id, title, body, due_at, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
+- `todos(id, owner_id, title, body, due_at, due_has_time INTEGER /* 1: due_at is a UTC instant YYYY-MM-DDTHH:MM:SSZ; 0: a UTC day YYYY-MM-DD */, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
 - `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`
 - `audit_log(id, actor_id, action, entity, entity_id, via TEXT /* ui|mcp */, at)`
 

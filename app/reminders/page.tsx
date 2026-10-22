@@ -1,6 +1,7 @@
 import Shell from "@/app/components/shell/Shell";
 import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
 import ReminderBody from "./ReminderBody";
+import LocalTime from "./LocalTime";
 import { auditRequest } from "@/lib/request-audit";
 import {
   ownerIdFor,
@@ -137,7 +138,7 @@ const CHIP_CLASS: Record<DueState, string> = {
 
 function ReminderCard({ t, group }: { t: TodoRow; group: keyof ReminderGroups }) {
   const state = dueState(group, t.due_at);
-  const chipText = state === "done" ? "Done" : (formatDueDate(t.due_at) ?? "No due date");
+  const chipText = state === "done" ? "Done" : (formatDueDate(t.due_at, undefined, t.due_has_time === 1) ?? "No due date");
   const updated = t.updated_at !== t.created_at;
 
   return (
@@ -147,7 +148,13 @@ function ReminderCard({ t, group }: { t: TodoRow; group: keyof ReminderGroups })
         <span className={`${styles.chip} ${CHIP_CLASS[state]}`} data-state={state}>
           {chipText}
         </span>
-        {t.due_at && state !== "done" ? <time dateTime={toCalendarDate(t.due_at)}>{toCalendarDate(t.due_at)}</time> : null}
+        {t.due_at && state !== "done" ? (
+          t.due_has_time === 1 ? (
+            <LocalTime iso={t.due_at} />
+          ) : (
+            <time dateTime={toCalendarDate(t.due_at)}>{toCalendarDate(t.due_at)}</time>
+          )
+        ) : null}
         <span>Created {formatRelativeTime(t.created_at)}</span>
         {state === "done" ? (
           <span>Completed {formatRelativeTime(t.updated_at)}</span>

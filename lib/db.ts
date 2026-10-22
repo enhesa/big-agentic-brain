@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 47;
+export const CURRENT_VERSION = 48;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -309,6 +309,12 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(47);
     appliedVersion = 47;
   }
+
+  if (appliedVersion < 48) {
+    runMigrationV48(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(48);
+    appliedVersion = 48;
+  }
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */
@@ -316,6 +322,16 @@ export const CLEARED_SESSION_COLUMNS: Record<string, string[]> = {
   sessions: ["title", "cwd", "name", "host", "pid"],
   session_links: ["title", "cwd"],
 };
+
+function runMigrationV48(database: DatabaseSync) {
+  // A time of day on reminders: todos.due_has_time is 1 when due_at is a UTC instant
+  // ("YYYY-MM-DDTHH:MM:SSZ"), 0 for a date-only day. Existing rows stay date-only. The column add is
+  // guarded (ALTER TABLE has no IF NOT EXISTS), so a run that died before the version row can repeat.
+  const cols = database.prepare("PRAGMA table_info(todos)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "due_has_time")) {
+    database.exec("ALTER TABLE todos ADD COLUMN due_has_time INTEGER NOT NULL DEFAULT 0");
+  }
+}
 
 function runMigrationV47(database: DatabaseSync) {
   // Search recall: an author can list other wordings, symptoms and error strings a colleague

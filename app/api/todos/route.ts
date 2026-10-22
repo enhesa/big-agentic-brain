@@ -4,7 +4,7 @@ import { auditRequest } from "@/lib/request-audit";
 import { listMine, create, TODO_TABS, type TodoFilter } from "@/lib/todos";
 import { withIdempotency } from "@/lib/idempotency";
 import { toApiError } from "@/lib/errors";
-import { isCalendarDate } from "@/lib/dates";
+import { parseDueAt, DUE_AT_FORM } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -56,16 +56,17 @@ export async function POST(req: NextRequest) {
 
       const dueAtRaw = record.dueAt;
       if (dueAtRaw == null || dueAtRaw === "") {
-        return { status: 400, body: { error: "dueAt is required and must be a real calendar date, YYYY-MM-DD" } };
+        return { status: 400, body: { error: `dueAt is required and must be ${DUE_AT_FORM}` } };
       }
-      if (!isCalendarDate(dueAtRaw)) {
-        return { status: 400, body: { error: "dueAt must be a real calendar date, YYYY-MM-DD" } };
+      const due = parseDueAt(dueAtRaw);
+      if (!due) {
+        return { status: 400, body: { error: `dueAt must be ${DUE_AT_FORM}` } };
       }
 
       const body = record.body == null ? null : String(record.body);
       const relatedKey = record.relatedKey == null ? null : String(record.relatedKey);
 
-      const todo = create({ ownerId: user.id, title, dueAt: dueAtRaw, body, relatedKey }, "mcp");
+      const todo = create({ ownerId: user.id, title, dueAt: due.dueAt, body, relatedKey }, "mcp");
       return { status: 201, body: { todo } };
     } catch (err) {
       return toApiError(err);

@@ -62,7 +62,7 @@ import {
   TODO_TABS,
   type TodoFilter,
 } from "./todos";
-import { isCalendarDate } from "./dates";
+import { isCalendarDate, parseDueAt, DUE_AT_FORM } from "./dates";
 import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./users";
 import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, normalizeArea, removeAreaContact, setHomeTeam } from "./area-contacts";
 import { resetPromptsSinceLearn } from "./sessions";
@@ -565,7 +565,7 @@ function runRemind(actor: SessionUser, args: Record<string, unknown>): string {
       action === "complete"
         ? completeTodo(id, actor.id, "mcp")
         : action === "snooze"
-          ? snoozeTodo(id, actor.id, "mcp")
+          ? snoozeTodo(id, actor.id, "mcp", args.dueAt)
           : abandonTodo(id, actor.id, "mcp");
     return JSON.stringify({ todo });
   }
@@ -576,16 +576,17 @@ function runRemind(actor: SessionUser, args: Record<string, unknown>): string {
 
   const dueAtRaw = args.dueAt;
   if (dueAtRaw == null || dueAtRaw === "") {
-    throw new ValidationError("dueAt is required and must be a real calendar date, YYYY-MM-DD");
+    throw new ValidationError(`dueAt is required and must be ${DUE_AT_FORM}`);
   }
-  if (!isCalendarDate(dueAtRaw)) {
-    throw new ValidationError("dueAt must be a real calendar date, YYYY-MM-DD");
+  const due = parseDueAt(dueAtRaw);
+  if (!due) {
+    throw new ValidationError(`dueAt must be ${DUE_AT_FORM}`);
   }
 
   const body = args.body == null ? null : str(args.body);
   const relatedKey = args.relatedKey == null ? null : str(args.relatedKey);
 
-  const todo = createTodo({ ownerId: actor.id, title, dueAt: dueAtRaw, body, relatedKey }, "mcp");
+  const todo = createTodo({ ownerId: actor.id, title, dueAt: due.dueAt, body, relatedKey }, "mcp");
   return JSON.stringify({ todo });
 }
 
@@ -950,9 +951,9 @@ export const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["create", "list", "complete", "snooze", "abandon"], description: "Which operation to perform; required, has no default. snooze picks its own new due date (today or the current due date, whichever is later, plus 7 days); there is no argument to set it." },
+        action: { type: "string", enum: ["create", "list", "complete", "snooze", "abandon"], description: "Which operation to perform; required, has no default. snooze moves the due date to dueAt if given, else 7 days past today or the current due date, whichever is later." },
         title: { type: "string", description: "Reminder title, required for action=create, 160 characters or fewer." },
-        dueAt: { type: "string", description: "Calendar date (YYYY-MM-DD) the reminder is due; required for action=create." },
+        dueAt: { type: "string", description: "Due date YYYY-MM-DD, or date-time with offset or Z (2026-10-21T16:00:00-04:00); a time needs an offset. Required for create; optional for snooze." },
         body: { type: "string", description: "Optional reminder detail for action=create, 4000 characters or fewer." },
         relatedKey: { type: "string", description: "Optional free-text key linking this reminder to something else, for action=create." },
         id: { type: "string", description: "The reminder's id; required for action=complete/snooze/abandon." },

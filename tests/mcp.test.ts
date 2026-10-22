@@ -1127,7 +1127,7 @@ it("bab_remind create refuses a dueAt that is not a real calendar date, and acce
   for (const dueAt of ["2026-13-01", "2026-02-30", "2026-02-29"]) {
     const out = await rpc("tools/call", { name: "bab_remind", arguments: { action: "create", title: "Bad date", dueAt } }, ACTOR);
     expect(out.result.isError, dueAt).toBe(true);
-    expect(out.result.content[0].text).toBe("dueAt must be a real calendar date, YYYY-MM-DD");
+    expect(out.result.content[0].text).toBe("dueAt must be YYYY-MM-DD, or an ISO 8601 date-time with an offset or Z, e.g. 2026-10-21T16:00:00-04:00");
   }
   const { listMine } = await import("../lib/todos");
   expect(listMine("alice.example@example.com", "open")).toHaveLength(0);
@@ -1232,7 +1232,7 @@ it("bab_remind create refuses an invalid dueAt", async () => {
     ACTOR,
   );
   expect(out.result.isError).toBe(true);
-  expect(out.result.content[0].text).toBe("dueAt must be a real calendar date, YYYY-MM-DD");
+  expect(out.result.content[0].text).toBe("dueAt must be YYYY-MM-DD, or an ISO 8601 date-time with an offset or Z, e.g. 2026-10-21T16:00:00-04:00");
 });
 
 it("bab_remind refuses an unrecognized action", async () => {

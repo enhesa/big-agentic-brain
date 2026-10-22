@@ -17,7 +17,7 @@ import {
 import { formatAge } from "@/lib/relative-time";
 import { normalizeTokens } from "@/lib/similarity";
 import { deriveProjectFromRepo, GENERAL_PROJECT_KEY } from "@/lib/project-key";
-import { todayUtc } from "@/lib/dates";
+import { todayUtc, nowUtcInstant } from "@/lib/dates";
 import { downvotedLive } from "@/lib/swarm-gc";
 import { getDb } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -562,7 +562,8 @@ function retiredNudgeFor(ownerId: string, sessionId: string, origin: string): st
  * sessions are open; the table exists so a brand-new session_id never re-announces one
  * the owner already saw. due_at is part of the key: snooze() (lib/todos.ts) writes a new
  * due_at on the same row, so a re-snoozed reminder is announced again once ITS new due
- * date arrives rather than staying suppressed forever by the earlier delivery. Counts
+ * date arrives rather than staying suppressed forever by the earlier delivery. A timed reminder
+ * (due_has_time) is due from its instant on, a date-only one from the start of its day. Counts
  * only, no titles: same unauthenticated-route rule as digestFor above.
  */
 function dueReminderNudgeFor(ownerId: string): DueResult {
@@ -570,9 +571,10 @@ function dueReminderNudgeFor(ownerId: string): DueResult {
     .prepare(
       `INSERT OR IGNORE INTO reminder_deliveries (owner_id, todo_id, due_at)
        SELECT ?, id, due_at FROM todos
-       WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL AND substr(due_at, 1, 10) <= ?`,
+       WHERE owner_id = ? AND status = 'open' AND due_at IS NOT NULL
+         AND ((due_has_time = 1 AND due_at <= ?) OR (due_has_time = 0 AND substr(due_at, 1, 10) <= ?))`,
     )
-    .run(ownerId, ownerId, todayUtc());
+    .run(ownerId, ownerId, nowUtcInstant(), todayUtc());
 
   const total = Number(result.changes ?? 0);
   if (total === 0) return { lines: [], due: 0 };

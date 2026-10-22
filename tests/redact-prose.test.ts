@@ -45,3 +45,37 @@ describe("redact: key=value prose and config (feedback f8942f33)", () => {
     expect(redact(`"client_secret": "${TOKEN}"`)).toBe("[redacted]");
   });
 });
+
+describe("redact: documentation placeholders survive (BAB feedback)", () => {
+  it("keeps values in angle brackets", () => {
+    for (const text of ["token=<address>", "Authorization: Bearer <token>", "password: <your-password>", "api-key=<key>", 'secret = "<value>"']) {
+      expect(redact(text), text).toBe(text);
+    }
+  });
+
+  it("keeps the bare words token, secret, password and xxx as a value", () => {
+    for (const text of ["token=xxx", "secret: secret", "password=password", "Authorization: Bearer token", "apikey=XXX", "the db password: xxx"]) {
+      expect(redact(text), text).toBe(text);
+    }
+  });
+
+  it("keeps a maintainer comment that holds placeholders", () => {
+    const text = "Set token=<address> and send Authorization: Bearer <token> with each call.";
+    expect(redact(text)).toBe(text);
+  });
+
+  it("still masks real-looking values next to the same labels", () => {
+    const random = ["abc123", "XYZ789qwe", "RTY456uio"].join("");
+    expect(redact(`Authorization: Bearer ${random}`)).not.toContain(random);
+    expect(redact(`Authorization: Bearer ${random}`)).toContain("[redacted]");
+    const key = ["sk-", "proj1234567890abcdefghij"].join("");
+    expect(redact(`token=${key}`)).toBe("[redacted]");
+    expect(redact(`token=${key}`)).not.toContain(key);
+    expect(redact("password=<tmp>x")).not.toBe("password=<tmp>x");
+    expect(redact("token=tokens123")).not.toContain("tokens123");
+    const blob = ["aB3dE9fG1hJ2kL4mN5pQ6rS7tU8vW0xY", "z1A2b3C4"].join("");
+    expect(blob).toHaveLength(40);
+    expect(redact(`token=<${blob}>`)).not.toContain(blob);
+    expect(redact("token=<abc123>")).not.toContain("abc123");
+  });
+});

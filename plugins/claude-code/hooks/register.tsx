@@ -473,16 +473,20 @@ async function unreadThreads($: EngineInterface): Promise<{ threads: Thread[]; t
   return { threads: threads.slice(0, UNREAD_CAP), total }
 }
 
-type Todo = { id: string; title?: string; body?: string | null; due_at?: string | null; related_key?: string | null }
+type Todo = { id: string; title?: string; body?: string | null; due_at?: string | null; due_has_time?: number; related_key?: string | null }
 
 /** The person's open reminders, oldest due first. */
 async function openReminders($: EngineInterface): Promise<Reminder[]> {
   const todos = (JSON.parse(await call($, 'bab_remind', { action: 'list' })).todos ?? []) as Todo[]
-  const today = new Date(await $.clock.now()).toISOString().slice(0, 10)
+  const nowMs = await $.clock.now()
+  const today = new Date(nowMs).toISOString().slice(0, 10)
   return todos
     .map(t => {
       const raw = (t.due_at ?? '').slice(0, 10)
       const due = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''
+      // A timed reminder is due from its instant on; a date-only one for its whole day.
+      const at = t.due_has_time === 1 ? Date.parse(t.due_at ?? '') : NaN
+      const hasPassed = !Number.isNaN(at) && at <= nowMs
       return {
         id: t.id,
         title: clean(t.title, 120) || '(no title)',
@@ -490,8 +494,8 @@ async function openReminders($: EngineInterface): Promise<Reminder[]> {
         body: cleanLines(t.body, 4000) || null,
         relatedKey: clean(t.related_key, 80) || null,
         due: due ? (due === today ? 'today' : due) : 'no date',
-        isDue: !!due && due <= today,
-        isOverdue: !!due && due < today,
+        isDue: !!due && (Number.isNaN(at) ? due <= today : hasPassed),
+        isOverdue: !!due && (Number.isNaN(at) ? due < today : hasPassed),
         sortKey: due || '9999',
       }
     })

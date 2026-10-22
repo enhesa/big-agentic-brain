@@ -89,6 +89,8 @@ export interface TodoRow {
   title: string;
   body: string | null;
   due_at: string | null;
+  /** 1 when due_at is a UTC instant ("...T..Z"); 0 when it is a date-only day. */
+  due_has_time: number;
   status: TodoStatus;
   related_key: string | null;
   created_at: string;

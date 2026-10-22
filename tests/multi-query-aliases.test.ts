@@ -305,7 +305,7 @@ describe("migration v47", () => {
       getDb().prepare("DELETE FROM migrations WHERE version >= 47").run();
       _resetDbForTests();
       const db = getDb();
-      expect((db.prepare("SELECT MAX(version) AS v FROM migrations").get() as { v: number }).v).toBe(47);
+      expect((db.prepare("SELECT MAX(version) AS v FROM migrations").get() as { v: number }).v).toBeGreaterThanOrEqual(47);
       expect(JSON.parse((db.prepare("SELECT aliases FROM learnings WHERE id = ?").get(m.id) as { aliases: string }).aliases)).toEqual(["zxqv consumer stuck"]);
     }
     const { search: run } = await import("../lib/learnings");

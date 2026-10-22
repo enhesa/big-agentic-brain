@@ -128,7 +128,7 @@ Under the open conversation, **Open chat** starts a fresh Claude session on the 
 **⧉ Copy prompt** copies a take-up prompt for any Claude chat (where the app cannot copy for you,
 the prompt shows under the thread to copy by hand). Answering is your agent's job, so the panel
 has no reply box. Your reminders due today or overdue sit at the top, one line each with the date
-on the right and **✓ Done** and **Snooze a week**; later ones fold into one "N later" line. Click a
+on the right (a timed reminder is due from its time) and **✓ Done** and **Snooze a week**; later ones fold into one "N later" line. Click a
 reminder to read it in full (its whole title, its text and the key it is about) under the row; click
 again or **Close** to fold it.
 
