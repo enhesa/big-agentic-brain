@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1](https://github.com/enhesa/big-agentic-brain/compare/v2.7.0...v2.7.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **plugin:** fewer permission prompts: read-only tool hints, pause polling when refused ([#64](https://github.com/enhesa/big-agentic-brain/issues/64)) ([567a71f](https://github.com/enhesa/big-agentic-brain/commit/567a71f8d3c08f915720c76db57e8415ac4b42b9))
+
 ## [2.7.0](https://github.com/enhesa/big-agentic-brain/compare/v2.6.1...v2.7.0) (2026-10-22)
 
 
