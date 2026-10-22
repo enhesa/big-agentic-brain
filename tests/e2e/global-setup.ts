@@ -82,7 +82,7 @@ export async function bootServer(extraEnv: Record<string, string> = {}): Promise
   const port = await findFreePort();
   const origin = `http://127.0.0.1:${port}`;
 
-  const proc = spawn(process.execPath, ["--require", "./collapse-slashes.cjs", "server.js"], {
+  const proc = spawn(process.execPath, ["server.js"], {
     cwd: STANDALONE_DIR,
     env: {
       ...process.env,
@@ -93,6 +93,8 @@ export async function bootServer(extraEnv: Record<string, string> = {}): Promise
       HOSTNAME: "127.0.0.1",
       DATA_DIR: dir,
       NODE_ENV: "production",
+      // Same as the Dockerfile runtime stage.
+      NODE_OPTIONS: "--require ./collapse-slashes.cjs",
       // e2e hits the real handler chain. The proxy identity headers are trusted so the device tests can
       // act as a signed-in viewer; every other e2e file sends none, and X-Bab-Actor-* still
       // resolves identity for them.

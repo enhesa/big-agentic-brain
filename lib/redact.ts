@@ -62,12 +62,12 @@ const SPLUNK_TOKEN = /\bsplunk[_-]?token\s*[:=]\s*[^\s;,]+/gi;
 const LABELLED = new Set<RegExp>([KEY_VALUE_SECRET, HEADER_STYLE_SECRET, AWS_SECRET_KEY, SPLUNK_TOKEN]);
 
 /**
- * A documentation placeholder, not a credential: a value in angle brackets (`<token>`, `<address>`)
+ * A documentation placeholder, not a credential: a short word-like value in angle brackets (`<token>`, `<address>`, no digits)
  * or the bare word token, secret, password or xxx. Real values never look like this.
  */
 function isPlaceholder(value: string): boolean {
   const v = value.replace(/^["']+|["']+$/g, "");
-  return /^<[^<>\s]*>$/.test(v) || /^(?:token|secret|password|x{3,})$/i.test(v);
+  return /^<[A-Za-z][A-Za-z _-]{0,30}>$/.test(v) || /^(?:token|secret|password|x{3,})$/i.test(v);
 }
 
 /** True when a `label[:=]value` match carries only a placeholder; `after` is the text following the match. */

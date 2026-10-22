@@ -73,5 +73,9 @@ describe("redact: documentation placeholders survive (BAB feedback)", () => {
     expect(redact(`token=${key}`)).not.toContain(key);
     expect(redact("password=<tmp>x")).not.toBe("password=<tmp>x");
     expect(redact("token=tokens123")).not.toContain("tokens123");
+    const blob = ["aB3dE9fG1hJ2kL4mN5pQ6rS7tU8vW0xY", "z1A2b3C4"].join("");
+    expect(blob).toHaveLength(40);
+    expect(redact(`token=<${blob}>`)).not.toContain(blob);
+    expect(redact("token=<abc123>")).not.toContain("abc123");
   });
 });

@@ -50,6 +50,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATA_DIR=/data
+# Collapses repeated slashes (//api/hook) before Next.js sees the request. NODE_OPTIONS, not a CMD flag,
+# so a launcher that spawns server.js as a child still loads it: launchers must keep NODE_OPTIONS.
+ENV NODE_OPTIONS="--require /app/collapse-slashes.cjs"
 VOLUME /data
 EXPOSE 3000
 
@@ -57,4 +60,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 
-CMD ["node", "--require", "./collapse-slashes.cjs", "server.js"]
+CMD ["node", "server.js"]
