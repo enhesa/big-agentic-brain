@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-22",
+    title: "Your own team list",
+    changes: [
+      "An organisation can set its own teams with BAB_TEAM_TAGS, such as Expert Services.",
+    ],
+  },
+  {
     date: "2026-10-21",
     title: "How BAB keeps sensitive data out, better recall",
     changes: [

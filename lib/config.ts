@@ -41,6 +41,8 @@ export interface BabConfig {
   projectKeyPrefixes: string[];
   /** Extra platform labels for applies-to (BAB_EXTRA_APPLIES_TO), lowercase, validated. */
   extraAppliesTo: string[];
+  /** Team slugs (BAB_TEAM_TAGS), lowercase, validated, in the order given. */
+  teamTags: string[];
   branding: {
     orgName: string;
     accentColor: string;
@@ -144,6 +146,24 @@ function extraLabels(env: Env, name: string): string[] {
     }
   }
   return [...new Set(labels)];
+}
+
+/** Lowercase letters and digits, with single hyphens between words. Safe in SQL literals and URLs. */
+const TEAM_SLUG_SHAPE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const DEFAULT_TEAM_TAGS = CONFIG_SPEC.find((e) => e.env === "BAB_TEAM_TAGS")!.default;
+
+function teamTagsOf(env: Env): string[] {
+  const name = "BAB_TEAM_TAGS";
+  const raw = read(env, name);
+  const slugs = (raw === undefined ? DEFAULT_TEAM_TAGS : raw).split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+  if (slugs.length === 0) throw new ConfigError(name + " must hold at least one team slug");
+  for (const slug of slugs) {
+    if (!TEAM_SLUG_SHAPE.test(slug)) {
+      throw new ConfigError(name + ' holds a team that is not lowercase letters, digits and hyphens, got "' + slug + '"');
+    }
+  }
+  return [...new Set(slugs)];
 }
 
 function origin(env: Env, name: string): string | null {
@@ -271,6 +291,7 @@ function parse(env: Env): BabConfig {
     sourceHosts: hosts.length ? hosts : null,
     projectKeyPrefixes: csv(env, "BAB_PROJECT_KEY_PREFIXES"),
     extraAppliesTo: extraLabels(env, "BAB_EXTRA_APPLIES_TO"),
+    teamTags: teamTagsOf(env),
     branding: {
       orgName: str(env, "BAB_ORG_NAME", "BAB"),
       accentColor: accent,

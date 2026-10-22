@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { branding } from "./branding";
 import { platformLabels } from "./applies-to";
+import { teamTags } from "./teams";
 import { identityDomain, identityHint } from "./identity";
 
 const contentDir = path.join(process.cwd(), "content", "instructions");
@@ -11,7 +12,7 @@ const rawInstall = readFileSync(path.join(contentDir, "install.md"), "utf8");
 const rawSkill = readFileSync(path.join(contentDir, "skill.md"), "utf8");
 
 const PLACEHOLDER_RE =
-  /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS)\}\}|<origin>|__BAB_ORIGIN__/g;
+  /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS|TEAM_TAGS)\}\}|<origin>|__BAB_ORIGIN__/g;
 
 /** Replaces every placeholder with the current configuration. `origin` null leaves the origin placeholders in place. */
 export function renderInstructionText(text: string, origin: string | null): string {
@@ -26,6 +27,7 @@ export function renderInstructionText(text: string, origin: string | null): stri
     "{{ALLOWED_SENDERS}}": domain ? `*@${domain}` : "*",
     "{{PLIST_ID}}": `com.${b.orgName.toLowerCase().replace(/[^a-z0-9]/g, "")}.bab-listener`,
     "{{PLATFORM_LABELS}}": platformLabels().join(", "),
+    "{{TEAM_TAGS}}": teamTags().map((t) => `\`${t}\``).join(", "),
   };
   return text.replace(PLACEHOLDER_RE, (m, name?: string) => {
     if (name === "ORIGIN" || m === "<origin>" || m === "__BAB_ORIGIN__") return origin ?? (m.startsWith("{{") ? m : "{{ORIGIN}}");

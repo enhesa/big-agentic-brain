@@ -6,7 +6,7 @@ export interface UserRow {
   created_at: string;
   last_seen_at: string;
   trust: number;
-  /** One of the team tags (lib/usage.ts TEAM_TAGS), or null. */
+  /** One of the team tags (BAB_TEAM_TAGS, see lib/teams.ts), or null. */
   home_team: string | null;
 }
 

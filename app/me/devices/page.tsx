@@ -8,7 +8,7 @@ import { getLinkedUserId, suggestLinkFor } from "@/lib/proxy-links";
 import { listDevices } from "@/lib/devices";
 import { areasOf, AREAS_PER_PERSON_MAX, AREA_MAX, AREA_NOTE_MAX, CONTACTS_PER_AREA_MAX } from "@/lib/area-contacts";
 import { getUser } from "@/lib/users";
-import { TEAM_TAGS } from "@/lib/usage";
+import { teamLabel, teamTags } from "@/lib/teams";
 import { listRecentConnections, CONNECTION_TTL_DAYS } from "@/lib/mcp-connections";
 import { CLAIM_ERRORS } from "@/lib/devices-web";
 import { describeIp } from "@/lib/client-ip";
@@ -168,9 +168,9 @@ function Profile({ email, error }: { email: string; error: boolean }) {
         <label htmlFor="team">Home team</label>
         <select id="team" name="team" defaultValue={homeTeam}>
           <option value="">None</option>
-          {TEAM_TAGS.map((t) => (
+          {(homeTeam && !teamTags().includes(homeTeam) ? [homeTeam, ...teamTags()] : teamTags()).map((t) => (
             <option key={t} value={t}>
-              {t}
+              {teamLabel(t)}
             </option>
           ))}
         </select>

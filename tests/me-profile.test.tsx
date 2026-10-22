@@ -81,6 +81,30 @@ describe("/me/devices profile section", () => {
     expect(html).toContain('name="action" value="remove"');
   });
 
+  it("lists the default teams with readable labels", async () => {
+    const html = await render();
+    expect(html).toMatch(/<option value="engineering">Engineering<\/option>/);
+    expect(html).toMatch(/<option value="hr">HR<\/option>/);
+    expect(html).not.toContain("expert-services");
+  });
+
+  it("shows a configured team as a labelled option and accepts it", async () => {
+    process.env.BAB_TEAM_TAGS = "engineering,expert-services";
+    try {
+      const { _resetConfigForTests } = await import("../lib/config");
+      _resetConfigForTests();
+      const { setHomeTeam } = await import("../lib/area-contacts");
+      setHomeTeam(ALICE, "expert-services", "ui");
+      const html = await render();
+      expect(html).toMatch(/<option value="expert-services" selected[^>]*>Expert services<\/option>/);
+      expect(html).not.toContain('value="marketing"');
+    } finally {
+      delete process.env.BAB_TEAM_TAGS;
+      const { _resetConfigForTests } = await import("../lib/config");
+      _resetConfigForTests();
+    }
+  });
+
   it("says one fixed line after a refusal", async () => {
     expect(await render({ profile: "invalid" })).toContain("That did not work.");
     expect(await render({ profile: "<script>" })).not.toContain("That did not work.");

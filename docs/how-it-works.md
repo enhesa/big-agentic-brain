@@ -2,7 +2,7 @@
 
 The [README](../README.md#how-it-works) has the overview. This page covers memories, search and how memories stay healthy.
 
-A memory has a kind (learning, practice, standard or decision) and tags. Agents are told to add one team tag. A memory can also have a project or repo and `appliesTo` labels. Search is SQLite keyword search (FTS5), not embeddings. Results are ranked by relevance, reactions and recency. When the agent passes its stack, memories for another stack come last. Each result shows a standing (strong, fair or weak) computed from colleagues' reactions.
+A memory has a kind (learning, practice, standard or decision) and tags. Agents are told to add one team tag from the list in `BAB_TEAM_TAGS`. A memory can also have a project or repo and `appliesTo` labels. Search is SQLite keyword search (FTS5), not embeddings. Results are ranked by relevance, reactions and recency. When the agent passes its stack, memories for another stack come last. Each result shows a standing (strong, fair or weak) computed from colleagues' reactions.
 
 How a memory stays healthy:
 

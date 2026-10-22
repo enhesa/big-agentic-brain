@@ -4,7 +4,7 @@ import { ForbiddenError, ValidationError } from "./errors";
 import { isMaintainer } from "./feedback";
 import { redact } from "./redact";
 import { normalizeTokens } from "./similarity";
-import { TEAM_TAGS } from "./usage";
+import { isTeamTag, teamTags } from "./teams";
 import { getUser } from "./users";
 import type { AuditVia } from "./types";
 
@@ -84,8 +84,8 @@ export function setHomeTeam(userId: string, team: unknown, via: AuditVia): strin
   if (team === undefined) throw new ValidationError("team is required (a team tag, or an empty string to clear it)");
   requireUser(userId);
   const raw = team === null ? "" : String(team).trim().toLowerCase();
-  if (raw && !(TEAM_TAGS as readonly string[]).includes(raw)) {
-    throw new ValidationError(`team must be one of ${TEAM_TAGS.join(", ")}`);
+  if (raw && !isTeamTag(raw)) {
+    throw new ValidationError(`team must be one of ${teamTags().join(", ")}`);
   }
   const next = raw || null;
   const db = getDb();

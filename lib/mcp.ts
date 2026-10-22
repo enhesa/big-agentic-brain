@@ -78,6 +78,7 @@ import {
   type CreateFeedbackInput,
 } from "./feedback";
 import { branding } from "./branding";
+import { teamTags } from "./teams";
 import { config, sourceLinkText } from "./config";
 import { ValidationError, NotFoundError, ConflictError } from "./errors";
 import { derivedNameFromEmail } from "./identity";
@@ -830,11 +831,14 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_learn",
-    description:
-      "Records a learning in the shared memory. Call it on autopilot, without asking, when a task ends with a fact a colleague could act on (a gotcha, house rule, deploy step, verified answer), then tell the user the title and link. " +
-      "Never personal preferences, secrets, client names or anything under NDA. kind: learning (default) or practice (a should); decision only after the user's yes on the draft; standard is posted and changed only by BAB maintainers: post a practice and ask one to promote it (bab_people lists them under maintainers; bab_send needs the user's yes). " +
-      "supersedes is autopilot for a learning or practice you checked against the source, also on another author's entry or several ids at once; the body must cite the evidence. Never supersede someone else's standard or decision, unless you are a BAB maintainer: flag it with your evidence. Correcting your own decision needs the user's yes. " +
-      "model: pass your own model id from your system prompt (for example claude-opus-5-5). appliesTo: only when the fact is specific to a stack or platform. tags: one team tag (engineering, product, marketing, sales, content, legal, regulatory, finance, hr, management, operations, it, data) plus topic tags. aliases: 2 to 4 other wordings, symptoms and error strings someone would search for.",
+    get description() {
+      return (
+        "Records a learning in the shared memory. Call it on autopilot, without asking, when a task ends with a fact a colleague could act on (a gotcha, house rule, deploy step, verified answer), then tell the user the title and link. " +
+        "Never personal preferences, secrets, client names or anything under NDA. kind: learning (default) or practice (a should); decision only after the user's yes on the draft; standard is posted and changed only by BAB maintainers: post a practice and ask one to promote it (bab_people lists them under maintainers; bab_send needs the user's yes). " +
+        "supersedes is autopilot for a learning or practice you checked against the source, also on another author's entry or several ids at once; the body must cite the evidence. Never supersede someone else's standard or decision, unless you are a BAB maintainer: flag it with your evidence. Correcting your own decision needs the user's yes. " +
+        "model: pass your own model id from your system prompt (for example claude-opus-5-5). appliesTo: only when the fact is specific to a stack or platform. tags: one team tag (" + teamTags().join(", ") + ") plus topic tags. aliases: 2 to 4 other wordings, symptoms and error strings someone would search for."
+      );
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -933,7 +937,7 @@ export const TOOLS: Tool[] = [
       properties: {
         area: { type: "string", description: "Without action: list the contacts for this knowledge area. With add_contact or remove_contact: the area (a free label, lowercased and hyphenated, 40 characters or fewer)." },
         action: { type: "string", enum: ["set_home_team", "add_contact", "remove_contact"], description: "Change your own profile; omit to read." },
-        team: { type: "string", description: "For set_home_team: your home team (engineering, product, marketing, sales, content, legal, regulatory, finance, hr, management, operations, it, data), or empty to clear." },
+        team: { type: "string", get description() { return "For set_home_team: your home team (" + teamTags().join(", ") + "), or empty to clear."; } },
         note: { type: "string", description: "For add_contact: what to ask you about, 200 characters or fewer." },
         user: { type: "string", description: "For remove_contact, maintainers only: the person (email) to remove from the area." },
       },
