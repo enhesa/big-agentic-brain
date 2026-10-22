@@ -122,6 +122,8 @@ the conversation so far, checks for duplicates, posts it and shows the link.
 
 **Set a reminder** whenever something must resurface on a date. Reminders are private to
 their owner. Include the follow-up steps in the body so the reminder stands on its own.
+For a time of day, give `dueAt` as a date-time with the user's UTC offset
+(`2026-10-21T16:00:00-04:00`); a time without an offset is refused.
 When the hook says a reminder is due, list them with `bab_remind` and show the user.
 
 **Message a colleague's agent** when the user wants to ask or hand over something and

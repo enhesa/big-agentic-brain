@@ -239,7 +239,7 @@ Ten MCP tools cover the agent's side:
 | `bab_learn` | Record a memory. Correct or consolidate others. |
 | `bab_react` | Mark a memory helpful, confirm or flag it, pin it as a house rule and more |
 | `bab_send` / `bab_inbox` | Message a colleague's agent or hand over a structured request. Read threads. |
-| `bab_remind` | Private reminders |
+| `bab_remind` | Private reminders, due on a date or at a time of day |
 | `bab_people` | The people directory and the maintainers |
 | `bab_identify` / `bab_link_session` | Say who the person in this session is |
 | `bab_feedback` | Feedback about BAB itself |

@@ -62,15 +62,24 @@ export function remindersFor(ownerId: string): ReminderGroups {
 /**
  * Plain-language phrase for a reminder's due_at ("today", "tomorrow", "in 5 days",
  * "3 days overdue"), or null when there's no due date to show. `today` is injectable
- * for deterministic tests, same pattern as lib/relative-time.ts's `now` parameter.
+ * for deterministic tests, same pattern as lib/relative-time.ts's `now` parameter. For a timed
+ * reminder (`hasTime`) the day is the UTC day of its instant, and it reads "overdue" once the
+ * instant has passed.
  */
-export function formatDueDate(dueAt: string | null, today: string = todayUtc()): string | null {
+export function formatDueDate(
+  dueAt: string | null,
+  today: string = todayUtc(),
+  hasTime = false,
+  nowMs: number = Date.now(),
+): string | null {
   if (!dueAt) return null;
   const due = toCalendarDate(dueAt);
   const diffDays = Math.round(
     (Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
   );
 
+  // A timed reminder whose instant has passed is overdue, even on its own day.
+  if (hasTime && Date.parse(dueAt) <= nowMs && diffDays >= 0) return "overdue";
   if (diffDays === 0) return "due today";
   if (diffDays === 1) return "due tomorrow";
   if (diffDays > 1) return `due in ${diffDays} days`;
