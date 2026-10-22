@@ -5,14 +5,15 @@ import { toolsFor } from "../lib/mcp";
  * Hosts such as the Claude desktop app prompt for every tool call unless the tool says it is
  * read-only. Pin the hints so a new tool cannot ship without them, and a writer cannot pass as a read.
  * bab_inbox counts as read-only although opening a thread marks it read: that is what the caller asked for.
- * bab_people counts as read-only for listing; its profile actions are own-profile settings that need the user's yes.
+ * bab_people is not read-only: a maintainer can remove another user's contact through it.
  */
-const READ_ONLY = ["bab_search", "bab_people", "bab_inbox"];
+const READ_ONLY = ["bab_search", "bab_inbox"];
 const WRITERS_DESTRUCTIVE: Record<string, boolean> = {
   bab_learn: true,
   bab_react: true,
   bab_send: false,
   bab_remind: false,
+  bab_people: false,
   bab_identify: false,
   bab_link_session: false,
   bab_feedback: false,

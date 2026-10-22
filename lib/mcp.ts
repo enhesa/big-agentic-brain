@@ -166,8 +166,7 @@ export function toolsFor(toolset: McpToolset): Tool[] {
  * MCP tool annotations: hints a host uses to decide whether to prompt (readOnlyHint true is usually allowed
  * without a prompt). A writer states destructiveHint either way, because the MCP default for an omitted one is
  * true. bab_inbox is read-only although opening a thread marks it read: that is the caller's intent. bab_people
- * is read-only for listing; its profile actions only change your own profile, and the tool text asks for the
- * user's yes.
+ * is not read-only: a maintainer can remove another user's contact through it.
  */
 export interface ToolAnnotations {
   title: string;
@@ -961,7 +960,7 @@ export const TOOLS: Tool[] = [
   {
     name: "bab_people",
     title: "List people",
-    annotations: { title: "List people", readOnlyHint: true, openWorldHint: false },
+    annotations: { title: "List people", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description: "Lists the people directory with learning counts, each person's homeTeam and the areas they are a contact for; `self` is your own id. `maintainers` ([{ id, name }]) are the people who post standards and decide about a flagged standard or decision: ask one to promote a practice with bab_send, with the user's yes. area=toxicology lists the named contacts for that area (use them when BAB has no answer). Your own profile, only with the user's yes: action=set_home_team (team, one of the team tags; empty clears it), add_contact (area, optional note on what to ask you; up to 3 contacts per area, 10 areas per person) or remove_contact (area; a maintainer may also pass user).",
     inputSchema: {
       type: "object",

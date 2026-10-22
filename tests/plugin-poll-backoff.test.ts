@@ -33,7 +33,7 @@ describe("refusal detection", () => {
   ])("does not mistake %j for a refusal", (text) => expect(looksLikeRefusal(text)).toBe(false));
 
   it("says in plain text how to resume", () => {
-    expect(PAUSED_TEXT).toContain("allow bab_inbox");
+    expect(PAUSED_TEXT).toContain("allow its tools");
     expect(PAUSED_TEXT).toContain("/bab-check");
     expect(PAUSED_TEXT).not.toContain("—");
   });

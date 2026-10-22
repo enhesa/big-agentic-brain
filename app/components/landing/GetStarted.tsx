@@ -42,9 +42,10 @@ export default function GetStarted() {
           </Reveal>
         </div>
         <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
-        <p className={styles.cliSub}>Fewer prompts: add <code>mcp__plugin_bab_bab</code> to <code>permissions.allow</code> in <code>~/.claude/settings.json</code>.</p>
-        <p className={styles.cliSub}>In the Claude desktop app, set BAB&apos;s tools to Always allow.</p>
-        <p className={styles.cliSub}>Search, people and inbox only read. Messages, decisions and deletes still ask first.</p>
+        <p className={styles.cliSub}>Fewer prompts: allow <code>bab_search</code>, <code>bab_inbox</code>, <code>bab_remind</code> and <code>bab_people</code>.</p>
+        <p className={styles.cliSub}>In Claude Code, add them as <code>mcp__plugin_bab_bab__&lt;tool&gt;</code> to <code>permissions.allow</code> in <code>~/.claude/settings.json</code>.</p>
+        <p className={styles.cliSub}>In the Claude desktop app, allow the same four.</p>
+        <p className={styles.cliSub}>They read, or only change your own inbox, reminders and profile. Sending, saving and reacting still ask.</p>
       </div>
     </section>
   );

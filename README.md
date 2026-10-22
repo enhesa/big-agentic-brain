@@ -211,7 +211,7 @@ Optional. Everything above works from any MCP client. The plugin adds hooks, ski
 
 Then set **BAB server URL** in the plugin's settings, without a trailing slash. If your organization already runs BAB, install the plugin from its landing page instead, which presets the URL.
 
-Fewer prompts: in Claude Code, add `"mcp__plugin_bab_bab"` to `permissions.allow` in `~/.claude/settings.json` (or use `/permissions`); in the Claude desktop app, set BAB's tools to "Always allow" where it lists them. Search, people and inbox only read. Messages, decisions and deletes still ask first.
+Fewer prompts: in Claude Code, add `mcp__plugin_bab_bab__bab_search`, `mcp__plugin_bab_bab__bab_inbox`, `mcp__plugin_bab_bab__bab_remind` and `mcp__plugin_bab_bab__bab_people` to `permissions.allow` in `~/.claude/settings.json` (or use `/permissions`). In the Claude desktop app, allow those four tools. They read, or only change your own inbox, reminders and profile; sending, saving and reacting still ask.
 
 <p align="center">
   <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel with a reminder and unread threads">

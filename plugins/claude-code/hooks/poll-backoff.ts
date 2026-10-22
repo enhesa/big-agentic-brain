@@ -22,7 +22,7 @@ export function looksLikeRefusal(text: string): boolean {
 }
 
 /** What the panel says while polling is paused. */
-export const PAUSED_TEXT = 'Inbox paused: allow bab_inbox to see new messages, then run /bab-check.'
+export const PAUSED_TEXT = 'BAB paused: allow its tools to see new messages and reminders. /bab-check resumes.'
 
 /** The configured server URL ends with "/": hosts such as Forge's proxy answer a `//` path with 400. */
 export function hasTrailingSlash(url: unknown): boolean {
