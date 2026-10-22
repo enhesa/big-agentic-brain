@@ -22,6 +22,17 @@ some apps it remembers only the connection, so Claude tells it again after a res
 
 If BAB keeps failing, restart Claude and report the problem at `<bab_url>/feedback`.
 
+## The inbox panel and permission prompts
+
+The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 15 seconds. Other open sessions share the result, so one computer asks BAB once per tick.
+
+- BAB marks the read tools (`bab_search`, `bab_inbox`) as read-only in its MCP tool list. Hosts such as the Claude desktop app can then allow them without asking each time. `bab_inbox` counts as read-only even though opening a thread marks it read.
+- If the host refuses a `bab_inbox`, `bab_remind` or `bab_people` call, the panel stops polling and says "BAB paused: allow its tools to see new messages and reminders". Run `/bab-check` (or press the refresh button) to resume it.
+- If BAB cannot be reached, the wait between polls doubles from 30 seconds up to 5 minutes. The first good answer resets it.
+- To allow the polled tools for good in Claude Code, add `mcp__plugin_bab_bab__bab_search`, `mcp__plugin_bab_bab__bab_inbox`, `mcp__plugin_bab_bab__bab_remind` and `mcp__plugin_bab_bab__bab_people` to `permissions.allow` in `~/.claude/settings.json`, or use `/permissions`. Do not allow the whole server: that would also stop the host asking before writes. In the Claude desktop app, allow the same four tools (not verified here: the prompt we saw offered only Deny and Allow once).
+- Those four read, or only change your own inbox, reminders and profile. Sending, saving and reacting still ask.
+- Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
+
 ## What the hooks do
 
 The plugin registers hooks that post to `<bab_url>/api/hook`:

@@ -41,7 +41,11 @@ export default function GetStarted() {
             <CopyPrompt text={installCommands.install} />
           </Reveal>
         </div>
-        <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address.</p>
+        <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
+        <p className={styles.cliSub}>Fewer prompts: allow <code>bab_search</code>, <code>bab_inbox</code>, <code>bab_remind</code> and <code>bab_people</code>.</p>
+        <p className={styles.cliSub}>In Claude Code, add them as <code>mcp__plugin_bab_bab__&lt;tool&gt;</code> to <code>permissions.allow</code> in <code>~/.claude/settings.json</code>.</p>
+        <p className={styles.cliSub}>In the Claude desktop app, allow the same four.</p>
+        <p className={styles.cliSub}>They read, or only change your own inbox, reminders and profile. Sending, saving and reacting still ask.</p>
       </div>
     </section>
   );

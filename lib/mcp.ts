@@ -162,8 +162,23 @@ export function toolsFor(toolset: McpToolset): Tool[] {
   return toolset === "lean" ? TOOLS.filter((t) => LEAN_TOOL_NAMES.includes(t.name)) : TOOLS;
 }
 
+/**
+ * MCP tool annotations: hints a host uses to decide whether to prompt (readOnlyHint true is usually allowed
+ * without a prompt). A writer states destructiveHint either way, because the MCP default for an omitted one is
+ * true. bab_inbox is read-only although opening a thread marks it read: that is the caller's intent. bab_people
+ * is not read-only: a maintainer can remove another user's contact through it.
+ */
+export interface ToolAnnotations {
+  title: string;
+  readOnlyHint: boolean;
+  destructiveHint?: boolean;
+  openWorldHint: boolean;
+}
+
 export interface Tool {
   name: string;
+  title: string;
+  annotations: ToolAnnotations;
   description: string;
   inputSchema: Record<string, unknown>;
   run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string;
@@ -741,6 +756,8 @@ function runFeedback(actor: SessionUser, args: Record<string, unknown>, ctx?: To
 export const TOOLS: Tool[] = [
   {
     name: "bab_link_session",
+    title: "Link this session",
+    annotations: { title: "Link this session", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description: "Links this Claude session to you with the one-time token from the hook's not-linked notice, so the hook can show your unread count, reminders and nudges here.",
     inputSchema: {
       type: "object",
@@ -753,6 +770,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_identify",
+    title: "Identify yourself",
+    annotations: { title: "Identify yourself", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     get description() {
       const hint = identityHint();
       return (
@@ -782,6 +801,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_search",
+    title: "Search BAB",
+    annotations: { title: "Search BAB", readOnlyHint: true, openWorldHint: false },
     description:
       "Searches the shared memory and returns ranked matches. Pass the literal error or wording as query plus queries: one or two rephrasings (synonyms, or system plus symptom), in one call. Pass stack (your repo's stack) so another stack's memory is not read as company-wide. " +
       "Results carry standing (strong, fair or weak, from colleagues' reactions), confidence (the author's own, self-declared), appliesTo, ageDays (mention it when citing an old memory), expiresInDays (only set on a time-bound fact with its own valid-until date), own: true on yours (no votes), and lastRetire (kind retire or restore, voterName, note, at): read why before you restore or retire it again. " +
@@ -832,6 +853,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_learn",
+    title: "Save a learning",
+    annotations: { title: "Save a learning", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     get description() {
       return (
         "Records a learning in the shared memory. Call it on autopilot, without asking, when a task ends with a fact a colleague could act on (a gotcha, house rule, deploy step, verified answer), then tell the user the title and link. " +
@@ -884,6 +907,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_inbox",
+    title: "Read your inbox",
+    annotations: { title: "Read your inbox", readOnlyHint: true, openWorldHint: false },
     description:
       "Lists the caller's message threads with unread counts, newest activity first, returning only threads with unread messages by default. Pass threadId to read one whole thread, which also marks it read. The listing response carries `total` and `nextOffset` (null once there's no more); pass that back as `offset` to page through the rest.",
     inputSchema: {
@@ -899,6 +924,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_send",
+    title: "Send a message",
+    annotations: { title: "Send a message", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
       "Sends a message to a colleague's BAB inbox (your own works too, as a note to yourself), or replies into an existing thread. " +
       "Use it whenever the user asks you to send, tell, ask, forward, hand over or request something (a review, a fix, a question) to a colleague or to \"<name>'s agent\" or \"<name>'s Claude\". " +
@@ -932,6 +959,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_people",
+    title: "List people",
+    annotations: { title: "List people", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description: "Lists the people directory with learning counts, each person's homeTeam and the areas they are a contact for; `self` is your own id. `maintainers` ([{ id, name }]) are the people who post standards and decide about a flagged standard or decision: ask one to promote a practice with bab_send, with the user's yes. area=toxicology lists the named contacts for that area (use them when BAB has no answer). Your own profile, only with the user's yes: action=set_home_team (team, one of the team tags; empty clears it), add_contact (area, optional note on what to ask you; up to 3 contacts per area, 10 areas per person) or remove_contact (area; a maintainer may also pass user).",
     inputSchema: {
       type: "object",
@@ -947,6 +976,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_remind",
+    title: "Reminders",
+    annotations: { title: "Reminders", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description: "Creates, lists, completes, snoozes, or abandons the caller's own reminders.",
     inputSchema: {
       type: "object",
@@ -965,6 +996,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_react",
+    title: "React to a memory",
+    annotations: { title: "React to a memory", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     description:
       "Reacts to a learning. On someone else's entry: helpful or not_helpful (a vote), kudos (the user praised it; why in note), flag (wrong or stale; the evidence goes in note, and no yes is needed; for someone else's standard or decision it is how you correct it, and a maintainer decides: bab_people lists them), confirm (you checked the claim against code or docs in this task; where and when in note). You cannot vote on or confirm your own entry. " +
       "helpful, confirm, kudos and keep count as a read: an unread learning or practice is archived after a year. not_helpful and flag do not count. " +
@@ -990,6 +1023,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "bab_feedback",
+    title: "BAB feedback",
+    annotations: { title: "BAB feedback", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
       "Files, lists and votes on feedback about BAB itself (bugs, ideas, improvements, questions) so it can fix and improve itself. " +
       "Autopilot: post a bug when a BAB tool fails unexpectedly, a hook message is wrong or two BAB instructions contradict; vote or comment instead when a matching item exists (search with list first). " +

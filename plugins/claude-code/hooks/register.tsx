@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
+import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, looksLikeRefusal } from './poll-backoff'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
 // BAB's watcher: everything goes through
@@ -135,6 +136,8 @@ const threadsAtom = atom({ plugin: 'bab', key: 'threads' } as const, null as Thr
 const openAtom = atom({ plugin: 'bab', key: 'open' } as const, null as OpenThread | null)
 const noticeAtom = atom({ plugin: 'bab', key: 'notice' } as const, null as string | null)
 // Why BAB's MCP server is not connected in this session, in words a person can act on; null while it is.
+// True while polling is paused because the host refused a BAB tool. The text shown derives from it first, so a later good call cannot clear it.
+const pausedAtom = atom({ plugin: 'bab', key: 'paused' } as const, false)
 const connectProblemAtom = atom({ plugin: 'bab', key: 'connectProblem' } as const, null as string | null)
 const rowNoteAtom = atom({ plugin: 'bab', key: 'rowNote' } as const, null as RowNote | null)
 const reminderNoteAtom = atom({ plugin: 'bab', key: 'reminderNote' } as const, null as ReminderNote | null)
@@ -189,6 +192,22 @@ let names: Record<string, string> = {}
 let peopleAt = 0
 let whoTriedAt = 0
 let busy = false
+// Poll back-off. After a refusal (the host denied bab_inbox) the 15 s poll stops until /bab-check or ↻;
+// after any other failure the ticks wait 30 s, 60 s ... up to 5 minutes, and one success resets it.
+let isPaused = false
+let failures = 0
+let retryAt = 0
+
+/** The host (not BAB) declined a tool call: a person or a policy said no. */
+class RefusedError extends Error {}
+
+/** Stops the 15 s poll until /bab-check or ↻, and says so in the panel. */
+async function pause($: EngineInterface): Promise<void> {
+  isPaused = true
+  await update($, pausedAtom, () => true)
+  await update($, view, v => ({ ...v, isDown: true }))
+  $.ui.status('✉ paused')
+}
 let isLoadingThreads = false
 let loadAgain = false
 
@@ -337,8 +356,13 @@ function within<T>($: EngineInterface, work: Promise<T>, ms: number, what: strin
 
 /** A BAB tool's text answer; throws on a transport or tool error, or after CALL_TIMEOUT_MS, so an error is never "zero". */
 async function call($: EngineInterface, tool: string, args: Record<string, unknown>): Promise<string> {
-  const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool)
-  const text = result.isError ? null : result.content?.find(c => c.type === 'text')?.text
+  const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool).catch(err => {
+    // A host may reject a denied call instead of returning an error result.
+    throw looksLikeRefusal(String(err)) ? new RefusedError(`${tool} was refused`) : err
+  })
+  const first = result.content?.find(c => c.type === 'text')?.text
+  if (result.isError && first != null && looksLikeRefusal(first)) throw new RefusedError(`${tool} was refused`)
+  const text = result.isError ? null : first
   if (text == null) throw new Error(`${tool} failed`)
   if ((await read($, connectProblemAtom)) !== null) await update($, connectProblemAtom, () => null)
   return text
@@ -361,6 +385,7 @@ async function linkSession($: EngineInterface): Promise<void> {
       try {
         learnOrigin((JSON.parse(await call($, 'bab_people', {})) as { origin?: unknown }).origin)
       } catch (err) {
+        if (err instanceof RefusedError) throw err
         $.ui.log(`session link skipped, BAB origin unknown: ${why(err)}`, { to: 'debug' })
         return
       }
@@ -383,6 +408,8 @@ async function linkSession($: EngineInterface): Promise<void> {
     await call($, 'bab_link_session', { token: json.linkToken })
     $.ui.log('session linked to BAB', { to: 'debug' })
   } catch (err) {
+    // A refusal pauses polling like any other: otherwise the next tick asks again.
+    if (err instanceof RefusedError) return void (await pause($))
     // Not the user's problem: the model's own link notice is the fallback.
     $.ui.log(`session link failed: ${why(err)}`, { to: 'debug' })
   }
@@ -426,7 +453,8 @@ async function people($: EngineInterface): Promise<void> {
     self = mine ?? self
     peopleAt = now
     await $.store.set('people', { self: self ?? null, names, at: now, ...(origin ? { origin } : {}) } satisfies People)
-  } catch {
+  } catch (err) {
+    if (err instanceof RefusedError) throw err
     // Unknown is fine: names then fall back to the address, and nothing is labelled "You".
   }
 }
@@ -567,7 +595,10 @@ async function poll($: EngineInterface): Promise<Snapshot | null> {
   const theirs = threads.filter(t => !isMyReply(t))
   const ordered = [...theirs, ...threads.filter(isMyReply)]
   // A reminders failure must not hide the mail: the reminders then stay as they were.
-  const rows = await readReminders($, false).catch(() => null)
+  const rows = await readReminders($, false).catch(err => {
+    if (err instanceof RefusedError) throw err
+    return null
+  })
   const due = (rows ?? []).filter(r => r.isDue)
   return {
     unread: threads.reduce((n, t) => n + (t.unreadCount ?? 0), 0),
@@ -661,9 +692,18 @@ type Shared = { owner: string; until: number; at: number; snap: Snapshot | null 
 /** One tick: poll BAB if this session holds (or can take) the lease, else reuse the shared result. */
 async function check($: EngineInterface, force = false): Promise<string> {
   if (busy && !force) return 'BAB: a check is already running'
+  if (force) {
+    isPaused = false
+    await update($, pausedAtom, () => false)
+    failures = 0
+    retryAt = 0
+  } else if (isPaused) {
+    return 'BAB: inbox paused, /bab-check resumes it'
+  }
   busy = true
   try {
     const now = await $.clock.now()
+    if (!force && now < retryAt) return 'BAB: waiting to retry'
     const sessionId = await $.session.id()
     // Lease and result in one key, so they can never disagree.
     const shared = (await $.store.get('inbox')) as Shared | undefined
@@ -676,13 +716,22 @@ async function check($: EngineInterface, force = false): Promise<string> {
     // poll() throws on a failure, so a failing holder stops renewing and loses the lease.
     const snap = await poll($).catch(async (err: unknown) => {
       await update($, view, v => ({ ...v, isDown: true }))
+      if (err instanceof RefusedError) {
+        await pause($)
+      } else {
+        failures += 1
+        retryAt = now + backoffMs(failures)
+      }
       throw err
     })
+    failures = 0
+    retryAt = 0
     await $.store.set('inbox', { owner: sessionId, until: now + LEASE_MS, at: now, snap } satisfies Shared)
     return await apply($, snap, now)
   } catch (err) {
     // The reason goes to the debug log; this text is read by the model, so it carries no error text.
     $.ui.log(`inbox check failed: ${why(err)}`, { to: 'debug' })
+    if (err instanceof RefusedError) return 'BAB: inbox paused, allow bab_inbox then run /bab-check'
     return 'BAB: inbox check failed'
   } finally {
     busy = false
@@ -744,7 +793,7 @@ async function fetchThreads($: EngineInterface): Promise<void> {
     await update($, unreadCountAtom, () => ({ threads: unread.total, hidden: Math.max(0, unread.total - unread.threads.length) }))
     await update($, noticeAtom, () => null)
   } catch (err) {
-    const problem = await read($, connectProblemAtom)
+    const problem = (await read($, pausedAtom)) ? PAUSED_TEXT : await read($, connectProblemAtom)
     await update($, noticeAtom, () => problem ?? `Could not load the inbox (${why(err)})`)
   }
 }
@@ -838,7 +887,7 @@ async function showPane($: EngineInterface): Promise<void> {
   void loadThreads($)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   // A failed command is the moment an agent is stuck. The MCP instructions and the skill already
   // say "search BAB before you debug", and happy-path evals
   // showed a Sonnet agent still fixes from the code alone. So the reminder rides the
@@ -869,6 +918,7 @@ export const register: Register = on => {
     await update($, hiddenAt, () => -1)
     await $.command.register({ name: 'bab', description: 'Open the BAB Inbox panel' })
     await $.command.register({ name: 'bab-check', description: 'Check the BAB inbox now' })
+    if (hasTrailingSlash(options?.bab_url)) $.ui.toast(SLASH_WARNING, { timeoutMs: 15000 })
     $.clock.every(PERIOD_MS, () => void check($))
     void linkSession($)
     void check($)
@@ -930,7 +980,7 @@ export const register: Register = on => {
     const cols = e.props.bodyColumns > 0 ? Math.max(24, e.props.bodyColumns) : 80
     const v = await read($, view)
     const notice = await read($, noticeAtom)
-    const connectProblem = await read($, connectProblemAtom)
+    const connectProblem = (await read($, pausedAtom)) ? PAUSED_TEXT : await read($, connectProblemAtom)
     const rowNote = await read($, rowNoteAtom)
     const copy = await read($, copyTextAtom)
     const reminders = await read($, remindersAtom)
