@@ -22,8 +22,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   return withIdempotency(req, user.id, async () => {
     try {
-      const payload = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-      const todo = snooze(id, user.id, "mcp", payload?.dueAt);
+      // No body means the default snooze. A body that is not a JSON object is a client error, never a silent default.
+      const text = await req.text();
+      let dueAt: unknown;
+      if (text.trim() !== "") {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          return { status: 400, body: { error: "Body must be a JSON object" } };
+        }
+        if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+          return { status: 400, body: { error: "Body must be a JSON object" } };
+        }
+        dueAt = (payload as Record<string, unknown>).dueAt;
+      }
+      const todo = snooze(id, user.id, "mcp", dueAt);
       return { status: 200, body: { todo } };
     } catch (err) {
       return toApiError(err);

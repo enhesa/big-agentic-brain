@@ -268,8 +268,46 @@ describe("the hook's due-reminder notice", () => {
   });
 });
 
+describe("POST /api/todos/:id/snooze body", () => {
+  async function snoozeWith(body: string | undefined) {
+    vi.doMock("next/headers", () => ({
+      headers: async () => new Headers({ "x-bab-actor-email": OWNER, "x-bab-actor-name": "Alice" }),
+    }));
+    const todo = await addTodo("2030-01-01");
+    const { POST } = await import("../app/api/todos/[id]/snooze/route");
+    const res = await POST(
+      new Request(`http://x/api/todos/${todo.id}/snooze`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      }) as never,
+      { params: Promise.resolve({ id: todo.id }) },
+    );
+    vi.doUnmock("next/headers");
+    const { getById } = await import("../lib/todos");
+    return { res, after: getById(todo.id)! };
+  }
+
+  it("400s on a body that is not valid JSON and leaves the reminder alone", async () => {
+    const { res, after } = await snoozeWith("{not json");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Body must be a JSON object" });
+    expect(after.due_at).toBe("2030-01-01");
+  });
+
+  it("400s on JSON that is not an object", async () => {
+    expect((await snoozeWith("[1]")).res.status).toBe(400);
+  });
+
+  it("an empty body is the default snooze", async () => {
+    const empty = await snoozeWith(undefined);
+    expect(empty.res.status).toBe(200);
+    expect(empty.after.due_at).not.toBe("2030-01-01");
+  });
+});
+
 describe("migration v48", () => {
-  it("adds due_has_time with every existing row date-only, and can run twice", async () => {
+  it("re-running v48 on a database that already has the column keeps existing rows date-only", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     await seedUser();
     getDb()

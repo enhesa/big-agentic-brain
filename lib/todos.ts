@@ -143,7 +143,8 @@ export function complete(id: string, actorId: string, via: AuditVia = "ui"): Tod
 /**
  * Pushes a reminder back. With `dueAt` (a day, or a date-time with an offset) it moves to exactly that.
  * Without, a date-only one moves 7 days from the later of today and its day; a timed one moves 7 days
- * from the later of now and its instant, keeping its time of day. Either way the due value changes, so
+ * from the later of now and its instant. That is exactly 7x24 hours, so the UTC instant is kept and the
+ * local wall time shifts by an hour if a daylight-saving change falls in between. Either way the due value changes, so
  * the hook announces it again when the new time comes.
  */
 export function snooze(id: string, actorId: string, via: AuditVia = "ui", dueAt?: unknown): TodoRow {
