@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0](https://github.com/enhesa/big-agentic-brain/compare/v2.6.1...v2.7.0) (2026-10-22)
+
+
+### Features
+
+* **reminders:** a time of day on reminders ([#62](https://github.com/enhesa/big-agentic-brain/issues/62)) ([2946979](https://github.com/enhesa/big-agentic-brain/commit/2946979435f93fa3fe3329a9a5a05dfe5c98b684))
+
+
+### Bug Fixes
+
+* **hooks:** accept a trailing slash in bab_url; keep doc placeholders unmasked ([#59](https://github.com/enhesa/big-agentic-brain/issues/59)) ([d2db97c](https://github.com/enhesa/big-agentic-brain/commit/d2db97ca824f2f94e1b312f51ae089289416dd8e))
+
 ## [2.6.1](https://github.com/enhesa/big-agentic-brain/compare/v2.6.0...v2.6.1) (2026-10-21)
 
 
