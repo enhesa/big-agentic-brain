@@ -150,6 +150,21 @@ describe("claimTypedIdentity (P1.0)", () => {
     expect(getLinkedUserId(PROXY)).toBeNull();
   });
 
+  it("accepts an SSO alias built from the first two or three letters of the first name", async () => {
+    const { claimTypedIdentity } = await import("../lib/proxy-links");
+    expect(claimTypedIdentity(PROXY, "almartin@example.com", "Alice Martin", "alice.martin@example.com").email).toBe(
+      "alice.martin@example.com",
+    );
+  });
+
+  it("still refuses a first-name prefix longer than three letters or not from the first name", async () => {
+    const { claimTypedIdentity, getLinkedUserId } = await import("../lib/proxy-links");
+    for (const sso of ["alicmartin@example.com", "lmartin@example.com", "aimartin@example.com"]) {
+      expect(() => claimTypedIdentity(PROXY, sso, "Alice Martin", "alice.martin@example.com")).toThrow(/admin\/links/);
+    }
+    expect(getLinkedUserId(PROXY)).toBeNull();
+  });
+
   it("middle names: the guessed alias must be the SSO alias", async () => {
     const { claimTypedIdentity, getLinkedUserId } = await import("../lib/proxy-links");
     expect(() => claimTypedIdentity(PROXY, "jpsmith@example.com", "John Paul Smith", "john.paul.smith@example.com")).toThrow(
@@ -214,5 +229,24 @@ describe("claimTypedIdentity (P1.0)", () => {
     expect(getLinkedUserId(PROXY)).toBeNull();
     claimTypedIdentity(PROXY, "aexample@example.com", "Alice Example", "alice.example@example.com");
     expect(getLinkedUserId(PROXY)).toBe("alice.example@example.com");
+  });
+});
+
+describe("claimErrorCode", () => {
+  it("tells an SSO address refusal apart from a name refusal", async () => {
+    const { claimTypedIdentity } = await import("../lib/proxy-links");
+    const { claimErrorCode } = await import("../lib/devices-web");
+    const codeOf = (fn: () => unknown) => {
+      try {
+        fn();
+      } catch (err) {
+        return claimErrorCode(err);
+      }
+      return "none";
+    };
+    expect(codeOf(() => claimTypedIdentity("proxy-oid-code", "lmartin@example.com", "Alice Martin", "alice.martin@example.com"))).toBe("sso");
+    expect(codeOf(() => claimTypedIdentity("proxy-oid-code", "amartin@example.com", "Bob Martin", "alice.martin@example.com"))).toBe(
+      "mismatch",
+    );
   });
 });
