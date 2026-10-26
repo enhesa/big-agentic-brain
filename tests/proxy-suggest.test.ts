@@ -32,6 +32,19 @@ describe("suggestLinkFor", () => {
     });
   });
 
+  it("matches an alias built from two or three letters of the first name", async () => {
+    await seedUsers("alice.martin@example.com", "albert.martin@example.com");
+    const { suggestLinkFor } = await import("../lib/proxy-links");
+    expect(suggestLinkFor("oid-1", "almartin@example.com", "Alice Martin")?.email).toBe("alice.martin@example.com");
+    expect(suggestLinkFor("oid-1", "albmartin@example.com", "Albert Martin")?.email).toBe("albert.martin@example.com");
+  });
+
+  it("suggests nobody when two users share the name behind a prefix alias", async () => {
+    await seedUsers("alice.martin@example.com", "alice.mar.tin@example.com");
+    const { suggestLinkFor } = await import("../lib/proxy-links");
+    expect(suggestLinkFor("oid-1", "almartin@example.com", "Alice Martin")).toBeNull();
+  });
+
   it("is case-insensitive on the alias and trims it", async () => {
     await seedUsers("alice.example@example.com");
     const { suggestLinkFor } = await import("../lib/proxy-links");

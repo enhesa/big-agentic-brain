@@ -20,9 +20,7 @@ export const CLAIM_ERRORS: Record<string, string> = {
     return `Type your long address, ${identityHint()}.`;
   },
   mismatch: "That address does not fit the name your sign-in shows. Ask a maintainer for help (they use /admin/links).",
-  get sso() {
-    return `Your sign-in does not show an address that fits this one (${identityHint()}). Ask a maintainer for help (they use /admin/links).`;
-  },
+  sso: "The address your sign-in shows does not fit this one. Ask a maintainer for help (they use /admin/links).",
   taken: "That address, or this browser, is already linked. Unlink it first, or ask a maintainer for help (they use /admin/links).",
 };
 
