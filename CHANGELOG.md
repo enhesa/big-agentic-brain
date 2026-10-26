@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.2](https://github.com/enhesa/big-agentic-brain/compare/v2.7.1...v2.7.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **identity:** accept SSO aliases with a two- or three-letter first-name prefix ([#67](https://github.com/enhesa/big-agentic-brain/issues/67)) ([0a1209c](https://github.com/enhesa/big-agentic-brain/commit/0a1209c50a793b122bcbe19fab8465b0bd3995f3))
+
 ## [2.7.1](https://github.com/enhesa/big-agentic-brain/compare/v2.7.0...v2.7.1) (2026-10-22)
 
 
