@@ -1014,8 +1014,18 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
   `POST /admin/links/unlink {email}` or `{proxyUserId}` (own Origin, JSON) deletes the link and
   audits `unlink-browser` with the target. It is on an SSO viewer path, not `/api`, so the caller is
   the real signed-in maintainer.
-- Both routes are SSO viewer paths outside `/api`; the claim needs the app's own `Origin` and a
-  JSON body (403 / 415 otherwise).
+- **Linking for someone**: a refused typed claim is audited `link-refused` (entity id the proxy
+  user id) with the reason, sign-in email and name, and the typed address. `/admin/links` lists
+  each sign-in user whose latest refusal is still unlinked (newest first, up to 100, gone after
+  the audit retention, and left out once the browser was unlinked after it) with the typed address
+  and a Link form. The form is prefilled only when the name fit and the sign-in alias did not
+  (`typed-sso-email`). `POST /admin/links/link
+  {proxyUserId, email}` (maintainers, own Origin, JSON) skips the name and alias checks but keeps
+  first come wins (409 when the browser or the address is linked), needs a refusal on record for
+  that proxy id (404 otherwise), and audits `link-browser-admin` (actor the maintainer, details
+  the email plus the sign-in email and name from the refusal). An existing users row keeps its roles.
+- The claim and the admin link and unlink routes are SSO viewer paths outside `/api` and need the
+  app's own `Origin` (403 otherwise); the admin routes also need a JSON body (415 otherwise).
 
 ## Hand off to Claude
 

@@ -129,6 +129,48 @@ describe("claimTypedIdentity (P1.0)", () => {
     expect(getUser("alice.example@example.com")).toBeUndefined();
   });
 
+  it("audits each refusal with the sign-in email and name and the typed address, for /admin/links", async () => {
+    const { claimTypedIdentity, listRefusedSignIns } = await import("../lib/proxy-links");
+    expect(() => claimTypedIdentity(PROXY, " JPSmith@Example.com", "John Paul Smith", "john.paul.smith@example.com")).toThrow();
+    const { getDb } = await import("../lib/db");
+    const row = getDb()
+      .prepare("SELECT entity_id, details FROM audit_log WHERE action = 'link-refused'")
+      .get() as { entity_id: string; details: string };
+    expect(row.entity_id).toBe(PROXY);
+    expect(JSON.parse(row.details)).toEqual({
+      reason: "typed-sso-email",
+      proxyEmail: "jpsmith@example.com",
+      proxyName: "John Paul Smith",
+      typed: "john.paul.smith@example.com",
+    });
+    expect(listRefusedSignIns()).toEqual([
+      {
+        proxyUserId: PROXY,
+        refusedAt: expect.any(String),
+        reason: "typed-sso-email",
+        proxyEmail: "jpsmith@example.com",
+        proxyName: "John Paul Smith",
+        typed: "john.paul.smith@example.com",
+      },
+    ]);
+  });
+
+  it("lists only the latest refusal per sign-in user, drops linked ones, and tolerates old rows", async () => {
+    const { claimTypedIdentity, listRefusedSignIns } = await import("../lib/proxy-links");
+    const { getDb } = await import("../lib/db");
+    const { audit } = await import("../lib/audit");
+    audit(getDb(), "proxy-old", "link-refused", "proxy_link", "proxy-old", "ui", { details: { reason: "typed-mismatch" } });
+    expect(() => claimTypedIdentity(PROXY, "mcurie@example.com", "Marie Curie", "alice.example@example.com")).toThrow();
+    expect(() => claimTypedIdentity(PROXY, "mcurie@example.com", "Marie Curie", "marie.other@example.com")).toThrow();
+    expect(() => claimTypedIdentity("proxy-later-ok", "aexample@example.com", "Bad Name", "alice.example@example.com")).toThrow();
+    claimTypedIdentity("proxy-later-ok", "aexample@example.com", "Alice Example", "alice.example@example.com");
+
+    const rows = listRefusedSignIns();
+    expect(rows.map((r) => r.proxyUserId)).toEqual([PROXY, "proxy-old"]);
+    expect(rows[0].typed).toBe("marie.other@example.com");
+    expect(rows[1]).toMatchObject({ reason: "typed-mismatch", proxyEmail: null, proxyName: null, typed: null });
+  });
+
   it("refuses when SSO sent no name at all", async () => {
     const { claimTypedIdentity } = await import("../lib/proxy-links");
     expect(() => claimTypedIdentity(PROXY, "aexample@example.com", null, "alice.example@example.com")).toThrow(/does not fit/);

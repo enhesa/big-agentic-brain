@@ -20,8 +20,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-26",
-    title: "Browser sign-in fix",
-    changes: ["Colleagues whose sign-in uses two or three letters of their first name can now link their browser."],
+    title: "Browser sign-in fix, maintainers can link a refused browser",
+    changes: [
+      "Colleagues whose sign-in uses two or three letters of their first name can now link their browser.",
+      "Maintainers see refused sign-ins on /admin/links and can link each browser to its long address.",
+    ],
   },
   {
     date: "2026-10-22",
