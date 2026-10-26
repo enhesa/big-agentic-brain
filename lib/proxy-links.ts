@@ -3,7 +3,7 @@ import { audit } from "./audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "./errors";
 import { assertMaintainer } from "./feedback";
 import { derivedNameFromEmail, proxyNameMatchesEmail, identityDomain, identityHint, isValidIdentityEmail } from "./identity";
-import { upsertUser } from "./users";
+import { getUser, upsertUser } from "./users";
 import { revokeDevicesBoundVia, revokeDevicesForUser } from "./devices";
 import { deleteConnectionsForUser } from "./mcp-connections";
 
@@ -192,22 +192,28 @@ export function claimTypedIdentity(
     throw new ConflictError("This browser is already linked to someone. Unlink it first.");
   }
 
+  // Every refusal keeps the sign-in email and name and the typed address, so a maintainer can
+  // see who it was and link the browser from /admin/links (listRefusedSignIns, linkBrowserAsMaintainer).
+  const signIn = { proxyEmail: proxyEmail?.trim().toLowerCase() ?? null, proxyName, typed };
+
   if (!proxyNameMatchesEmail(proxyName, typed)) {
-    audit(db, proxyUserId, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "typed-mismatch" } });
+    audit(db, proxyUserId, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "typed-mismatch", ...signIn } });
     throw new ForbiddenError(
       "That address does not fit the name your sign-in shows. Ask a maintainer for help (they use /admin/links).",
     );
   }
 
   if (!ssoEmailFitsTyped(proxyEmail, typed)) {
-    audit(db, proxyUserId, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "typed-sso-email" } });
+    audit(db, proxyUserId, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "typed-sso-email", ...signIn } });
     throw new ForbiddenError(
       `Your sign-in does not show an @${identityDomain()} address that fits this one. Ask a maintainer for help (they use /admin/links).`,
     );
   }
 
   if (db.prepare("SELECT 1 FROM proxy_links WHERE user_id = ?").get(typed)) {
-    audit(db, typed, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "email-linked-elsewhere" } });
+    audit(db, typed, "link-refused", "proxy_link", proxyUserId, "ui", {
+      details: { reason: "email-linked-elsewhere", ...signIn },
+    });
     throw new ConflictError(
       "That address is already linked to another browser. Ask a maintainer for help (they use /admin/links).",
     );
@@ -228,7 +234,7 @@ export interface LinkRow {
   proxyUserId: string;
   userId: string;
   linkedAt: string;
-  /** From the claim audit row; null when the link has no claim row (the audit log is purged after BAB_AUDIT_RETENTION_DAYS). */
+  /** From the claim (or maintainer link) audit row; null when the link has no such row (the audit log is purged after BAB_AUDIT_RETENTION_DAYS). */
   proxyEmail: string | null;
   proxyName: string | null;
 }
@@ -239,7 +245,7 @@ export function listLinks(): LinkRow[] {
     .prepare(
       `SELECT l.proxy_user_id AS proxyUserId, l.user_id AS userId, l.linked_at AS linkedAt,
          (SELECT a.details FROM audit_log a
-            WHERE a.action = 'link-browser-claim' AND a.entity_id = l.proxy_user_id
+            WHERE a.action IN ('link-browser-claim', 'link-browser-admin') AND a.entity_id = l.proxy_user_id
             ORDER BY a.id DESC LIMIT 1) AS details
        FROM proxy_links l ORDER BY l.linked_at DESC, l.rowid DESC`,
     )
@@ -260,6 +266,105 @@ export function listLinks(): LinkRow[] {
       proxyName: d.proxyName ?? d.forgeName ?? null,
     };
   });
+}
+
+export interface RefusedSignIn {
+  proxyUserId: string;
+  /** When the latest refusal happened (audit_log.at, UTC). */
+  refusedAt: string;
+  reason: string | null;
+  /** From the refusal audit row; null on rows written before these were stored. */
+  proxyEmail: string | null;
+  proxyName: string | null;
+  /** The address the person typed and was refused. */
+  typed: string | null;
+}
+
+/** The latest typed-claim refusal for a proxy user id, or null. */
+function latestRefusal(proxyUserId: string): RefusedSignIn | null {
+  return listRefusedSignIns(proxyUserId)[0] ?? null;
+}
+
+/**
+ * Sign-in users whose typed claim was refused and whose browser is still not linked, newest
+ * first, one row each (their latest refusal). A refusal from before the browser's last unlink is
+ * old evidence and is left out. Read from the audit log, so a refusal older
+ * than BAB_AUDIT_RETENTION_DAYS is gone; the person tries again and shows up here again.
+ * Callers check maintainership.
+ */
+export function listRefusedSignIns(onlyProxyUserId?: string): RefusedSignIn[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT a.entity_id AS proxyUserId, a.at AS refusedAt, a.details AS details
+       FROM audit_log a
+       WHERE a.id IN (SELECT MAX(id) FROM audit_log WHERE action = 'link-refused' GROUP BY entity_id)
+         AND (? IS NULL OR a.entity_id = ?)
+         AND NOT EXISTS (SELECT 1 FROM proxy_links l WHERE l.proxy_user_id = a.entity_id)
+         AND NOT EXISTS (SELECT 1 FROM audit_log u
+                         WHERE u.action IN ('unlink-browser', 'unlink-browser-self')
+                           AND u.entity_id = a.entity_id AND u.id > a.id)
+       ORDER BY a.id DESC LIMIT 100`,
+    )
+    .all(onlyProxyUserId ?? null, onlyProxyUserId ?? null) as { proxyUserId: string; refusedAt: string; details: string | null }[];
+  return rows.map((r) => {
+    let d: { reason?: unknown; proxyEmail?: unknown; proxyName?: unknown; typed?: unknown } = {};
+    try {
+      d = r.details ? JSON.parse(r.details) : {};
+    } catch {
+      d = {};
+    }
+    const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+    return {
+      proxyUserId: r.proxyUserId,
+      refusedAt: r.refusedAt,
+      reason: str(d.reason),
+      proxyEmail: str(d.proxyEmail),
+      proxyName: str(d.proxyName),
+      typed: str(d.typed),
+    };
+  });
+}
+
+/**
+ * A maintainer links a refused sign-in user's browser to a long-form address (maintainers only;
+ * 403 while BAB_MAINTAINERS is unset). This is the help the refusal messages point to: it skips
+ * the name and alias checks, which is the point, but keeps first come wins. Only a proxy user
+ * id with a refusal on record can be linked, so a typo cannot link a browser nobody owns, and
+ * the sign-in email and name in the audit row come from that refusal, never from the form.
+ */
+export function linkBrowserAsMaintainer(
+  maintainerId: string,
+  proxyUserIdRaw: string,
+  emailRaw: string,
+): { email: string } {
+  assertMaintainer(maintainerId, "link a browser");
+  const proxyUserId = typeof proxyUserIdRaw === "string" ? proxyUserIdRaw.trim() : "";
+  const email = typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
+  if (!proxyUserId) throw new ValidationError("proxyUserId is required");
+  if (!isValidIdentityEmail(email)) throw new ValidationError(`Type the long address, ${identityHint()}`);
+  const db = getDb();
+
+  const existing = getLinkedUserId(proxyUserId);
+  if (existing) {
+    if (existing === email) return { email };
+    throw new ConflictError("This browser is already linked to someone. Unlink it first.");
+  }
+  const refusal = latestRefusal(proxyUserId);
+  if (!refusal) throw new NotFoundError("No refused sign-in for that user id");
+  if (db.prepare("SELECT 1 FROM proxy_links WHERE user_id = ?").get(email)) {
+    throw new ConflictError("That address is already linked to another browser. Unlink it first.");
+  }
+
+  // Only a brand-new person gets a users row here; an upsert would reset an existing row's roles.
+  if (!getUser(email)) upsertUser({ id: email, email, name: null, roles: [] }, "ui");
+  db.prepare("INSERT INTO proxy_links (proxy_user_id, user_id, linked_at) VALUES (?, ?, datetime('now'))").run(
+    proxyUserId,
+    email,
+  );
+  audit(db, maintainerId, "link-browser-admin", "proxy_link", proxyUserId, "ui", {
+    details: { email, proxyEmail: refusal.proxyEmail, proxyName: refusal.proxyName },
+  });
+  return { email };
 }
 
 /**

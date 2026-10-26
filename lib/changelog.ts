@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-26",
+    title: "Maintainers can link a refused browser",
+    changes: ["Maintainers see refused sign-ins on /admin/links and can link each browser to its long address."],
+  },
+  {
     date: "2026-10-22",
     title: "Reminders get a time of day, your own team list, fixes",
     changes: [

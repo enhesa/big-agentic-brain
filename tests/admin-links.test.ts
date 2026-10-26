@@ -131,6 +131,127 @@ describe("POST /admin/links/unlink", () => {
   });
 });
 
+const REFUSED = "oid-refused";
+
+/** A colleague with a middle name whose typed claim was refused (guessed alias differs). */
+async function seedRefusal() {
+  const { upsertUser } = await import("../lib/users");
+  upsertUser({ id: MAINT, email: MAINT, name: "Mia Maint", roles: [] });
+  const { claimTypedIdentity } = await import("../lib/proxy-links");
+  expect(() =>
+    claimTypedIdentity(REFUSED, "jpsmith@example.com", "John Paul Smith", "john.paul.smith@example.com"),
+  ).toThrow(/admin\/links/);
+}
+
+function link(body: unknown, headers: Record<string, string> = {}) {
+  return new Request("http://localhost/admin/links/link", {
+    method: "POST",
+    headers: { "content-type": "application/json", host: "localhost", origin: "http://localhost", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /admin/links/link", () => {
+  it("links a refused sign-in user to an address and audits it with the sign-in email and name", async () => {
+    await seedRefusal();
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    const res = await POST(link({ proxyUserId: REFUSED, email: " John.Paul.Smith@Example.com " }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, email: "john.paul.smith@example.com" });
+
+    const { getLinkedUserId, listRefusedSignIns, listLinks } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(REFUSED)).toBe("john.paul.smith@example.com");
+    expect(listRefusedSignIns()).toEqual([]);
+    expect(listLinks()[0]).toMatchObject({ proxyUserId: REFUSED, proxyEmail: "jpsmith@example.com", proxyName: "John Paul Smith" });
+
+    const { getDb } = await import("../lib/db");
+    const row = getDb()
+      .prepare("SELECT actor_id, entity, entity_id, via, details FROM audit_log WHERE action = 'link-browser-admin'")
+      .get() as { actor_id: string; entity: string; entity_id: string; via: string; details: string };
+    expect({ ...row, details: JSON.parse(row.details) }).toEqual({
+      actor_id: MAINT,
+      entity: "proxy_link",
+      entity_id: REFUSED,
+      via: "ui",
+      details: { email: "john.paul.smith@example.com", proxyEmail: "jpsmith@example.com", proxyName: "John Paul Smith" },
+    });
+  });
+
+  it("is idempotent for the same address and 409s for another one", async () => {
+    await seedRefusal();
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(200);
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(200);
+    expect((await POST(link({ proxyUserId: REFUSED, email: "jane.other@example.com" }))).status).toBe(409);
+  });
+
+  it("keeps first come wins: 409 when the address is linked to another browser", async () => {
+    await seedRefusal();
+    await seedLink();
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: REFUSED, email: TARGET }))).status).toBe(409);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(REFUSED)).toBeNull();
+    expect(getLinkedUserId("oid-wrong")).toBe(TARGET);
+  });
+
+  it("404s for a user id with no refusal on record, 400s on a bad address or no id", async () => {
+    await seedRefusal();
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: "oid-unknown", email: "john.paul.smith@example.com" }))).status).toBe(404);
+    expect((await POST(link({ proxyUserId: REFUSED, email: "jsmith@example.com" }))).status).toBe(400);
+    expect((await POST(link({ email: "john.paul.smith@example.com" }))).status).toBe(400);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(REFUSED)).toBeNull();
+  });
+
+  it("403s for a non-maintainer and while BAB_MAINTAINERS is unset, linking nothing", async () => {
+    await seedRefusal();
+    asViewer("alice.example@example.com");
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(403);
+    delete process.env.BAB_MAINTAINERS;
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(403);
+    const { getLinkedUserId } = await import("../lib/proxy-links");
+    expect(getLinkedUserId(REFUSED)).toBeNull();
+  });
+
+  it("keeps the roles of an existing users row", async () => {
+    await seedRefusal();
+    const { upsertUser, getUser } = await import("../lib/users");
+    upsertUser({ id: "john.paul.smith@example.com", email: "john.paul.smith@example.com", name: "John", roles: ["lead"] });
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(200);
+    expect(getUser("john.paul.smith@example.com")?.roles).toBe("lead");
+  });
+
+  it("drops a refusal from before an unlink: not listed, and no longer enough to link", async () => {
+    await seedRefusal();
+    asViewer(MAINT);
+    const { POST } = await import("../app/admin/links/link/route");
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(200);
+    const { unlinkBrowser, listRefusedSignIns } = await import("../lib/proxy-links");
+    unlinkBrowser(MAINT, { proxyUserId: REFUSED });
+    expect(listRefusedSignIns()).toEqual([]);
+    expect((await POST(link({ proxyUserId: REFUSED, email: "john.paul.smith@example.com" }))).status).toBe(404);
+  });
+
+  it("401s for agent headers, 403s cross-origin, 415s for text/plain", async () => {
+    await seedRefusal();
+    mockHeaders({ "x-bab-actor-email": MAINT, "x-bab-actor-name": "Mia Maint" });
+    const { POST } = await import("../app/admin/links/link/route");
+    const body = { proxyUserId: REFUSED, email: "john.paul.smith@example.com" };
+    expect((await POST(link(body))).status).toBe(401);
+    expect((await POST(link(body, { origin: "https://evil.example.com" }))).status).toBe(403);
+    expect((await POST(link(body, { "content-type": "text/plain" }))).status).toBe(415);
+  });
+});
+
 describe("/admin/links page", () => {
   async function render() {
     const { renderToReadableStream } = await import("react-dom/server.edge");
@@ -147,6 +268,29 @@ describe("/admin/links page", () => {
     expect(html).toContain("aexample@example.com");
     expect(html).toContain("Alice Example");
     expect(html).toContain("Unlink");
+  });
+
+  it("lists refused sign-ins with the sign-in email, name, reason and a prefilled Link form", async () => {
+    await seedRefusal();
+    asViewer(MAINT);
+    const html = await render();
+    expect(html).toContain("Refused sign-ins");
+    expect(html).toContain(REFUSED);
+    expect(html).toContain("jpsmith@example.com");
+    expect(html).toContain("John Paul Smith");
+    expect(html).toContain("Sign-in email does not fit");
+    expect(html).toContain('value="john.paul.smith@example.com"');
+  });
+
+  it("shows but does not prefill the address when the sign-in name did not fit it", async () => {
+    const { claimTypedIdentity } = await import("../lib/proxy-links");
+    expect(() => claimTypedIdentity("oid-other", "bother@example.com", "Bob Other", "alice.example@example.com")).toThrow();
+    asViewer(MAINT);
+    const html = await render();
+    expect(html).toContain("oid-other");
+    expect(html).toContain("alice.example@example.com");
+    expect(html).toContain("Name does not fit the address");
+    expect(html).not.toContain('value="alice.example@example.com"');
   });
 
   it("is a 404 for a non-maintainer", async () => {

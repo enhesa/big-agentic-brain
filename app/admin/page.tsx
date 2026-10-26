@@ -19,7 +19,7 @@ export default async function AdminIndexPage() {
           <Link href="/usage">Usage</Link>: weekly capture, identify and flag numbers.
         </li>
         <li>
-          <Link href="/admin/links">Browser links</Link>: unlink a wrong browser link, revoke a device.
+          <Link href="/admin/links">Browser links</Link>: link a refused sign-in, unlink a wrong browser link, revoke a device.
         </li>
       </ul>
     </Shell>

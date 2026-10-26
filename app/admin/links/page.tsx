@@ -3,19 +3,31 @@ import Shell from "@/app/components/shell/Shell";
 import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { isMaintainer } from "@/lib/feedback";
-import { listLinks } from "@/lib/proxy-links";
+import { listLinks, listRefusedSignIns } from "@/lib/proxy-links";
 import { listAllDevices } from "@/lib/devices";
 import { describeIp } from "@/lib/client-ip";
 import { formatDate } from "@/lib/me-web";
 import { formatRelativeTime } from "@/lib/relative-time";
 import UnlinkButton from "./UnlinkButton";
 import RevokeDeviceButton from "./RevokeDeviceButton";
+import LinkForm from "./LinkForm";
 
 /**
- * Maintainer-only list of browser links with an Unlink button each, to undo a wrong link, and
- * of the devices that identified themselves with a Revoke (forget) button each (lost laptop, leaver).
+ * The refusal codes claimTypedIdentity audits, in plain words. Only "typed-sso-email" (the name
+ * fits, the alias does not, as with a middle name) prefills the Link form; a name that does not
+ * fit the typed address may be someone claiming a colleague, so the maintainer types it.
+ */
+const REFUSAL_REASONS: Record<string, string> = {
+  "typed-mismatch": "Name does not fit the address",
+  "typed-sso-email": "Sign-in email does not fit",
+  "email-linked-elsewhere": "Address linked to another browser",
+};
+
+/**
+ * Maintainer-only list of browser links with an Unlink button each, to undo a wrong link, of
+ * sign-in users whose typed claim was refused with a form to link each one, and of the devices that identified themselves with a Revoke (forget) button each (lost laptop, leaver).
  * A 404 for everyone else (including while BAB_MAINTAINERS is unset) so the page does not
- * advertise itself. The real check for the write is in POST /admin/links/unlink.
+ * advertise itself. The real checks for the writes are in the POST routes.
  */
 export default async function AdminLinksPage() {
   const viewer = await getViewer();
@@ -23,6 +35,7 @@ export default async function AdminLinksPage() {
   if (!viewer || !isMaintainer(viewer.ownerId)) notFound();
 
   const links = listLinks();
+  const refused = listRefusedSignIns();
   const devices = listAllDevices();
   return (
     <Shell>
@@ -54,6 +67,44 @@ export default async function AdminLinksPage() {
                 <td>{l.linkedAt}</td>
                 <td>
                   <UnlinkButton proxyUserId={l.proxyUserId} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2>Refused sign-ins</h2>
+      <p>
+        These people typed an address on their devices page and were refused. Check who they are, then link their
+        browser. An address or browser that is already linked must be unlinked first.
+      </p>
+      {refused.length === 0 ? (
+        <p className="card">No refused sign-ins.</p>
+      ) : (
+        <table className="card">
+          <thead>
+            <tr>
+              <th>Sign-in email</th>
+              <th>Sign-in name</th>
+              <th>Sign-in user id</th>
+              <th>Typed address</th>
+              <th>Why refused</th>
+              <th>Refused</th>
+              <th>Link to</th>
+            </tr>
+          </thead>
+          <tbody>
+            {refused.map((r) => (
+              <tr key={r.proxyUserId}>
+                <td>{r.proxyEmail ?? "-"}</td>
+                <td>{r.proxyName ?? "-"}</td>
+                <td>{r.proxyUserId}</td>
+                <td>{r.typed ?? "-"}</td>
+                <td>{REFUSAL_REASONS[r.reason ?? ""] ?? r.reason ?? "-"}</td>
+                <td>{formatRelativeTime(r.refusedAt)}</td>
+                <td>
+                  <LinkForm proxyUserId={r.proxyUserId} typed={r.reason === "typed-sso-email" ? r.typed : null} />
                 </td>
               </tr>
             ))}
