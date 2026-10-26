@@ -3,7 +3,7 @@ import { auditRequest } from "./request-audit";
 import { notifyJson } from "./notify-auth";
 import { currentUser } from "./user";
 import { trustProxyHeaders } from "./session";
-import { claimTypedIdentity } from "./proxy-links";
+import { claimTypedIdentity, SsoAddressMismatchError } from "./proxy-links";
 import { ConflictError, ForbiddenError, toApiError } from "./errors";
 import { forbiddenResponse, redirectTo, sameOrigin } from "./feedback-web";
 import { readFields, wantsJson } from "./me-web";
@@ -20,10 +20,12 @@ export const CLAIM_ERRORS: Record<string, string> = {
     return `Type your long address, ${identityHint()}.`;
   },
   mismatch: "That address does not fit the name your sign-in shows. Ask a maintainer for help (they use /admin/links).",
+  sso: "The address your sign-in shows does not fit this one. Ask a maintainer for help (they use /admin/links).",
   taken: "That address, or this browser, is already linked. Unlink it first, or ask a maintainer for help (they use /admin/links).",
 };
 
-export function claimErrorCode(err: unknown): "mismatch" | "taken" | "invalid" {
+export function claimErrorCode(err: unknown): "sso" | "mismatch" | "taken" | "invalid" {
+  if (err instanceof SsoAddressMismatchError) return "sso";
   return err instanceof ForbiddenError ? "mismatch" : err instanceof ConflictError ? "taken" : "invalid";
 }
 

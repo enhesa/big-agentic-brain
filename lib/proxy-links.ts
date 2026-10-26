@@ -48,13 +48,17 @@ export function getLinkedUserId(proxyUserId: string): string | null {
   return row?.user_id ?? null;
 }
 
+/** A typed claim whose SSO address is not the typed person's alias (as opposed to a name mismatch). */
+export class SsoAddressMismatchError extends ForbiddenError {}
+
 export interface LinkSuggestion {
   email: string;
   name: string;
 }
 
 /**
- * The alias the proxy sends is first initial + last name ("aexample"). The long form may
+ * The alias the proxy sends is first initial + last name ("aexample"), or, when that one was
+ * taken, the first two or three letters of the first name ("alexample"). The long form may
  * carry a multi-part last name ("bob.van.der.example") or a hyphenated one, so each
  * candidate alias is built from the letters only and the last name is tried both as the
  * last segment and as everything after the first dot joined together.
@@ -67,8 +71,9 @@ function aliasesOf(longEmail: string): string[] {
     .map((s) => s.replace(/[^a-z]/g, ""))
     .filter(Boolean);
   if (segments.length < 2) return [];
-  const initial = segments[0][0];
-  return [...new Set([initial + segments[segments.length - 1], initial + segments.slice(1).join("")])];
+  const lasts = [segments[segments.length - 1], segments.slice(1).join("")];
+  const prefixes = [1, 2, 3].filter((n) => n <= segments[0].length).map((n) => segments[0].slice(0, n));
+  return [...new Set(prefixes.flatMap((p) => lasts.map((l) => p + l)))];
 }
 
 interface Candidate extends LinkSuggestion {
@@ -201,7 +206,7 @@ export function claimTypedIdentity(
 
   if (!ssoEmailFitsTyped(proxyEmail, typed)) {
     audit(db, proxyUserId, "link-refused", "proxy_link", proxyUserId, "ui", { details: { reason: "typed-sso-email" } });
-    throw new ForbiddenError(
+    throw new SsoAddressMismatchError(
       `Your sign-in does not show an @${identityDomain()} address that fits this one. Ask a maintainer for help (they use /admin/links).`,
     );
   }
