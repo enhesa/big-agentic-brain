@@ -13,6 +13,7 @@ import {
   MONTH_DAYS,
   WINDOW_DAYS,
   QUIET_DAYS,
+  HELPED_WINDOW_MINUTES,
   NUDGE_FOLLOW_MINUTES,
   STANDING_SAMPLE_MAX,
   USAGE_COLLECTING_SINCE,
@@ -83,6 +84,7 @@ function HeroTile({
   spark,
   testId,
   title,
+  note,
 }: {
   label: string;
   value: number;
@@ -92,6 +94,8 @@ function HeroTile({
   spark: { values: number[]; label: string };
   testId: string;
   title: string;
+  /** One short line under the tile that puts the number in context. */
+  note?: { text: string; title: string; testId: string };
 }) {
   return (
     <div className={styles.hero} title={title}>
@@ -103,6 +107,11 @@ function HeroTile({
         <Sparkline values={spark.values} label={spark.label} />
       </div>
       <Grew n={grew} what={what} title={`${title} Grew by ${formatCount(grew)} this week so far.`} />
+      {note && (
+        <span className={styles.heroNote} title={note.title} data-testid={note.testId}>
+          {note.text}
+        </span>
+      )}
     </div>
   );
 }
@@ -365,6 +374,11 @@ export default async function UsagePage({
             spark={sparkOf("saves", "Memories saved")}
             testId="tile-saved"
             title="New memories saved over the last 12 months, added up."
+            note={{
+              text: `${formatCount(report.savedStillLive)} still in BAB`,
+              title: "Of the memories saved in these 12 months, this many are still live. The rest were merged into other memories, replaced by a corrected one, retired, archived or deleted.",
+              testId: "tile-saved-note",
+            }}
           />
           <HeroTile
             label="Searches"
@@ -381,6 +395,11 @@ export default async function UsagePage({
             spark={sparkOf("reactions", "Helpful reactions")}
             testId="tile-helpful"
             title="Helpful, kudos and confirm reactions on memories over the last 12 months, added up."
+            note={{
+              text: `${totals.searches > 0 ? Math.round((100 * totals.helpedSearches) / totals.searches) : 0}% of searches helped`,
+              title: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)} searches were followed within ${HELPED_WINDOW_MINUTES} minutes by the same person marking a memory helpful (or giving kudos). A sign, not proof: agents do not always react, and the memory need not come from that search.`,
+              testId: "tile-helped-note",
+            }}
           />
           <HeroTile
             label="People using BAB"

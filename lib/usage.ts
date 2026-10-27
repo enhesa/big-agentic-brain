@@ -53,6 +53,10 @@ const SEARCH_TOOL_PATH = "/mcp#tools/call:bab_search";
 const SEARCH_API_PATH = "/api/learnings";
 /** Reactions that say a memory helped: helpful, kudos and confirm (not not_helpful or flag). */
 const HELPFUL_ACTIONS = "('helpful', 'kudos', 'confirm')";
+/** Reactions that say a memory helped the agent that used it (a confirm only says it is still true). */
+const USED_ACTIONS = "('helpful', 'kudos')";
+/** A search "helped" when the same person marks a memory helpful within this many minutes after it. */
+export const HELPED_WINDOW_MINUTES = 30;
 /** Audit actor ids that are not a person. */
 const NOT_PEOPLE = "('anonymous', 'system')";
 const LIVE = "('active')";
@@ -168,6 +172,12 @@ export interface ActivityCounts {
   searches: number;
   /** helpful, kudos and confirm reactions. */
   reactions: number;
+  /**
+   * Searches followed, within HELPED_WINDOW_MINUTES, by a helpful or kudos reaction from the same
+   * person. Each reaction credits only the last search before it, so rephrasing the same question
+   * does not count twice. A lower bound: agents do not always react.
+   */
+  helpedSearches: number;
   /** Distinct people (audit actors, not anonymous or system) who used any BAB tool or page. */
   people: number;
 }
@@ -254,6 +264,8 @@ export interface UsageReport {
   /** The hero tiles: saves, searches and reactions summed over the window; people are distinct, not a sum of weekly counts. */
   totals: ActivityCounts;
   growth: Growth;
+  /** Memories saved in the window (by created_at) that are still live: the saved tile's "still in BAB". */
+  savedStillLive: number;
   contents: Contents;
   topHelpful: HelpfulItem[];
   topProjects: Array<{ project: string; n: number }>;
@@ -289,7 +301,7 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
   const slot = (week: string) => {
     let c = out.get(week);
     if (!c) {
-      c = { saves: 0, searches: 0, reactions: 0, people: 0, newPeople: 0 };
+      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 };
       out.set(week, c);
     }
     return c;
@@ -313,6 +325,24 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
     )
     .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number }>;
   for (const r of searches) slot(r.week).searches = num(r.n);
+  // For each helpful or kudos reaction, the same person's last search in the window before it
+  // (idx_audit_actor_at), counted once per search, in the week of the search.
+  const helped = db
+    .prepare(
+      `WITH hits AS (
+         SELECT (SELECT s.id FROM audit_log s
+                 WHERE s.actor_id = h.actor_id AND s.at <= h.at AND s.at >= datetime(h.at, '-${HELPED_WINDOW_MINUTES} minutes')
+                   AND s.path IN (?, ?) AND (s.path = ? OR s.action = 'GET')
+                 ORDER BY s.at DESC, s.id DESC LIMIT 1) AS sid
+         FROM audit_log h
+         WHERE h.action IN ${USED_ACTIONS} AND h.at >= ? AND h.at < ? AND +h.entity = 'learning' AND h.actor_id NOT IN ${NOT_PEOPLE}
+       )
+       SELECT ${weekSql("s.at")} AS week, COUNT(DISTINCT s.id) AS n
+       FROM hits JOIN audit_log s ON s.id = hits.sid
+       GROUP BY week`,
+    )
+    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, SEARCH_TOOL_PATH, from, to) as Array<{ week: string; n: number }>;
+  for (const r of helped) slot(r.week).helpedSearches = num(r.n);
   const people = db
     .prepare(
       `SELECT ${weekSql("at")} AS week, COUNT(DISTINCT actor_id) AS n
@@ -340,14 +370,20 @@ export function activityByWeek(weeks: string[]): ActivityWeek[] {
   return weeks.map((week) => ({
     week,
     label: isoWeekLabel(week),
-    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, people: 0, newPeople: 0 }),
+    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 }),
   }));
 }
 
 /** The window's totals for the hero tiles: the weekly counts added up, and the distinct people (each counted once). */
 export function activityTotals(activity: ActivityWeek[]): ActivityCounts {
-  const sum = (key: "saves" | "searches" | "reactions" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
-  return { saves: sum("saves"), searches: sum("searches"), reactions: sum("reactions"), people: sum("newPeople") };
+  const sum = (key: "saves" | "searches" | "reactions" | "helpedSearches" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
+  return {
+    saves: sum("saves"),
+    searches: sum("searches"),
+    reactions: sum("reactions"),
+    helpedSearches: sum("helpedSearches"),
+    people: sum("newPeople"),
+  };
 }
 
 /* ------------------------------------------------------------- what's in BAB */
@@ -729,6 +765,13 @@ export function usageReport(now: Date = new Date()): UsageReport {
     activity,
     totals: activityTotals(activity),
     growth: growth(now),
+    savedStillLive: num(
+      (
+        getDb()
+          .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
+          .get(sqlDate(weeks[0])) as { n: number }
+      ).n,
+    ),
     contents: contents(),
     topHelpful: topHelpful(now),
     topProjects: topProjects(5),

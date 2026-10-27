@@ -181,6 +181,11 @@
   font-weight: 600;
 }
 
+.heroNote {
+  font-size: 0.8rem;
+  color: var(--u-muted);
+}
+
 .deltaUp {
   color: var(--u-up);
 }
