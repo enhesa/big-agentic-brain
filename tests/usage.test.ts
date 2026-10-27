@@ -364,7 +364,7 @@ describe("activity per week and the hero tiles", () => {
     const r = usageReport(NOW);
     expect(r.activity).toHaveLength(52);
     expect(r.activity.every((w) => w.saves + w.searches + w.reactions + w.people + w.newPeople === 0)).toBe(true);
-    expect(r.totals).toEqual({ saves: 0, searches: 0, reactions: 0, people: 0 });
+    expect(r.totals).toEqual({ saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0 });
     expect(r.growth).toEqual({ points: [], live: 0, lastMonth: 0 });
     expect(r.contents.byKind.map((k) => k.n)).toEqual([0, 0, 0, 0]);
     expect(r.contents.standing).toEqual({ strong: 0, fair: 0, weak: 0 });
@@ -393,7 +393,26 @@ describe("activity per week and the hero tiles", () => {
     expect(r.activity.at(-1)).toMatchObject({ week: "2026-10-05", saves: 2, searches: 5, reactions: 3, people: 2 });
     expect(r.activity.slice(0, -1).every((w) => w.saves + w.searches + w.reactions + w.people === 0)).toBe(true);
     // One week in the window: the totals are that week.
-    expect(r.totals).toEqual({ saves: 2, searches: 5, reactions: 3, people: 2 });
+    expect(r.totals).toEqual({ saves: 2, searches: 5, reactions: 3, helpedSearches: 0, people: 2 }); // B reacted 49 minutes after searching
+  });
+
+  it("credits a helpful reaction to the same person's last search within 30 minutes, once per search", async () => {
+    // A rephrases twice, then marks two memories helpful: only the last search counts, once.
+    for (const m of ["00", "01", "02"]) await row(A, "POST", `2026-10-06 09:${m}:00`, { path: "/mcp#tools/call:bab_search" });
+    await row(A, "helpful", "2026-10-06 09:10:00", { entity: "learning" });
+    await row(A, "kudos", "2026-10-06 09:12:00", { entity: "learning" });
+    // B: a confirm says "still true", not "helped"; a helpful 40 minutes later is too late.
+    await row(B, "GET", "2026-10-06 10:00:00", { path: "/api/learnings" });
+    await row(B, "confirm", "2026-10-06 10:05:00", { entity: "learning" });
+    await row(B, "GET", "2026-10-06 11:00:00", { path: "/api/learnings" });
+    await row(B, "helpful", "2026-10-06 11:40:00", { entity: "learning" });
+    // Someone else's reaction never credits A's search.
+    await row(A, "POST", "2026-10-06 12:00:00", { path: "/mcp#tools/call:bab_search" });
+    await row(B, "helpful", "2026-10-06 12:01:00", { entity: "learning" });
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.activity.at(-1)).toMatchObject({ searches: 6, helpedSearches: 1 });
+    expect(r.totals.helpedSearches).toBe(1);
   });
 
   it("spreads a typical year and totals it: sums for the counts, distinct people for people", async () => {
@@ -439,7 +458,7 @@ describe("activity per week and the hero tiles", () => {
     await row("system", "device-expire", "2026-10-06 10:00:00", { entity: "device" });
     const { usageReport, activityTotals } = await import("../lib/usage");
     const r = usageReport(NOW);
-    expect(r.totals).toEqual({ saves: 1, searches: 1, reactions: 0, people: 2 });
+    expect(r.totals).toEqual({ saves: 1, searches: 1, reactions: 0, helpedSearches: 0, people: 2 });
     expect(activityTotals(r.activity)).toEqual(r.totals);
   });
 });
@@ -925,6 +944,9 @@ describe("/usage page", () => {
     expect(html).toMatch(/data-testid="tile-searches"[^>]*>1</);
     expect(html).toMatch(/data-testid="tile-helpful"[^>]*>0</);
     expect(html).toMatch(/data-testid="tile-people"[^>]*>3</);
+    // Only audit rows are seeded here, no memories, so none are still in BAB.
+    expect(html).toMatch(/data-testid="tile-saved-note"[^>]*>0 still in BAB</);
+    expect(html).toMatch(/data-testid="tile-helped-note"[^>]*>0% of searches helped</);
     const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
     expect(tiles).toContain("+1 this week"); // saves and searches both grew by 1
     expect(tiles).toContain("+2 new this week"); // B and the viewer
