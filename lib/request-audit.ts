@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { getDb } from "./db";
 import { audit } from "./audit";
+import { redact } from "./redact";
 import { scheduleMaintenance } from "./maintenance";
 import { clientIp } from "./client-ip";
 import type { AuditVia } from "./types";
@@ -26,10 +27,11 @@ export interface AuditRequestInput {
 const ANONYMOUS_ACTOR = { id: "anonymous", name: null, email: null };
 
 /**
- * Writes one audit_log row per data page render / server action / API call.
+ * Writes one audit_log row per data page render / server action / API call, and returns its id
+ * (null when nothing was written: a coalesced poll, or a logging failure).
  * Never throws: a logging failure must not break the request it describes.
  */
-export async function auditRequest(input: AuditRequestInput): Promise<void> {
+export async function auditRequest(input: AuditRequestInput): Promise<number | null> {
   // Page views trigger the hourly sweeps and the daily backup copy too, not only agent
   // traffic, so a day with no agent calls still gets them (review, 2026-09-25).
   scheduleMaintenance();
@@ -50,13 +52,43 @@ export async function auditRequest(input: AuditRequestInput): Promise<void> {
              AND json_extract(details, '$.coalesce') = 1 AND at > datetime('now', ?) LIMIT 1`,
         )
         .get(actor.id, input.path, `-${input.coalesce.minutes} minutes`);
-      if (recent) return;
+      if (recent) return null;
     }
     // details.source tells header callers from device callers, for the P1.4 admin page.
     const merged = { ...(input.actor?.source ? { source: input.actor.source } : {}), ...(input.coalesce && input.actor ? { coalesce: 1 } : {}), ...input.details };
     const details = Object.keys(merged).length > 0 ? merged : undefined;
-    audit(db, actor, input.method, "request", input.path, input.via, { ip, path: input.path, details });
+    return audit(db, actor, input.method, "request", input.path, input.via, { ip, path: input.path, details });
   } catch (err) {
     console.error("auditRequest failed", err);
+    return null;
+  }
+}
+
+/** The most query text a search audit row keeps, after redaction. */
+export const SEARCH_QUERY_MAX = 120;
+/** Longer query text is not stored at all: redact() is never handed more than this. */
+const SEARCH_QUERY_RAW_MAX = 4000;
+
+/**
+ * Adds what a search found to its own audit row (written before the search ran): `results`, the
+ * number of matches, and `q`, the query text after redact(), cut to SEARCH_QUERY_MAX characters.
+ * The query is never stored unredacted. Other details on the row (source, cx) are kept.
+ * /usage reads these for "Found nothing". Never throws.
+ */
+export function recordSearchOutcome(auditId: number | null | undefined, outcome: { results: number; query?: string }): void {
+  if (auditId == null) return;
+  try {
+    const raw = (outcome.query ?? "").replace(/\s+/g, " ").trim();
+    const q = raw && raw.length <= SEARCH_QUERY_RAW_MAX ? redact(raw).slice(0, SEARCH_QUERY_MAX).trim() : "";
+    const results = Math.max(0, Math.trunc(outcome.results));
+    getDb()
+      .prepare(
+        q
+          ? "UPDATE audit_log SET details = json_set(COALESCE(details, '{}'), '$.results', ?, '$.q', ?) WHERE id = ?"
+          : "UPDATE audit_log SET details = json_set(COALESCE(details, '{}'), '$.results', ?) WHERE id = ?",
+      )
+      .run(...(q ? [results, q, auditId] : [results, auditId]));
+  } catch (err) {
+    console.error("recordSearchOutcome failed", err);
   }
 }

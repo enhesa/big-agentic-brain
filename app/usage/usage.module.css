@@ -696,6 +696,38 @@
   text-underline-offset: 3px;
 }
 
+.zeroList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zeroItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--u-grid);
+}
+
+.zeroItem:last-child {
+  border-bottom: none;
+}
+
+.zeroQuery {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.zeroCount {
+  font-family: var(--font-head);
+  font-weight: 700;
+  color: var(--u-muted);
+}
+
 .topCount {
   font-family: var(--font-head);
   font-weight: 800;

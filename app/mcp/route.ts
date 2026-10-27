@@ -200,8 +200,9 @@ export async function POST(req: Request): Promise<Response> {
   // initialize, tools/list and notifications are not audited: any caller can make them in
   // bulk, and they say nothing. Anonymous tool calls are.
   const deviceError = h.get("x-bab-device-error");
+  let auditId: number | null = null;
   if (!anonymous || method === "tools/call") {
-    await auditRequest({
+    auditId = await auditRequest({
       actor,
       method: "POST",
       path: auditPath(method, body.params),
@@ -280,7 +281,7 @@ export async function POST(req: Request): Promise<Response> {
         });
       }
       try {
-        const text = tool.run(actor, args, { origin });
+        const text = tool.run(actor, args, { origin, auditId });
         return rpcResult(id, { content: [{ type: "text", text }] });
       } catch (err) {
         // A business refusal is a tool-level failure, not a broken request:

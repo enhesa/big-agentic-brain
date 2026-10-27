@@ -302,6 +302,25 @@ describe("performance at 50k audit rows", () => {
         since,
       ),
     ).toMatch(/idx_learnings_(status_created_at|kind_status)/);
+    // Found nothing: the searches with a recorded count, on the path index.
+    const outcomes = plan(
+      `SELECT COUNT(*), SUM(json_extract(details, '$.results') = 0) FROM audit_log
+       WHERE path IN (?, ?) AND at >= ? AND (path = ? OR action = 'GET') AND json_extract(details, '$.results') IS NOT NULL`,
+      "/mcp#tools/call:bab_search",
+      "/api/learnings",
+      since,
+      "/mcp#tools/call:bab_search",
+    );
+    expect(outcomes).toContain("idx_audit_path_at");
+    expect(outcomes).not.toMatch(/SCAN (TABLE )?audit_log(?! USING)/);
+    // Never used: live learnings through their status index, votes by learning.
+    const unused = plan(
+      `SELECT COUNT(*), SUM(l.last_accessed_at IS NULL AND NOT EXISTS (SELECT 1 FROM votes v WHERE v.learning_id = l.id AND v.kind IN ('helpful', 'kudos', 'confirm') AND lower(v.voter_id) != lower(l.author_id)))
+       FROM learnings l WHERE l.status = 'active' AND l.kind IN ('learning', 'practice') AND l.pinned = 0 AND l.created_at < ?`,
+      since,
+    );
+    expect(unused).toMatch(/idx_learnings_/);
+    expect(unused).toMatch(/idx_votes_learning_kind|sqlite_autoindex_votes/);
   });
 });
 
@@ -1028,5 +1047,168 @@ describe("/usage page", () => {
   it("says so when nothing was cleaned up", async () => {
     await people(A, B);
     expect(await render(B)).toContain("No clean-up in these weeks.");
+  });
+  describe("searches that found nothing", () => {
+    const SEARCH = "/mcp#tools/call:bab_search";
+    // After SEARCH_RESULTS_SINCE, so the recorded counts fall inside the window.
+    const LATER = new Date("2026-11-03T12:00:00Z");
+
+    async function mcpSearch(args: Record<string, unknown>) {
+      vi.doMock("next/headers", () => ({
+        headers: async () => new Headers({ "x-bab-actor-email": A, "x-bab-actor-name": "Ann A" }),
+      }));
+      const { POST } = await import("../app/mcp/route");
+      const res = await POST(
+        new Request("https://bab.example.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json", host: "bab.example.com" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "bab_search", arguments: args } }),
+        }),
+      );
+      return res.json();
+    }
+
+    it("bab_search writes the result count and the redacted query, cut to 120 characters, on its own audit row", async () => {
+      await people(A, B);
+      await memory(B, { title: "Kafka consumer lag fix for the acme cluster" });
+      await mcpSearch({ query: "kafka consumer lag" });
+      const secret = "AKIA" + "ABCDEFGHIJKLMNOP";
+      await mcpSearch({ query: `nothing matches qqzzyy ${secret} ${"x".repeat(200)}` });
+      await mcpSearch({ query: "kafka consumer lag", offset: 5 }); // a later page: not recorded
+      await mcpSearch({ query: "", houseRules: true }); // the digest: not a search
+      const { getDb } = await import("../lib/db");
+      const rows = getDb().prepare("SELECT details FROM audit_log WHERE path = ? ORDER BY id").all(SEARCH) as Array<{ details: string | null }>;
+      expect(rows).toHaveLength(4);
+      const found = JSON.parse(rows[0].details!);
+      expect(found.results).toBeGreaterThan(0);
+      expect(found.q).toBe("kafka consumer lag");
+      const empty = JSON.parse(rows[1].details!);
+      expect(empty.results).toBe(0);
+      expect(empty.q.length).toBeLessThanOrEqual(120);
+      expect(empty.q).toContain("nothing matches qqzzyy");
+      expect(empty.q).toContain("[redacted]");
+      expect(rows[1].details).not.toContain(secret);
+      // The identity source on every row stays; the later page and the digest get no count.
+      expect(found.source).toBe("declared");
+      expect(JSON.parse(rows[2].details!)).toEqual({ source: "declared" });
+      expect(JSON.parse(rows[3].details!)).toEqual({ source: "declared" });
+    });
+
+    it("GET /api/learnings with a query records its result count, and keeps the identity source", async () => {
+      await people(A);
+      vi.doMock("next/headers", () => ({
+        headers: async () => new Headers({ "x-bab-actor-email": A, "x-bab-actor-name": "Ann A" }),
+        cookies: async () => ({ get: () => undefined }),
+      }));
+      const { GET } = await import("../app/api/learnings/route");
+      const { NextRequest } = await import("next/server");
+      await GET(new NextRequest("http://x/api/learnings?q=Unfindable%20Thing%20zz9"));
+      const { getDb } = await import("../lib/db");
+      const r = getDb().prepare("SELECT details FROM audit_log WHERE path = '/api/learnings'").get() as { details: string };
+      const d = JSON.parse(r.details);
+      expect(d).toMatchObject({ results: 0, q: "Unfindable Thing zz9" });
+      expect(d.source).toBeDefined();
+    });
+
+    it("reports the share since recording began and groups zero-result queries case-insensitively", async () => {
+      await row(A, "POST", "2026-11-02 09:00:00", { path: SEARCH }); // no count: left out
+      await row(A, "POST", "2026-11-02 09:01:00", { path: SEARCH, details: { results: 3, q: "deploy" } });
+      await row(A, "POST", "2026-11-02 09:02:00", { path: SEARCH, details: { results: 0, q: "Vault Path" } });
+      await row(B, "GET", "2026-11-03 09:03:00", { path: "/api/learnings", details: { results: 0, q: "vault path" } });
+      await row(B, "POST", "2026-11-03 09:04:00", { path: SEARCH, details: { results: 0, q: "argo sync" } });
+      await row(B, "POST", "2026-11-03 09:05:00", { path: SEARCH, details: { results: 0 } }); // a listing, no text
+      await row(B, "POST", "2026-11-03 09:06:00", { path: "/api/learnings", details: { results: 0, q: "a save" } }); // not a search
+      const { usageReport } = await import("../lib/usage");
+      const s = usageReport(LATER).searchOutcomes;
+      expect(s).toMatchObject({ since: "2026-11-02", recorded: 5, zero: 4 });
+      expect(s.zeroQueries.map((q) => [q.query, q.n])).toEqual([
+        ["vault path", 2],
+        ["argo sync", 1],
+      ]);
+    });
+
+    it("shows the share to everyone and the queries to maintainers only", async () => {
+      await people(A, B);
+      const { getDb } = await import("../lib/db");
+      const now = getDb().prepare("SELECT datetime('now') AS t").get() as { t: string };
+      await row(A, "POST", now.t, { path: SEARCH, details: { results: 0, q: "secret project qqvv" } });
+      await row(A, "POST", now.t, { path: SEARCH, details: { results: 2, q: "deploy" } });
+      const asMember = await render(B);
+      expect(asMember).toMatch(/data-testid="tile-found-nothing"[^>]*>50%</);
+      expect(asMember).not.toContain("qqvv");
+      expect(asMember).not.toContain("Searches that found nothing");
+      (await import("../lib/db"))._resetDbForTests();
+      vi.resetModules();
+      const asMaint = await render(MAINT);
+      expect(asMaint).toContain("Searches that found nothing");
+      expect(asMaint).toContain("secret project qqvv");
+    });
+  });
+
+  describe("memories never used, time saved and weekly people", () => {
+    it("counts live learnings and practices over 14 days old with no read and no reaction from anyone but the author", async () => {
+      await people(A, B);
+      const old = "2026-09-01 00:00:00";
+      const unread = await memory(A, { createdAt: old });
+      const read = await memory(A, { createdAt: old });
+      const votedByOther = await memory(A, { createdAt: old, kind: "practice" });
+      await memory(A, { createdAt: old, kind: "standard" }); // not a learning or practice
+      await memory(A, { createdAt: "2026-10-01 00:00:00" }); // too young on 6 Oct
+      const pinned = await memory(A, { createdAt: old });
+      const { getDb } = await import("../lib/db");
+      getDb().prepare("UPDATE learnings SET last_accessed_at = '2026-10-02 10:00:00' WHERE id = ?").run(read);
+      getDb().prepare("UPDATE learnings SET pinned = 1 WHERE id = ?").run(pinned);
+      await vote(votedByOther, B, "helpful");
+      const { usageReport } = await import("../lib/usage");
+      const u = usageReport(NOW).unused;
+      expect(u).toEqual({ unused: 1, eligible: 3 });
+      expect(unread).toBeTruthy();
+    });
+
+    it("estimates time saved from helped searches and saves, never below zero", async () => {
+      const { timeSavedHours } = await import("../lib/usage");
+      expect(timeSavedHours({ helpedSearches: 12, saves: 60 })).toBe((12 * 25 - 60 * 0.5) / 60);
+      expect(timeSavedHours({ helpedSearches: 0, saves: 100 })).toBe(0);
+    });
+
+    it("shows the second row of tiles and the weekly active people card", async () => {
+      await people(A, B);
+      const prev = await (async () => {
+        const { weekStart } = await import("../lib/usage");
+        const d = new Date(`${weekStart(new Date())}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - 7);
+        return d.toISOString().slice(0, 10);
+      })();
+      await row(A, "GET", `${prev} 00:00:01`, { path: "/memory" });
+      const { getDb } = await import("../lib/db");
+      const now = (getDb().prepare("SELECT datetime('now') AS t").get() as { t: string }).t;
+      await row(A, "GET", now, { path: "/memory" });
+      // 4 helped searches and 2 saves: (4 x 25 - 2 x 0.5) / 60 = 1.65 hours.
+      for (let i = 0; i < 4; i++) {
+        await row(A, "POST", `${prev} 0${i}:00:00`, { path: "/mcp#tools/call:bab_search" });
+        await row(A, "helpful", `${prev} 0${i}:05:00`, { entity: "learning" });
+      }
+      for (const sec of [1, 2]) await row(A, "create", `${prev} 09:00:0${sec}`, { entity: "learning" });
+      const html = await render(B);
+      expect(html).toMatch(/data-testid="tile-time-saved"[^>]*>1.7 h</);
+      expect(html).toContain("docs/savings.md");
+      // A (also active last week), B and the viewer's own page view.
+      expect(html).toMatch(/data-testid="tile-active-week"[^>]*>3</);
+      expect(html).toMatch(/data-testid="tile-active-week-note"[^>]*>1 returning, 2 new</);
+      expect(html).toMatch(/data-testid="tile-found-nothing-note"[^>]*>No searches recorded yet</);
+      expect(html).toContain("Weekly active people");
+      expect(html).toContain("Week of ");
+      expect(html).toMatch(/3 people, 1 returning, 2 new/);
+      expect(html).not.toMatch(/NaN|Infinity|-\d+(\.\d)? h</);
+    });
+
+    it("labels weak standing as few or no reactions, and explains no team tag", async () => {
+      await people(A);
+      await memory(A, { tags: [] });
+      const html = await render(A);
+      expect(html).toContain("Few or no reactions");
+      expect(html).not.toMatch(/<span>Weak<\/span>/);
+      expect(html).toContain("Authors can add one to their memories.");
+    });
   });
 });
