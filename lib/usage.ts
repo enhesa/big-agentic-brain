@@ -264,6 +264,8 @@ export interface UsageReport {
   /** The hero tiles: saves, searches and reactions summed over the window; people are distinct, not a sum of weekly counts. */
   totals: ActivityCounts;
   growth: Growth;
+  /** Memories saved in the window (by created_at) that are still live: the saved tile's "still in BAB". */
+  savedStillLive: number;
   contents: Contents;
   topHelpful: HelpfulItem[];
   topProjects: Array<{ project: string; n: number }>;
@@ -763,6 +765,13 @@ export function usageReport(now: Date = new Date()): UsageReport {
     activity,
     totals: activityTotals(activity),
     growth: growth(now),
+    savedStillLive: num(
+      (
+        getDb()
+          .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
+          .get(sqlDate(weeks[0])) as { n: number }
+      ).n,
+    ),
     contents: contents(),
     topHelpful: topHelpful(now),
     topProjects: topProjects(5),

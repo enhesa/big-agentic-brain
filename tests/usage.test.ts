@@ -415,6 +415,24 @@ describe("activity per week and the hero tiles", () => {
     expect(r.totals.helpedSearches).toBe(1);
   });
 
+  it("counts a search exactly 30 minutes before the reaction", async () => {
+    await row(A, "POST", "2026-10-06 09:00:00", { path: "/mcp#tools/call:bab_search" });
+    await row(A, "helpful", "2026-10-06 09:30:00", { entity: "learning" });
+    const { usageReport } = await import("../lib/usage");
+    expect(usageReport(NOW).totals.helpedSearches).toBe(1);
+  });
+
+  it("still in BAB: live memories saved inside the window only", async () => {
+    await people(A);
+    await memory(A, { createdAt: "2026-10-05 09:00:00" });
+    await memory(A, { createdAt: "2026-10-05 10:00:00", status: "archived" });
+    await memory(A, { createdAt: "2024-01-01 09:00:00" }); // live, but saved before the window
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.savedStillLive).toBe(1);
+    expect(r.growth.live).toBe(2);
+  });
+
   it("spreads a typical year and totals it: sums for the counts, distinct people for people", async () => {
     // Saves in five of the last eight weeks, oldest first.
     const plan: Array<[string, number]> = [

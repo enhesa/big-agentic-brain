@@ -375,8 +375,8 @@ export default async function UsagePage({
             testId="tile-saved"
             title="New memories saved over the last 12 months, added up."
             note={{
-              text: `${formatCount(growth.live)} still in BAB`,
-              title: "The rest were merged into other memories, replaced by a corrected one, retired, archived or deleted.",
+              text: `${formatCount(report.savedStillLive)} still in BAB`,
+              title: "Of the memories saved in these 12 months, this many are still live. The rest were merged into other memories, replaced by a corrected one, retired, archived or deleted.",
               testId: "tile-saved-note",
             }}
           />
@@ -397,7 +397,7 @@ export default async function UsagePage({
             title="Helpful, kudos and confirm reactions on memories over the last 12 months, added up."
             note={{
               text: `${totals.searches > 0 ? Math.round((100 * totals.helpedSearches) / totals.searches) : 0}% of searches helped`,
-              title: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)} searches were followed within ${HELPED_WINDOW_MINUTES} minutes by a helpful or kudos reaction from the same person. A lower bound: agents do not always react.`,
+              title: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)} searches were followed within ${HELPED_WINDOW_MINUTES} minutes by the same person marking a memory helpful (or giving kudos). A sign, not proof: agents do not always react, and the memory need not come from that search.`,
               testId: "tile-helped-note",
             }}
           />
