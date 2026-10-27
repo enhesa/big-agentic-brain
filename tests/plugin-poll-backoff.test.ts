@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BACKOFF_MAX_MS, PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, looksLikeRefusal } from "../plugins/claude-code/hooks/poll-backoff";
+import { BACKOFF_MAX_MS, PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isBabTool, looksLikeRefusal } from "../plugins/claude-code/hooks/poll-backoff";
 
 describe("poll back-off", () => {
   it("waits nothing until a poll has failed, then doubles up to five minutes", () => {
@@ -53,4 +53,16 @@ describe("trailing slash warning", () => {
     expect(SLASH_WARNING).toContain("restart Claude");
     expect(SLASH_WARNING).not.toContain("\u2014");
   });
+});
+
+describe("isBabTool", () => {
+  it.each(["mcp__plugin_bab_bab__bab_inbox", "mcp__plugin_bab-inline_bab__bab_send", "mcp__plugin_bab_bab__bab_link_session"])(
+    "approves %s",
+    (name) => expect(isBabTool(name)).toBe(true),
+  );
+
+  it.each(["Bash", "mcp__plugin_bab_bab__", "mcp__plugin_evil_other__bab_inbox", "mcp__bab__bab_inbox", "mcp__plugin_x_bab__bab_inbox;rm", "xmcp__plugin_bab_bab__bab_inbox"])(
+    "leaves %s to the normal check",
+    (name) => expect(isBabTool(name)).toBe(false),
+  );
 });

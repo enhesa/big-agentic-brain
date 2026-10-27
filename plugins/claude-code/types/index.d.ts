@@ -126,6 +126,8 @@ declare module 'claude-code' {
       connectProblem: string | null
       /** Null until the first load of the list. */
       unreadCount: UnreadCount | null
+      /** Polling stopped because the host refused or held a BAB call; /bab-check resumes it. */
+      paused: boolean
     }
   }
 }
