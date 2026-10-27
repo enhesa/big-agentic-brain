@@ -17,9 +17,15 @@ import {
   NUDGE_FOLLOW_MINUTES,
   STANDING_SAMPLE_MAX,
   USAGE_COLLECTING_SINCE,
+  UNUSED_MIN_AGE_DAYS,
+  SAVINGS_MINUTES_WITHOUT_BAB,
+  SAVINGS_MINUTES_WITH_BAB,
+  SAVINGS_MINUTES_PER_SAVE,
   cachedUsageReport,
+  timeSavedHours,
   weekStart,
 } from "@/lib/usage";
+import { INACTIVITY_CLOCK_START } from "@/lib/learnings";
 import { AreaLine, GroupedBars, HBars, MiniBars, Sparkline, StackedBar, formatCount, type BarRow, type MiniBarRow } from "./charts";
 import { teamLabel, teamTags } from "@/lib/teams";
 import styles from "./usage.module.css";
@@ -87,11 +93,12 @@ function HeroTile({
   note,
 }: {
   label: string;
-  value: number;
-  /** How much the total grew this week. */
-  grew: number;
+  /** A count, or text such as a share or an amount of hours. */
+  value: number | string;
+  /** How much the total grew this week; left out on a tile that is not a running total. */
+  grew?: number;
   what?: "this week" | "new this week";
-  spark: { values: number[]; label: string };
+  spark?: { values: number[]; label: string };
   testId: string;
   title: string;
   /** One short line under the tile that puts the number in context. */
@@ -102,11 +109,11 @@ function HeroTile({
       <span className={styles.heroLabel}>{label}</span>
       <div className={styles.heroRow}>
         <span className={styles.heroValue} data-testid={testId}>
-          {formatCount(value)}
+          {typeof value === "number" ? formatCount(value) : value}
         </span>
-        <Sparkline values={spark.values} label={spark.label} />
+        {spark && <Sparkline values={spark.values} label={spark.label} />}
       </div>
-      <Grew n={grew} what={what} title={`${title} Grew by ${formatCount(grew)} this week so far.`} />
+      {grew !== undefined && <Grew n={grew} what={what} title={`${title} Grew by ${formatCount(grew)} this week so far.`} />}
       {note && (
         <span className={styles.heroNote} title={note.title} data-testid={note.testId}>
           {note.text}
@@ -261,6 +268,13 @@ export default async function UsagePage({
   const flags = report.flagged.length;
 
   const activityTotal = shown.reduce((s, w) => s + w.saves + w.searches + w.reactions, 0);
+  const peopleTotal = shown.reduce((s, w) => s + w.people, 0);
+
+  // Estimated hours saved over the window (docs/savings.md). Whole hours from 10 up, else one decimal.
+  const savedHours = timeSavedHours(totals);
+  const savedHoursText = `${savedHours >= 10 ? formatCount(Math.round(savedHours)) : (Math.round(savedHours * 10) / 10).toString()} h`;
+  const outcomes = report.searchOutcomes;
+  const unused = report.unused;
 
   const kindRows: BarRow[] = contents.byKind.map((k) => ({
     key: k.key,
@@ -277,7 +291,15 @@ export default async function UsagePage({
       title: `Tagged ${t.key}: ${plural(t.n, "live memory", "live memories")}`,
     })),
     ...(contents.noTeamTag > 0
-      ? [{ key: "_none", label: "No team tag", n: contents.noTeamTag, title: `No team tag: ${plural(contents.noTeamTag, "live memory", "live memories")}`, muted: true }]
+      ? [
+          {
+            key: "_none",
+            label: "No team tag",
+            n: contents.noTeamTag,
+            title: `No team tag: ${plural(contents.noTeamTag, "live memory", "live memories")} with none of the team tags. Authors can add one to their memories.`,
+            muted: true,
+          },
+        ]
       : []),
   ];
   const standingTotal = contents.standing.strong + contents.standing.fair + contents.standing.weak;
@@ -408,7 +430,55 @@ export default async function UsagePage({
             what="new this week"
             spark={sparkOf("newPeople", "People using BAB")}
             testId="tile-people"
-            title="Different people whose agent or browser used BAB in the last 12 months, each counted once."
+            title="Different people whose agent or browser used BAB in the last 12 months, each counted once, not added up per week. The line is the running count of distinct people."
+          />
+        </section>
+
+        {/* 1b. Value and gaps */}
+        <section aria-label="Value and gaps" className={styles.heroes} data-testid="usage-tiles-2">
+          <HeroTile
+            label="Time saved (estimate)"
+            value={savedHoursText}
+            testId="tile-time-saved"
+            title={`An estimate, not a measurement. Each search that helped saves ${SAVINGS_MINUTES_WITHOUT_BAB - SAVINGS_MINUTES_WITH_BAB} minutes (${SAVINGS_MINUTES_WITHOUT_BAB} to solve a known issue alone, minus ${SAVINGS_MINUTES_WITH_BAB} to find and apply the memory), and each memory saved costs ${SAVINGS_MINUTES_PER_SAVE} minutes. Helped searches are a lower bound on reuse, since agents do not always react. Assumptions 2, 3 and 6 in docs/savings.md.`}
+            note={{
+              text: `from ${plural(totals.helpedSearches, "search", "searches")} that helped`,
+              title: `${formatCount(totals.helpedSearches)} helped searches and ${formatCount(totals.saves)} saves in the last 12 months. Never shown below 0. The model is in docs/savings.md.`,
+              testId: "tile-time-saved-note",
+            }}
+          />
+          <HeroTile
+            label="Found nothing"
+            value={pct(outcomes.zero, outcomes.recorded) ?? "-"}
+            testId="tile-found-nothing"
+            title="The share of searches that returned no memory at all. Counted only since searches started recording how many results they found."
+            note={{
+              text: outcomes.since ? `${formatCount(outcomes.zero)} of ${formatCount(outcomes.recorded)}, since ${dayMonth(outcomes.since)}` : "No searches recorded yet",
+              title: "Older searches did not record their result count, so they are left out.",
+              testId: "tile-found-nothing-note",
+            }}
+          />
+          <HeroTile
+            label="Never used"
+            value={pct(unused.unused, unused.eligible) ?? "-"}
+            testId="tile-never-used"
+            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}, so only memories saved since then are judged. Pinned house rules are left out.`}
+            note={{
+              text: `${formatCount(unused.unused)} of ${plural(unused.eligible, "memory", "memories")}`,
+              title: `Live learnings and practices saved since ${dayMonth(INACTIVITY_CLOCK_START)}, older than ${UNUSED_MIN_AGE_DAYS} days, not pinned.`,
+              testId: "tile-never-used-note",
+            }}
+          />
+          <HeroTile
+            label="Active this week"
+            value={current.people}
+            testId="tile-active-week"
+            title="Different people whose agent or browser used BAB this week."
+            note={{
+              text: `${formatCount(current.people - current.newPeople)} returning, ${formatCount(current.newPeople)} new`,
+              title: "Returning: also active in an earlier week of the last 12 months. New: first active this week.",
+              testId: "tile-active-week-note",
+            }}
           />
         </section>
 
@@ -494,6 +564,44 @@ export default async function UsagePage({
           </Card>
         </div>
 
+        {/* 3b. Weekly active people and the searches that found nothing */}
+        <div className={styles.grid}>
+          <Card title="Weekly active people" span={maintainer ? "s7" : "s12"} sub={<Legend2 />}>
+            {activityTotal === 0 || peopleTotal === 0 ? (
+              <Empty>No activity yet.</Empty>
+            ) : (
+              <GroupedBars
+                label={`Distinct active people per week, returning and new, last ${plural(shown.length, "week")}`}
+                series={[
+                  { name: "Returning", className: styles.fill1 },
+                  { name: "New", className: styles.fill3 },
+                ]}
+                data={shown.map((w) => ({
+                  label: dayMonth(w.week),
+                  values: [w.people - w.newPeople, w.newPeople],
+                  title: `${weekOf(w.week)}: ${plural(w.people, "person", "people")}, ${formatCount(w.people - w.newPeople)} returning, ${formatCount(w.newPeople)} new`,
+                }))}
+              />
+            )}
+          </Card>
+          {maintainer && (
+            <Card title="Searches that found nothing" span="s5" sub={outcomes.since ? `Since ${dayMonth(outcomes.since)}, maintainers only` : "Maintainers only"}>
+              {outcomes.zeroQueries.length === 0 ? (
+                <Empty>No search with text has come back empty yet.</Empty>
+              ) : (
+                <ol className={styles.zeroList} data-testid="zero-queries">
+                  {outcomes.zeroQueries.map((q) => (
+                    <li key={q.query} className={styles.zeroItem} title={`${plural(q.n, "time")}, last ${dayMonth(parseDbTime(q.last))}`}>
+                      <span className={styles.zeroQuery}>{q.query}</span>
+                      <span className={styles.zeroCount}>{formatCount(q.n)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+          )}
+        </div>
+
         {/* 4. What's in BAB */}
         <section className={styles.group} aria-labelledby="contents-h">
           <h2 id="contents-h" className={styles.h2}>
@@ -507,17 +615,21 @@ export default async function UsagePage({
               <Card
                 title="Standing"
                 span="s12"
-                sub={contents.standingRead >= STANDING_SAMPLE_MAX ? `Newest ${formatCount(STANDING_SAMPLE_MAX)}` : "From colleagues' reactions"}
+                sub={
+                  <span title="Strong and fair memories have enough helpful reactions and confirmations. Low so far: few or no reactions yet, not-helpful votes or flags that outweigh them, or a level lost after 180 days without a check.">
+                    {contents.standingRead >= STANDING_SAMPLE_MAX ? `Newest ${formatCount(STANDING_SAMPLE_MAX)}` : "From colleagues' reactions"}
+                  </span>
+                }
               >
                 {standingTotal === 0 ? (
                   <Empty>No memories yet.</Empty>
                 ) : (
                   <StackedBar
-                    label={`Standing of live memories: ${contents.standing.strong} strong, ${contents.standing.fair} fair, ${contents.standing.weak} weak`}
+                    label={`Standing of live memories: ${contents.standing.strong} strong, ${contents.standing.fair} fair, ${contents.standing.weak} low so far`}
                     segments={[
                       { key: "strong", name: "Strong", n: contents.standing.strong, className: styles.ord3, swatchClassName: styles.swOrd3 },
                       { key: "fair", name: "Fair", n: contents.standing.fair, className: styles.ord2, swatchClassName: styles.swOrd2 },
-                      { key: "weak", name: "Weak", n: contents.standing.weak, className: styles.ord1, swatchClassName: styles.swOrd1 },
+                      { key: "weak", name: "Low so far", n: contents.standing.weak, className: styles.ord1, swatchClassName: styles.swOrd1 },
                     ]}
                   />
                 )}
@@ -889,6 +1001,19 @@ export default async function UsagePage({
         </section>
       </div>
     </Shell>
+  );
+}
+
+function Legend2() {
+  return (
+    <ul className={styles.legend} aria-label="Legend">
+      <li>
+        <span className={`${styles.swatch} ${styles.sw1}`} /> Returning
+      </li>
+      <li>
+        <span className={`${styles.swatch} ${styles.sw3}`} /> New
+      </li>
+    </ul>
   );
 }
 

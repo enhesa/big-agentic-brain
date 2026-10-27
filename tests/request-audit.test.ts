@@ -94,7 +94,51 @@ describe("auditRequest", () => {
         path: "/x",
         via: "ui",
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
+  });
+});
+
+describe("recordSearchOutcome", () => {
+  it("adds the result count and the redacted, cut query to the row it was given, keeping its other details", async () => {
+    const { auditRequest, recordSearchOutcome, SEARCH_QUERY_MAX } = await import("../lib/request-audit");
+    const { getDb } = await import("../lib/db");
+    const id = await auditRequest({
+      actor: { id: "ada@example.com", name: "Ada", email: "ada@example.com", source: "device" },
+      method: "GET",
+      path: "/api/learnings",
+      via: "mcp",
+    });
+    expect(typeof id).toBe("number");
+    const token = "sk-" + "a".repeat(30);
+    recordSearchOutcome(id, { results: 0, query: `  why does   ${token} fail ${"y".repeat(300)}` });
+    recordSearchOutcome(null, { results: 3, query: "ignored" });
+    const r = getDb().prepare("SELECT details FROM audit_log WHERE id = ?").get(id) as { details: string };
+    const d = JSON.parse(r.details);
+    expect(d.source).toBe("device");
+    expect(d.results).toBe(0);
+    expect(d.q.startsWith("why does [redacted] fail")).toBe(true);
+    expect(d.q.length).toBeLessThanOrEqual(SEARCH_QUERY_MAX);
+    expect(r.details).not.toContain(token);
+    expect((getDb().prepare("SELECT COUNT(*) AS n FROM audit_log").get() as { n: number }).n).toBe(1);
+  });
+
+  it("redacts a key: value line before it joins the lines", async () => {
+    const { auditRequest, recordSearchOutcome } = await import("../lib/request-audit");
+    const { getDb } = await import("../lib/db");
+    const id = await auditRequest({ actor: { id: "ada@example.com", name: null, email: null }, method: "GET", path: "/api/learnings", via: "mcp" });
+    recordSearchOutcome(id, { results: 0, query: "deploy\npassword: hunter2zz\nnow" });
+    const r = getDb().prepare("SELECT details FROM audit_log WHERE id = ?").get(id) as { details: string };
+    expect(r.details).not.toContain("hunter2zz");
+    expect(JSON.parse(r.details).q).not.toMatch(/\n/);
+  });
+
+  it("stores only the count when there is no query text", async () => {
+    const { auditRequest, recordSearchOutcome } = await import("../lib/request-audit");
+    const { getDb } = await import("../lib/db");
+    const id = await auditRequest({ actor: { id: "ada@example.com", name: null, email: null }, method: "GET", path: "/api/learnings", via: "mcp" });
+    recordSearchOutcome(id, { results: 4, query: "   " });
+    const r = getDb().prepare("SELECT details FROM audit_log WHERE id = ?").get(id) as { details: string };
+    expect(JSON.parse(r.details)).toEqual({ results: 4 });
   });
 });
 

@@ -1212,15 +1212,27 @@ every time.
      (people: "+2 new this week", the people whose first activity in the window is this week), or "none
      yet this week". Always calm: a total never goes down, so there is no down arrow or red. The
      sparkline is the running total per week; for people the running count of distinct people.
+     A second row of four tiles: time saved (an estimate: helped searches x (30 - 5) minutes minus
+     saves x 0.5 minutes over the window, in hours, never below 0; docs/savings.md assumptions 2, 3
+     and 6, constants `SAVINGS_MINUTES_*`); found nothing (the share of searches whose audit row
+     records `results: 0`, "since" the first recorded day, as older rows have no count); never used
+     (live, unpinned learnings and practices older than 14 days with no agent read and no helpful,
+     kudos or confirm from anyone but the author; reads carry no reader, so the author's own reads
+     count, and reads start on 7 Oct); and active this week, split into returning and new.
   2. Memories in BAB: live memories (status active) by the week they were saved, added up
      from the week of the oldest one (at most 156 weeks), with "+N this month" (saved in the last 30
      days). There is no archive date, so the line is "still live, by week saved".
   3. Activity per week: saves, searches and helpful reactions as grouped bars, with a numbers table.
      At 52 weeks the bars thin out (no gap between them) and only about eight week labels are drawn
-     (four on a phone); every week keeps its bars and its tooltip.
+     (four on a phone); every week keeps its bars and its tooltip. Below it, weekly active people as
+     grouped bars: returning (people minus new) and new (first active that week in the window).
+     Maintainers also see "Searches that found nothing": the 10 most repeated zero-result queries,
+     grouped case-insensitively, most recent first on a tie. Nobody else sees query text.
   4. What's in BAB: live memories by kind and by team tag (a memory with two team tags counts for
-     both; unreadable tags count as no team tag), and the standing mix (strong, fair, weak, from
-     `standingsFor`, over the newest 5,000 live memories).
+     both; unreadable tags count as no team tag; its hover says authors can add one), and the
+     standing mix (strong, fair, weak, from `standingsFor`, over the newest 5,000 live memories).
+     Weak is shown as "Low so far" (few or no reactions, more not-helpful votes or flags than
+     helpful ones, or a level lost after 180 days without a check). The stored level stays `weak`.
   5. Most helpful: the 5 memories with the most helpful, kudos and confirm reactions in the
      last 12 months (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
   6. Who writes: memories saved since 6 Oct by the model their author named (`learnings.model`;
@@ -1264,6 +1276,13 @@ every time.
   plus the first 8 hex characters of a SHA-256 of the connection id. Never the device secret or its
   hash. Header-only callers have no `cx`. Migration v38 added the `audit_log(path, at)` and
   `audit_log(action, at)` indexes.
+- Since 27 Oct (`SEARCH_RESULTS_SINCE`) a search adds what it found to its own audit row
+  (`recordSearchOutcome` in lib/request-audit.ts, `json_set` on the row `auditRequest` wrote, so
+  `source` and `cx` stay): `results`, the number of matches, and `q`, the query text after
+  `redact()` (on the text as sent, line breaks included), cut to 120 characters. Never the raw
+  query. Only a search with text: a `bab_search` first page (not a later page, not the house
+  rules digest) and a `GET /api/learnings` with `q`. A listing by kind, project or tag is not
+  recorded, so it is not in the share. "Never used" counts any agent read, listings included.
 
 ## Chats list removed
 

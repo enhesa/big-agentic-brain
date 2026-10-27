@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireActorForApi } from "@/lib/session";
-import { auditRequest } from "@/lib/request-audit";
+import { auditRequest, recordSearchOutcome } from "@/lib/request-audit";
 import {
   search,
   recordSearchRead,
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (e instanceof Response) return e;
     throw e;
   }
-  await auditRequest({ actor: user, method: "GET", path: "/api/learnings", via: "mcp" });
+  const auditId = await auditRequest({ actor: user, method: "GET", path: "/api/learnings", via: "mcp" });
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
@@ -91,6 +91,7 @@ export async function GET(req: NextRequest) {
       try {
         project = normalizeProjectKey(projectRaw) ?? undefined;
       } catch {
+        if (q.trim()) recordSearchOutcome(auditId, { results: 0, query: q });
         return Response.json({ results: [], limit });
       }
     }
@@ -99,6 +100,8 @@ export async function GET(req: NextRequest) {
   const results = search(q, { tag, repo, author, status, project, kind, flagged, model, appliesTo, stack }, limit);
   // An agent got these memories: that is a read (lib/learnings.ts touchRead). The web pages never come through here.
   recordSearchRead(results, { status, flagged });
+  // What a search with text found, on its own audit row, for "Found nothing" on /usage.
+  if (q.trim()) recordSearchOutcome(auditId, { results: results.length, query: q });
 
   // verifyHint only when a result is marked verify: true, like bab_search.
   // Nothing found for a real query: name the area contacts, like bab_search.

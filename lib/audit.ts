@@ -36,13 +36,13 @@ export function audit(
   entityId: string,
   via: AuditVia,
   extra?: { ip?: string | null; path?: string | null; details?: unknown },
-) {
+): number {
   const actorId = typeof actor === "string" ? actor : actor.id;
   const actorName = typeof actor === "string" ? null : (actor.name ?? null);
   const actorEmail = typeof actor === "string" ? null : (actor.email ?? null);
   const details = extra?.details !== undefined ? JSON.stringify(extra.details) : null;
 
-  insertStatement(db).run(
+  const result = insertStatement(db).run(
     actorId,
     actorName,
     actorEmail,
@@ -54,4 +54,6 @@ export function audit(
     extra?.path ?? null,
     details,
   );
+  // The row id, so a caller can add what it learns later to the same row (lib/request-audit.ts recordSearchOutcome).
+  return Number(result.lastInsertRowid);
 }

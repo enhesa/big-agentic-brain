@@ -31,6 +31,20 @@ export const IDENTIFY_LOOP_THRESHOLD = 3;
  * started. Before it those numbers read 0 because nothing recorded them.
  */
 export const USAGE_COLLECTING_SINCE = "2026-10-06";
+/** The day search audit rows started to carry their result count (details.results) and redacted query (details.q). */
+export const SEARCH_RESULTS_SINCE = "2026-10-27";
+/** How many zero-result queries the maintainer list shows. */
+export const ZERO_QUERIES_SHOWN = 10;
+/** A memory younger than this has not had a fair chance to be used yet. */
+export const UNUSED_MIN_AGE_DAYS = 14;
+/**
+ * The time-saved estimate, from docs/savings.md: assumption 2 (Tw, minutes lost on a known issue
+ * without BAB), assumption 3 (Tb, minutes per reuse with BAB) and assumption 6 (ts, minutes to save
+ * one memory). Middle values; the ranges are in docs/savings.md.
+ */
+export const SAVINGS_MINUTES_WITHOUT_BAB = 30;
+export const SAVINGS_MINUTES_WITH_BAB = 5;
+export const SAVINGS_MINUTES_PER_SAVE = 0.5;
 /** "This month" on the page: the last 30 days. */
 export const MONTH_DAYS = 30;
 
@@ -241,6 +255,29 @@ export interface Upkeep {
 }
 
 /** One week of the Clean-up card (swarm garbage collection, docs/spec.md), from audit_log. */
+/** "Found nothing": searches recorded with a result count (since SEARCH_RESULTS_SINCE) in the window. */
+export interface SearchOutcomes {
+  /** The first day with a recorded count in the window (YYYY-MM-DD), or null when there is none yet. */
+  since: string | null;
+  /** Searches with a recorded result count. */
+  recorded: number;
+  /** Of those, the ones that found nothing. */
+  zero: number;
+  /**
+   * The most repeated zero-result queries (lowercased, redacted when stored), most recent first on a
+   * tie, at most ZERO_QUERIES_SHOWN. Maintainers only: the page never shows these to anyone else.
+   */
+  zeroQueries: Array<{ query: string; n: number; last: string }>;
+}
+
+/** Live learnings and practices older than UNUSED_MIN_AGE_DAYS that nobody else has used. */
+export interface Unused {
+  /** No agent read (reads start at INACTIVITY_CLOCK_START) and no reaction from anyone but the author. */
+  unused: number;
+  /** Live, unpinned learnings and practices older than UNUSED_MIN_AGE_DAYS. */
+  eligible: number;
+}
+
 export interface CleanupWeek {
   week: string;
   label: string;
@@ -274,6 +311,8 @@ export interface UsageReport {
   /** Memories saved since USAGE_COLLECTING_SINCE by the model their author named; "" is not stated. */
   models: Count[];
   upkeep: Upkeep;
+  unused: Unused;
+  searchOutcomes: SearchOutcomes;
   capture: CaptureWeek[];
   identify: IdentifyWeek[];
   identifyLoops: IdentifyLoop[];
@@ -561,6 +600,68 @@ export function upkeep(now: Date): Upkeep {
   };
 }
 
+/**
+ * Live learnings and practices older than UNUSED_MIN_AGE_DAYS that no agent has read and nobody but
+ * the author has reacted to. A read does not say who read it (touchRead keeps only a date), so the
+ * author's own reads count too; reads are recorded since INACTIVITY_CLOCK_START. Pinned house rules
+ * are left out: the digest that serves them is not counted as a read.
+ */
+export function unusedMemories(now: Date): Unused {
+  const r = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS eligible,
+              SUM(l.last_accessed_at IS NULL AND NOT EXISTS (
+                SELECT 1 FROM votes v
+                WHERE v.learning_id = l.id AND v.kind IN ${HELPFUL_ACTIONS} AND lower(v.voter_id) != lower(l.author_id)
+              )) AS unused
+       FROM learnings l
+       WHERE l.status = 'active' AND l.kind IN ('learning', 'practice') AND l.pinned = 0 AND l.created_at < ? AND l.created_at >= ?`,
+    )
+    // Reads are recorded only since INACTIVITY_CLOCK_START: an older memory may have been read before
+    // then without a trace, so only memories saved since are judged.
+    .get(sqlTime(new Date(now.getTime() - UNUSED_MIN_AGE_DAYS * DAY_MS)), INACTIVITY_CLOCK_START) as { eligible: number; unused: number | null };
+  return { unused: num(r.unused), eligible: num(r.eligible) };
+}
+
+/**
+ * The share of searches that found nothing, from the result count each search writes on its own
+ * audit row (lib/request-audit.ts recordSearchOutcome). Two queries on idx_audit_path_at, bounded by
+ * the window and SEARCH_RESULTS_SINCE.
+ */
+export function searchOutcomes(weeks: string[]): SearchOutcomes {
+  const db = getDb();
+  const from = sqlDate(weeks[0] > SEARCH_RESULTS_SINCE ? weeks[0] : SEARCH_RESULTS_SINCE);
+  const where = `path IN (?, ?) AND at >= ? AND (path = ? OR action = 'GET') AND json_extract(details, '$.results') IS NOT NULL`;
+  const args = [SEARCH_TOOL_PATH, SEARCH_API_PATH, from, SEARCH_TOOL_PATH];
+  const share = db
+    .prepare(`SELECT COUNT(*) AS recorded, SUM(json_extract(details, '$.results') = 0) AS zero, MIN(at) AS first FROM audit_log WHERE ${where}`)
+    .get(...args) as { recorded: number; zero: number | null; first: string | null };
+  const zeroQueries = db
+    .prepare(
+      `SELECT lower(json_extract(details, '$.q')) AS query, COUNT(*) AS n, MAX(at) AS last
+       FROM audit_log WHERE ${where} AND json_extract(details, '$.results') = 0 AND json_extract(details, '$.q') != ''
+       GROUP BY query ORDER BY n DESC, last DESC LIMIT ?`,
+    )
+    .all(...args, ZERO_QUERIES_SHOWN) as Array<{ query: string; n: number; last: string }>;
+  return {
+    since: share.first ? share.first.slice(0, 10) : null,
+    recorded: num(share.recorded),
+    zero: num(share.zero),
+    zeroQueries: zeroQueries.map((q) => ({ query: String(q.query), n: num(q.n), last: q.last })),
+  };
+}
+
+/**
+ * Hours saved, estimated: each helped search saves SAVINGS_MINUTES_WITHOUT_BAB minus
+ * SAVINGS_MINUTES_WITH_BAB, each save costs SAVINGS_MINUTES_PER_SAVE (docs/savings.md, assumptions
+ * 2, 3 and 6). Helped searches are a lower bound on reuse. Never below 0.
+ */
+export function timeSavedHours(totals: Pick<ActivityCounts, "helpedSearches" | "saves">): number {
+  const minutes =
+    totals.helpedSearches * (SAVINGS_MINUTES_WITHOUT_BAB - SAVINGS_MINUTES_WITH_BAB) - totals.saves * SAVINGS_MINUTES_PER_SAVE;
+  return Math.max(0, minutes / 60);
+}
+
 /* -------------------------------------------------------------------- health */
 
 export function captureByWeek(weeks: string[]): CaptureWeek[] {
@@ -778,6 +879,8 @@ export function usageReport(now: Date = new Date()): UsageReport {
     generalCount: generalProjectCount(),
     models: modelsUsed(),
     upkeep: upkeep(now),
+    unused: unusedMemories(now),
+    searchOutcomes: searchOutcomes(weeks),
     capture: captureByWeek(weeks),
     identify: identifyByWeek(weeks),
     identifyLoops: identifyLoops(weeks),

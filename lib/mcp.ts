@@ -16,6 +16,7 @@ import { parseAppliesToFilter, parseStack, PLATFORM_LABELS, platformLabels, read
 import type { SessionUser } from "./session";
 import { identityDomain, identityHint } from "./identity";
 import { redeemLinkToken } from "./session-links";
+import { recordSearchOutcome } from "./request-audit";
 import { VERIFY_HINT } from "./swarm-gc";
 import { formatAge } from "./relative-time";
 import {
@@ -87,6 +88,8 @@ import type { LearningConfidence } from "./types";
 /** What a tool needs to know about the request that is running it. */
 export interface ToolContext {
   origin: string;
+  /** The audit row of this tools/call, so a search can add what it found to it (recordSearchOutcome). */
+  auditId?: number | null;
 }
 
 /**
@@ -267,6 +270,7 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
       try {
         project = normalizeProjectKey(raw) ?? undefined;
       } catch {
+        if (offset === 0 && hasText && !houseRules) recordSearchOutcome(ctx?.auditId, { results: 0, query: phrasings.join(" ") });
         return JSON.stringify({ results: [], total: 0, nextOffset: null });
       }
     }
@@ -306,6 +310,10 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   // Multi-phrasing: `total` counts the distinct memories among each phrasing's first hits (approximate), and there is no next page.
   const total = found.total ?? searchTotal(single, filters);
   const nextOffset = !multi && offset + limit < total ? offset + limit : null;
+  // What the search found, on its own audit row, for "Found nothing" on /usage. Only a search with
+  // text (a listing by kind or project is not a question), and only the first page: a later page
+  // that comes back empty did find something.
+  if (offset === 0 && hasText) recordSearchOutcome(ctx?.auditId, { results: total, query: phrasings.join(" ") });
   // Nothing found for a real query: name the people who volunteered as contacts for the area.
   const contacts = total === 0 && offset === 0 && (hasText || tag) ? contactsForSearch(phrasings.join(" "), tag) : [];
   return JSON.stringify({
