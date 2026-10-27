@@ -88,6 +88,36 @@ describe("effort ledger", () => {
     expect(position(l, 12 * MIN)).toMatchObject({ activeMs: 12 * MIN, tokens: 1200 });
   });
 
+  it("gives two saves in one step their own segments, and an undo puts a refused one back", () => {
+    const l = newLedger();
+    startTurn(l, "t1", 0);
+    addTokens(l, 500, "t1");
+    // Two saves at the same moment: the first takes the segment, the second starts from it.
+    expect(segment(l, 5 * MIN)).toMatchObject({ activeMs: 5 * MIN, tokens: 500 });
+    const undoFirst = cut(l, 5 * MIN);
+    expect(segment(l, 5 * MIN)).toMatchObject({ activeMs: 0, tokens: 0 });
+    cut(l, 5 * MIN);
+    // An undo after a later cut changes nothing.
+    undoFirst();
+    expect(segment(l, 5 * MIN)).toMatchObject({ activeMs: 0, tokens: 0 });
+    // A refused save: the segment goes on, with what came since.
+    addTokens(l, 100, "t1");
+    const undo = cut(l, 7 * MIN);
+    addTokens(l, 50, "t1");
+    undo();
+    expect(segment(l, 8 * MIN)).toMatchObject({ activeMs: 3 * MIN, tokens: 150 });
+  });
+
+  it("keeps tokens that arrived between turns in the segment they belong to", () => {
+    const l = newLedger();
+    addTokens(l, 80);
+    const undo = cut(l, 0);
+    expect(segment(l, 0)).toMatchObject({ tokens: 0 });
+    undo();
+    expect(segment(l, 0)).toMatchObject({ tokens: 80 });
+    expect(position(l, 0).tokens).toBe(80);
+  });
+
   it("caps a segment at the most recent turns that fit in four hours, with their tokens only", () => {
     const l = newLedger(0);
     let t = 0;
@@ -141,6 +171,9 @@ describe("effort ledger", () => {
     expect(costArg({ activeMs: 90_500, tokens: 12.6, usd: 0.123456 })).toEqual({ activeMinutes: 1.51, tokens: 13, usd: 0.1235 });
     expect(costArg({ activeMs: 10 * SEGMENT_CAP_MS, tokens: TOKENS_MAX * 2, usd: null })).toEqual({ activeMinutes: 240, tokens: TOKENS_MAX });
     expect(costArg({ activeMs: -5, tokens: -1, usd: -1 })).toEqual({ activeMinutes: 0, tokens: 0, usd: 0 });
+    expect(costArg({ activeMs: Number.NaN, tokens: 1, usd: null })).toBeNull();
+    expect(costArg({ activeMs: 1, tokens: Number.POSITIVE_INFINITY, usd: null })).toBeNull();
+    expect(costArg({ activeMs: 1, tokens: 1, usd: Number.NaN })).toEqual({ activeMinutes: 0, tokens: 1 });
   });
 
   it("reads memory ids from a search answer and from the prompt notice", () => {

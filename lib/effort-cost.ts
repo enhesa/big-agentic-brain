@@ -56,9 +56,24 @@ export function parseCost(raw: unknown): EffortCost | null {
 /** Stores the discovery cost of a memory just saved. Once per memory; a later call is ignored. */
 export function recordDiscoveryCost(learningId: string, cost: EffortCost | null): void {
   if (!cost) return;
-  getDb()
-    .prepare("INSERT OR IGNORE INTO learning_costs (learning_id, active_ms, tokens, usd) VALUES (?, ?, ?, ?)")
-    .run(learningId, cost.activeMs, cost.tokens, cost.usd);
+  bestEffort(() =>
+    getDb()
+      .prepare("INSERT OR IGNORE INTO learning_costs (learning_id, active_ms, tokens, usd) VALUES (?, ?, ?, ?)")
+      .run(learningId, cost.activeMs, cost.tokens, cost.usd),
+  );
+}
+
+/**
+ * The memory or the vote is already saved when its cost is written: a failure here must not turn
+ * that success into an error the agent would retry. The number is lost, and the reuse counts as
+ * not measured.
+ */
+function bestEffort(write: () => unknown): void {
+  try {
+    write();
+  } catch (err) {
+    console.warn(`effort cost not stored: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**
@@ -67,12 +82,14 @@ export function recordDiscoveryCost(learningId: string, cost: EffortCost | null)
  */
 export function recordReuseCost(learningId: string, voterId: string, kind: "helpful" | "kudos", cost: EffortCost | null): void {
   if (!cost) return;
-  getDb()
-    .prepare(
-      `INSERT OR IGNORE INTO reuse_costs (learning_id, voter_id, kind, active_ms, tokens, usd)
-       SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM votes WHERE learning_id = ? AND voter_id = ? AND kind = ?)`,
-    )
-    .run(learningId, voterId, kind, cost.activeMs, cost.tokens, cost.usd, learningId, voterId, kind);
+  bestEffort(() =>
+    getDb()
+      .prepare(
+        `INSERT OR IGNORE INTO reuse_costs (learning_id, voter_id, kind, active_ms, tokens, usd)
+         SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM votes WHERE learning_id = ? AND voter_id = ? AND kind = ?)`,
+      )
+      .run(learningId, voterId, kind, cost.activeMs, cost.tokens, cost.usd, learningId, voterId, kind),
+  );
 }
 
 /** The measured discovery cost of one memory, or null when none was measured. */

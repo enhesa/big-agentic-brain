@@ -19,6 +19,7 @@ import {
   segment,
   startTurn,
   type Ledger,
+  type Position,
 } from './effort-ledger'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
@@ -1038,10 +1039,18 @@ export const register: Register = (on, options) => {
     if (!tool) return next(e)
     const args = e as unknown as Record<string, unknown>
     if (tool === 'bab_search') {
+      // The reuse is measured from before the search, so the search itself counts as reuse effort.
+      // The house rules digest is a re-read, not a question, so it surfaces nothing.
+      let at: Position | null = null
+      try {
+        if (args.houseRules !== true) at = position(ledger, await $.clock.now(), await sessionUsd($))
+      } catch {
+        at = null
+      }
       const ran = await next(e)
       try {
-        if (ran.deny === undefined && ran.isError !== true && typeof ran.text === 'string') {
-          markSurfaced(ledger, idsFromSearchResult(ran.text), position(ledger, await $.clock.now(), await sessionUsd($)))
+        if (at && ran.deny === undefined && ran.isError !== true && typeof ran.text === 'string') {
+          markSurfaced(ledger, idsFromSearchResult(ran.text), at)
         }
       } catch {
         // Measuring is best effort.
@@ -1049,24 +1058,25 @@ export const register: Register = (on, options) => {
       return ran
     }
     const isReuse = tool === 'bab_react' && isReuseReaction(args.action)
-    let cost: ReturnType<typeof costArg> | null = null
+    if (tool !== 'bab_learn' && !isReuse) return next(withCost(e, null))
+    let cost: ReturnType<typeof costArg> = null
+    let undo: (() => void) | null = null
     try {
       const now = await $.clock.now()
       const usd = await sessionUsd($)
+      // Measured and cut with no await in between: a second save in the same step starts from here.
       if (tool === 'bab_learn') cost = costArg(segment(ledger, now, usd))
-      else if (isReuse && typeof args.learningId === 'string') {
+      else if (typeof args.learningId === 'string') {
         const spent = reuseSince(ledger, args.learningId, position(ledger, now, usd))
         cost = spent ? costArg(spent) : null
       }
+      undo = cut(ledger, now, usd)
     } catch {
       cost = null
     }
     const ran = await next(withCost(e, cost))
-    try {
-      if ((tool === 'bab_learn' || isReuse) && ran.deny === undefined && ran.isError !== true) cut(ledger, await $.clock.now(), await sessionUsd($))
-    } catch {
-      // Measuring is best effort.
-    }
+    // BAB or the host refused it: the segment goes on as if the call never happened.
+    if (ran.deny !== undefined || ran.isError === true) undo?.()
     return ran
   })
 

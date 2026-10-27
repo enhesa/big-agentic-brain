@@ -109,6 +109,14 @@ describe("bab_learn with a measured cost", () => {
     expect(await rows("SELECT * FROM learning_costs")).toEqual([]);
   });
 
+  it("still saves when the cost cannot be stored", async () => {
+    const { getDb } = await import("../lib/db");
+    getDb().exec("DROP TABLE learning_costs");
+    const out = await call("bab_learn", { title: "Saved although the cost table is gone", body: "Body.", cost: { activeMinutes: 1, tokens: 1 } });
+    expect(out.isError).toBe(false);
+    expect(JSON.parse(out.text).learning.id).toBeTruthy();
+  });
+
   it("refuses a bad cost before anything is written", async () => {
     const out = await call("bab_learn", { title: "Bad cost", body: "Body.", cost: { activeMinutes: 9999, tokens: 1 } });
     expect(out.isError).toBe(true);

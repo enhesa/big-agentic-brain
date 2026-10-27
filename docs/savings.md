@@ -12,15 +12,16 @@ Since 27 Oct 2026 BAB also measures agent time and tokens saved, per reuse. That
 
 The question it answers: how much agent effort did a memory save the agent that reused it, compared with what it cost the agent that first found the answer? Both sides are agents, so both are measured the same way. Only numbers are recorded, never prompt text.
 
-- **Agent time** is active time: the sum of the main loop's turn durations, from a turn's start to its end. Time between turns, while nobody works, is not counted. A subagent runs inside a turn, so its time is not added again.
+- **Agent time** is active time: the sum of the main loop's turn durations, from a turn's start to its end, as the host reports them. Time between turns, while nobody works, is not counted. A turn that waits on a permission dialog or a question to the user includes that wait. A subagent runs inside a turn, so its time is not added again.
 - **Tokens** are billable tokens of every model request in the session, subagents included: fresh input, cache writes and output. Cache reads are left out, as in the model above.
 - **USD**, where the host reports a session cost, is stored too. The tiles do not use it yet.
 
 The Claude Code plugin measures both sides in the session (`plugins/claude-code/hooks/effort-ledger.ts`) and sends them with the call:
 
 1. **Discovery cost**, sent with `bab_learn`. It covers the turns since the latest of: the session start, the previous save in this session, or the previous helpful or kudos reaction in this session. It counts the turn in flight up to the save. It is capped at 4 hours of active time: walking back from the save, it includes whole turns until the next one would pass 4 hours, with those turns' tokens only. A single turn longer than 4 hours counts as 4 hours, with its tokens in proportion. The cap keeps one long session from being charged to one memory. A capped segment sends no USD.
-2. **Reuse cost**, sent with a `helpful` or `kudos` `bab_react`. It covers the time and tokens from the first moment the memory surfaced in this session (a `bab_search` result, or BAB's per-prompt notice that names matching memories) to the reaction. If the memory did not surface in this session, or the span is over 4 hours, the reuse cost is not sent, so it is unknown.
-3. **Saved per reuse** = discovery cost minus reuse cost, floored at 0, for time and tokens apart. It counts only when both sides were measured.
+2. **Reuse cost**, sent with a `helpful` or `kudos` `bab_react`. It covers the time and tokens from the first moment the memory surfaced in this session to the reaction. A `bab_search` surfaces its results from the moment the search started, so the search counts as reuse effort; the house rules digest surfaces nothing. BAB's per-prompt notice that names matching memories surfaces them too, if the host passes it to the plugin (not yet confirmed). If the memory did not surface in this session, or the span is over 4 hours, the reuse cost is not sent, so it is unknown.
+3. A save or reaction BAB refuses starts no new segment.
+4. **Saved per reuse** = discovery cost minus reuse cost, floored at 0, for time and tokens apart. It counts only when both sides were measured.
 
 How the tiles count:
 

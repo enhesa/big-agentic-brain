@@ -52,10 +52,12 @@ export type Ledger = {
   stepped: Set<string>
   /** Memory id to the position where it was first surfaced in this session. */
   surfaced: Map<string, Position>
+  /** Counts the cuts, so an undo applies only when no later cut happened. */
+  cuts: number
 }
 
 export function newLedger(usd: number | null = null): Ledger {
-  return { pieces: [], open: null, loose: 0, closedMs: 0, closedTokens: 0, boundaryUsd: usd, stepped: new Set(), surfaced: new Map() }
+  return { pieces: [], open: null, loose: 0, closedMs: 0, closedTokens: 0, boundaryUsd: usd, stepped: new Set(), surfaced: new Map(), cuts: 0 }
 }
 
 /** A main-loop turn began. A turn already open (a missed end) is closed at this moment. */
@@ -142,8 +144,13 @@ export function segment(l: Ledger, now: number, usd: number | null = null, capMs
   return { activeMs, tokens, usd: spent, isCapped }
 }
 
-/** A new discovery segment starts now: after a save or a helpful reaction. Splits the turn in flight. */
-export function cut(l: Ledger, now: number, usd: number | null = null): void {
+/**
+ * A new discovery segment starts now: at a save or a helpful reaction. Splits the turn in flight.
+ * Called before the call goes to BAB, so two saves in one step never share a segment. Returns an
+ * undo for a call BAB refused: it puts the segment back, with what came since, unless another cut
+ * happened in between.
+ */
+export function cut(l: Ledger, now: number, usd: number | null = null): () => void {
   const o = l.open
   if (o) {
     const ms = Math.max(0, now - o.pieceStartedAt)
@@ -152,11 +159,20 @@ export function cut(l: Ledger, now: number, usd: number | null = null): void {
     o.pieceStartedAt = now
     o.tokens = 0
   }
-  // Older pieces are no longer needed: the running totals keep the reuse positions.
-  l.closedTokens += l.loose
+  if (l.loose > 0) pushPiece(l, { activeMs: 0, tokens: l.loose })
   l.loose = 0
+  // The pieces before the cut leave the segment; the running totals keep the reuse positions.
+  const before = l.pieces
+  const beforeUsd = l.boundaryUsd
   l.pieces = []
   l.boundaryUsd = usd
+  const seq = ++l.cuts
+  return () => {
+    if (l.cuts !== seq) return
+    l.pieces = [...before, ...l.pieces]
+    l.boundaryUsd = beforeUsd
+    l.cuts++
+  }
 }
 
 /** Remembers where each memory was first surfaced in this session (a search result or a prompt notice). */
@@ -185,7 +201,9 @@ export function reuseSince(l: Ledger, id: string, now: Position): Position | nul
 }
 
 /** The `cost` argument BAB accepts: minutes to 0.01, whole tokens, USD to 0.0001, each clamped to the server's caps. */
-export function costArg(p: Position): { activeMinutes: number; tokens: number; usd?: number } {
+export function costArg(p: Position): { activeMinutes: number; tokens: number; usd?: number } | null {
+  // A number BAB would refuse would fail the whole save or reaction: send no cost instead.
+  if (!Number.isFinite(p.activeMs) || !Number.isFinite(p.tokens)) return null
   const minutes = Math.min(Math.max(0, p.activeMs) / 60_000, SEGMENT_CAP_MS / 60_000)
   const out: { activeMinutes: number; tokens: number; usd?: number } = {
     activeMinutes: Math.round(minutes * 100) / 100,

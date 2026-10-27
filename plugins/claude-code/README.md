@@ -37,7 +37,7 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 The mod measures agent effort for the "Agent time saved" and "Tokens saved" tiles on `/usage` (`hooks/effort-ledger.ts`, defined in `docs/savings.md`, "Measured savings"). It keeps numbers only, never prompt text.
 
 - `turn.start`, `turn.step` and `turn.complete` add up active time (the main loop's turn durations) and billable tokens (fresh input, cache writes and output, subagents included).
-- `bab_search` results and BAB's per-prompt notice mark which memories surfaced, and when.
+- `bab_search` results mark which memories surfaced, from when the search started (the house rules digest does not count). BAB's per-prompt notice does too, if the host passes it to `prompt.submit`.
 - `bab_learn` gets a `cost` argument: the effort since the session start, the last save or the last helpful reaction, capped at 4 hours of active time.
 - A `helpful` or `kudos` `bab_react` gets a `cost` argument: the effort since that memory first surfaced in the session. With no surfacing, or over 4 hours, it sends none.
 - The mod sets `cost` itself and drops any value the model passed. A reload starts the measurement over.
