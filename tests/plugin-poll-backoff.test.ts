@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BACKOFF_MAX_MS, PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isBabTool, looksLikeRefusal } from "../plugins/claude-code/hooks/poll-backoff";
+import { BACKOFF_MAX_MS, PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isOwnBabTool, looksLikeRefusal } from "../plugins/claude-code/hooks/poll-backoff";
 
 describe("poll back-off", () => {
   it("waits nothing until a poll has failed, then doubles up to five minutes", () => {
@@ -55,14 +55,23 @@ describe("trailing slash warning", () => {
   });
 });
 
-describe("isBabTool", () => {
-  it.each(["mcp__plugin_bab_bab__bab_inbox", "mcp__plugin_bab-inline_bab__bab_send", "mcp__plugin_bab_bab__bab_link_session"])(
-    "approves %s",
-    (name) => expect(isBabTool(name)).toBe(true),
+describe("isOwnBabTool", () => {
+  it.each(["mcp__plugin_bab_bab__bab_inbox", "mcp__plugin_bab_bab__bab_send", "mcp__plugin_bab_bab__bab_link_session"])(
+    "approves %s on the plugin's own server",
+    (name) => expect(isOwnBabTool(name, "plugin:bab:bab")).toBe(true),
   );
 
-  it.each(["Bash", "mcp__plugin_bab_bab__", "mcp__plugin_evil_other__bab_inbox", "mcp__bab__bab_inbox", "mcp__plugin_x_bab__bab_inbox;rm", "xmcp__plugin_bab_bab__bab_inbox"])(
+  it("follows the name the plugin was installed under", () => {
+    expect(isOwnBabTool("mcp__plugin_bab-inline_bab__bab_inbox", "plugin:bab-inline:bab")).toBe(true);
+    expect(isOwnBabTool("mcp__plugin_bab_bab__bab_inbox", "plugin:bab-inline:bab")).toBe(false);
+  });
+
+  it.each(["Bash", "mcp__plugin_bab_bab__", "mcp__plugin_evil_bab__bab_x", "mcp__plugin_bab_bab__other", "mcp__plugin_bab_bab__bab_inbox;rm", "xmcp__plugin_bab_bab__bab_inbox"])(
     "leaves %s to the normal check",
-    (name) => expect(isBabTool(name)).toBe(false),
+    (name) => expect(isOwnBabTool(name, "plugin:bab:bab")).toBe(false),
   );
+
+  it("approves nothing while the server is unknown", () => {
+    expect(isOwnBabTool("mcp__plugin_bab_bab__bab_inbox", null)).toBe(false);
+  });
 });
