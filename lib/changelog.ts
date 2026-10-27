@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Fewer permission prompts for BAB, a design for working offline",
     changes: [
       "The usage page shows measured agent time and tokens saved per reuse, replacing the estimate, and leads with outcomes.",
+      "The offline design now has measured results, a 24 hour hold for old saves, and a check on reactions.",
       "The usage page shows time saved, searches that found nothing, memories never used and weekly active people.",
       "Searches record how many results they found, and their query with secrets masked, for the usage page.",
       "The usage page shows how many saved memories are still in BAB, and the share of searches that helped.",
