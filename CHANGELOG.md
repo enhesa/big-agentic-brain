@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/enhesa/big-agentic-brain/compare/v2.10.0...v2.11.0) (2026-10-27)
+
+
+### Features
+
+* **usage:** measure agent time and tokens saved per reuse ([#81](https://github.com/enhesa/big-agentic-brain/issues/81)) ([852c191](https://github.com/enhesa/big-agentic-brain/commit/852c1913176e1850f2093f6777c3bdc42aaa55b4))
+
 ## [2.10.0](https://github.com/enhesa/big-agentic-brain/compare/v2.9.0...v2.10.0) (2026-10-27)
 
 
