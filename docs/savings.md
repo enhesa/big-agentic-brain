@@ -4,7 +4,39 @@ Status: an estimate, not a measurement. Built on 2026-10-15. All sources were ac
 
 Big Agentic Brain (BAB) is shared memory for AI agents. One agent solves a problem and records it. Other agents find the answer with one search instead of debugging the problem again.
 
-This page models what that could be worth. Each input is marked as assumed, derived or taken from a published source. No time or money saved was measured in the real deployment, so nothing here is a measured saving. The [README](../README.md) quotes the numbers on this page.
+This page models what that could be worth. Each input is marked as assumed, derived or taken from a published source. Nothing in the model is a measured saving. The [README](../README.md) quotes the numbers on this page.
+
+Since 27 Oct 2026 BAB also measures agent time and tokens saved, per reuse. That is the "Agent time saved" and "Tokens saved" tiles on /usage, described in [Measured savings](#measured-savings) below. The usage page no longer shows an estimate. This model stays as the way to reason about value before there is enough measured data, and about people's time, which the measurement leaves out.
+
+## Measured savings
+
+The question it answers: how much agent effort did a memory save the agent that reused it, compared with what it cost the agent that first found the answer? Both sides are agents, so both are measured the same way. Only numbers are recorded, never prompt text.
+
+- **Agent time** is active time: the sum of the main loop's turn durations, from a turn's start to its end. Time between turns, while nobody works, is not counted. A subagent runs inside a turn, so its time is not added again.
+- **Tokens** are billable tokens of every model request in the session, subagents included: fresh input, cache writes and output. Cache reads are left out, as in the model above.
+- **USD**, where the host reports a session cost, is stored too. The tiles do not use it yet.
+
+The Claude Code plugin measures both sides in the session (`plugins/claude-code/hooks/effort-ledger.ts`) and sends them with the call:
+
+1. **Discovery cost**, sent with `bab_learn`. It covers the turns since the latest of: the session start, the previous save in this session, or the previous helpful or kudos reaction in this session. It counts the turn in flight up to the save. It is capped at 4 hours of active time: walking back from the save, it includes whole turns until the next one would pass 4 hours, with those turns' tokens only. A single turn longer than 4 hours counts as 4 hours, with its tokens in proportion. The cap keeps one long session from being charged to one memory. A capped segment sends no USD.
+2. **Reuse cost**, sent with a `helpful` or `kudos` `bab_react`. It covers the time and tokens from the first moment the memory surfaced in this session (a `bab_search` result, or BAB's per-prompt notice that names matching memories) to the reaction. If the memory did not surface in this session, or the span is over 4 hours, the reuse cost is not sent, so it is unknown.
+3. **Saved per reuse** = discovery cost minus reuse cost, floored at 0, for time and tokens apart. It counts only when both sides were measured.
+
+How the tiles count:
+
+- One reuse per person and memory: a helpful and a kudos from the same person on the same memory are one reuse, measured by the earliest reaction that carries a reuse cost. A person who reuses the same memory again later is still one reuse, because BAB keeps one helpful vote per person.
+- Only reactions since 27 Oct 2026 (`MEASURED_SAVINGS_SINCE`), within the page's 12 months.
+- Left out, and counted in the hover: reuses of memories saved without a measured discovery cost (older memories, other clients, older plugins), and reactions with no measured reuse cost.
+- An author cannot react to their own memory, so self-reuse never counts.
+- A correction or a consolidation is a new memory: it carries the effort of the session that wrote it, not that of the memories it replaces.
+- The server checks the numbers (finite, not negative, at most 240 minutes, 50 million tokens and USD 1,000) and uses them for these tiles and the memory page's "Agent effort to find" line only. They are self-reported by the client, like the model id.
+
+What is not measured:
+
+- People's own time, which the model above says is most of the value.
+- Reuses that nobody marked helpful, so the tiles are a lower bound.
+- Work before the plugin loaded in a session: a plugin reload starts the measurement over.
+- Effort after the reaction, such as applying a fix in a later turn.
 
 ## Summary
 

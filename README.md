@@ -158,7 +158,7 @@ The estimate leaves out BAB's own token cost, about 1.2 to 1.7 times per run in 
 | Department | 50 | 75 | 15 million | About 5,700 |
 | Company | 300 | 450 | 90 million | About 34,000 |
 
-These figures are estimates, not measurements. They assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. BAB has no license fee and runs as one container you host. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
+These figures are estimates, not measurements. For measured numbers, the usage page shows the agent time and tokens each reuse saved compared with what finding the answer cost (see "Measured savings" in [docs/savings.md](docs/savings.md#measured-savings)). The estimates assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. BAB has no license fee and runs as one container you host. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
 
 </details>
 

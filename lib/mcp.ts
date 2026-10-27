@@ -19,6 +19,7 @@ import { redeemLinkToken } from "./session-links";
 import { recordSearchOutcome } from "./request-audit";
 import { VERIFY_HINT } from "./swarm-gc";
 import { formatAge } from "./relative-time";
+import { parseCost, recordDiscoveryCost, recordReuseCost } from "./effort-cost";
 import {
   search,
   searchTotal,
@@ -374,6 +375,8 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
 
   const confirmNotDuplicate = args.confirmNotDuplicate === true;
   const provenance = readProvenance(args);
+  // Measured by the plugin, checked before anything is written; used for /usage only.
+  const cost = parseCost(args.cost);
 
   let created;
   try {
@@ -413,6 +416,7 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   // Quiets the Stop hook's capture nudge (app/api/hook/route.ts). MCP calls carry no
   // Claude session id, so this is owner-wide on purpose: see resetPromptsSinceLearn.
   resetPromptsSinceLearn(actor.id);
+  recordDiscoveryCost(created.id, cost);
 
   return JSON.stringify({
     learning: { ...getLearningById(created.id)!, appliesTo: readAppliesTo(created.applies_to) },
@@ -625,6 +629,9 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   if (!REACT_ACTIONS.includes(action as ReactAction)) {
     throw new ValidationError("action must be one of helpful, not_helpful, flag, kudos, confirm, keep, retire, delete, pin, unpin, label");
   }
+  // Measured by the plugin between the search that surfaced the memory and this reaction; /usage only.
+  const cost = parseCost(args.cost);
+  if (cost && action !== "helpful" && action !== "kudos") throw new ValidationError("cost is only for helpful and kudos");
 
   if (action === "flag") {
     const note = noteArg(args.note);
@@ -632,7 +639,9 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   }
   if (action === "kudos") {
     const note = noteArg(args.note);
-    return withUrl(ctx, { learning: giveKudos(learningId, actor.id, note, "mcp") });
+    const learning = giveKudos(learningId, actor.id, note, "mcp");
+    recordReuseCost(learningId, actor.id, "kudos", cost);
+    return withUrl(ctx, { learning });
   }
   if (action === "confirm") {
     // Before the vote fallthrough below, which would cast "confirm" as a helpful/not_helpful choice.
@@ -663,6 +672,7 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     return withUrl(ctx, { learning, changed, ...(message ? { message } : {}) });
   }
   const { learning, changed } = vote(learningId, actor.id, action as "helpful" | "not_helpful", "mcp");
+  if (action === "helpful") recordReuseCost(learningId, actor.id, "helpful", cost);
   return withUrl(ctx, { learning, changed });
 }
 

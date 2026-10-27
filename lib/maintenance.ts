@@ -273,6 +273,8 @@ function sweepDeletedLearnings(db: Db): number {
     (idList, ids) =>
       inTransaction(db, () => {
         db.prepare(`DELETE FROM votes WHERE learning_id IN (${idList})`).run(...ids);
+        db.prepare(`DELETE FROM reuse_costs WHERE learning_id IN (${idList})`).run(...ids);
+        db.prepare(`DELETE FROM learning_costs WHERE learning_id IN (${idList})`).run(...ids);
         // supersession_links and learnings.supersedes_id both hold foreign keys to learnings;
         // without unlinking them first the DELETE below fails and rolls the whole batch back.
         db.prepare(`DELETE FROM supersession_links WHERE old_id IN (${idList}) OR new_id IN (${idList})`).run(

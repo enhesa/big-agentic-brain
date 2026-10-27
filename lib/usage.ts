@@ -38,13 +38,10 @@ export const ZERO_QUERIES_SHOWN = 10;
 /** A memory younger than this has not had a fair chance to be used yet. */
 export const UNUSED_MIN_AGE_DAYS = 14;
 /**
- * The time-saved estimate, from docs/savings.md: assumption 2 (Tw, minutes lost on a known issue
- * without BAB), assumption 3 (Tb, minutes per reuse with BAB) and assumption 6 (ts, minutes to save
- * one memory). Middle values; the ranges are in docs/savings.md.
+ * The day the plugin started to measure agent effort (lib/effort-cost.ts): the discovery cost on a
+ * save and the reuse cost on a helpful or kudos reaction. "Agent time saved" counts reuses from it.
  */
-export const SAVINGS_MINUTES_WITHOUT_BAB = 30;
-export const SAVINGS_MINUTES_WITH_BAB = 5;
-export const SAVINGS_MINUTES_PER_SAVE = 0.5;
+export const MEASURED_SAVINGS_SINCE = "2026-10-27";
 /** "This month" on the page: the last 30 days. */
 export const MONTH_DAYS = 30;
 
@@ -313,6 +310,7 @@ export interface UsageReport {
   upkeep: Upkeep;
   unused: Unused;
   searchOutcomes: SearchOutcomes;
+  measured: MeasuredSavings;
   capture: CaptureWeek[];
   identify: IdentifyWeek[];
   identifyLoops: IdentifyLoop[];
@@ -651,15 +649,97 @@ export function searchOutcomes(weeks: string[]): SearchOutcomes {
   };
 }
 
+/** "Agent time saved" and "Tokens saved" on /usage (docs/savings.md, "Measured savings"). */
+export interface MeasuredSavings {
+  /** The first day counted: MEASURED_SAVINGS_SINCE, or the window's first Monday once that is later. */
+  since: string;
+  /** Reuses since then: one per person and memory with a helpful or kudos reaction. */
+  reuses: number;
+  /** Of those, the ones with both a measured discovery cost and a measured reuse cost: the only ones counted. */
+  measured: number;
+  /** Reuses of a memory saved without a measured discovery cost (an older memory, another client, an old plugin). */
+  noDiscovery: number;
+  /** Reuses of a measured memory whose reaction carried no reuse cost (not surfaced by a search in that session, or another client). */
+  noReuse: number;
+  /** Summed over measured reuses: discovery minus reuse, each floored at 0. */
+  savedMs: number;
+  savedTokens: number;
+}
+
+/** One helpful or kudos reaction with the measured costs on both sides, null where none was measured. */
+export interface ReuseRow {
+  learningId: string;
+  voterId: string;
+  at: string;
+  discoveryMs: number | null;
+  discoveryTokens: number | null;
+  reuseMs: number | null;
+  reuseTokens: number | null;
+}
+
 /**
- * Hours saved, estimated: each helped search saves SAVINGS_MINUTES_WITHOUT_BAB minus
- * SAVINGS_MINUTES_WITH_BAB, each save costs SAVINGS_MINUTES_PER_SAVE (docs/savings.md, assumptions
- * 2, 3 and 6). Helped searches are a lower bound on reuse. Never below 0.
+ * The measured savings, from reaction rows. One reuse per person and memory (helpful and kudos from
+ * the same person on the same memory are one reuse), measured by its earliest reaction that carries a
+ * reuse cost. Saved per reuse = discovery cost minus reuse cost, floored at 0, time and tokens apart.
+ * Counted only when both sides are measured; the rest are counted as excluded, by reason.
  */
-export function timeSavedHours(totals: Pick<ActivityCounts, "helpedSearches" | "saves">): number {
-  const minutes =
-    totals.helpedSearches * (SAVINGS_MINUTES_WITHOUT_BAB - SAVINGS_MINUTES_WITH_BAB) - totals.saves * SAVINGS_MINUTES_PER_SAVE;
-  return Math.max(0, minutes / 60);
+export function measuredSavingsFrom(rows: ReuseRow[], since: string): MeasuredSavings {
+  const pairs = new Map<string, ReuseRow[]>();
+  for (const r of rows) {
+    const key = `${r.learningId} ${r.voterId.toLowerCase()}`;
+    pairs.set(key, [...(pairs.get(key) ?? []), r]);
+  }
+  const out: MeasuredSavings = { since, reuses: pairs.size, measured: 0, noDiscovery: 0, noReuse: 0, savedMs: 0, savedTokens: 0 };
+  for (const group of pairs.values()) {
+    const first = group[0];
+    if (first.discoveryMs === null || first.discoveryTokens === null) {
+      out.noDiscovery++;
+      continue;
+    }
+    const reuse = group
+      .filter((r) => r.reuseMs !== null && r.reuseTokens !== null)
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))[0];
+    if (!reuse) {
+      out.noReuse++;
+      continue;
+    }
+    out.measured++;
+    out.savedMs += Math.max(0, first.discoveryMs - (reuse.reuseMs ?? 0));
+    out.savedTokens += Math.max(0, first.discoveryTokens - (reuse.reuseTokens ?? 0));
+  }
+  return out;
+}
+
+/**
+ * Helpful and kudos reactions by people since MEASURED_SAVINGS_SINCE (or the window start), with
+ * the memory's discovery cost and the reaction's reuse cost. Bounded by votes.created_at.
+ */
+export function measuredSavings(weeks: string[]): MeasuredSavings {
+  const since = weeks[0] > MEASURED_SAVINGS_SINCE ? weeks[0] : MEASURED_SAVINGS_SINCE;
+  const rows = getDb()
+    .prepare(
+      `SELECT v.learning_id AS learningId, v.voter_id AS voterId, v.created_at AS at,
+              lc.active_ms AS discoveryMs, lc.tokens AS discoveryTokens,
+              rc.active_ms AS reuseMs, rc.tokens AS reuseTokens
+       FROM votes v
+       LEFT JOIN learning_costs lc ON lc.learning_id = v.learning_id
+       LEFT JOIN reuse_costs rc ON rc.learning_id = v.learning_id AND rc.voter_id = v.voter_id AND rc.kind = v.kind
+       WHERE v.kind IN ${USED_ACTIONS} AND v.created_at >= ? AND v.voter_id NOT IN ${NOT_PEOPLE}`,
+    )
+    .all(sqlDate(since)) as Array<Record<string, string | number | null>>;
+  const n = (v: string | number | null) => (v === null ? null : Number(v));
+  return measuredSavingsFrom(
+    rows.map((r) => ({
+      learningId: String(r.learningId),
+      voterId: String(r.voterId),
+      at: String(r.at),
+      discoveryMs: n(r.discoveryMs),
+      discoveryTokens: n(r.discoveryTokens),
+      reuseMs: n(r.reuseMs),
+      reuseTokens: n(r.reuseTokens),
+    })),
+    since,
+  );
 }
 
 /* -------------------------------------------------------------------- health */
@@ -881,6 +961,7 @@ export function usageReport(now: Date = new Date()): UsageReport {
     upkeep: upkeep(now),
     unused: unusedMemories(now),
     searchOutcomes: searchOutcomes(weeks),
+    measured: measuredSavings(weeks),
     capture: captureByWeek(weeks),
     identify: identifyByWeek(weeks),
     identifyLoops: identifyLoops(weeks),

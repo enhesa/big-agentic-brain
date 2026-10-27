@@ -32,6 +32,16 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 - The mod approves the BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`), so they raise no permission dialog. A `deny` rule in settings, or an organisation ceiling on the tool, still wins. Sending and deleting keep their ask in words: the server instructions make the agent get the user's yes in the chat.
 - Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
 
+## Measured agent effort
+
+The mod measures agent effort for the "Agent time saved" and "Tokens saved" tiles on `/usage` (`hooks/effort-ledger.ts`, defined in `docs/savings.md`, "Measured savings"). It keeps numbers only, never prompt text.
+
+- `turn.start`, `turn.step` and `turn.complete` add up active time (the main loop's turn durations) and billable tokens (fresh input, cache writes and output, subagents included).
+- `bab_search` results and BAB's per-prompt notice mark which memories surfaced, and when.
+- `bab_learn` gets a `cost` argument: the effort since the session start, the last save or the last helpful reaction, capped at 4 hours of active time.
+- A `helpful` or `kudos` `bab_react` gets a `cost` argument: the effort since that memory first surfaced in the session. With no surfacing, or over 4 hours, it sends none.
+- The mod sets `cost` itself and drops any value the model passed. A reload starts the measurement over.
+
 ## What the hooks do
 
 The plugin registers hooks that post to `<bab_url>/api/hook`:

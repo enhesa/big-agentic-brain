@@ -253,6 +253,17 @@ describe("the memory page", () => {
     expect(await render(a.id)).toMatch(/Written with<\/span><span[^>]*>claude-opus-5-5/);
     expect(await render(b.id)).not.toContain("Written with");
   });
+
+  it("shows the measured effort to find it when the plugin measured one, and nothing when not", async () => {
+    await seedUser();
+    const { create } = await import("../lib/learnings");
+    const { recordDiscoveryCost } = await import("../lib/effort-cost");
+    const a = create({ authorId: "ada.m@example.com", title: "Gradle cache key", body: "hash the lock file, not the build file" });
+    const b = create({ authorId: "ada.m@example.com", title: "Garden hose length", body: "thirty metres reaches the back fence" });
+    recordDiscoveryCost(a.id, { activeMs: 25 * 60_000, tokens: 123_456, usd: null });
+    expect(await render(a.id)).toMatch(/Agent effort to find<\/span><span[^>]*>25 min, 123,456 tokens/);
+    expect(await render(b.id)).not.toContain("Agent effort to find");
+  });
 });
 
 describe("the specs", () => {

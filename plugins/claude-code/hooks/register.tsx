@@ -2,6 +2,24 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isOwnBabTool, looksLikeRefusal } from './poll-backoff'
+import {
+  addTokens,
+  babToolOf,
+  billableTokens,
+  completeTurn,
+  costArg,
+  cut,
+  idsFromNotice,
+  idsFromSearchResult,
+  isReuseReaction,
+  markSurfaced,
+  newLedger,
+  position,
+  reuseSince,
+  segment,
+  startTurn,
+  type Ledger,
+} from './effort-ledger'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
 // BAB's watcher: everything goes through
@@ -231,6 +249,37 @@ function cleanLines(s: string | null | undefined, max: number): string {
 /** What went wrong, as one short line a Text can hold: an error can carry text from the server. */
 function why(err: unknown): string {
   return clean(String(err), 60)
+}
+
+// Measured agent effort for "Agent time saved" on /usage (effort-ledger.ts, docs/savings.md). Numbers
+// only. Module state: a reload starts it over, so a segment then starts at the reload.
+let ledger: Ledger = newLedger()
+/** The measured tools on any server; the own-server check comes after this cheap test. */
+const MEASURED_TOOL_RE = /^mcp__.+__bab_(?:learn|react|search)$/
+
+/** The session's cost in USD so far, or null where the host keeps no cost ledger. */
+async function sessionUsd($: EngineInterface): Promise<number | null> {
+  try {
+    const usd = (await $.session.usage()).cost?.usd
+    return typeof usd === 'number' && Number.isFinite(usd) ? usd : null
+  } catch {
+    return null
+  }
+}
+
+/** This plugin's MCP server name, connecting once if needed (as tool.check does). */
+async function ownServerName($: EngineInterface): Promise<string | null> {
+  if (!ownServer) {
+    const c = await $.mcp.connect('bab').catch(() => null)
+    if (c?.isConnected) ownServer = c.server
+  }
+  return ownServer ?? null
+}
+
+/** The call's arguments with `cost` set by the plugin alone: whatever the model passed is dropped. */
+function withCost<T extends object>(e: T, cost: ReturnType<typeof costArg> | null): T {
+  const { cost: _dropped, ...rest } = e as T & { cost?: unknown }
+  return (cost ? { ...rest, cost } : rest) as T
 }
 
 /** "jan.van.der.biest@example.com" -> "Jan": enough to recognise, short enough for one line. */
@@ -939,7 +988,91 @@ export const register: Register = (on, options) => {
     return { ...verdict, decision: 'allow', reason: 'BAB plugin tool' }
   })
 
+  // Measured effort (effort-ledger.ts). Every hook here only reads numbers and passes the event on;
+  // a failure is swallowed so the session never notices.
+  on('turn.start', async ($, e, next) => {
+    try {
+      if (e.agentId === undefined) startTurn(ledger, e.turnId, await $.clock.now())
+    } catch {
+      // Measuring is best effort.
+    }
+    return next(e)
+  })
+
+  on('turn.step', async function* ($, e, next) {
+    const response = yield* next(e)
+    try {
+      addTokens(ledger, billableTokens(response.usage), e.turnId)
+    } catch {
+      // Measuring is best effort.
+    }
+    return response
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    try {
+      completeTurn(ledger, { turnId: e.turnId, isMain: e.agentId === undefined, durationMs: e.durationMs, usage: e.usage }, await $.clock.now())
+    } catch {
+      // Measuring is best effort.
+    }
+    return next(e)
+  })
+
+  // BAB's per-prompt notice names the memories it surfaced; their reuse is measured from here.
+  on('prompt.submit', async ($, e, next) => {
+    const entered = await next(e)
+    try {
+      const ids = 'context' in entered && entered.context ? entered.context.flatMap(idsFromNotice) : []
+      if (ids.length > 0) markSurfaced(ledger, ids, position(ledger, await $.clock.now(), await sessionUsd($)))
+    } catch {
+      // Measuring is best effort.
+    }
+    return entered
+  })
+
+  // bab_search marks what it surfaced; bab_learn carries the discovery cost; a helpful or kudos
+  // bab_react carries the reuse cost. Both start a new discovery segment once BAB accepted them.
+  on('tool.call', async ($, e, next) => {
+    if (!MEASURED_TOOL_RE.test(e.tool)) return next(e)
+    const tool = babToolOf(e.tool, await ownServerName($))
+    if (!tool) return next(e)
+    const args = e as unknown as Record<string, unknown>
+    if (tool === 'bab_search') {
+      const ran = await next(e)
+      try {
+        if (ran.deny === undefined && ran.isError !== true && typeof ran.text === 'string') {
+          markSurfaced(ledger, idsFromSearchResult(ran.text), position(ledger, await $.clock.now(), await sessionUsd($)))
+        }
+      } catch {
+        // Measuring is best effort.
+      }
+      return ran
+    }
+    const isReuse = tool === 'bab_react' && isReuseReaction(args.action)
+    let cost: ReturnType<typeof costArg> | null = null
+    try {
+      const now = await $.clock.now()
+      const usd = await sessionUsd($)
+      if (tool === 'bab_learn') cost = costArg(segment(ledger, now, usd))
+      else if (isReuse && typeof args.learningId === 'string') {
+        const spent = reuseSince(ledger, args.learningId, position(ledger, now, usd))
+        cost = spent ? costArg(spent) : null
+      }
+    } catch {
+      cost = null
+    }
+    const ran = await next(withCost(e, cost))
+    try {
+      if ((tool === 'bab_learn' || isReuse) && ran.deny === undefined && ran.isError !== true) cut(ledger, await $.clock.now(), await sessionUsd($))
+    } catch {
+      // Measuring is best effort.
+    }
+    return ran
+  })
+
   on('session.start', async ($, e, next) => {
+    // A new session (or a reload) measures from here.
+    ledger = newLedger(await sessionUsd($))
     // No early return for headless runs: the desktop app reports neither isInteractive nor a
     // surface at session.start, so either test would switch the watcher off there too.
     // A new session (or a reload) shows the pill again even if it was closed before.

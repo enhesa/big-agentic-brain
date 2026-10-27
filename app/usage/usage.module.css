@@ -150,6 +150,15 @@
   color: var(--u-ink);
 }
 
+/* A value that is a sentence, such as "Measuring since 27 Oct": smaller, and allowed to wrap. */
+.heroValueText {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: var(--u-muted);
+}
+
 .spark {
   width: 112px;
   height: 38px;
@@ -1088,6 +1097,10 @@ a.mini:hover {
 
   .heroValue {
     font-size: 2.2rem;
+  }
+
+  .heroValueText {
+    font-size: 1.1rem;
   }
 
   .spark {

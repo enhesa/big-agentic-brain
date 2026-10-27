@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 48;
+export const CURRENT_VERSION = 49;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -315,6 +315,39 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(48);
     appliedVersion = 48;
   }
+
+  if (appliedVersion < 49) {
+    runMigrationV49(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(49);
+    appliedVersion = 49;
+  }
+}
+
+function runMigrationV49(database: DatabaseSync) {
+  // Measured agent effort (docs/savings.md, "Measured savings"): what the plugin measured before a
+  // save (discovery cost) and between a search and a helpful or kudos reaction (reuse cost). Numbers
+  // only. Own tables, not columns: learnings and votes are read with SELECT *, and these numbers must
+  // not ride along in every search answer. No foreign keys: rows go with their learning's purge
+  // (lib/maintenance.ts) and with the vote they belong to (lib/learnings.ts vote()).
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS learning_costs (
+      learning_id TEXT PRIMARY KEY,
+      active_ms INTEGER NOT NULL,
+      tokens INTEGER NOT NULL,
+      usd REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS reuse_costs (
+      learning_id TEXT NOT NULL,
+      voter_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      active_ms INTEGER NOT NULL,
+      tokens INTEGER NOT NULL,
+      usd REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (learning_id, voter_id, kind)
+    );
+  `);
 }
 
 /** Columns that held people's first prompts, folders and computer names for the removed session list. */

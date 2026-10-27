@@ -18,11 +18,7 @@ import {
   STANDING_SAMPLE_MAX,
   USAGE_COLLECTING_SINCE,
   UNUSED_MIN_AGE_DAYS,
-  SAVINGS_MINUTES_WITHOUT_BAB,
-  SAVINGS_MINUTES_WITH_BAB,
-  SAVINGS_MINUTES_PER_SAVE,
   cachedUsageReport,
-  timeSavedHours,
   weekStart,
 } from "@/lib/usage";
 import { INACTIVITY_CLOCK_START } from "@/lib/learnings";
@@ -55,6 +51,19 @@ function plural(n: number, one: string, many = `${one}s`): string {
 
 function pct(part: number, whole: number): string | null {
   return whole > 0 ? `${Math.round((part / whole) * 100)}%` : null;
+}
+
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+/** Large counts short: 9,500 as is, then 12K, 3.4M. */
+function shortCount(n: number): string {
+  return n < 10_000 ? formatCount(n) : compact.format(n);
+}
+
+/** Hours with one decimal under 10, whole hours from 10 up. */
+function hoursText(ms: number): string {
+  const h = ms / 3_600_000;
+  return `${h >= 10 ? formatCount(Math.round(h)) : (Math.round(h * 10) / 10).toString()} h`;
 }
 
 /** More weeks than this make the Authors-per-team grid compact. */
@@ -91,10 +100,13 @@ function HeroTile({
   testId,
   title,
   note,
+  isWaiting = false,
 }: {
   label: string;
   /** A count, or text such as a share or an amount of hours. */
   value: number | string;
+  /** The value is a sentence ("Measuring since 27 Oct"), not a number: drawn smaller. */
+  isWaiting?: boolean;
   /** How much the total grew this week; left out on a tile that is not a running total. */
   grew?: number;
   what?: "this week" | "new this week";
@@ -108,7 +120,7 @@ function HeroTile({
     <div className={styles.hero} title={title}>
       <span className={styles.heroLabel}>{label}</span>
       <div className={styles.heroRow}>
-        <span className={styles.heroValue} data-testid={testId}>
+        <span className={isWaiting ? `${styles.heroValue} ${styles.heroValueText}` : styles.heroValue} data-testid={testId}>
           {typeof value === "number" ? formatCount(value) : value}
         </span>
         {spark && <Sparkline values={spark.values} label={spark.label} />}
@@ -270,9 +282,15 @@ export default async function UsagePage({
   const activityTotal = shown.reduce((s, w) => s + w.saves + w.searches + w.reactions, 0);
   const peopleTotal = shown.reduce((s, w) => s + w.people, 0);
 
-  // Estimated hours saved over the window (docs/savings.md). Whole hours from 10 up, else one decimal.
-  const savedHours = timeSavedHours(totals);
-  const savedHoursText = `${savedHours >= 10 ? formatCount(Math.round(savedHours)) : (Math.round(savedHours * 10) / 10).toString()} h`;
+  // Measured agent savings (docs/savings.md, "Measured savings"): only reuses measured on both sides count.
+  const measured = report.measured;
+  const measuredSince = dayMonth(measured.since);
+  const isMeasuring = measured.measured === 0;
+  const measuredNote = `${plural(measured.measured, "measured reuse")} since ${measuredSince}`;
+  const excludedText =
+    `Counted: ${formatCount(measured.measured)} of ${plural(measured.reuses, "reuse")} since ${measuredSince} (one per person and memory, a helpful or kudos reaction). ` +
+    `Left out, because one side was not measured: ${plural(measured.noDiscovery, "reuse")} of memories saved without a measured cost (older memories, other clients), ` +
+    `and ${plural(measured.noReuse, "reaction")} with no measured reuse (the memory was not surfaced by a search in that session, or another client).`;
   const outcomes = report.searchOutcomes;
   const unused = report.unused;
 
@@ -387,8 +405,68 @@ export default async function UsagePage({
           </div>
         </header>
 
-        {/* 1. Totals over the last 12 months */}
-        <section aria-label="Last 12 months" className={styles.heroes} data-testid="usage-tiles">
+        {/* 1. Outcomes: measured savings and how well search works */}
+        <section aria-label="Outcomes" className={styles.heroes} data-testid="usage-tiles">
+          <HeroTile
+            label="Agent time saved"
+            value={isMeasuring ? `Measuring since ${measuredSince}` : hoursText(measured.savedMs)}
+            isWaiting={isMeasuring}
+            testId="tile-time-saved"
+            title={
+              "Measured, not estimated. For each reuse: the agent time spent to find the answer before the memory was saved, minus the agent time from the search that surfaced it to the helpful reaction, never below 0, added up. " +
+              "Agent time is active time, the sum of turn durations, not idle time. The save side counts the turns since the session started, the last save or the last helpful reaction, up to 4 hours. People's own time is not counted. " +
+              excludedText +
+              " Details in docs/savings.md."
+            }
+            note={{
+              text: isMeasuring ? "No reuse measured on both sides yet" : measuredNote,
+              title: excludedText,
+              testId: "tile-time-saved-note",
+            }}
+          />
+          <HeroTile
+            label="Tokens saved"
+            value={isMeasuring ? `Measuring since ${measuredSince}` : shortCount(measured.savedTokens)}
+            isWaiting={isMeasuring}
+            testId="tile-tokens-saved"
+            title={
+              "Measured, not estimated. For each reuse: the tokens spent to find the answer before the memory was saved, minus the tokens from the search that surfaced it to the helpful reaction, never below 0, added up. " +
+              "Tokens are the billable ones: fresh input, cache writes and output, subagents included. Cache reads are left out. " +
+              excludedText +
+              " Details in docs/savings.md."
+            }
+            note={{
+              text: isMeasuring ? "No reuse measured on both sides yet" : `${formatCount(measured.savedTokens)} tokens since ${measuredSince}`,
+              title: excludedText,
+              testId: "tile-tokens-saved-note",
+            }}
+          />
+          <HeroTile
+            label="Searches that helped"
+            value={pct(totals.helpedSearches, totals.searches) ?? "-"}
+            testId="tile-search-helped"
+            title={`A search counts as helped when the same person marks a memory helpful (or gives kudos) within ${HELPED_WINDOW_MINUTES} minutes after it. A sign, not proof: agents do not always react, and the memory need not come from that search.`}
+            note={{
+              text: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)}, last 12 months`,
+              title: "Searches by agents, with the search tool or the REST search, over the last 12 months.",
+              testId: "tile-helped-note",
+            }}
+          />
+          <HeroTile
+            label="Found nothing"
+            value={pct(outcomes.zero, outcomes.recorded) ?? "-"}
+            testId="tile-found-nothing"
+            title="The share of searches that returned no memory at all. Counted only since searches started recording how many results they found. Listings without search text are left out."
+            note={{
+              text: outcomes.since ? `${formatCount(outcomes.zero)} of ${formatCount(outcomes.recorded)}, since ${dayMonth(outcomes.since)}` : "No searches recorded yet",
+              title: "Older searches did not record their result count, so they are left out.",
+              testId: "tile-found-nothing-note",
+            }}
+          />
+        </section>
+
+        {/* 1b. Activity over the last 12 months */}
+        <section aria-label="Activity" className={styles.heroes} data-testid="usage-tiles-2">
           <HeroTile
             label="Memories saved"
             value={totals.saves}
@@ -408,7 +486,8 @@ export default async function UsagePage({
             grew={current.searches}
             spark={sparkOf("searches", "Searches")}
             testId="tile-searches"
-            title="Searches agents ran in BAB over the last 12 months, added up."
+            title="Searches agents ran in BAB over the last 12 months, added up: the search tool and the REST search."
+            note={{ text: "Last 12 months", title: "Weeks run Monday to Sunday, UTC.", testId: "tile-searches-note" }}
           />
           <HeroTile
             label="Found it helpful"
@@ -416,64 +495,14 @@ export default async function UsagePage({
             grew={current.reactions}
             spark={sparkOf("reactions", "Helpful reactions")}
             testId="tile-helpful"
-            title="Helpful, kudos and confirm reactions on memories over the last 12 months, added up."
-            note={{
-              text: `${totals.searches > 0 ? Math.round((100 * totals.helpedSearches) / totals.searches) : 0}% of searches helped`,
-              title: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)} searches were followed within ${HELPED_WINDOW_MINUTES} minutes by the same person marking a memory helpful (or giving kudos). A sign, not proof: agents do not always react, and the memory need not come from that search.`,
-              testId: "tile-helped-note",
-            }}
-          />
-          <HeroTile
-            label="People using BAB"
-            value={totals.people}
-            grew={current.newPeople}
-            what="new this week"
-            spark={sparkOf("newPeople", "People using BAB")}
-            testId="tile-people"
-            title="Different people whose agent or browser used BAB in the last 12 months, each counted once, not added up per week. The line is the running count of distinct people."
-          />
-        </section>
-
-        {/* 1b. Value and gaps */}
-        <section aria-label="Value and gaps" className={styles.heroes} data-testid="usage-tiles-2">
-          <HeroTile
-            label="Time saved (estimate)"
-            value={savedHoursText}
-            testId="tile-time-saved"
-            title={`An estimate, not a measurement. Each search that helped saves ${SAVINGS_MINUTES_WITHOUT_BAB - SAVINGS_MINUTES_WITH_BAB} minutes (${SAVINGS_MINUTES_WITHOUT_BAB} to solve a known issue alone, minus ${SAVINGS_MINUTES_WITH_BAB} to find and apply the memory), and each memory saved costs ${SAVINGS_MINUTES_PER_SAVE} minutes. Helped searches are a lower bound on reuse, since agents do not always react. Assumptions 2, 3 and 6 in docs/savings.md.`}
-            note={{
-              text: `from ${plural(totals.helpedSearches, "search", "searches")} that helped`,
-              title: `${formatCount(totals.helpedSearches)} helped searches and ${formatCount(totals.saves)} saves in the last 12 months. Never shown below 0. The model is in docs/savings.md.`,
-              testId: "tile-time-saved-note",
-            }}
-          />
-          <HeroTile
-            label="Found nothing"
-            value={pct(outcomes.zero, outcomes.recorded) ?? "-"}
-            testId="tile-found-nothing"
-            title="The share of searches that returned no memory at all. Counted only since searches started recording how many results they found."
-            note={{
-              text: outcomes.since ? `${formatCount(outcomes.zero)} of ${formatCount(outcomes.recorded)}, since ${dayMonth(outcomes.since)}` : "No searches recorded yet",
-              title: "Older searches did not record their result count, so they are left out.",
-              testId: "tile-found-nothing-note",
-            }}
-          />
-          <HeroTile
-            label="Never used"
-            value={pct(unused.unused, unused.eligible) ?? "-"}
-            testId="tile-never-used"
-            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}, so only memories saved since then are judged. Pinned house rules are left out.`}
-            note={{
-              text: `${formatCount(unused.unused)} of ${plural(unused.eligible, "memory", "memories")}`,
-              title: `Live learnings and practices saved since ${dayMonth(INACTIVITY_CLOCK_START)}, older than ${UNUSED_MIN_AGE_DAYS} days, not pinned.`,
-              testId: "tile-never-used-note",
-            }}
+            title="Helpful, kudos and confirm reactions on memories over the last 12 months, added up. Not helpful and flags are left out."
+            note={{ text: "Last 12 months", title: "Helpful, kudos and confirm reactions.", testId: "tile-helpful-note" }}
           />
           <HeroTile
             label="Active this week"
             value={current.people}
             testId="tile-active-week"
-            title="Different people whose agent or browser used BAB this week."
+            title={`Different people whose agent or browser used BAB this week. Over the last 12 months: ${plural(totals.people, "person", "people")}, each counted once.`}
             note={{
               text: `${formatCount(current.people - current.newPeople)} returning, ${formatCount(current.newPeople)} new`,
               title: "Returning: also active in an earlier week of the last 12 months. New: first active this week.",
@@ -566,7 +595,18 @@ export default async function UsagePage({
 
         {/* 3b. Weekly active people and the searches that found nothing */}
         <div className={styles.grid}>
-          <Card title="Weekly active people" span={maintainer ? "s7" : "s12"} sub={<Legend2 />}>
+          <Card
+            title="Weekly active people"
+            span={maintainer ? "s7" : "s12"}
+            sub={
+              <>
+                <span className={styles.chip} title="Different people whose agent or browser used BAB in the last 12 months, each counted once." data-testid="people-total">
+                  {plural(totals.people, "person", "people")} in 12 months
+                </span>{" "}
+                <Legend2 />
+              </>
+            }
+          >
             {activityTotal === 0 || peopleTotal === 0 ? (
               <Empty>No activity yet.</Empty>
             ) : (
@@ -785,6 +825,13 @@ export default async function UsagePage({
               value={formatCount(upkeep.archivedUnread)}
               title="Memories archived because no agent read them for a year. Any agent can restore one with keep."
               testId="upkeep-archived-unread"
+            />
+            <MiniTile
+              label="Never used"
+              value={pct(unused.unused, unused.eligible) ?? "-"}
+              title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}, so only memories saved since then are judged. Pinned house rules are left out.`}
+              testId="tile-never-used"
+              foot={<span data-testid="tile-never-used-note">{`${formatCount(unused.unused)} of ${plural(unused.eligible, "memory", "memories")}`}</span>}
             />
             <MiniTile label="Kept" value={formatCount(upkeep.kept)} title="Memories someone checked and kept." testId="upkeep-kept" />
             <MiniTile label="Restored" value={formatCount(upkeep.restored)} title="Retired memories brought back." testId="upkeep-restored" />

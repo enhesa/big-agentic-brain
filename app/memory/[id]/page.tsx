@@ -22,6 +22,7 @@ import {
 } from "@/lib/learnings";
 import { formatRelativeTime, formatAge, formatExpiry } from "@/lib/relative-time";
 import { getDb } from "@/lib/db";
+import { discoveryCostOf } from "@/lib/effort-cost";
 import styles from "../memory.module.css";
 import Markdown from "@/app/components/Markdown";
 import { formatDate, DATE_TIME } from "@/lib/branding";
@@ -113,6 +114,9 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
   if (learning.repo) facts.push(["Repo", learning.repo]);
   // Self-declared by the author, shown as text only; it is not part of standing or confidence.
   if (learning.model) facts.push(["Written with", learning.model]);
+  // Measured by the plugin when it was saved (lib/effort-cost.ts); numbers only, for /usage.
+  const found = discoveryCostOf(learning.id);
+  if (found) facts.push(["Agent effort to find", `${found.activeMs < 60_000 ? "under 1" : Math.round(found.activeMs / 60_000)} min, ${found.tokens.toLocaleString("en-GB")} tokens`]);
 
   return (
     <Shell>

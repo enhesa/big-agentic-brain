@@ -2023,6 +2023,8 @@ export function vote(
         voterId,
         existing.kind,
       );
+      // A measured reuse goes with the helpful vote it was measured for (lib/effort-cost.ts).
+      db.prepare("DELETE FROM reuse_costs WHERE learning_id = ? AND voter_id = ? AND kind = ?").run(learningId, voterId, existing.kind);
     }
 
     db.prepare(
