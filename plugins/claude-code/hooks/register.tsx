@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isBabTool, looksLikeRefusal } from './poll-backoff'
+import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isOwnBabTool, looksLikeRefusal } from './poll-backoff'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
 // BAB's watcher: everything goes through
@@ -192,6 +192,9 @@ let names: Record<string, string> = {}
 let peopleAt = 0
 let whoTriedAt = 0
 let busy = false
+// This plugin's MCP server as $.mcp.connect names it, once it has connected.
+let ownServer: string | undefined
+
 // Poll back-off. After a refusal (the host denied bab_inbox) the 15 s poll stops until /bab-check or ↻;
 // after any other failure the ticks wait 30 s, 60 s ... up to 5 minutes, and one success resets it.
 let isPaused = false
@@ -926,7 +929,13 @@ export const register: Register = (on, options) => {
   // their ask in words: the server instructions make the agent get the user's yes first.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
-    if (!isBabTool(e.tool) || verdict.decision === 'deny') return verdict
+    if (verdict.decision !== 'ask' || (verdict.ceiling && verdict.ceiling !== 'allow')) return verdict
+    if (!ownServer) {
+      // Not cached until it connects, so a server that comes up later (VPN on) is still approved.
+      const c = await $.mcp.connect('bab').catch(() => null)
+      if (c?.isConnected) ownServer = c.server
+    }
+    if (!isOwnBabTool(e.tool, ownServer ?? null)) return verdict
     return { ...verdict, decision: 'allow', reason: 'BAB plugin tool' }
   })
 

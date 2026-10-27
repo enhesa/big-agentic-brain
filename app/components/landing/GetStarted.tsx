@@ -43,8 +43,6 @@ export default function GetStarted() {
         </div>
         <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
         <p className={styles.cliSub}>No permission prompts: the plugin approves its own tools. Before sending a message or deleting, Claude still asks you.</p>
-        <p className={styles.cliSub}>In the Claude desktop app, allow the same four.</p>
-        <p className={styles.cliSub}>They read, or only change your own inbox, reminders and profile. Sending, saving and reacting still ask.</p>
       </div>
     </section>
   );
