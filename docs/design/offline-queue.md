@@ -59,7 +59,7 @@ The server instructions make the agent show the exact text and send on the user'
 
 ### Local validation at enqueue
 
-The server rejects bad input. A queue that holds input the server will reject creates poison items days later. So the mod checks, at enqueue, the static limits the schema states: title 160, body 8000 (a reminder body 4000), tags and aliases as the schema text states, required fields, `dueAt` format, and an `expiresAt` that is not already past. Enums that depend on server config (team tags, platform labels) are not checked locally; the server's answer at replay holds such an entry with a readable reason instead of dropping it. A failure returns an error to the agent right away, so it can fix the call while it still has the context.
+The server rejects bad input. A queue that holds input the server will reject creates poison items days later. So the mod checks the static limits at enqueue: title 160, body 8000 (a reminder body 4000), tags and aliases as the schema text states, required fields, `dueAt` format, and an `expiresAt` that is not already past. Enums that depend on server config (team tags, platform labels) are not checked locally. The server's answer at replay holds such an entry with a readable reason. It is not dropped. A failure returns an error to the agent right away, so it can fix the call while it still has the context.
 
 Drift guard: a test imports `TOOLS` from `lib/mcp.ts` and asserts the stand-in schemas are a subset of the real ones (same property names, limits no looser). It sees the test config, so it does not check config-driven enums.
 
@@ -152,7 +152,12 @@ Where: `$.store` (survives sessions, shared by every session on the machine). No
 
 Layout, because `$.store` has only `get`, `set`, `delete`, `keys` and no atomic update:
 
-- One key per entry: `bab.q1.e.<createdAtMs>.<random>`. Requests use `bab.q1.r.<id>` and dead letters `bab.q1.d.<ms>.<random>`, so none sorts among the entries. Appending is a single `set` of a new key, so two sessions do not touch each other's items, if `$.store` writes per key. That is an assumption: the API says only that it is a JSON file of the plugin's own. If each process rewrites the whole file from its own copy, session A's `set` can wipe B's new key. Phase 0 tests this with two processes writing at once. Fallbacks, in order: write the entry, read it back, and write again if it is gone (a mitigation only: it cannot see a whole-file rewrite by another process, so the two-process spike is the real test); then one key per session (`bab.q1.<session>`) written only by that session; then a per-session file through `$.fs`. Phase 3 does not start until one of these passes. FIFO order is the key order, sorted by the embedded time.
+- One key per entry: `bab.q1.e.<createdAtMs>.<random>`. Requests use `bab.q1.r.<id>` and dead letters `bab.q1.d.<ms>.<random>`, so none sorts among the entries. Appending is a single `set` of a new key, so two sessions do not touch each other's items, if `$.store` writes per key. That is an assumption: the API says only that it is a JSON file of the plugin's own. If each process rewrites the whole file from its own copy, session A's `set` can wipe B's new key. Phase 0 tests this with two processes writing at once.
+  - Fallbacks, in order: write the entry, read it back, and write again if it is gone. This is a mitigation only. It cannot see a whole-file rewrite by another process, so the two-process spike is the real test.
+  - Then one key per session (`bab.q1.<session>`), written only by that session.
+  - Then a per-session file through `$.fs`.
+  - Phase 3 does not start until one of these passes.
+  - FIFO order is the key order, sorted by the embedded time.
 - Only the replay lease holder changes an entry's state. Sessions create entries and, for `/bab-queue discard` and `approve`, write a request key (`bab.q1.r.<id>`) that the holder honours before it sends. A discard of an entry already in `sending` may have reached BAB; the reply says so. Before every state write the holder reads the entry again and skips it if it is gone, so a slow holder cannot bring back an entry another holder deleted. A resurrected entry is harmless only inside the 15-day key window.
 - Budget: the whole store is capped at 4 MiB and already holds the inbox snapshot (reminders with bodies) and people. The queue gets 1 MiB: at most 50 entries, each at most 16 KiB of JSON (800 KiB), and dead letters at most 20 entries of 1 KiB (title and the first 200 characters). Counts are checked at enqueue and re-checked by the lease holder. Two sessions racing can exceed 50 by a few; every session re-counts the entries at enqueue and refuses while at the cap; nothing is trimmed.
 - Full: refuse the new item loudly ("BAB offline queue is full (50). Not saved."). Never drop the oldest silently.
@@ -180,7 +185,7 @@ Entry (v1):
 }
 ```
 
-TTL: 14 days for learn, feedback and remind; 7 days for react (a stale vote is noise). An expired item moves to a dead-letter record (max 20, kept 30 days, title and the first 200 characters only, no more) and the person sees one line: "Dropped 2 saved items older than 14 days." Clock jumps back: age is clamped to zero. Clock jumps far forward: items expire early and land in dead letters, not nowhere.
+TTL: 14 days for learn, feedback and remind; 7 days for react (a stale vote is noise). An expired item moves to a dead-letter record. It keeps at most 20 records for 30 days, with the title and the first 200 characters only. The person sees one line: "Dropped 2 saved items older than 14 days." Clock jumps back: age is clamped to zero. Clock jumps far forward: items expire early and land in dead letters, not nowhere.
 
 Dead-letter list is bounded by count and age, so it cannot grow either.
 
@@ -309,7 +314,17 @@ Advice: A, in the phases below. C is phase 1 and ships value alone.
 
 ## 16. Phased rollout
 
-- Phase 0, spikes (no product change): reconnect behaviour (12); whether the real tools stay listed and `tool.call` still fires after a mid-session drop; whether a deny rule fires before or after the `tool.call` hook; whether a `tool.call` hook can return a result for an MCP tool; the server replica count; `$.store` cross-process safety and file location and permissions; stand-in namespace and `isDeferred` behaviour; `/healthz` body; whether `bab_react` is an upsert; whether attribution of a learn uses the session link. Output: a short update of this doc.
+- Phase 0, spikes (no product change). Output: a short update of this doc. Check:
+  - reconnect behaviour (12);
+  - whether the real tools stay listed and `tool.call` still fires after a mid-session drop;
+  - whether a deny rule fires before or after the `tool.call` hook;
+  - whether a `tool.call` hook can return a result for an MCP tool;
+  - the server replica count;
+  - `$.store` cross-process safety, file location and permissions;
+  - the stand-in namespace and `isDeferred` behaviour;
+  - the `/healthz` body;
+  - whether `bab_react` is an upsert;
+  - whether attribution of a learn uses the session link.
 - Phase 1, breaker and fast fail: breaker with shared state and probe; offline text for reads; status line and panel banner; merge with #71's pause. No queue. Safe alone.
 - Phase 2, server: `clientRequestId` on in-scope MCP tools, 15-day retention, `features` in `bab_people`, machine-readable error codes, `app: "bab"` in `/healthz`. Ships before any replay. Also updates `skill.md`, the SKILL.md copy, the tool count guard tests if any tool is added (none is), and keeps the instructions text under its limit.
 - Phase 3, queue: entries, local validation and secret check, `tool.call` interception for dropped connections, replay, identity and origin checks, `/bab-queue`, dead letters. Behind `bab_offline_queue`, off by default; maintainers on first.
