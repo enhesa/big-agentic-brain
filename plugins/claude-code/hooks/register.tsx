@@ -196,6 +196,10 @@ let busy = false
 // after any other failure the ticks wait 30 s, 60 s ... up to 5 minutes, and one success resets it.
 let isPaused = false
 let failures = 0
+// Polls in a row that timed out. The desktop app holds a call on "Needs approval" instead of
+// refusing it, and each retry would stack one more approval, so a second timeout in a row pauses
+// like a refusal. One alone (a slow server, a laptop waking up) keeps the back-off.
+let timeouts = 0
 let retryAt = 0
 
 /** The host (not BAB) declined a tool call: a person or a policy said no. */
@@ -337,10 +341,12 @@ async function serverName($: EngineInterface): Promise<string> {
   return SERVER
 }
 
+class TimedOutError extends Error {}
+
 /** Settles with `work`, or rejects when it takes longer than `ms`: a stalled request must not hold a check for ever. */
 function within<T>($: EngineInterface, work: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = $.clock.after(ms, () => reject(new Error(`${what} timed out`)))
+    const timer = $.clock.after(ms, () => reject(new TimedOutError(`${what} timed out`)))
     work.then(
       value => {
         timer.cancel()
@@ -696,6 +702,7 @@ async function check($: EngineInterface, force = false): Promise<string> {
     isPaused = false
     await update($, pausedAtom, () => false)
     failures = 0
+    timeouts = 0
     retryAt = 0
   } else if (isPaused) {
     return 'BAB: inbox paused, /bab-check resumes it'
@@ -716,7 +723,8 @@ async function check($: EngineInterface, force = false): Promise<string> {
     // poll() throws on a failure, so a failing holder stops renewing and loses the lease.
     const snap = await poll($).catch(async (err: unknown) => {
       await update($, view, v => ({ ...v, isDown: true }))
-      if (err instanceof RefusedError) {
+      timeouts = err instanceof TimedOutError ? timeouts + 1 : 0
+      if (err instanceof RefusedError || timeouts >= 2) {
         await pause($)
       } else {
         failures += 1
@@ -725,6 +733,7 @@ async function check($: EngineInterface, force = false): Promise<string> {
       throw err
     })
     failures = 0
+    timeouts = 0
     retryAt = 0
     await $.store.set('inbox', { owner: sessionId, until: now + LEASE_MS, at: now, snap } satisfies Shared)
     return await apply($, snap, now)
