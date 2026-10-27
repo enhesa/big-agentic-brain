@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-27",
+    title: "Design for working offline",
+    changes: [
+      "A draft design describes how the plugin could save learnings while you are off the network or VPN.",
+    ],
+  },
+  {
     date: "2026-10-26",
     title: "Browser sign-in fix, maintainers can link a refused browser",
     changes: [
