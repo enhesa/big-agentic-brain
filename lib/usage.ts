@@ -615,9 +615,11 @@ export function unusedMemories(now: Date): Unused {
                 WHERE v.learning_id = l.id AND v.kind IN ${HELPFUL_ACTIONS} AND lower(v.voter_id) != lower(l.author_id)
               )) AS unused
        FROM learnings l
-       WHERE l.status = 'active' AND l.kind IN ('learning', 'practice') AND l.pinned = 0 AND l.created_at < ?`,
+       WHERE l.status = 'active' AND l.kind IN ('learning', 'practice') AND l.pinned = 0 AND l.created_at < ? AND l.created_at >= ?`,
     )
-    .get(sqlTime(new Date(now.getTime() - UNUSED_MIN_AGE_DAYS * DAY_MS))) as { eligible: number; unused: number | null };
+    // Reads are recorded only since INACTIVITY_CLOCK_START: an older memory may have been read before
+    // then without a trace, so only memories saved since are judged.
+    .get(sqlTime(new Date(now.getTime() - UNUSED_MIN_AGE_DAYS * DAY_MS)), INACTIVITY_CLOCK_START) as { eligible: number; unused: number | null };
   return { unused: num(r.unused), eligible: num(r.eligible) };
 }
 

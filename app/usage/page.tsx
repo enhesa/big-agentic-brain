@@ -462,10 +462,10 @@ export default async function UsagePage({
             label="Never used"
             value={pct(unused.unused, unused.eligible) ?? "-"}
             testId="tile-never-used"
-            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}. Pinned house rules are left out.`}
+            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}, so only memories saved since then are judged. Pinned house rules are left out.`}
             note={{
               text: `${formatCount(unused.unused)} of ${plural(unused.eligible, "memory", "memories")}`,
-              title: `Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days, not pinned.`,
+              title: `Live learnings and practices saved since ${dayMonth(INACTIVITY_CLOCK_START)}, older than ${UNUSED_MIN_AGE_DAYS} days, not pinned.`,
               testId: "tile-never-used-note",
             }}
           />

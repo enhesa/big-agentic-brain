@@ -80,7 +80,9 @@ export function recordSearchOutcome(auditId: number | null | undefined, outcome:
   try {
     // Redact the text as it came, line breaks included (a "key: value" line is masked only on its
     // own line), and only then tidy the spaces and cut it.
-    const raw = outcome.query ?? "";
+    // The query text is kept only when nothing was found: that is all /usage reads, and it keeps
+    // ordinary queries (which may name a client or a colleague) out of the audit log.
+    const raw = outcome.results === 0 ? (outcome.query ?? "") : "";
     const q =
       raw.trim() && raw.length <= SEARCH_QUERY_RAW_MAX ? redact(raw).replace(/\s+/g, " ").trim().slice(0, SEARCH_QUERY_MAX).trim() : "";
     const results = Math.max(0, Math.trunc(outcome.results));

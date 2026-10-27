@@ -1068,7 +1068,7 @@ describe("/usage page", () => {
       return res.json();
     }
 
-    it("bab_search writes the result count and the redacted query, cut to 120 characters, on its own audit row", async () => {
+    it("bab_search writes the result count on its own audit row, and the redacted query (cut to 120 characters) only when it found nothing", async () => {
       await people(A, B);
       await memory(B, { title: "Kafka consumer lag fix for the acme cluster" });
       await mcpSearch({ query: "kafka consumer lag" });
@@ -1082,7 +1082,7 @@ describe("/usage page", () => {
       expect(rows).toHaveLength(5);
       const found = JSON.parse(rows[0].details!);
       expect(found.results).toBeGreaterThan(0);
-      expect(found.q).toBe("kafka consumer lag");
+      expect(found.q).toBeUndefined(); // the text is kept only when nothing was found
       const empty = JSON.parse(rows[1].details!);
       expect(empty.results).toBe(0);
       expect(empty.q.length).toBeLessThanOrEqual(120);
@@ -1148,21 +1148,23 @@ describe("/usage page", () => {
   });
 
   describe("memories never used, time saved and weekly people", () => {
-    it("counts live learnings and practices over 14 days old with no read and no reaction from anyone but the author", async () => {
+    it("counts live learnings and practices over 14 days old, saved since reads are recorded, with no read and no reaction from anyone but the author", async () => {
       await people(A, B);
-      const old = "2026-09-01 00:00:00";
-      const unread = await memory(A, { createdAt: old });
-      const read = await memory(A, { createdAt: old });
-      const votedByOther = await memory(A, { createdAt: old, kind: "practice" });
-      await memory(A, { createdAt: old, kind: "standard" }); // not a learning or practice
-      await memory(A, { createdAt: "2026-10-01 00:00:00" }); // too young on 6 Oct
-      const pinned = await memory(A, { createdAt: old });
+      const later = new Date("2026-11-10T12:00:00Z");
+      const saved = "2026-10-08 00:00:00"; // after INACTIVITY_CLOCK_START, over 14 days before `later`
+      const unread = await memory(A, { createdAt: saved });
+      const read = await memory(A, { createdAt: saved });
+      const votedByOther = await memory(A, { createdAt: saved, kind: "practice" });
+      await memory(A, { createdAt: saved, kind: "standard" }); // not a learning or practice
+      await memory(A, { createdAt: "2026-11-01 00:00:00" }); // too young
+      await memory(A, { createdAt: "2026-09-01 00:00:00" }); // saved before reads were recorded: not judged
+      const pinned = await memory(A, { createdAt: saved });
       const { getDb } = await import("../lib/db");
-      getDb().prepare("UPDATE learnings SET last_accessed_at = '2026-10-02 10:00:00' WHERE id = ?").run(read);
+      getDb().prepare("UPDATE learnings SET last_accessed_at = '2026-10-20 10:00:00' WHERE id = ?").run(read);
       getDb().prepare("UPDATE learnings SET pinned = 1 WHERE id = ?").run(pinned);
       await vote(votedByOther, B, "helpful");
       const { usageReport } = await import("../lib/usage");
-      const u = usageReport(NOW).unused;
+      const u = usageReport(later).unused;
       expect(u).toEqual({ unused: 1, eligible: 3 });
       expect(unread).toBeTruthy();
     });
