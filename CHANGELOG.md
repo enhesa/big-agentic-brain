@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.0](https://github.com/enhesa/big-agentic-brain/compare/v2.9.0...v2.10.0) (2026-10-27)
+
+
+### Features
+
+* **usage:** time saved, searches that found nothing, unused memories, weekly people ([#78](https://github.com/enhesa/big-agentic-brain/issues/78)) ([3fafbe8](https://github.com/enhesa/big-agentic-brain/commit/3fafbe8261d5ba2f4b60b28abff325f2d3c48042))
+
 ## [2.9.0](https://github.com/enhesa/big-agentic-brain/compare/v2.8.1...v2.9.0) (2026-10-27)
 
 
