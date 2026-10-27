@@ -1204,21 +1204,28 @@ every time.
   days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line and
   "What's in BAB" are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
   (`MONTH_DAYS`). Top to bottom:
-  1. Four tiles with the total over the last 12 months: memories saved (audit `create` on a
-     learning), searches (`bab_search` calls and GETs on `/api/learnings`), "found it helpful"
-     (`helpful`, `kudos` and `confirm` reactions), each the sum of its weekly counts, and people using
-     BAB: the distinct audit actors (not `anonymous` or `system`) in the window, each counted once,
-     not a sum of weekly people. Under the number, how much it grew this week so far: "+12 this week"
-     (people: "+2 new this week", the people whose first activity in the window is this week), or "none
-     yet this week". Always calm: a total never goes down, so there is no down arrow or red. The
-     sparkline is the running total per week; for people the running count of distinct people.
-     A second row of four tiles: time saved (an estimate: helped searches x (30 - 5) minutes minus
-     saves x 0.5 minutes over the window, in hours, never below 0; docs/savings.md assumptions 2, 3
-     and 6, constants `SAVINGS_MINUTES_*`); found nothing (the share of searches whose audit row
-     records `results: 0`, "since" the first recorded day, as older rows have no count); never used
-     (live, unpinned learnings and practices older than 14 days with no agent read and no helpful,
-     kudos or confirm from anyone but the author; reads carry no reader, so the author's own reads
-     count, and reads start on 7 Oct); and active this week, split into returning and new.
+  1. Two rows of four tiles, outcomes first. Each tile has one label, the number, one short note
+     that names its window ("last 12 months", "this week" or "since <date>"), and a hover that says
+     how it is counted and what is left out. Under 1000px the rows are two columns.
+     Outcomes: agent time saved and tokens saved (measured, docs/savings.md "Measured savings":
+     per reuse, the memory's discovery cost minus the reaction's reuse cost, floored at 0, summed;
+     only reuses measured on both sides count; one reuse per person and memory with a `helpful` or
+     `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
+     hover how many were left out and why; with none measured yet the tile says "Measuring since
+     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note); and
+     found nothing (the share of searches whose audit row records `results: 0`, "since" the first
+     recorded day, as older rows have no count).
+     Activity over the last 12 months: memories saved (audit `create` on a learning), searches
+     (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and
+     `confirm` reactions), each the sum of its weekly counts, and active this week, split into
+     returning and new. Under the totals, how much they grew this week so far: "+12 this week", or
+     "none yet this week". Always calm: a total never goes down, so there is no down arrow or red. The
+     sparkline is the running total per week. People using BAB (the distinct audit actors, not
+     `anonymous` or `system`, each counted once) is not a tile, as a cumulative count says little
+     week to week: it is a chip on the weekly active people card and in the active-this-week hover.
+     Never used (live, unpinned learnings and practices older than 14 days with no agent read and no
+     helpful, kudos or confirm from anyone but the author; reads carry no reader, so the author's own
+     reads count, and reads start on 7 Oct) is a small tile in Upkeep.
   2. Memories in BAB: live memories (status active) by the week they were saved, added up
      from the week of the oldest one (at most 156 weeks), with "+N this month" (saved in the last 30
      days). There is no archive date, so the line is "still live, by week saved".

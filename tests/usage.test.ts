@@ -980,13 +980,13 @@ describe("/usage page", () => {
     expect(html).toMatch(/data-testid="tile-saved"[^>]*>4</);
     expect(html).toMatch(/data-testid="tile-searches"[^>]*>1</);
     expect(html).toMatch(/data-testid="tile-helpful"[^>]*>0</);
-    expect(html).toMatch(/data-testid="tile-people"[^>]*>3</);
+    expect(html).toMatch(/data-testid="people-total"[^>]*>3 people in 12 months</);
     // Only audit rows are seeded here, no memories, so none are still in BAB.
     expect(html).toMatch(/data-testid="tile-saved-note"[^>]*>0 still in BAB</);
-    expect(html).toMatch(/data-testid="tile-helped-note"[^>]*>0% of searches helped</);
+    expect(html).toMatch(/data-testid="tile-search-helped"[^>]*>0%</);
+    expect(html).toMatch(/data-testid="tile-helped-note"[^>]*>0 of 1, last 12 months</);
     const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
     expect(tiles).toContain("+1 this week"); // saves and searches both grew by 1
-    expect(tiles).toContain("+2 new this week"); // B and the viewer
     expect(tiles).toContain("none yet this week"); // no helpful reactions
     expect(tiles).toContain("over the last 12 months");
     expect(html).toContain("over the last 12 months.");
@@ -1007,8 +1007,10 @@ describe("/usage page", () => {
     const html = await render(A);
     const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
     // A and B were seen last week; only the viewer is new.
-    expect(tiles).toMatch(/data-testid="tile-people"[^>]*>3</);
-    expect(tiles).toContain("+1 new this week");
+    expect(html).toMatch(/data-testid="people-total"[^>]*>3 people in 12 months</);
+    expect(tiles).toMatch(/data-testid="tile-active-week-note"[^>]*>\d+ returning, 1 new</);
+    // People using BAB is no longer a hero tile: it is cumulative, so it sits on the weekly people card.
+    expect(tiles).not.toContain("tile-people");
   });
 
   it("shows a compact Clean-up card: six rows of small weekly bars, with the totals", async () => {
@@ -1169,10 +1171,68 @@ describe("/usage page", () => {
       expect(unread).toBeTruthy();
     });
 
-    it("estimates time saved from helped searches and saves, never below zero", async () => {
-      const { timeSavedHours } = await import("../lib/usage");
-      expect(timeSavedHours({ helpedSearches: 12, saves: 60 })).toBe((12 * 25 - 60 * 0.5) / 60);
-      expect(timeSavedHours({ helpedSearches: 0, saves: 100 })).toBe(0);
+    it("counts saved effort only for reuses measured on both sides, per person and memory, floored at zero", async () => {
+      const { measuredSavingsFrom } = await import("../lib/usage");
+      const r = (learningId: string, voterId: string, at: string, d: [number, number] | null, u: [number, number] | null) => ({
+        learningId,
+        voterId,
+        at,
+        discoveryMs: d ? d[0] : null,
+        discoveryTokens: d ? d[1] : null,
+        reuseMs: u ? u[0] : null,
+        reuseTokens: u ? u[1] : null,
+      });
+      const m = measuredSavingsFrom(
+        [
+          // Measured: 30 min and 100k tokens to find, 5 min and 10k to reuse.
+          r("m1", "a@example.com", "2026-10-28 10:00:00", [1_800_000, 100_000], [300_000, 10_000]),
+          // The same person's kudos on the same memory is the same reuse: the earliest measured one counts.
+          r("m1", "A@example.com", "2026-10-28 11:00:00", [1_800_000, 100_000], [60_000, 1_000]),
+          // Reuse cost more than discovery: floored at zero, still a measured reuse.
+          r("m2", "b@example.com", "2026-10-28 10:00:00", [60_000, 5_000], [120_000, 9_000]),
+          // No discovery measurement, and no reuse measurement.
+          r("m3", "a@example.com", "2026-10-28 10:00:00", null, [60_000, 1_000]),
+          r("m4", "a@example.com", "2026-10-28 10:00:00", [600_000, 1_000], null),
+        ],
+        "2026-10-27",
+      );
+      expect(m).toEqual({ since: "2026-10-27", reuses: 4, measured: 2, noDiscovery: 1, noReuse: 1, savedMs: 1_500_000, savedTokens: 90_000 });
+    });
+
+    it("reads the measured costs from the database, people's helpful and kudos reactions only", async () => {
+      await people(A, B);
+      const found = await memory(A);
+      const unmeasured = await memory(A);
+      const { getDb } = await import("../lib/db");
+      const db = getDb();
+      db.prepare("INSERT INTO learning_costs (learning_id, active_ms, tokens) VALUES (?, ?, ?)").run(found, 3_600_000, 200_000);
+      await vote(found, B, "helpful");
+      db.prepare("INSERT INTO reuse_costs (learning_id, voter_id, kind, active_ms, tokens) VALUES (?, ?, 'helpful', ?, ?)").run(found, B, 600_000, 20_000);
+      await people("system");
+      await vote(found, "system", "helpful");
+      await vote(unmeasured, B, "confirm");
+      await vote(unmeasured, B, "kudos");
+      const { measuredSavings, lastWeeks } = await import("../lib/usage");
+      expect(measuredSavings(lastWeeks(new Date()))).toMatchObject({ reuses: 2, measured: 1, noDiscovery: 1, noReuse: 0, savedMs: 3_000_000, savedTokens: 180_000 });
+    });
+
+    it("shows the measured tiles, with what was left out in the hover", async () => {
+      await people(A, B);
+      const found = await memory(A);
+      const { getDb } = await import("../lib/db");
+      const db = getDb();
+      db.prepare("INSERT INTO learning_costs (learning_id, active_ms, tokens) VALUES (?, ?, ?)").run(found, 2 * 3_600_000, 1_250_000);
+      await vote(found, B, "helpful");
+      db.prepare("INSERT INTO reuse_costs (learning_id, voter_id, kind, active_ms, tokens) VALUES (?, ?, 'helpful', ?, ?)").run(found, B, 1_800_000, 50_000);
+      await vote(await memory(A), B, "kudos");
+      const html = await render(B);
+      expect(html).toMatch(/data-testid="tile-time-saved"[^>]*>1.5 h</);
+      expect(html).toMatch(/data-testid="tile-tokens-saved"[^>]*>1.2M</);
+      expect(html).toMatch(/data-testid="tile-time-saved-note"[^>]*>1 measured reuse since 27 Oct</);
+      expect(html).toMatch(/data-testid="tile-tokens-saved-note"[^>]*>1,200,000 tokens since 27 Oct</);
+      expect(html).toContain("Counted: 1 of 2 reuses since 27 Oct");
+      expect(html).toContain("1 reuse of memories saved without a measured cost");
+      expect(html).not.toContain("Measuring since");
     });
 
     it("shows the second row of tiles and the weekly active people card", async () => {
@@ -1187,15 +1247,29 @@ describe("/usage page", () => {
       const { getDb } = await import("../lib/db");
       const now = (getDb().prepare("SELECT datetime('now') AS t").get() as { t: string }).t;
       await row(A, "GET", now, { path: "/memory" });
-      // 4 helped searches and 2 saves: (4 x 25 - 2 x 0.5) / 60 = 1.65 hours.
+      // 4 searches, each followed by a helpful reaction: 100% helped. Nothing measured yet.
       for (let i = 0; i < 4; i++) {
         await row(A, "POST", `${prev} 0${i}:00:00`, { path: "/mcp#tools/call:bab_search" });
         await row(A, "helpful", `${prev} 0${i}:05:00`, { entity: "learning" });
       }
       for (const sec of [1, 2]) await row(A, "create", `${prev} 09:00:0${sec}`, { entity: "learning" });
       const html = await render(B);
-      expect(html).toMatch(/data-testid="tile-time-saved"[^>]*>1.7 h</);
+      expect(html).toMatch(/data-testid="tile-time-saved"[^>]*>Measuring since 27 Oct</);
+      expect(html).toMatch(/data-testid="tile-tokens-saved"[^>]*>Measuring since 27 Oct</);
+      expect(html).toMatch(/data-testid="tile-time-saved-note"[^>]*>No reuse measured on both sides yet</);
+      expect(html).toMatch(/data-testid="tile-search-helped"[^>]*>100%</);
+      expect(html).toMatch(/data-testid="tile-helped-note"[^>]*>4 of 4, last 12 months</);
       expect(html).toContain("docs/savings.md");
+      // The old estimate is gone.
+      expect(html).not.toContain("Time saved (estimate)");
+      expect(html).not.toContain("An estimate, not a measurement");
+      // Outcomes first, then activity, in the owner's order.
+      const order = ["tile-time-saved", "tile-tokens-saved", "tile-search-helped", "tile-found-nothing", "tile-saved", "tile-searches", "tile-helpful", "tile-active-week"];
+      const at = order.map((id) => html.indexOf(`data-testid="${id}"`));
+      expect(at.every((x) => x > 0)).toBe(true);
+      expect(at).toEqual([...at].sort((x, y) => x - y));
+      // Never used moved to the Upkeep row.
+      expect(html.indexOf('data-testid="tile-never-used"')).toBeGreaterThan(html.indexOf('id="upkeep-h"'));
       // A (also active last week), B and the viewer's own page view.
       expect(html).toMatch(/data-testid="tile-active-week"[^>]*>3</);
       expect(html).toMatch(/data-testid="tile-active-week-note"[^>]*>1 returning, 2 new</);
