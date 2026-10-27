@@ -1231,8 +1231,8 @@ every time.
   4. What's in BAB: live memories by kind and by team tag (a memory with two team tags counts for
      both; unreadable tags count as no team tag; its hover says authors can add one), and the
      standing mix (strong, fair, weak, from `standingsFor`, over the newest 5,000 live memories).
-     Weak is shown as "Few or no reactions": it also covers a flag or no check in 180 days, so it
-     is not a judgement on the memory. The stored level stays `weak`.
+     Weak is shown as "Low so far" (few or no reactions, more not-helpful votes or flags than
+     helpful ones, or a level lost after 180 days without a check). The stored level stays `weak`.
   5. Most helpful: the 5 memories with the most helpful, kudos and confirm reactions in the
      last 12 months (deleted ones left out), linked to `/memory/<id>`; and the top 5 projects plus General.
   6. Who writes: memories saved since 6 Oct by the model their author named (`learnings.model`;
@@ -1279,9 +1279,10 @@ every time.
 - Since 27 Oct (`SEARCH_RESULTS_SINCE`) a search adds what it found to its own audit row
   (`recordSearchOutcome` in lib/request-audit.ts, `json_set` on the row `auditRequest` wrote, so
   `source` and `cx` stay): `results`, the number of matches, and `q`, the query text after
-  `redact()`, cut to 120 characters. Never the raw query. Only a `bab_search` first page (not a
-  later page, not the house rules digest) and a `GET /api/learnings`. A listing with no text gets
-  `results` only.
+  `redact()` (on the text as sent, line breaks included), cut to 120 characters. Never the raw
+  query. Only a search with text: a `bab_search` first page (not a later page, not the house
+  rules digest) and a `GET /api/learnings` with `q`. A listing by kind, project or tag is not
+  recorded, so it is not in the share. "Never used" counts any agent read, listings included.
 
 ## Chats list removed
 

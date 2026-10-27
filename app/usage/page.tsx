@@ -462,7 +462,7 @@ export default async function UsagePage({
             label="Never used"
             value={pct(unused.unused, unused.eligible) ?? "-"}
             testId="tile-never-used"
-            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}. Pinned house rules are left out.`}
+            title={`Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days that no agent has read and no one but the author has reacted to. A read is any search result or listing an agent got, and it does not record who read it, so the author's own reads count as use. Reads are recorded since ${dayMonth(INACTIVITY_CLOCK_START)}. Pinned house rules are left out.`}
             note={{
               text: `${formatCount(unused.unused)} of ${plural(unused.eligible, "memory", "memories")}`,
               title: `Live learnings and practices older than ${UNUSED_MIN_AGE_DAYS} days, not pinned.`,
@@ -616,7 +616,7 @@ export default async function UsagePage({
                 title="Standing"
                 span="s12"
                 sub={
-                  <span title="Strong and fair memories have enough helpful reactions and confirmations. The rest have few or none yet, a flag, or no check in 180 days. It is not a judgement on the memory.">
+                  <span title="Strong and fair memories have enough helpful reactions and confirmations. Low so far: few or no reactions yet, not-helpful votes or flags that outweigh them, or a level lost after 180 days without a check.">
                     {contents.standingRead >= STANDING_SAMPLE_MAX ? `Newest ${formatCount(STANDING_SAMPLE_MAX)}` : "From colleagues' reactions"}
                   </span>
                 }
@@ -625,11 +625,11 @@ export default async function UsagePage({
                   <Empty>No memories yet.</Empty>
                 ) : (
                   <StackedBar
-                    label={`Standing of live memories: ${contents.standing.strong} strong, ${contents.standing.fair} fair, ${contents.standing.weak} with few or no reactions`}
+                    label={`Standing of live memories: ${contents.standing.strong} strong, ${contents.standing.fair} fair, ${contents.standing.weak} low so far`}
                     segments={[
                       { key: "strong", name: "Strong", n: contents.standing.strong, className: styles.ord3, swatchClassName: styles.swOrd3 },
                       { key: "fair", name: "Fair", n: contents.standing.fair, className: styles.ord2, swatchClassName: styles.swOrd2 },
-                      { key: "weak", name: "Few or no reactions", n: contents.standing.weak, className: styles.ord1, swatchClassName: styles.swOrd1 },
+                      { key: "weak", name: "Low so far", n: contents.standing.weak, className: styles.ord1, swatchClassName: styles.swOrd1 },
                     ]}
                   />
                 )}

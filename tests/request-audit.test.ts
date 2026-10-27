@@ -122,6 +122,16 @@ describe("recordSearchOutcome", () => {
     expect((getDb().prepare("SELECT COUNT(*) AS n FROM audit_log").get() as { n: number }).n).toBe(1);
   });
 
+  it("redacts a key: value line before it joins the lines", async () => {
+    const { auditRequest, recordSearchOutcome } = await import("../lib/request-audit");
+    const { getDb } = await import("../lib/db");
+    const id = await auditRequest({ actor: { id: "ada@example.com", name: null, email: null }, method: "GET", path: "/api/learnings", via: "mcp" });
+    recordSearchOutcome(id, { results: 0, query: "deploy\npassword: hunter2zz\nnow" });
+    const r = getDb().prepare("SELECT details FROM audit_log WHERE id = ?").get(id) as { details: string };
+    expect(r.details).not.toContain("hunter2zz");
+    expect(JSON.parse(r.details).q).not.toMatch(/\n/);
+  });
+
   it("stores only the count when there is no query text", async () => {
     const { auditRequest, recordSearchOutcome } = await import("../lib/request-audit");
     const { getDb } = await import("../lib/db");

@@ -1076,9 +1076,10 @@ describe("/usage page", () => {
       await mcpSearch({ query: `nothing matches qqzzyy ${secret} ${"x".repeat(200)}` });
       await mcpSearch({ query: "kafka consumer lag", offset: 5 }); // a later page: not recorded
       await mcpSearch({ query: "", houseRules: true }); // the digest: not a search
+      await mcpSearch({ query: "", kind: "standard" }); // a listing with no text: not recorded
       const { getDb } = await import("../lib/db");
       const rows = getDb().prepare("SELECT details FROM audit_log WHERE path = ? ORDER BY id").all(SEARCH) as Array<{ details: string | null }>;
-      expect(rows).toHaveLength(4);
+      expect(rows).toHaveLength(5);
       const found = JSON.parse(rows[0].details!);
       expect(found.results).toBeGreaterThan(0);
       expect(found.q).toBe("kafka consumer lag");
@@ -1092,6 +1093,7 @@ describe("/usage page", () => {
       expect(found.source).toBe("declared");
       expect(JSON.parse(rows[2].details!)).toEqual({ source: "declared" });
       expect(JSON.parse(rows[3].details!)).toEqual({ source: "declared" });
+      expect(JSON.parse(rows[4].details!)).toEqual({ source: "declared" });
     });
 
     it("GET /api/learnings with a query records its result count, and keeps the identity source", async () => {
@@ -1206,7 +1208,7 @@ describe("/usage page", () => {
       await people(A);
       await memory(A, { tags: [] });
       const html = await render(A);
-      expect(html).toContain("Few or no reactions");
+      expect(html).toContain("Low so far");
       expect(html).not.toMatch(/<span>Weak<\/span>/);
       expect(html).toContain("Authors can add one to their memories.");
     });

@@ -78,8 +78,11 @@ const SEARCH_QUERY_RAW_MAX = 4000;
 export function recordSearchOutcome(auditId: number | null | undefined, outcome: { results: number; query?: string }): void {
   if (auditId == null) return;
   try {
-    const raw = (outcome.query ?? "").replace(/\s+/g, " ").trim();
-    const q = raw && raw.length <= SEARCH_QUERY_RAW_MAX ? redact(raw).slice(0, SEARCH_QUERY_MAX).trim() : "";
+    // Redact the text as it came, line breaks included (a "key: value" line is masked only on its
+    // own line), and only then tidy the spaces and cut it.
+    const raw = outcome.query ?? "";
+    const q =
+      raw.trim() && raw.length <= SEARCH_QUERY_RAW_MAX ? redact(raw).replace(/\s+/g, " ").trim().slice(0, SEARCH_QUERY_MAX).trim() : "";
     const results = Math.max(0, Math.trunc(outcome.results));
     getDb()
       .prepare(

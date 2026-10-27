@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       try {
         project = normalizeProjectKey(projectRaw) ?? undefined;
       } catch {
-        recordSearchOutcome(auditId, { results: 0, query: q });
+        if (q.trim()) recordSearchOutcome(auditId, { results: 0, query: q });
         return Response.json({ results: [], limit });
       }
     }
@@ -100,8 +100,8 @@ export async function GET(req: NextRequest) {
   const results = search(q, { tag, repo, author, status, project, kind, flagged, model, appliesTo, stack }, limit);
   // An agent got these memories: that is a read (lib/learnings.ts touchRead). The web pages never come through here.
   recordSearchRead(results, { status, flagged });
-  // What the search found, on its own audit row, for "Found nothing" on /usage.
-  recordSearchOutcome(auditId, { results: results.length, query: q });
+  // What a search with text found, on its own audit row, for "Found nothing" on /usage.
+  if (q.trim()) recordSearchOutcome(auditId, { results: results.length, query: q });
 
   // verifyHint only when a result is marked verify: true, like bab_search.
   // Nothing found for a real query: name the area contacts, like bab_search.
