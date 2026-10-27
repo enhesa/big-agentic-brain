@@ -21,6 +21,14 @@ export function looksLikeRefusal(text: string): boolean {
   return REFUSAL_RE.test(text.slice(0, 500))
 }
 
+// This plugin's own tools as the host names them: mcp__plugin_<plugin>_bab__bab_<tool>, whatever the plugin was installed as.
+const BAB_TOOL_RE = /^mcp__plugin_[A-Za-z0-9-]+_bab__bab_[a-z_]+$/
+
+/** True for one of BAB's own MCP tools, which the plugin approves itself (see register.tsx, tool.check). */
+export function isBabTool(name: string): boolean {
+  return BAB_TOOL_RE.test(name)
+}
+
 /** What the panel says while polling is paused. */
 export const PAUSED_TEXT = 'BAB paused: allow its tools to see new messages and reminders. /bab-check resumes.'
 

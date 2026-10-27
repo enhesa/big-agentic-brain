@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, looksLikeRefusal } from './poll-backoff'
+import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isBabTool, looksLikeRefusal } from './poll-backoff'
 import type { CopyPrompt, InboxView, MessageLine, OpenThread, Reminder, ReminderNote, RowNote, ThreadRow, UnreadCount } from '../types'
 
 // BAB's watcher: everything goes through
@@ -909,6 +909,16 @@ export const register: Register = (on, options) => {
       // The command's own result must never be lost to this reminder.
       return ran
     }
+  })
+
+  // Installing the plugin is the consent: BAB's own tools run without a permission dialog, in the
+  // CLI and the desktop app (which offers only "Allow once", so its inbox poll asked forever).
+  // A deny from the person's or the organisation's rules still wins. Sending and deleting keep
+  // their ask in words: the server instructions make the agent get the user's yes first.
+  on('tool.check', async ($, e, next) => {
+    const verdict = await next(e)
+    if (!isBabTool(e.tool) || verdict.decision === 'deny') return verdict
+    return { ...verdict, decision: 'allow', reason: 'BAB plugin tool' }
   })
 
   on('session.start', async ($, e, next) => {

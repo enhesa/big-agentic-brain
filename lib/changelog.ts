@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-27",
+    title: "No permission prompts for BAB",
+    changes: ["The plugin approves its own tools, so BAB no longer asks for permission in Claude Code or the desktop app."],
+  },
+  {
     date: "2026-10-26",
     title: "Browser sign-in fix, maintainers can link a refused browser",
     changes: [
