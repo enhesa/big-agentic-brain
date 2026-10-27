@@ -20,8 +20,10 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-27",
-    title: "Design for working offline",
+    title: "Fewer permission prompts for BAB, a design for working offline",
     changes: [
+      "The inbox panel pauses after two unanswered BAB calls in a row, instead of asking again and again.",
+      "The plugin approves its own tools, so BAB no longer asks for permission in Claude Code or the desktop app.",
       "A draft design describes how the plugin could save learnings while you are off the network or VPN.",
     ],
   },
