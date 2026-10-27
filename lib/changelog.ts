@@ -21,7 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-27",
     title: "No more stacked approval prompts in the desktop app",
-    changes: ["The inbox panel pauses when a BAB call waits for your approval, instead of asking again every minute."],
+    changes: ["The inbox panel pauses after two unanswered BAB calls in a row, instead of asking again and again."],
   },
   {
     date: "2026-10-26",
