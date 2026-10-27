@@ -14,7 +14,7 @@ BAB is reachable only on the company network or VPN. Off it:
 
 Goal: off the network, BAB fails fast, says so plainly, keeps what is safe to keep, and sends it once, as the same person, when BAB is back. It must never send something the person did not mean to send, never send twice, and never lose something silently.
 
-Non-goals: offline reads from a cache, offline messaging to colleagues, a local copy of the memory, changes to the curl hooks (see 14).
+Non-goals: offline reads from a cache, offline messaging to colleagues, a local copy of the memory, changes to the curl hooks (see the note in 14; phase 5 revisits them).
 
 ## 2. Principles
 
@@ -33,8 +33,8 @@ Non-goals: offline reads from a cache, offline messaging to colleagues, a local 
 | --- | --- | --- |
 | `bab_learn` (new learning or practice) | Yes | The main loss today. The server redacts and checks duplicates at write. |
 | `bab_learn` with `supersedes`, `kind: decision` or `standard`, `source: confluence` | No | Depends on server state or needs the user's yes. Fail loudly. |
-| `bab_react`: helpful, not_helpful, kudos, confirm, keep, flag | Yes | Small, target id already known, near-idempotent. |
-| `bab_react`: delete, retire, pin, unpin, label | No | Destructive or privileged. Needs a live answer. |
+| `bab_react`: helpful, not_helpful, kudos, confirm | Yes | Small, target id already known. A repeat answer such as "Kudos already given" counts as success. A `confirm` note says where and when the person checked, so at replay it carries the original date. |
+| `bab_react`: flag, keep, delete, retire, pin, unpin, label | No | A replayed flag can archive a memory that was fixed meanwhile; keep restores archived ones; the rest are destructive or privileged. Needs a live answer. |
 | `bab_feedback`: post, vote, comment | Yes | Low risk. A post may come back as "similar exists" at replay: held for review (see 8). |
 | `bab_feedback`: list, get, status | No | Read, or maintainer action. |
 | `bab_remind`: create | Yes | Private, own reminder, absolute `dueAt` required. |
@@ -59,9 +59,9 @@ The server instructions make the agent show the exact text and send on the user'
 
 ### Local validation at enqueue
 
-The server rejects bad input. A queue that holds input the server will reject creates poison items days later. So the mod checks, at enqueue, the same limits the schema states: title 160, body 8000, tags 10, aliases 5, enums, required fields, `dueAt` format. A failure returns an error to the agent right away, so it can fix the call while it still has the context.
+The server rejects bad input. A queue that holds input the server will reject creates poison items days later. So the mod checks, at enqueue, the static limits the schema states: title 160, body 8000, tags 10, aliases 5, required fields, `dueAt` format, and an `expiresAt` that is not already past. Enums that depend on server config (team tags, platform labels) are not checked locally; the server's answer at replay holds such an entry with a readable reason instead of dropping it. A failure returns an error to the agent right away, so it can fix the call while it still has the context.
 
-Drift guard: a test imports `TOOLS` from `lib/mcp.ts` and asserts the stand-in schemas are a subset of the real ones (same property names, same enums, limits no looser).
+Drift guard: a test imports `TOOLS` from `lib/mcp.ts` and asserts the stand-in schemas are a subset of the real ones (same property names, limits no looser). It sees the test config, so it does not check config-driven enums.
 
 Local secret check: the mod runs a small pattern set (key=value secrets, bearer tokens, private key blocks, well-known token prefixes). A hit refuses the enqueue: "This looks like it contains a secret. Not saved." The server's `redact()` still runs at replay, but the local copy must not hold secrets for days.
 
@@ -71,9 +71,9 @@ Two cases.
 
 ### 4.1 The server is present but unreachable (dropped mid-session)
 
-The real tools exist. A `tool.call` hook on the real BAB tools (name `mcp__plugin_<plugin>_bab__bab_*`, same matcher shape as `isBabTool` in #72) does the work:
+The real tools exist. A `tool.call` hook on the real BAB tools does the work. The install name varies, so the hook is registered without a tool filter if the matcher takes only exact names, and tests the name with `isBabTool` first thing; the cost is one regex per tool call. Phase 0 checks the matcher. The hook:
 
-- Breaker closed: inject `clientRequestId` (see 7) into the args of in-scope writes with `next({ ...e, args })`, then call. If the call fails with a network-class error, the hook enqueues the same entry with the same key and returns "saved offline". Original call and replay share the key, so a timeout that succeeded is safe.
+- Breaker closed: look for a queued entry with the same kind and args hash. If there is one, reuse its key; on success delete that entry (an agent that retries online after a failure must not leave a second copy behind). Otherwise make a new key. Add `clientRequestId` (see 7) with `next({ ...e, clientRequestId })`; a hook's `e` is flat, the tool's arguments sit beside `tool`, there is no `e.args`. Race `next(e)` against the hook's own timer (20 s): the engine's MCP timeout can be far longer than `CALL_TIMEOUT_MS`, which covers only the mod's own calls. On a transport error or the timer, enqueue the entry with that key and return "saved offline". A late success of the original call is harmless because the key is shared.
 - Breaker open: do not call. In-scope write: enqueue and return "saved offline". Read: return the offline text at once (no 20 s wait). Not-queueable write: return the loud failure.
 
 ### 4.2 The server never connected (started offline)
@@ -82,16 +82,16 @@ The real tools do not exist. The mod registers stand-in tools with `$.tool.regis
 
 - Names: `bab_offline_learn`, `bab_offline_react`, `bab_offline_feedback`, `bab_offline_remind`. Full name `mcp__bab__bab_offline_*` (the mod's namespace is `mcp__<plugin>__<name>`; the real server is `mcp__plugin_bab_bab__bab_*`). The prefix `bab_offline_` means a stand-in and a real tool never share a name, whatever the plugin is installed as. Verify the namespace in the spike.
 - Typed schemas, one tool per kind, copied from the real ones (fewer wrong calls than one generic tool). `isDeferred: true` to keep the prompt small.
-- Registered when `$.mcp.connect('bab')` fails at start, or when none of the real tools is in `$.tool.list()` at the first prompt. A stand-in cannot be unregistered, so registering one too early (server only slow) must be harmless. It is: a stand-in is a proxy.
+- Registered always, at `session.start`, without waiting on `$.mcp.connect`. A tool registered there is listed from the first prompt; awaiting a connect off the network would block the session start. `isDeferred: true` keeps the cost to a name in the ToolSearch list. A stand-in cannot be unregistered, so it stays for the session; that is fine, because it is a proxy.
 - Proxy behaviour: breaker closed and a working connection: forward to the real tool through `$.mcp.call`, with a key, and return the real answer. Else enqueue.
 - Description says: use only when the `bab_*` tools are missing or BAB is offline.
-- A `prompt.compose` section (`scope: 'session'`), added only while offline: "BAB is offline. bab_* tools are missing. Use bab_offline_* to save a learning, reaction, feedback or reminder. Say it is saved locally, not in BAB yet. Do not search, read the inbox or send messages. Do not invent BAB content." Adding it only offline keeps the prompt cache stable for everyone else.
+- A `prompt.compose` section (`scope: 'session'`), added only while the breaker is open or the real tools are absent. Two texts. Real tools absent: "BAB is offline. bab_* tools are missing. Use bab_offline_* to save a learning, reaction, feedback or reminder. Say it is saved locally, not in BAB yet. Do not search, read the inbox or send messages. Do not invent BAB content." Real tools present, breaker open: "BAB is offline. Saves are kept on this computer and sent later. Reads fail. Say a save is not in BAB yet. Do not invent BAB content." The stand-in text is never shown while the real tools work. Adding a section only offline keeps the prompt cache stable for everyone else.
 
 No read stand-ins. A missing tool is an honest answer, and the prompt section tells the agent why.
 
 ### 4.3 Permission
 
-A stand-in only writes to the local store (or proxies to tools #72 already allows). Extend `isBabTool` (or add `isStandIn`) to allow `^mcp__bab__bab_offline_[a-z_]+$` in `tool.check`, with a deny from the person's or organisation's rules still winning. Without it the desktop app, which offers only "Allow once", asks for each save.
+A stand-in only writes to the local store (or proxies to tools #72 already allows). Allow in `tool.check` exactly the full names `$.tool.register` returned, kept in module state (not a regex pinned to the plugin name `bab`), with a deny from the person's or organisation's rules still winning. Without it the desktop app, which offers only "Allow once", asks for each save.
 
 ## 5. Circuit breaker
 
@@ -101,14 +101,14 @@ Shared by every session on the machine through `$.store`, with a lease like the 
 
 | Class | Examples | Counts for breaker? |
 | --- | --- | --- |
-| Network | DNS failure, connect refused, connect timeout, TLS error, 502, 503, 504, captive-portal HTML | Yes |
-| Slow | Call timeout with the probe passing | No: "held" (maybe an approval prompt, a slow server). Shown as paused (#71). |
+| Network | A thrown transport error from `$.mcp.call`, a failed `$.mcp.connect`, a probe that fails or returns the wrong body | Yes |
+| Slow | Call timeout with the probe passing | No. Maybe an approval prompt or a slow server. Poll: two in a row pause, as in #71. Replay: the attempt is counted and the entry retried later. |
 | Refusal | Host denied the call (`looksLikeRefusal`) | No: pause as in #71 |
 | Auth | 401, SSO redirect, "needs sign-in", "does not know you" | No: "needs sign-in", queue holds |
-| Rate limit | 429 | No: wait for `Retry-After` |
-| Validation | Server answers 4xx with a reason | No: item is poison, see 8 |
+| Rate limit | The server's JSON-RPC rate-limit error (`$.mcp.call` shows no HTTP status or headers) | No: wait for `retryAfterSeconds` from the error data |
+| Validation | The server answered with an error and a reason | No: the item is held or dead-lettered, see 8 |
 
-This resolves the overlap with #71: two timeouts in a row no longer pause by themselves. A timeout runs the probe. Probe fails: network, breaker opens. Probe passes: the host is holding the call, so pause as in #71.
+This resolves the overlap with #71: two timeouts in a row no longer pause by themselves. A timeout runs the probe. Probe fails: network, breaker opens. Probe passes: the host or server is holding the call; the poll pauses after two in a row as in #71, and replay counts an attempt (8).
 
 ### The probe
 
@@ -132,15 +132,17 @@ half-open --(either fails)--> open
 
 ### Sharing
 
-Store key `bab.breaker`: `{ state, since, failures: [ts...], openedBy, probeAt }`. Rules:
+Store key `bab.breaker`: `{ state, since, openedBy, probeAt }`. Rules:
 
 - Any session may write `closed -> open` on its own observed failures. Opening early is safe.
-- Only the lease holder probes and writes `open -> half-open -> closed`. The lease is the existing `inbox` lease (one talker per machine). It is only taken after a successful poll, so a holder always has a working connection.
-- A session with a stale breaker record (older than 10 min, owner gone) takes over through the lease.
-- `$.store` has no compare-and-set. Last writer wins is acceptable here, because every writer derives the state from facts and the next probe corrects a wrong one.
+- Only the probe holder probes and writes `open -> half-open -> closed`. Probing has its own lease, `bab.probe` = `{ owner, until }`, taken by any session when it has expired, with no successful call needed. The existing `inbox` lease cannot do this job: it is written only after a successful poll and lapses after 40 s, so offline nobody holds it and nobody would ever probe. Two sessions probing at once is harmless.
+- Polling and replay stay with the `inbox` lease. Replay needs both: breaker closed and the `inbox` lease.
+- Only the probe holder writes `closed`. Any other session writes `open`, and records its own failures under its own key (`bab.fail.<session>`), never in the shared record, so a stale read-modify-write cannot overwrite `open` with `closed`.
+- A breaker record older than 10 min with no live probe lease is taken over through that lease.
+- `$.store` has no compare-and-set. With these writer rules, last writer wins is acceptable: the next probe corrects a wrong state.
 - `/bab-check` and the panel's refresh force a probe now.
 
-The breaker replaces `failures`/`retryAt`/`timeouts` module state in `check()`. The refusal pause (`isPaused`) stays a separate flag: "paused" means the host held the call, "offline" means no route. The panel shows one at a time, paused first.
+The breaker replaces `failures`, `retryAt` and `timeouts` module state in `check()`. The refusal pause (`isPaused`) stays a separate flag: "paused" means the host held the call, "offline" means no route. The panel shows one at a time, paused first.
 
 ## 6. Storage
 
@@ -148,9 +150,9 @@ Where: `$.store` (survives sessions, shared by every session on the machine). No
 
 Layout, because `$.store` has only `get`, `set`, `delete`, `keys` and no atomic update:
 
-- One key per entry: `bab.q1.<createdAtMs>.<random>`. Appending is a single `set` of a new key, so two sessions can never overwrite each other's items. FIFO order is the key order (`keys()` is in insertion order; sort by the embedded time to be sure).
-- Only the replay lease holder changes an entry's state. Sessions only create entries.
-- Budget: the whole store is capped at 4 MiB and already holds the inbox snapshot (reminders with bodies) and people. The queue gets 1 MiB: at most 50 entries, each at most 32 KiB of JSON. Counts are checked at enqueue and re-checked by the lease holder. Two sessions racing can exceed 50 by a few; the holder trims nothing but refuses new ones until under the cap.
+- One key per entry: `bab.q1.<createdAtMs>.<random>`. Appending is a single `set` of a new key, so two sessions do not touch each other's items, if `$.store` writes per key. That is an assumption: the API says only that it is a JSON file of the plugin's own. If each process rewrites the whole file from its own copy, session A's `set` can wipe B's new key. Phase 0 tests this with two processes writing at once. Fallbacks, in order: write the entry, read it back, and write again if it is gone; then one key per session (`bab.q1.<session>`) written only by that session; then a per-session file through `$.fs`. Phase 3 does not start until one of these passes. FIFO order is the key order, sorted by the embedded time.
+- Only the replay lease holder changes an entry's state. Sessions create entries and, for `/bab-queue discard` and `approve`, write a request key (`bab.q1.req.<id>`) that the holder honours before it sends. A discard of an entry already in `sending` may have reached BAB; the reply says so. Before every state write the holder reads the entry again and skips it if it is gone, so a slow holder cannot bring back an entry another holder deleted. A resurrected entry is harmless only inside the 15-day key window.
+- Budget: the whole store is capped at 4 MiB and already holds the inbox snapshot (reminders with bodies) and people. The queue gets 1 MiB: at most 50 entries, each at most 16 KiB of JSON (800 KiB), and dead letters at most 20 entries of 1 KiB (title and the first 200 characters). Counts are checked at enqueue and re-checked by the lease holder. Two sessions racing can exceed 50 by a few; the holder trims nothing but refuses new ones until under the cap.
 - Full: refuse the new item loudly ("BAB offline queue is full (50). Not saved."). Never drop the oldest silently.
 - Per-session cap: 20 entries and 10 a minute, so a looping agent or an injected prompt cannot fill it.
 - Local dedupe: same kind and same args hash as an item already queued returns that item's id instead of adding one (an agent that retries a stand-in).
@@ -162,7 +164,8 @@ Entry (v1):
 ```
 {
   v: 1,
-  id, key,                    // key = clientRequestId, "q1-" + 22 random chars; never reused
+  id,                         // the store key suffix; the person sees its last 4 characters as q-<4>
+  key,                        // clientRequestId, "q1-" + 22 random chars; never reused
   kind: 'learn' | 'react' | 'feedback' | 'remind',
   args,                       // immutable, as the real tool takes them (plus nothing else)
   createdAt,                  // $.clock.now
@@ -175,7 +178,7 @@ Entry (v1):
 }
 ```
 
-TTL: 14 days for learn, feedback and remind; 7 days for react (a stale vote is noise). An expired item moves to a dead-letter record (max 20, kept 30 days, title or first 80 chars only, body kept for `/bab-queue show`) and the person sees one line: "Dropped 2 saved items older than 14 days." Clock jumps back: age is clamped to zero. Clock jumps far forward: items expire early and land in dead letters, not nowhere.
+TTL: 14 days for learn, feedback and remind; 7 days for react (a stale vote is noise). An expired item moves to a dead-letter record (max 20, kept 30 days, title and the first 200 characters only, no more) and the person sees one line: "Dropped 2 saved items older than 14 days." Clock jumps back: age is clamped to zero. Clock jumps far forward: items expire early and land in dead letters, not nowhere.
 
 Dead-letter list is bounded by count and age, so it cannot grow either.
 
@@ -184,11 +187,11 @@ Dead-letter list is bounded by count and age, so it cannot grow either.
 The REST API already has `Idempotency-Key` (`lib/idempotency.ts`: per actor, per key, fingerprint check, 24 h, only 2xx stored). The MCP route has nothing like it. Replay goes through MCP (the mod must not hold the device secret), so the server needs a small change:
 
 - Add optional `clientRequestId` (string, 1 to 120 chars, `[A-Za-z0-9_-]`) to the input of the in-scope mutating tools.
-- In the MCP route, wrap those calls with the same table and fingerprint logic as `withIdempotency`: same key and same args returns the stored result with `replayed: true`; same key and different args returns an error. Only success is stored, so a fix-and-retry with the same key works.
+- In the MCP route, wrap those calls with the same table and fingerprint logic as `withIdempotency`: same key and same args returns the stored result with `replayed: true`; same key and different args returns an error. The fingerprint is the tool name plus the canonical args without `clientRequestId`. The in-flight lock in `withIdempotency` is per process, so one write per key holds on one replica; check the replica count in phase 0. Only success is stored, so a fix-and-retry with the same key works. Success means an actor was resolved and the tool ran and returned its normal result. The "BAB does not know you" notice is never stored under a key, or every later replay would get `replayed: true` and the entry would be deleted unsent.
 - Retention for these keys: 15 days, not 24 h (queue TTL 14 days plus one day). The sweep in `lib/maintenance.ts` needs a longer window for MCP keys. Without this, an item whose first attempt succeeded but timed out, retried 30 hours later, would duplicate.
-- Second layer for `bab_learn`: replay never sets `confirmNotDuplicate`. If the key was somehow lost, the server's similarity check answers "similar exists" and the item is held for review, not written twice.
+- Second layer for `bab_learn`: the stand-in strips `confirmNotDuplicate` at enqueue, because the agent cannot have seen the candidates offline. In 4.1 the online call that saw the candidates is the one that carries it, so an entry made from it keeps it. Replay never adds it. If the key was somehow lost, the server's similarity check answers "similar exists" and the item is held for review, not written twice.
 - `bab_react` helpful, kudos, confirm and keep should already be an upsert per person and learning. Verify in the spike. `bab_feedback` comment and `bab_remind` create are not idempotent and need the key.
-- Capability: `bab_people` returns `features: ["clientRequestId"]`. The mod caches it in `bab.people`. Replay is allowed only when it is present. Older server: the queue still collects, nothing replays, and the panel says "BAB server is older than the plugin, waiting". Deploy order is then free: server first is normal, plugin first is safe.
+- Capability: `bab_people` returns `features: ["clientRequestId"]`. Replay is allowed only when the live `bab_people` answer fetched for that drain (see 9) carries it. A cached copy is not trusted: a session running an older plugin rewrites the `people` key without it. Older server: the queue still collects, nothing replays, and the panel says "BAB server is older than the plugin, waiting". Deploy order is then free: server first is normal, plugin first is safe.
 - The mod never edits an entry's args after enqueue (the server would answer "reused with a different request").
 - The lease can be held by two sessions at once (no compare-and-set). That is why the key is a requirement, not a nicety: two sessions replaying the same entry produce one write.
 
@@ -196,7 +199,7 @@ The REST API already has `Idempotency-Key` (`lib/idempotency.ts`: per actor, per
 
 Runs in the lease holder, after a successful poll, only when the breaker is closed and no pause is set.
 
-Per tick (15 s): take up to 5 entries, oldest first, one at a time.
+Per tick (15 s): take up to 5 entries, oldest first, one at a time, and stop after 30 s. Renew the `inbox` lease before each entry, so a drain cannot outlive its 40 s lease and let a second session replay the same entries.
 
 Per entry:
 
@@ -204,22 +207,24 @@ Per entry:
 2. Persist `state: 'sending'`, `sendingSince`, `attempts + 1` before the call. A crash after this point is recovered, not lost.
 3. Call the real tool through `$.mcp.call` with `args` plus `clientRequestId = key`, 20 s timeout.
 4. Classify the result:
-   - Success, or `replayed: true`: delete the entry. Count it.
-   - Network-class failure: back to `queued`, do not count the attempt (the breaker took the signal), stop the drain, breaker handles it.
-   - Timeout with the probe passing: back to `queued`, count the attempt.
+   - Success: the answer parses to the shape that tool returns on success (for learn the new learning id, for feedback the feedback id, for remind the reminder id, for react the reaction). Or `replayed: true`. Delete the entry and count it. A result that is not an error but lacks that shape is not success: the route answers a caller it does not know with a plain notice and `isError: false`. Treat it as `unknown_actor` and hold.
+   - Network-class failure (a thrown transport error, never a server answer): back to `queued`, do not count the attempt, stop the drain, the breaker handles it. A failed connect right after the network returns is this class too.
+   - Timeout with the probe passing: back to `queued`, count the attempt. After 2 such attempts on one entry, `held` and move on (see head-of-line below).
    - Refusal: pause (#71 behaviour), stop the drain.
    - Auth ("does not know you", sign-in): `held` with `auth`, stop the drain, show "needs sign-in".
-   - 429: stop the drain until `Retry-After`, no attempt counted.
+   - Rate limited: stop the drain until `retryAfterSeconds`, no attempt counted.
    - "Similar exists" (learn, feedback post): `held` with `review`, keep the candidate ids in the short note. Never auto-confirm.
-   - Any other server error with a reason: poison. Move to dead letters at once (no retry), keep the code and a short reason.
-   - Unclassifiable: treat as poison after one attempt. Never retry blindly.
+   - Any other error the server returned with a reason: poison. Move to dead letters at once (no retry), keep the code and a short reason.
+   - An answer from the server that matches nothing above: poison after one attempt. This applies only to answers the server sent, never to engine or transport errors.
 5. Max 5 counted attempts, then dead letters. Waits between counted attempts: 30 s, 2 min, 10 min, 1 h.
 
 Recovery of `sending`: an entry in `sending` for more than 60 s with no live holder is treated as unknown outcome. It is replayed with the same key. That is safe only because of 7.
 
+Head-of-line: if an entry fails with a network-class error and the probe then passes, the entry itself is suspect (a proxy reset on a large body, say). Count an attempt against that entry. After 2, hold it and go on to the next, so one bad entry cannot block the queue until its TTL.
+
 Ordering: FIFO. A held or poisoned entry does not block the others; a network failure stops the whole drain. In scope there are no dependencies between entries (no supersedes, reactions target existing ids), so skipping is safe. `remind` with a `dueAt` already past is still created: overdue is what the person meant.
 
-Classification today is by text, which is brittle. Server change: MCP error results carry a machine-readable code (`structuredContent.code`: `validation`, `duplicate`, `rate_limited`, `unknown_actor`, `forbidden`, `not_found`, plus `retryAfterSeconds`). Until it ships, the mod matches only a short list of known texts and treats everything else as poison after one attempt. That is the conservative default.
+Sorting errors by text is brittle. Server change: MCP error results carry a machine-readable code (`structuredContent.code`: `validation`, `duplicate`, `rate_limited`, `unknown_actor`, `forbidden`, `not_found`, plus `retryAfterSeconds`). Until it ships, the mod matches only a short list of known texts and treats everything else as poison after one attempt. That is the conservative default.
 
 Partial failure inside a drain is normal: each entry is its own transaction. After a drain: one toast, "Sent 3 saved items to BAB" and, if any are held or dropped, "2 need you, /bab-queue".
 
@@ -228,10 +233,10 @@ Partial failure inside a drain is normal: each entry is its own transaction. Aft
 Replay must be as the person who made the item. The mod cannot see the device secret; the MCP connection authenticates as whoever the device is bound to now.
 
 - At enqueue, `actor` is the person id from the `bab.people` cache (`self`). If the cache is empty (never online on this machine), `actor` is null.
-- Before each replay batch the holder calls `bab_people` (cheap, one call per drain) and compares `self` with each entry's `actor`:
+- Before each replay batch the holder calls `bab_people` live (cheap, one call per drain; its answer, not a cache, decides) and compares `self` with each entry's `actor`:
   - Equal: replay.
   - Different: hold with `actor`. Never replay as someone else. The panel says "2 saved items belong to a@example.com, you are b@example.com now". They stay until TTL; if the person switches back, they replay.
-  - `actor` null: replay only if the live `self` equals `lastKnownSelf` in the store; else hold and ask. `/bab-queue approve <id>` makes the person confirm an item as theirs.
+  - `actor` null: replay only if the live `self` equals `people.self` in the store, read whatever its age (the store keeps it past `PEOPLE_TTL_MS`); else hold. If there is no `people.self` at all, hold. `/bab-queue approve <id>`, or an Approve button in the panel, makes the person confirm an item as theirs. Unapproved items expire like any other.
 - `origin` is pinned the same way. A changed `bab_url` (dev instead of live) holds the item with `origin`.
 - Device rebind, admin relink, or `bab_identify` as another address between enqueue and replay: covered by the `actor` check.
 - Session linking is not needed for replay: the device authenticates the MCP call. If a learn's attribution currently depends on a session link, the spike checks it, and items replay with the device's actor only.
@@ -248,8 +253,8 @@ No cache, no stale answers. A search result, inbox or people answer from yesterd
 - Panel banner (all surfaces): "BAB offline (VPN?). 3 items saved here and will be sent when it is back." Below it the list: kind, first 60 characters of the title, age, state (queued, held, why). Buttons: Retry now, Discard (per item, with a confirm), Show dropped.
 - Toasts, each once per transition: "BAB is offline. Saving learnings here." on open; "BAB is back. Sent 3 saved items." on drain; "2 saved items need you." on held. No toast per probe.
 - `/bab-queue`: list; `show <id>`; `discard <id>`; `retry`; `approve <id>`. Plain text output, usable on every surface and headless.
-- The agent's tool result for a save: "Saved on this computer, not in BAB yet (q-3). It will be sent when BAB is reachable. Tell the person." The prompt section tells the agent to say so in its reply.
-- Model-visible text carries counts and ids only, never queued content or server text (same rule as `check()` today).
+- The agent's tool result for a save: "Saved on this computer, not in BAB yet (q-7f3a). It will be sent when BAB is reachable. Tell the person." The prompt section tells the agent to say so in its reply.
+- Text the agent reads from the poll carries counts and ids only (same rule as `check()` today). `/bab-queue show` prints queued text to the person; it is output of a command the person ran, and it is marked as data.
 - All text drawn through `clean()`; queued text is data, never parsed as instructions or HTML.
 
 ## 12. Reconnecting the MCP server without a restart
@@ -270,7 +275,7 @@ The design does not depend on the answer; it only changes the wording and one ca
 
 ## 13. Desktop app and CLI
 
-- Approvals: the CLI asks per tool call; the desktop app offers only "Allow once" and holds a call on "Needs approval". #72 allows BAB's own tools, and 4.3 extends it to the stand-ins. `$.mcp.call` from the mod needs no prompt, so replay never asks.
+- Approvals: the CLI asks per tool call; the desktop app offers only "Allow once" and holds a call on "Needs approval". #72 allows BAB's own tools, and 4.3 extends it to the stand-ins. The API says `$.mcp.call` needs no prompt, but #71 exists because the desktop app held the mod's own calls on "Needs approval". So replay relies on the #72 allow and phase 3 tests replay on the desktop app.
 - Held-call detection (the probe rule in 5) keeps an approval hold from looking like an outage on the desktop.
 - Surfaces: `$.ui.status`, `$.ui.toast` and the panel are used as today. Where a surface lacks one, `/bab-queue` is the full interface.
 - Headless (`claude -p`): no panel, no toast. Stand-ins and tool results still work. Replay may run if the session holds the lease. A short-lived run just leaves the queue for the next session.
@@ -279,11 +284,11 @@ The design does not depend on the answer; it only changes the wording and one ca
 ## 14. Upgrade and downgrade
 
 - Entries carry `v`. Keys are prefixed `bab.q1.` for format 1.
-- A newer plugin reading an entry with a higher `v` than it knows leaves it untouched, never replays or deletes it, and shows "N saved items are from a newer plugin".
-- An older plugin ignores the keys it does not know (it never looked at them). Entries wait. TTL still counts from `createdAt`, so they expire correctly when a newer plugin returns.
+- The key prefix carries the format (`bab.q1.`, `bab.q2.`). A plugin that knows only `q1` never sees `q2` keys. A plugin that finds an entry whose `v` is higher than it knows under a prefix it reads leaves it untouched, never replays or deletes it, and shows "N saved items are from a newer plugin".
+- An older plugin without the queue ignores the keys. Entries wait. TTL still counts from `createdAt`, so they expire correctly when a newer plugin returns.
 - Within a version only additive optional fields. A breaking change is `v2` with a reader for `v1` for at least one release, and the reader migrates by writing a new key then deleting the old one.
 - Plugin and server skew is handled by the `features` flag (7).
-- A feature setting `bab_offline_queue` (plugin user config) ships off by default, then on after dogfooding. Off: nothing changes, entries already queued stay and expire.
+- A feature setting `bab_offline_queue` (plugin user config) ships off by default, then on after dogfooding. Off: no new entries are taken, but items already queued keep draining and stay visible in `/bab-queue`. Turning the setting off never drops saved work.
 
 Not in scope, listed so nobody assumes it: the curl hooks. Each prompt pays up to 1 s of connect timeout off the network. Moving those posts into a `prompt.submit` mod hook that reads the breaker would remove the cost, but changes how hook answers reach the model. Separate design.
 
@@ -298,11 +303,11 @@ Not in scope, listed so nobody assumes it: the curl hooks. Each prompt pays up t
 | E. Cache reads offline | Search keeps "working" | Stale standards presented as current; not worth the risk |
 | F. Queue `bab_send` with a confirm | Messages survive | Wrong default. Sends become surprises. Draft-only (phase 4) is the safe form |
 
-Recommendation: A, in the phases below. C is phase 1 and ships value alone.
+Advice: A, in the phases below. C is phase 1 and ships value alone.
 
 ## 16. Phased rollout
 
-- Phase 0, spikes (no product change): reconnect behaviour (12); `$.store` cross-process safety and file location and permissions; stand-in namespace and `isDeferred` behaviour; `/healthz` body; whether `bab_react` is an upsert; whether attribution of a learn uses the session link. Output: a short update of this doc.
+- Phase 0, spikes (no product change): reconnect behaviour (12); whether the real tools stay listed and `tool.call` still fires after a mid-session drop; whether a deny rule fires before or after the `tool.call` hook; whether a `tool.call` hook can return a result for an MCP tool; whether the matcher takes only exact names; the server replica count; `$.store` cross-process safety and file location and permissions; stand-in namespace and `isDeferred` behaviour; `/healthz` body; whether `bab_react` is an upsert; whether attribution of a learn uses the session link. Output: a short update of this doc.
 - Phase 1, breaker and fast fail: breaker with shared state and probe; offline text for reads; status line and panel banner; merge with #71's pause. No queue. Safe alone.
 - Phase 2, server: `clientRequestId` on in-scope MCP tools, 15-day retention, `features` in `bab_people`, machine-readable error codes, `app: "bab"` in `/healthz`. Ships before any replay. Also updates `skill.md`, the SKILL.md copy, the tool count guard tests if any tool is added (none is), and keeps the instructions text under its limit.
 - Phase 3, queue: entries, local validation and secret check, `tool.call` interception for dropped connections, replay, identity and origin checks, `/bab-queue`, dead letters. Behind `bab_offline_queue`, off by default; maintainers on first.
@@ -362,7 +367,7 @@ Evals (agent in the loop, offline fixture):
 
 1. What does `$.mcp.connect` do after a failed start (12)?
 2. Is `$.store` safe across processes, and where and how is it written?
-3. Does the stand-in namespace come out as `mcp__bab__...` on every surface?
-4. Is MCP-level idempotency acceptable on the route (stored results include text a person wrote, kept 15 days instead of 24 h)?
+3. Does the stand-in namespace come out as `mcp__bab__...` on every surface? (The allow rule uses the names `$.tool.register` returns, so this affects wording only.)
+4. Is MCP-level idempotency acceptable on the route (stored results include text a person wrote, kept 15 days instead of 24 h)? Should stored results be a minimal `{ id }` instead of the whole answer?
 5. Is 50 entries and 14 days right? Defaults chosen to be small; adjust with real use.
 6. Who owns the first maintainer dogfood group for the setting?
