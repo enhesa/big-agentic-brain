@@ -192,8 +192,8 @@ let names: Record<string, string> = {}
 let peopleAt = 0
 let whoTriedAt = 0
 let busy = false
-// This plugin's MCP server as $.mcp.connect names it: undefined until asked, null when it did not connect.
-let ownServer: string | null | undefined
+// This plugin's MCP server as $.mcp.connect names it, once it has connected.
+let ownServer: string | undefined
 
 // Poll back-off. After a refusal (the host denied bab_inbox) the 15 s poll stops until /bab-check or ↻;
 // after any other failure the ticks wait 30 s, 60 s ... up to 5 minutes, and one success resets it.
@@ -930,11 +930,12 @@ export const register: Register = (on, options) => {
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (verdict.decision !== 'ask' || (verdict.ceiling && verdict.ceiling !== 'allow')) return verdict
-    if (ownServer === undefined) {
+    if (!ownServer) {
+      // Not cached until it connects, so a server that comes up later (VPN on) is still approved.
       const c = await $.mcp.connect('bab').catch(() => null)
-      ownServer = c?.isConnected ? c.server : null
+      if (c?.isConnected) ownServer = c.server
     }
-    if (!isOwnBabTool(e.tool, ownServer)) return verdict
+    if (!isOwnBabTool(e.tool, ownServer ?? null)) return verdict
     return { ...verdict, decision: 'allow', reason: 'BAB plugin tool' }
   })
 
