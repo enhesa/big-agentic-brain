@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/enhesa/big-agentic-brain/compare/v2.8.1...v2.9.0) (2026-10-27)
+
+
+### Features
+
+* **usage:** show memories still in BAB and the share of searches that helped ([#76](https://github.com/enhesa/big-agentic-brain/issues/76)) ([1d9f96c](https://github.com/enhesa/big-agentic-brain/commit/1d9f96ccc67cb34268113948e1b2d57974ec8a0f))
+
 ## [2.8.1](https://github.com/enhesa/big-agentic-brain/compare/v2.8.0...v2.8.1) (2026-10-27)
 
 
