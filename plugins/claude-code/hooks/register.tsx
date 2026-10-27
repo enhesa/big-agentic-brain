@@ -337,10 +337,12 @@ async function serverName($: EngineInterface): Promise<string> {
   return SERVER
 }
 
+class TimedOutError extends Error {}
+
 /** Settles with `work`, or rejects when it takes longer than `ms`: a stalled request must not hold a check for ever. */
 function within<T>($: EngineInterface, work: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = $.clock.after(ms, () => reject(new Error(`${what} timed out`)))
+    const timer = $.clock.after(ms, () => reject(new TimedOutError(`${what} timed out`)))
     work.then(
       value => {
         timer.cancel()
@@ -358,7 +360,11 @@ function within<T>($: EngineInterface, work: Promise<T>, ms: number, what: strin
 async function call($: EngineInterface, tool: string, args: Record<string, unknown>): Promise<string> {
   const result = await within($, (async () => $.mcp.call(await serverName($), tool, args))(), CALL_TIMEOUT_MS, tool).catch(err => {
     // A host may reject a denied call instead of returning an error result.
-    throw looksLikeRefusal(String(err)) ? new RefusedError(`${tool} was refused`) : err
+    if (looksLikeRefusal(String(err))) throw new RefusedError(`${tool} was refused`)
+    // The desktop app holds the call on "Needs approval" instead of refusing it. Retrying would
+    // stack one more approval per retry, so an unanswered call pauses polling like a refusal.
+    if (err instanceof TimedOutError) throw new RefusedError(`${tool} was not answered, perhaps awaiting approval`)
+    throw err
   })
   const first = result.content?.find(c => c.type === 'text')?.text
   if (result.isError && first != null && looksLikeRefusal(first)) throw new RefusedError(`${tool} was refused`)

@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-27",
+    title: "No more stacked approval prompts in the desktop app",
+    changes: ["The inbox panel pauses when a BAB call waits for your approval, instead of asking again every minute."],
+  },
+  {
     date: "2026-10-26",
     title: "Browser sign-in fix, maintainers can link a refused browser",
     changes: [
