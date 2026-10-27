@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.8.0](https://github.com/enhesa/big-agentic-brain/compare/v2.7.2...v2.8.0) (2026-10-27)
+
+
+### Features
+
+* **admin:** maintainers can link a refused browser on /admin/links ([#69](https://github.com/enhesa/big-agentic-brain/issues/69)) ([ac34035](https://github.com/enhesa/big-agentic-brain/commit/ac3403552ba17d44ddb39bece9fb256ad6926c9f))
+* **plugin:** approve BAB's own tools without a permission dialog ([#72](https://github.com/enhesa/big-agentic-brain/issues/72)) ([44ad3a7](https://github.com/enhesa/big-agentic-brain/commit/44ad3a73ab6e6936ec7d1668a6c37116ed38b2d0))
+
+
+### Bug Fixes
+
+* **plugin:** pause the inbox poll when a BAB call goes unanswered ([#71](https://github.com/enhesa/big-agentic-brain/issues/71)) ([e7cc4d2](https://github.com/enhesa/big-agentic-brain/commit/e7cc4d2e1d98d0b19498528d562bc833b87f45da))
+
 ## [2.7.2](https://github.com/enhesa/big-agentic-brain/compare/v2.7.1...v2.7.2) (2026-10-26)
 
 
