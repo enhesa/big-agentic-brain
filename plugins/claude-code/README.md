@@ -29,8 +29,7 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 - BAB marks the read tools (`bab_search`, `bab_inbox`) as read-only in its MCP tool list. Hosts such as the Claude desktop app can then allow them without asking each time. `bab_inbox` counts as read-only even though opening a thread marks it read.
 - If the host refuses a `bab_inbox`, `bab_remind` or `bab_people` call, the panel stops polling and says "BAB paused: allow its tools to see new messages and reminders". Run `/bab-check` (or press the refresh button) to resume it.
 - If BAB cannot be reached, the wait between polls doubles from 30 seconds up to 5 minutes. The first good answer resets it.
-- The mod approves BAB's own tools (`tool.check` in `hooks/register.tsx`), so they raise no permission dialog. A `deny` rule in settings still wins. Sending and deleting keep their ask in words: the server instructions make the agent get the user's yes in the chat.
-- Those four read, or only change your own inbox, reminders and profile. Sending, saving and reacting still ask.
+- The mod approves the BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`), so they raise no permission dialog. A `deny` rule in settings, or an organisation ceiling on the tool, still wins. Sending and deleting keep their ask in words: the server instructions make the agent get the user's yes in the chat.
 - Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
 
 ## What the hooks do
