@@ -232,7 +232,7 @@ Partial failure inside a drain is normal: each entry is its own transaction. Aft
 
 Replay must be as the person who made the item. The mod cannot see the device secret; the MCP connection authenticates as whoever the device is bound to now.
 
-- At enqueue, `actor` is the person id from the `bab.people` cache (`self`). If the cache is empty (never online on this machine), `actor` is null.
+- At enqueue, `actor` is the person id from the `people` store key (`self`). If the cache is empty (never online on this machine), `actor` is null.
 - Before each replay batch the holder calls `bab_people` live (cheap, one call per drain; its answer, not a cache, decides) and compares `self` with each entry's `actor`:
   - Equal: replay.
   - Different: hold with `actor`. Never replay as someone else. The panel says "2 saved items belong to a@example.com, you are b@example.com now". They stay until TTL; if the person switches back, they replay.
@@ -326,7 +326,7 @@ Unit and property tests:
 - Queue: FIFO; per-key append with two simulated sessions never loses an item; caps (count, bytes, per-session rate); full refuses; local dedupe; TTL with clock back and forward; unknown `v` untouched; v1 fixture loads.
 - Replay: fault-injection fake server and fake `$.store` and `$.mcp`. Crash points: before persist, after persist before call, after call before delete. Server cases: success then timeout (key dedups), 5xx, 429, validation, similar-exists, unknown actor, refusal. Properties: never two writes for one key; never an entry lost without a dead-letter record or a sent mark; attempts bounded; `sending` recovery replays with the same key.
 - Two holders at once over one store: still one write per entry.
-- Identity: actor change holds; null actor with matching `lastKnownSelf` replays; origin change holds.
+- Identity: actor change holds; null actor with matching `people.self` replays; origin change holds.
 - Never-queue set: `bab_send`, identify, link, delete, retire, pin, label, supersedes, decision, standard all fail loudly and add nothing to the queue.
 - Drift guard: stand-in schemas are a subset of `TOOLS`.
 - Redaction: a queued secret is refused locally; the server test sends a secret through replay and sees `[redacted]` stored.
