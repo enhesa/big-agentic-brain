@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/enhesa/big-agentic-brain/compare/v2.8.0...v2.8.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **plugin:** approve only BAB tools on the plugin's own server ([#74](https://github.com/enhesa/big-agentic-brain/issues/74)) ([c39ebe5](https://github.com/enhesa/big-agentic-brain/commit/c39ebe5308d85d4e7808a57c3c5793ed30ed62b6))
+
 ## [2.8.0](https://github.com/enhesa/big-agentic-brain/compare/v2.7.2...v2.8.0) (2026-10-27)
 
 
