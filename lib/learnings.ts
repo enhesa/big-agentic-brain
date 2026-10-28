@@ -1989,6 +1989,8 @@ export interface VoteResult {
  * says the memory is in use, so it counts as a read like the first one.
  * Switching kind (helpful <-> not_helpful) replaces the previous one, since a
  * voter only ever holds one opinion at a time (`changed: true`, 200).
+ * `via` matters: "ui" (the default, and a click on the memory page) is a person, not an agent
+ * read, so it never counts as a read. Agent callers pass "mcp".
  */
 export function vote(
   learningId: string,
@@ -2086,6 +2088,7 @@ export function noteArg(raw: unknown): string | null {
  * groundwork): a distinct vote kind, one per identity per learning, never
  * on your own. A repeat is an explicit 409 (`ConflictError`), not a silent
  * no-op — the agent should tell the human it already thanked this author.
+ * Like vote(), via "ui" (the default) is not counted as a read; agent callers pass "mcp".
  */
 export function giveKudos(
   learningId: string,

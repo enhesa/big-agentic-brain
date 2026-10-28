@@ -27,7 +27,7 @@ How the tiles count:
 
 - One reuse per person and memory: a helpful and a kudos from the same person on the same memory are one reuse, measured by the earliest reaction that carries a reuse cost. A person who reuses the same memory again later is still one reuse, because BAB keeps one helpful vote per person.
 - Only reactions since 27 Oct 2026 (`MEASURED_SAVINGS_SINCE`), within the page's 12 months.
-- Left out, and counted in the hover: reuses of memories saved without a measured discovery cost (older memories, other clients, older plugins), and reactions with no measured reuse cost. A helpful or kudos clicked on the memory page is one of those: no agent session preceded it, so it never carries a reuse cost.
+- Left out, and counted in the hover: reuses of memories saved without a measured discovery cost (older memories, other clients, older plugins), and reactions with no measured reuse cost. A helpful or kudos clicked on the memory page is one of those: the page records no reuse cost.
 - An author cannot react to their own memory, so self-reuse never counts.
 - A correction or a consolidation is a new memory: it carries the effort of the session that wrote it, not that of the memories it replaces.
 - The server checks the numbers (finite, not negative, at most 240 minutes, 50 million tokens and USD 1,000) and uses them for these tiles and the memory page's "Agent effort to find" line only. They are self-reported by the client, like the model id.

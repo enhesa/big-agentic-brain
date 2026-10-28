@@ -7,6 +7,7 @@ import { KUDOS_NOTE_MAX } from "./learnings";
  */
 export const REACT_MESSAGES = {
   done: "Thanks, your reaction is saved.",
+  same: "Your vote was already saved. Pick the other button to change it.",
   link: "Link your browser on /me/devices first, then you can react.",
   own: "You cannot react to your own memory.",
   "kudos-given": "You already gave kudos on this memory.",

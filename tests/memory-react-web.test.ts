@@ -111,8 +111,11 @@ describe("POST /memory/[id]/react", () => {
     const l = await seed();
     await linkAlice();
     await react(l.id, { action: "helpful" });
-    await react(l.id, { action: "helpful" });
+    const repeat = await react(l.id, { action: "helpful" });
+    expect(location(repeat)).toContain("?react=same");
     expect(await votesOf(l.id)).toEqual([{ voter_id: ALICE, kind: "helpful", note: null }]);
+    const { getById: read } = await import("../lib/learnings");
+    expect(read(l.id)!.access_days).toBe(0); // a repeat web helpful is no read either
     await react(l.id, { action: "not_helpful" });
     expect(await votesOf(l.id)).toEqual([{ voter_id: ALICE, kind: "not_helpful", note: null }]);
     const { getById } = await import("../lib/learnings");
@@ -147,7 +150,7 @@ describe("POST /memory/[id]/react", () => {
     });
     const ok = await POST(req.clone(), { params: Promise.resolve({ id: l.id }) });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ ok: true, action: "kudos" });
+    expect(await ok.json()).toEqual({ ok: true, action: "kudos", changed: true });
     const dup = await POST(req, { params: Promise.resolve({ id: l.id }) });
     expect(dup.status).toBe(409);
   });
@@ -169,6 +172,25 @@ describe("POST /memory/[id]/react", () => {
       expect(location(await react(l.id, { action }))).toContain("?react=own");
     }
     expect(await votesOf(l.id)).toEqual([]);
+  });
+
+  it("answers an unlinked JSON caller with 401 and linkRequired", async () => {
+    signedIn("alice");
+    const l = await seed();
+    const res = await react(l.id, { action: "helpful" }, { "content-type": "application/json" });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ linkRequired: true });
+  });
+
+  it("refuses a deleted memory and hides the panel on it", async () => {
+    signedIn("alice");
+    const l = await seed();
+    await linkAlice();
+    const { deleteOwn } = await import("../lib/learnings");
+    deleteOwn(l.id, BOB);
+    expect(location(await react(l.id, { action: "helpful" }))).toContain("?react=gone");
+    expect(await votesOf(l.id)).toEqual([]);
+    expect(await renderDetail(l.id)).not.toContain("Did this help you?");
   });
 
   it("sends an unlinked browser to link first and records nothing", async () => {

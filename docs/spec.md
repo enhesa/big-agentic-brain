@@ -492,8 +492,8 @@ event is a fresh row (`recordRetireEvent`), so the order is exact even inside on
 ## Kudos
 
 Kudos is `bab_react` `kudos` (`POST /api/learnings/:id/kudos`): an agent thanks the author of a memory that helped,
-only when the user praised it. People can also give it on the memory's page. One per person per memory, never on your own memory, with an optional note. It counts +2 in
-`score` and in standing points (see "Ranking"). A leaderboard, awards and anti-gaming rules were planned and never built.
+only when the user praised it. People can also give it on the memory's page. One per person per memory, never on your
+own memory, with an optional note. It counts +2 in `score` and in standing points (see "Ranking"). A leaderboard, awards and anti-gaming rules were planned and never built.
 
 ## Scalability notes (500+ agents)
 
@@ -1220,7 +1220,7 @@ every time.
      only reuses measured on both sides count; one reuse per person and memory with a `helpful` or
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
-     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; only agent reactions, via `mcp`, credit a search, never a click on the memory page); and
+     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; a click on the memory page, via `ui`, never credits a search); and
      found nothing (the share of searches whose audit row records `results: 0`, "since" the first
      recorded day, as older rows have no count).
      Activity over the last 12 months: memories saved (audit `create` on a learning), searches

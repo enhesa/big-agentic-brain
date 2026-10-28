@@ -363,9 +363,9 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
     .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number }>;
   for (const r of searches) slot(r.week).searches = num(r.n);
   // For each helpful or kudos reaction, the same person's last search in the window before it
-  // (idx_audit_actor_at), counted once per search, in the week of the search. Only agent reactions
-  // (via 'mcp', which the REST routes use too): a click on the memory page follows no search in a
-  // session, so it says nothing about whether a search helped.
+  // (idx_audit_actor_at), counted once per search, in the week of the search. Not a click on the
+  // memory page (via 'ui'): it follows no search in an agent session, so it says nothing about
+  // whether a search helped.
   const helped = db
     .prepare(
       `WITH hits AS (
@@ -374,7 +374,7 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
                    AND s.path IN (?, ?) AND (s.path = ? OR s.action = 'GET')
                  ORDER BY s.at DESC, s.id DESC LIMIT 1) AS sid
          FROM audit_log h
-         WHERE h.action IN ${USED_ACTIONS} AND h.at >= ? AND h.at < ? AND +h.entity = 'learning' AND h.via = 'mcp' AND h.actor_id NOT IN ${NOT_PEOPLE}
+         WHERE h.action IN ${USED_ACTIONS} AND h.at >= ? AND h.at < ? AND +h.entity = 'learning' AND h.via != 'ui' AND h.actor_id NOT IN ${NOT_PEOPLE}
        )
        SELECT ${weekSql("s.at")} AS week, COUNT(DISTINCT s.id) AS n
        FROM hits JOIN audit_log s ON s.id = hits.sid

@@ -48,11 +48,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const learning = getById(id);
   if (!learning || learning.status === "deleted") return json ? notifyJson({ error: "Learning not found" }, 404) : back("gone");
 
+  let changed = true;
   try {
     if (action === "kudos") {
       giveKudos(id, viewer.ownerId, noteArg(note ?? null), "ui");
     } else {
-      vote(id, viewer.ownerId, action as "helpful" | "not_helpful", "ui");
+      changed = vote(id, viewer.ownerId, action as "helpful" | "not_helpful", "ui").changed;
     }
   } catch (err) {
     // Anything that is not a refusal is a bug: let it surface as one, not as a friendly line.
@@ -63,5 +64,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     return back(refusalCode(err));
   }
-  return json ? notifyJson({ ok: true, action }) : back("done");
+  return json ? notifyJson({ ok: true, action, changed }) : back(changed ? "done" : "same");
 }

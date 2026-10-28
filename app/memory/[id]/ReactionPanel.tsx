@@ -27,7 +27,7 @@ export default function ReactionPanel({
         Did this help you?
       </h2>
       {message ? (
-        <p role="status" className={message.code === "done" ? styles.reactOk : styles.reactNote}>
+        <p role="status" className={message.code === "done" || message.code === "same" ? styles.reactOk : styles.reactNote}>
           {message.text}
         </p>
       ) : null}
@@ -40,7 +40,7 @@ export default function ReactionPanel({
         <p className={styles.reactHint}>This is your memory, so you cannot react to it.</p>
       ) : (
         <>
-          <form method="post" action={action} className={styles.reactRow}>
+          <form method="post" action={action} className={styles.reactRow} role="group" aria-label="Your vote">
             <button
               type="submit"
               name="action"
