@@ -139,5 +139,6 @@ describe("tool description size", () => {
   });
 });
 
-const CEILING_FULL = 20000;
+// 20000 until bab_files (2026-10-28), the eleventh tool, added about 1600 characters.
+const CEILING_FULL = 21800;
 const CEILING_LEAN = 11200;

@@ -17,6 +17,8 @@ const WRITERS_DESTRUCTIVE: Record<string, boolean> = {
   bab_identify: false,
   bab_link_session: false,
   bab_feedback: false,
+  // delete removes the caller's own file for good.
+  bab_files: true,
 };
 
 describe("MCP tool annotations", () => {

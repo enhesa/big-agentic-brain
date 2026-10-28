@@ -22,8 +22,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
   const link = resolveDownloadLink(token);
   if (!link) return Response.json({ error: "Not found (the link is wrong or has expired)" }, { status: 404 });
   try {
-    const stream = openForDownload(link.file, link.createdBy, "mcp", "link");
-    return new Response(stream, { status: 200, headers: downloadHeaders(link.file) });
+    const headers = downloadHeaders(link.file);
+    return new Response(openForDownload(link.file, link.createdBy, "mcp", "link", clientIp(req.headers)), { status: 200, headers });
   } catch {
     return Response.json({ error: "Not found (the link is wrong or has expired)" }, { status: 404 });
   }

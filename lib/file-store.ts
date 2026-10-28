@@ -81,23 +81,44 @@ export async function stageUpload(body: Body, maxBytes: number): Promise<StagedU
   const hash = createHash("sha256");
   let size = 0;
   let head = Buffer.alloc(0);
-  const closed = new Promise<void>((resolve, reject) => {
+  // A write error (disk full, I/O) can arrive while the loop waits on the network: remember it and
+  // fail the next step, never leave it as an unhandled rejection or a drain wait that never ends.
+  let writeError: Error | null = null;
+  const closed = new Promise<void>((resolve) => {
     out.on("close", resolve);
-    out.on("error", reject);
+    out.on("error", (e) => {
+      writeError = e;
+      resolve();
+    });
   });
+  const drained = () =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        out.off("drain", done);
+        out.off("error", done);
+        out.off("close", done);
+        resolve();
+      };
+      out.on("drain", done);
+      out.on("error", done);
+      out.on("close", done);
+    });
   try {
     for await (const chunk of chunksOf(body)) {
+      if (writeError) throw writeError;
       size += chunk.byteLength;
       if (size > maxBytes) throw new UploadTooLargeError();
       if (head.length < HEAD_BYTES) head = Buffer.concat([head, Buffer.from(chunk.subarray(0, HEAD_BYTES - head.length))]);
       hash.update(chunk);
-      if (!out.write(chunk)) await new Promise<void>((resolve) => out.once("drain", resolve));
+      if (!out.write(chunk)) await drained();
     }
+    if (writeError) throw writeError;
     out.end();
     await closed;
+    if (writeError) throw writeError;
   } catch (err) {
     out.destroy();
-    await closed.catch(() => undefined);
+    await closed;
     rmSync(tmpPath, { force: true });
     throw err;
   }

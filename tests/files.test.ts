@@ -124,6 +124,13 @@ describe("names and types", () => {
     expect(readdirSync(path.join(dataDir, "files", "tmp"))).toEqual([]);
   });
 
+  it("drops trailing dots so run.bat. is still a .bat, and refuses direction-changing characters", async () => {
+    await expect(put(OWNER, "run.bat.", bytes(10))).rejects.toThrow(/\.bat files are refused/);
+    await expect(put(OWNER, "run.bat . .", bytes(10))).rejects.toThrow(/\.bat files are refused/);
+    await expect(put(OWNER, "photo\u202egpj.exe", bytes(10))).rejects.toThrow(/direction-changing/);
+    expect((await put(OWNER, "tab\u0085name.txt", bytes(3))).file.name).toBe("tabname.txt");
+  });
+
   it("refuses a name that holds an email address", async () => {
     await expect(put(OWNER, "notes-for-someone@acme.org.txt", bytes(1))).rejects.toThrow(/rename/);
   });
@@ -146,6 +153,44 @@ describe("per-file cap", () => {
     process.env.BAB_FILES_MAX_FILE_BYTES = String(1000);
     const { putFile } = await lib();
     await expect(putFile({ ownerId: OWNER, name: "big.bin", body: streamOf(bytes(5000)), declaredSize: 10 }, "mcp", ORIGIN)).rejects.toMatchObject({ status: 413 });
+  });
+});
+
+describe("uploads at once", () => {
+  it("allows two streamed uploads per person at a time, and frees the slot when one ends", async () => {
+    const { putFile } = await lib();
+    const enc = new TextEncoder();
+    const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+    const open = () =>
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          controllers.push(c);
+          c.enqueue(enc.encode("partial"));
+        },
+      });
+    const first = putFile({ ownerId: OWNER, name: "a.txt", body: open() }, "mcp", ORIGIN);
+    const second = putFile({ ownerId: OWNER, name: "b.txt", body: open() }, "mcp", ORIGIN);
+    await expect(putFile({ ownerId: OWNER, name: "c.txt", body: open() }, "mcp", ORIGIN)).rejects.toMatchObject({ status: 429 });
+    // Someone else is not blocked.
+    expect((await putFile({ ownerId: OTHER, name: "d.txt", body: streamOf(bytes(3)) }, "mcp", ORIGIN)).file.size).toBe(3);
+    controllers[0].close();
+    controllers[1].close();
+    expect((await first).file.size).toBe(7);
+    expect((await second).file.size).toBe(7);
+    expect((await put(OWNER, "e.txt", bytes(3))).file.size).toBe(3);
+  });
+
+  it("cleans up when the client goes away mid-upload", async () => {
+    const { putFile } = await lib();
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(bytes(10));
+        c.error(new Error("client went away"));
+      },
+    });
+    await expect(putFile({ ownerId: OWNER, name: "a.txt", body }, "mcp", ORIGIN)).rejects.toThrow(/went away/);
+    expect(readdirSync(path.join(dataDir, "files", "tmp"))).toEqual([]);
+    expect((await put(OWNER, "b.txt", bytes(3))).file.size).toBe(3);
   });
 });
 

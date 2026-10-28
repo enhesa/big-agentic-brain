@@ -1,5 +1,11 @@
 import type { FileRow } from "./files";
 
+/** RFC 5987 value: percent-encode everything but the attr-chars, including ' ( ) * ! which encodeURIComponent leaves. */
+function rfc5987(value: string): string {
+  const wellFormed = (value as string & { toWellFormed(): string }).toWellFormed();
+  return encodeURIComponent(wellFormed).replace(/['()*!]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
 /**
  * Headers for every file download. The bytes are always served as an opaque attachment: never
  * rendered by the browser, never sniffed, never cached, and sandboxed even if something tries to
@@ -10,7 +16,7 @@ export function downloadHeaders(file: FileRow): Headers {
   return new Headers({
     "Content-Type": "application/octet-stream",
     "Content-Length": String(file.size),
-    "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${rfc5987(file.name)}`,
     "X-Content-Type-Options": "nosniff",
     "Content-Security-Policy": "default-src 'none'; sandbox",
     "Cache-Control": "no-store",

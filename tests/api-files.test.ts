@@ -29,6 +29,7 @@ afterEach(async () => {
   rmSync(dataDir, { recursive: true, force: true });
   delete process.env.DATA_DIR;
   delete process.env.BAB_PUBLIC_ORIGIN;
+  delete process.env.BAB_API_TOKENS;
   vi.doUnmock("next/headers");
   vi.resetModules();
 });
@@ -43,7 +44,7 @@ async function upload(name: string, body: Uint8Array, query = "") {
   const { POST } = await import("../app/api/files/route");
   const req = new Request(`http://x/api/files?name=${encodeURIComponent(name)}${query}`, {
     method: "POST",
-    body,
+    body: body as unknown as BodyInit,
     headers: { "content-length": String(body.length), "content-type": "application/octet-stream" },
   });
   return POST(req as never);
@@ -52,7 +53,7 @@ async function upload(name: string, body: Uint8Array, query = "") {
 describe("/api/files", () => {
   it("401s without an identity", async () => {
     const { GET } = await import("../app/api/files/route");
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("http://x/api/files"))).status).toBe(401);
     expect((await upload("a.txt", new Uint8Array([1]))).status).toBe(401);
   });
 
@@ -66,7 +67,7 @@ describe("/api/files", () => {
     expect(put.usage.usedBytes).toBe(body.length);
 
     const { GET: LIST } = await import("../app/api/files/route");
-    const list = await (await LIST()).json();
+    const list = await (await LIST(new Request("http://x/api/files"))).json();
     expect(list.files.map((f: { id: string }) => f.id)).toEqual([put.file.id]);
     expect(list.usage).toMatchObject({ usedBytes: body.length, quotaBytes: 100 * 1024 * 1024 });
 
@@ -118,6 +119,40 @@ describe("/api/files", () => {
     const { POST } = await import("../app/api/files/route");
     const big = new Request("http://x/api/files?name=big.txt", { method: "POST", body: new Uint8Array(10), headers: { "content-length": String(26 * 1024 * 1024) } });
     expect((await POST(big as never)).status).toBe(413);
+  });
+});
+
+describe("download headers", () => {
+  it("encodes the name for Content-Disposition without breaking the header", async () => {
+    const { downloadHeaders } = await import("../lib/file-download");
+    const h = downloadHeaders({ id: "a".repeat(32), owner_id: OWNER, name: "rapport (final)'é\"x;.txt", size: 1, sha256: "0", org_visible: 0, created_at: "", expires_at: "", deleted_at: null, removed_at: null });
+    const cd = h.get("content-disposition")!;
+    expect(cd).toContain(`filename="rapport (final)'__x_.txt"`);
+    expect(cd).toContain("filename*=UTF-8''rapport%20%28final%29%27%C3%A9%22x%3B.txt");
+  });
+});
+
+describe("proxy", () => {
+  it("leaves POST /api/files out of the request proxy, so Next never buffers an upload, and keeps every other API path in", async () => {
+    const { config } = await import("../proxy");
+    expect(config.matcher).toEqual(["/api", "/api/((?!files$).*)", "/mcp"]);
+    const re = new RegExp("^/api/((?!files$).*)$");
+    expect(re.test("/api/files")).toBe(false);
+    for (const p of ["/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/learnings", "/api/filesx"]) expect(re.test(p), p).toBe(true);
+  });
+
+  it("runs the gate inside the upload route: a token is required in token mode", async () => {
+    process.env.BAB_API_TOKENS = "t0ken-for-tests-only";
+    (await import("../lib/db"))._resetDbForTests();
+    vi.resetModules();
+    as(OWNER, "Owner One");
+    const { POST, GET } = await import("../app/api/files/route");
+    const res = await POST(new Request("http://x/api/files?name=a.txt", { method: "POST", body: "abc", headers: { "content-length": "3" } }) as never);
+    expect(res.status).toBe(401);
+    expect((await GET(new Request("http://x/api/files"))).status).toBe(401);
+    const ok = await POST(new Request("http://x/api/files?name=a.txt", { method: "POST", body: "abc", headers: { "content-length": "3", authorization: "Bearer t0ken-for-tests-only" } }) as never);
+    expect(ok.status).toBe(201);
+    delete process.env.BAB_API_TOKENS;
   });
 });
 

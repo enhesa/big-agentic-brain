@@ -20,7 +20,7 @@ import { audit } from "./audit";
 import { redact } from "./redact";
 import { getUser } from "./users";
 import { send } from "./messages";
-import { ApiError, NotFoundError, ValidationError, ForbiddenError } from "./errors";
+import { ApiError, NotFoundError, ValidationError, ForbiddenError, TooManyRequestsError } from "./errors";
 import type { AuditVia } from "./types";
 import {
   blobExists,
@@ -71,6 +71,12 @@ const EXECUTABLE_MAGIC: Buffer[] = [
   Buffer.from([0xcf, 0xfa, 0xed, 0xfe]),
   Buffer.from([0xca, 0xfe, 0xba, 0xbe]),
 ];
+
+/** Streamed uploads running at once, per person and in all. */
+export const UPLOADS_IN_FLIGHT_PER_USER = 2;
+export const UPLOADS_IN_FLIGHT_TOTAL = 6;
+const inFlight = new Map<string, number>();
+let inFlightTotal = 0;
 
 /** 413: the upload is bigger than the per-file cap. */
 export class FileTooLargeError extends ApiError {
@@ -137,8 +143,11 @@ function mb(bytes: number): string {
 export function cleanFileName(raw: unknown): string {
   const text = typeof raw === "string" ? raw : "";
   const last = text.split(/[\\/]/).pop() ?? "";
+  // Control characters (C0, DEL, C1) go; bidi and invisible format characters, which can make
+  // "gpj.exe" read as "exe.jpg", are refused; trailing dots and spaces go, as Windows drops them.
+  if (/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/.test(last)) throw new ValidationError("name holds invisible or direction-changing characters; rename the file");
   // eslint-disable-next-line no-control-regex
-  const name = last.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  const name = last.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim().replace(/[. ]+$/, "");
   if (!name || name === "." || name === "..") throw new ValidationError("name is required: the file name, such as report.md");
   if (name.length > FILE_NAME_MAX) throw new ValidationError(`name must be ${FILE_NAME_MAX} characters or fewer`);
   if (redact(name) !== name) throw new ValidationError("name looks like it holds a secret or an email address; rename the file");
@@ -305,9 +314,9 @@ export function resolveDownloadLink(token: string): { file: FileRow; createdBy: 
 }
 
 /** Records a fetch and returns the bytes. */
-export function openForDownload(file: FileRow, actorId: string, via: AuditVia, how: "direct" | "link" | "inline"): ReadableStream<Uint8Array> {
+export function openForDownload(file: FileRow, actorId: string, via: AuditVia, how: "direct" | "link" | "inline", ip: string | null = null): ReadableStream<Uint8Array> {
   if (!blobExists(file.id)) throw new NotFoundError("File not found (its bytes are gone)");
-  audit(getDb(), actorId, "file_get", "file", file.id, via, { details: { how, size: file.size } });
+  audit(getDb(), actorId, "file_get", "file", file.id, via, { ip, details: { how, size: file.size } });
   return readBlob(file.id);
 }
 
@@ -360,8 +369,9 @@ function preparePut(input: PutInput): PreparedPut {
   if (note.length > FILE_NOTE_MAX) throw new ValidationError(`note must be ${FILE_NOTE_MAX} characters or fewer`);
   const subject = input.subject == null ? "" : String(input.subject).trim();
 
-  // Expired and deleted files whose bytes are still on disk: remove them now, so they stop counting.
-  purgeRemovable();
+  // This owner's expired and deleted files whose bytes are still on disk: remove them now, so they
+  // stop counting. Everyone else's wait for maintenance.
+  purgeRemovable(Date.now(), 100, input.ownerId);
 
   const declared = input.declaredSize == null ? NaN : Number(input.declaredSize);
   if (Number.isFinite(declared) && declared > f.maxFileBytes) throw new FileTooLargeError(tooLargeMessage(declared));
@@ -442,14 +452,28 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
  */
 export async function putFile(input: PutInput, via: AuditVia, origin: string): Promise<PutResult> {
   const p = preparePut(input);
-  let staged: StagedUpload;
-  try {
-    staged = await stageUpload(input.body, config().files.maxFileBytes);
-  } catch (err) {
-    if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage());
-    throw err;
+  // Uploads in progress do not count towards the quota or the disk check yet, so cap how many run at once.
+  const mine = inFlight.get(p.ownerId) ?? 0;
+  if (mine >= UPLOADS_IN_FLIGHT_PER_USER || inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) {
+    throw new TooManyRequestsError(`Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`);
   }
-  return finishPut(p, staged, via, origin);
+  inFlight.set(p.ownerId, mine + 1);
+  inFlightTotal += 1;
+  try {
+    let staged: StagedUpload;
+    try {
+      staged = await stageUpload(input.body, config().files.maxFileBytes);
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage());
+      throw err;
+    }
+    return finishPut(p, staged, via, origin);
+  } finally {
+    inFlightTotal -= 1;
+    const left = (inFlight.get(p.ownerId) ?? 1) - 1;
+    if (left > 0) inFlight.set(p.ownerId, left);
+    else inFlight.delete(p.ownerId);
+  }
 }
 
 /** The same for bytes already in memory (the MCP tool), synchronously. */
@@ -543,7 +567,7 @@ export function updateFile(actorId: string, id: string, input: UpdateInput, via:
     for (const s of remove) db.prepare("DELETE FROM file_shares WHERE file_id = ? AND user_id = ?").run(file.id, s);
     if (org !== undefined) db.prepare("UPDATE files SET org_visible = ? WHERE id = ?").run(org ? 1 : 0, file.id);
     if (expiresAt) db.prepare("UPDATE files SET expires_at = ? WHERE id = ?").run(expiresAt, file.id);
-    audit(db, actorId, "file_update", "file", file.id, via, { details: { shared: add.length, unshared: remove.length, orgVisible: org, expiresAt } });
+    audit(db, actorId, "file_update", "file", file.id, via, { details: { shared: add, unshared: remove, orgVisible: org, expiresAt } });
   });
   const fresh = db.prepare("SELECT * FROM files WHERE id = ?").get(file.id) as unknown as FileRow;
   return viewOf(db, fresh, actorId);
@@ -554,12 +578,18 @@ export function updateFile(actorId: string, id: string, input: UpdateInput, via:
  * stale temp uploads. Runs from maintenance and at the start of each upload. Returns the number of
  * files whose bytes were removed.
  */
-export function purgeRemovable(now: number = Date.now(), limit = 500): number {
+export function purgeRemovable(now: number = Date.now(), limit = 500, ownerId?: string): number {
   const db = getDb();
   const iso = nowIso(now);
-  const rows = db
-    .prepare("SELECT id, owner_id, size, deleted_at FROM files WHERE removed_at IS NULL AND (deleted_at IS NOT NULL OR expires_at <= ?) LIMIT ?")
-    .all(iso, limit) as unknown as { id: string; owner_id: string; size: number; deleted_at: string | null }[];
+  const rows = (
+    ownerId
+      ? db
+          .prepare("SELECT id, owner_id, size, deleted_at FROM files WHERE owner_id = ? AND removed_at IS NULL AND (deleted_at IS NOT NULL OR expires_at <= ?) LIMIT ?")
+          .all(ownerId, iso, limit)
+      : db
+          .prepare("SELECT id, owner_id, size, deleted_at FROM files WHERE removed_at IS NULL AND (deleted_at IS NOT NULL OR expires_at <= ?) LIMIT ?")
+          .all(iso, limit)
+  ) as unknown as { id: string; owner_id: string; size: number; deleted_at: string | null }[];
   let removed = 0;
   for (const r of rows) {
     if (!removeBlob(r.id)) continue;
@@ -571,8 +601,10 @@ export function purgeRemovable(now: number = Date.now(), limit = 500): number {
     });
     removed += 1;
   }
-  db.prepare("DELETE FROM file_links WHERE expires_at <= ?").run(iso);
-  sweepStaleTemps(now);
+  if (!ownerId) {
+    db.prepare("DELETE FROM file_links WHERE expires_at <= ?").run(iso);
+    sweepStaleTemps(now);
+  }
   return removed;
 }
 

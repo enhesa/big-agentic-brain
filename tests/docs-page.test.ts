@@ -143,7 +143,7 @@ describe("/docs", () => {
     const html = await render();
     expect(html).toContain("Four skills");
     expect(html).toContain("Three hooks");
-    expect(html).toContain("Ten tools");
+    expect(html).toContain("Eleven tools");
     expect(html).toContain("four with ?tools=lean");
     expect(html).not.toMatch(/listen\.mjs|hook\.mjs|guard\.mjs/);
     // The old install, with its curl hooks and permission rules, is not what the card draws any more.

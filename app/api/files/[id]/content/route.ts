@@ -19,8 +19,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   await auditRequest({ actor: user, method: "GET", path: `/api/files/${id}/content`, via: "mcp" });
   try {
     const file = fileForActor(user.id, id);
-    const stream = openForDownload(file, user.id, "mcp", "direct");
-    return new Response(stream, { status: 200, headers: downloadHeaders(file) });
+    const headers = downloadHeaders(file);
+    return new Response(openForDownload(file, user.id, "mcp", "direct"), { status: 200, headers });
   } catch (err) {
     const { status, body } = toApiError(err);
     return Response.json(body, { status });
