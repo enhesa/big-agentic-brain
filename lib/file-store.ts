@@ -51,7 +51,18 @@ const HEAD_BYTES = 8;
 
 type Body = ReadableStream<Uint8Array> | Uint8Array | null;
 
-async function* chunksOf(body: Body): AsyncGenerator<Uint8Array> {
+/** An upload that sends nothing for this long is dropped, so a stalled client cannot hold an upload slot. */
+export const UPLOAD_IDLE_TIMEOUT_MS = 30_000;
+
+/** Thrown when an upload stalls for UPLOAD_IDLE_TIMEOUT_MS. */
+export class UploadStalledError extends Error {
+  constructor() {
+    super("upload stalled");
+    this.name = "UploadStalledError";
+  }
+}
+
+async function* chunksOf(body: Body, idleMs: number): AsyncGenerator<Uint8Array> {
   if (body === null) return;
   if (body instanceof Uint8Array) {
     yield body;
@@ -60,11 +71,20 @@ async function* chunksOf(body: Body): AsyncGenerator<Uint8Array> {
   const reader = body.getReader();
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      if (value) yield value;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new UploadStalledError()), idleMs);
+      });
+      try {
+        const { done, value } = await Promise.race([reader.read(), stalled]);
+        if (done) return;
+        if (value) yield value;
+      } finally {
+        clearTimeout(timer);
+      }
     }
   } finally {
+    reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
@@ -74,7 +94,7 @@ async function* chunksOf(body: Body): AsyncGenerator<Uint8Array> {
  * `maxBytes` (Content-Length is not trusted: a chunked request has none). Memory use stays at one
  * chunk, whatever the file size.
  */
-export async function stageUpload(body: Body, maxBytes: number): Promise<StagedUpload> {
+export async function stageUpload(body: Body, maxBytes: number, idleMs: number = UPLOAD_IDLE_TIMEOUT_MS): Promise<StagedUpload> {
   mkdirSync(tmpDir(), { recursive: true, mode: 0o700 });
   const tmpPath = path.join(tmpDir(), randomBytes(16).toString("hex"));
   const out = createWriteStream(tmpPath, { mode: 0o600 });
@@ -104,7 +124,7 @@ export async function stageUpload(body: Body, maxBytes: number): Promise<StagedU
       out.on("close", done);
     });
   try {
-    for await (const chunk of chunksOf(body)) {
+    for await (const chunk of chunksOf(body, idleMs)) {
       if (writeError) throw writeError;
       size += chunk.byteLength;
       if (size > maxBytes) throw new UploadTooLargeError();

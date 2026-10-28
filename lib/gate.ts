@@ -85,7 +85,7 @@ export function gate(req: Request): Response | null {
   const length = Number(req.headers.get("content-length"));
   // /api/hook must always answer 200 {}: a hook failing loudly would break the agent session.
   // A file upload (POST /api/files) has its own cap, the per-file size; lib/files.ts enforces it again on the bytes.
-  const maxBody = pathname === "/api/files" || pathname === "/api/files/" ? Math.max(c.network.maxBodyBytes, c.files.maxFileBytes) : c.network.maxBodyBytes;
+  const maxBody = pathname === "/api/files" ? Math.max(c.network.maxBodyBytes, c.files.maxFileBytes) : c.network.maxBodyBytes;
   if (pathname !== "/api/hook" && pathname !== "/api/hook/" && Number.isFinite(length) && length > maxBody) return json(413, "request body too large");
 
   const gated = tokenModeOn();

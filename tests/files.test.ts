@@ -128,6 +128,7 @@ describe("names and types", () => {
     await expect(put(OWNER, "run.bat.", bytes(10))).rejects.toThrow(/\.bat files are refused/);
     await expect(put(OWNER, "run.bat . .", bytes(10))).rejects.toThrow(/\.bat files are refused/);
     await expect(put(OWNER, "photo\u202egpj.exe", bytes(10))).rejects.toThrow(/direction-changing/);
+    await expect(put(OWNER, "a\u2060b.txt", bytes(10))).rejects.toThrow(/invisible/);
     expect((await put(OWNER, "tab\u0085name.txt", bytes(3))).file.name).toBe("tabname.txt");
   });
 
@@ -178,6 +179,24 @@ describe("uploads at once", () => {
     expect((await first).file.size).toBe(7);
     expect((await second).file.size).toBe(7);
     expect((await put(OWNER, "e.txt", bytes(3))).file.size).toBe(3);
+  });
+
+  it("refuses a body shorter than its Content-Length, and keeps nothing", async () => {
+    const { putFile, quotaUsage } = await lib();
+    await expect(putFile({ ownerId: OWNER, name: "a.txt", body: streamOf(bytes(10)), declaredSize: 20 }, "mcp", ORIGIN)).rejects.toThrow(/cut short: 10 of 20/);
+    expect(quotaUsage(OWNER).files).toBe(0);
+    expect(readdirSync(path.join(dataDir, "files", "tmp"))).toEqual([]);
+  });
+
+  it("drops an upload that stalls", async () => {
+    const { stageUpload, UploadStalledError } = await import("../lib/file-store");
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(bytes(5));
+      },
+    });
+    await expect(stageUpload(body, 1000, 50)).rejects.toBeInstanceOf(UploadStalledError);
+    expect(readdirSync(path.join(dataDir, "files", "tmp"))).toEqual([]);
   });
 
   it("cleans up when the client goes away mid-upload", async () => {
@@ -405,6 +424,13 @@ describe("delivery", () => {
     expect(body).toContain(r.file.id);
     expect(body).toContain("brief.md");
     expect(body).toContain("Here is the brief.");
+  });
+
+  it("keeps the file and reports the error when the message cannot be sent", async () => {
+    const r = await put(OWNER, "brief.md", bytes(20), { to: OTHER, subject: "s".repeat(500) });
+    expect(r.delivery && "error" in r.delivery ? r.delivery.error : "").toMatch(/stored and shared, but the message was not sent/);
+    const { fileForActor } = await lib();
+    expect(fileForActor(OTHER, r.file.id).id).toBe(r.file.id);
   });
 
   it("delivers to the owner's own inbox (the other machine)", async () => {

@@ -34,6 +34,8 @@ import {
   stageBuffer,
   sweepStaleTemps,
   UploadTooLargeError,
+  UploadStalledError,
+  UPLOAD_IDLE_TIMEOUT_MS,
   type StagedUpload,
   volumeUsage,
   type VolumeUsage,
@@ -145,7 +147,7 @@ export function cleanFileName(raw: unknown): string {
   const last = text.split(/[\\/]/).pop() ?? "";
   // Control characters (C0, DEL, C1) go; bidi and invisible format characters, which can make
   // "gpj.exe" read as "exe.jpg", are refused; trailing dots and spaces go, as Windows drops them.
-  if (/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/.test(last)) throw new ValidationError("name holds invisible or direction-changing characters; rename the file");
+  if (/\p{Cf}/u.test(last)) throw new ValidationError("name holds invisible or direction-changing characters; rename the file");
   // eslint-disable-next-line no-control-regex
   const name = last.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim().replace(/[. ]+$/, "");
   if (!name || name === "." || name === "..") throw new ValidationError("name is required: the file name, such as report.md");
@@ -339,8 +341,8 @@ export interface PutResult {
   file: FileView;
   download: LinkResult;
   usage: QuotaUsage;
-  /** Set when `to` was given: the delivery message. */
-  delivery?: { to: string; threadId: string; messageId: string };
+  /** Set when `to` was given: the delivery message, or why it could not be sent (the file is stored and shared either way). */
+  delivery?: { to: string; threadId: string; messageId: string } | { to: string; error: string };
 }
 
 interface PreparedPut {
@@ -405,6 +407,10 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
   const createdAt = nowIso(now);
   const expiresAt = nowIso(now + p.days * 24 * 60 * 60 * 1000);
   const shareIds = [...new Set([...p.shares, ...(p.to ? [p.to] : [])])].filter((s) => s !== p.ownerId);
+  if (shareIds.length > FILE_SHARES_MAX) {
+    discardUpload(staged);
+    throw new ValidationError(`share with at most ${FILE_SHARES_MAX} people`);
+  }
   try {
     // Quota check and insert in one transaction: two uploads by one owner cannot both slip under the cap.
     inTransaction(db, () => {
@@ -439,8 +445,13 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
       `File: ${p.name} (${staged.size} bytes, sha256 ${staged.sha256}), id ${id}, kept until ${expiresAt}.`,
       `Fetch it with bab_files action=get id=${id}, or GET ${origin}/api/files/${id}/content with your BAB identity.`,
     ];
-    const sent = send({ fromId: p.ownerId, to: p.to, subject: p.subject || `File: ${p.name}`, body: lines.join("\n") }, via);
-    result.delivery = { to: sent.message.to_id, threadId: sent.thread.id, messageId: sent.message.id };
+    try {
+      const sent = send({ fromId: p.ownerId, to: p.to, subject: p.subject || `File: ${p.name}`, body: lines.join("\n") }, via);
+      result.delivery = { to: sent.message.to_id, threadId: sent.thread.id, messageId: sent.message.id };
+    } catch (err) {
+      // The file is stored and shared: say the message failed rather than fail the upload, so a retry does not store it twice.
+      result.delivery = { to: p.to, error: `The file is stored and shared, but the message was not sent: ${err instanceof Error ? err.message : "unknown error"}` };
+    }
   }
   return result;
 }
@@ -455,7 +466,11 @@ export async function putFile(input: PutInput, via: AuditVia, origin: string): P
   // Uploads in progress do not count towards the quota or the disk check yet, so cap how many run at once.
   const mine = inFlight.get(p.ownerId) ?? 0;
   if (mine >= UPLOADS_IN_FLIGHT_PER_USER || inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) {
-    throw new TooManyRequestsError(`Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`);
+    throw new TooManyRequestsError(
+      mine >= UPLOADS_IN_FLIGHT_PER_USER
+        ? `Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`
+        : "BAB is busy with other uploads: try again in a minute",
+    );
   }
   inFlight.set(p.ownerId, mine + 1);
   inFlightTotal += 1;
@@ -465,7 +480,14 @@ export async function putFile(input: PutInput, via: AuditVia, origin: string): P
       staged = await stageUpload(input.body, config().files.maxFileBytes);
     } catch (err) {
       if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage());
+      if (err instanceof UploadStalledError) throw new ValidationError(`The upload stalled: nothing arrived for ${UPLOAD_IDLE_TIMEOUT_MS / 1000} seconds`);
       throw err;
+    }
+    // A body that ended early (a dropped connection) is not stored as if it were the whole file.
+    const declared = input.declaredSize == null ? NaN : Number(input.declaredSize);
+    if (Number.isFinite(declared) && declared !== staged.size) {
+      discardUpload(staged);
+      throw new ValidationError(`The upload was cut short: ${staged.size} of ${declared} bytes arrived. Send it again.`);
     }
     return finishPut(p, staged, via, origin);
   } finally {
@@ -560,8 +582,10 @@ export function updateFile(actorId: string, id: string, input: UpdateInput, via:
   if (!add.length && !remove.length && org === undefined && !expiresAt) {
     throw new ValidationError("Nothing to change: pass shareWith, unshare, orgVisible or expiresInDays");
   }
-  const existing = sharesOf(db, file.id).length;
-  if (existing + add.length > FILE_SHARES_MAX) throw new ValidationError(`share with at most ${FILE_SHARES_MAX} people`);
+  const current = sharesOf(db, file.id);
+  const after = new Set([...current, ...add]);
+  for (const r of remove) after.delete(r);
+  if (after.size > FILE_SHARES_MAX) throw new ValidationError(`share with at most ${FILE_SHARES_MAX} people`);
   inTransaction(db, () => {
     for (const s of add) db.prepare("INSERT OR IGNORE INTO file_shares (file_id, user_id) VALUES (?, ?)").run(file.id, s);
     for (const s of remove) db.prepare("DELETE FROM file_shares WHERE file_id = ? AND user_id = ?").run(file.id, s);
