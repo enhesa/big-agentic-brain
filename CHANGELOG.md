@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.1](https://github.com/enhesa/big-agentic-brain/compare/v2.11.0...v2.11.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **docker:** drop the base image's unused npm from the runtime stage ([#83](https://github.com/enhesa/big-agentic-brain/issues/83)) ([460a021](https://github.com/enhesa/big-agentic-brain/commit/460a021eead64e519bd74a3b4a83002f83fde61a))
+
 ## [2.11.0](https://github.com/enhesa/big-agentic-brain/compare/v2.10.0...v2.11.0) (2026-10-27)
 
 
