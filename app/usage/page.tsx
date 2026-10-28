@@ -293,7 +293,7 @@ export default async function UsagePage({
   const excludedText =
     `Counted: ${formatCount(measured.measured)} of ${plural(measured.reuses, "reuse")} since ${measuredSince} (one per person and memory, a helpful or kudos reaction). ` +
     `Left out, because one side was not measured: ${plural(measured.noDiscovery, "reuse")} of memories saved without a measured cost (older memories, other clients), ` +
-    `and ${plural(measured.noReuse, "reaction")} with no measured reuse (the memory was not surfaced by a search in that session, or another client).`;
+    `and ${plural(measured.noReuse, "reaction")} with no measured reuse (the memory was not surfaced by a search in that session, another client, or a click on the memory page).`;
   const outcomes = report.searchOutcomes;
   const unused = report.unused;
 
@@ -461,7 +461,7 @@ export default async function UsagePage({
             label="Searches that helped"
             value={pct(totals.helpedSearches, totals.searches) ?? "-"}
             testId="tile-search-helped"
-            title={`A search counts as helped when the same person marks a memory helpful (or gives kudos) within ${HELPED_WINDOW_MINUTES} minutes after it. A sign, not proof: agents do not always react, and the memory need not come from that search.`}
+            title={`A search counts as helped when the same person marks a memory helpful (or gives kudos) within ${HELPED_WINDOW_MINUTES} minutes after it. Clicks on the memory page do not count here. A sign, not proof: agents do not always react, and the memory need not come from that search.`}
             note={{
               text: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)}, last 12 months`,
               title: "Searches by agents, with the search tool or the REST search, over the last 12 months.",

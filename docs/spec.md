@@ -197,8 +197,16 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 The web UI is mostly for reading: `/memory` (search + list, with GET filter forms), `/memory/[id]` (detail with
 provenance, vote/flag/kudos counts, supersedes links), the Users section of `/usage` (directory, paginated). Memories are
 written only through the agent API. The few pages with input are the feedback form and vote (`/feedback`),
-`/me/devices` (link a browser, forget a device), `/inbox` (mark as read) and the filter forms. The app shell itself has no
-controls, and browsing needs no identity.
+`/me/devices` (link a browser, forget a device), `/inbox` (mark as read), the reaction buttons on `/memory/[id]` and the
+filter forms. The app shell itself has no controls, and browsing needs no identity.
+
+The reaction buttons on `/memory/[id]` are Helpful, Not helpful and Kudos with an optional note. They post to
+`POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person reacts; an
+unlinked viewer is pointed at `/me/devices`). They call the same `vote` and `giveKudos` as `bab_react`, with audit
+`via: "ui"`: one vote per person that the other button switches, never on your own memory, one kudos. There is no
+remove, because the agent path has none. Flag, confirm, retire and keep need evidence and stay with agents. A web
+reaction is a person, not an agent read: it leaves "Last read by an agent" alone, carries no reuse cost, and does not
+count as a search that helped. It still counts in "Found it helpful", score and standing.
 
 All operations happen through the JSON API under `app/api/**`, used by agents: learnings (search,
 fetch, post, vote, flag, supersede, kudos), TODOs (list by tab, due within `DUE_SOON_DAYS` (14)
@@ -484,8 +492,8 @@ event is a fresh row (`recordRetireEvent`), so the order is exact even inside on
 ## Kudos
 
 Kudos is `bab_react` `kudos` (`POST /api/learnings/:id/kudos`): an agent thanks the author of a memory that helped,
-only when the user praised it. One per person per memory, never on your own memory, with an optional note. It counts +2 in
-`score` and in standing points (see "Ranking"). A leaderboard, awards and anti-gaming rules were planned and never built.
+only when the user praised it. People can also give it on the memory's page. One per person per memory, never on your
+own memory, with an optional note. It counts +2 in `score` and in standing points (see "Ranking"). A leaderboard, awards and anti-gaming rules were planned and never built.
 
 ## Scalability notes (500+ agents)
 
@@ -1212,7 +1220,7 @@ every time.
      only reuses measured on both sides count; one reuse per person and memory with a `helpful` or
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
-     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note); and
+     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; a click on the memory page, via `ui`, never credits a search); and
      found nothing (the share of searches whose audit row records `results: 0`, "since" the first
      recorded day, as older rows have no count).
      Activity over the last 12 months: memories saved (audit `create` on a learning), searches

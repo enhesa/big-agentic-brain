@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.0](https://github.com/enhesa/big-agentic-brain/compare/v2.11.1...v2.12.0) (2026-10-28)
+
+
+### Features
+
+* **memory:** react on a memory's page from a linked browser ([#85](https://github.com/enhesa/big-agentic-brain/issues/85)) ([f921901](https://github.com/enhesa/big-agentic-brain/commit/f92190180c752391811abd037ba4cd29ee2f75b3))
+
 ## [2.11.1](https://github.com/enhesa/big-agentic-brain/compare/v2.11.0...v2.11.1) (2026-10-28)
 
 
