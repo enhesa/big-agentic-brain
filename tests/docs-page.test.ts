@@ -169,10 +169,10 @@ describe("/docs", () => {
   });
 
   it("counts the tools the way the code does", async () => {
-    // The card says ten tools. Add or remove one in lib/mcp.ts and this fails, so the card, and
+    // The card says eleven tools. Add or remove one in lib/mcp.ts and this fails, so the card, and
     // its list of what the tools do, get a look in the same change.
     const { TOOLS } = await import("../lib/mcp");
-    expect(TOOLS).toHaveLength(10);
+    expect(TOOLS).toHaveLength(11);
   });
 
   // The whole complaint that produced this page was that it read like an essay.

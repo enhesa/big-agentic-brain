@@ -48,6 +48,13 @@ export async function GET() {
       "POST /api/me/team": `{ team } — sets your own home team to a team tag (${teamTags().join(", ")}); empty clears it. Audited as \`home_team_set\`.`,
       "GET /api/me/areas": "The knowledge areas you are a contact for: { areas[{ area, note }] }.",
       "POST /api/me/areas": "{ area, note? (<=200 characters) } — opt in as a contact for an area (a free label, lowercased and hyphenated, <=40 characters); the same area again changes the note. At most 3 contacts per area and 10 areas per person (400 otherwise). Audited as `area_contact_add`.",
+      "POST /api/files": "Upload a file: the raw bytes are the body (curl --data-binary @file), ?name= (required, no path), expiresInDays? (default 14, at most 30), shareWith? (comma-separated user ids), orgVisible?, to? (a user id: the file is shared with them and a BAB message names it), subject?, note?. -> 201 { file, download { url, expiresAt }, usage { usedBytes, quotaBytes, remainingBytes, files }, delivery? }. Limits: 25 MB per file (413), 100 MB per person across files still on disk (507 names used and remaining bytes), no uploads while the volume is over 85% full (507); executables are refused. Never confidential data: no customer data, database dumps, credentials or personal data.",
+      "GET /api/files": "My live files, the files others shared with me or with everyone (shared), and my usage (used / quota).",
+      "GET /api/files/:id": "One file I may fetch -> { file, download { url, expiresAt } }: a fresh link that works without identity for an hour. 404 when it does not exist, expired, was deleted or is not shared with me.",
+      "GET /api/files/:id/content": "The file's bytes (application/octet-stream, as an attachment). Headers X-Bab-File-Sha256 and X-Bab-File-Id.",
+      "PATCH /api/files/:id": "Owner only: { shareWith?, unshare?, orgVisible?, expiresInDays? (from now; at most 30 days from the upload) } -> { file }.",
+      "DELETE /api/files/:id": "Owner only. The bytes are removed at once and the quota frees at once -> { deleted, usage }.",
+      "GET /api/files/dl/:token": "A download link from a put or GET /api/files/:id. No identity needed; works for an hour, and only while its maker may still see the file.",
       "DELETE /api/me/areas": "?area=&user= — drop yourself from an area. user is for maintainers only, to remove someone else (403 otherwise); a maintainer never adds anyone. -> { removed }.",
     },
   });

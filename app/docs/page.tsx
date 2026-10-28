@@ -234,7 +234,7 @@ const REQUEST_PATH: Flow = {
 const PIECES = [
   { what: "Four skills", detail: "a policy and three commands" },
   { what: "Three hooks", detail: "each prompt, stop, compaction" },
-  { what: "Ten tools", detail: "four with ?tools=lean" },
+  { what: "Eleven tools", detail: "four with ?tools=lean" },
 ];
 
 /** "a year" for 365 days, so the diagram reads like people talk, and a plain count otherwise. */
@@ -267,7 +267,7 @@ export default async function DocsPage() {
           className={styles.diagram}
           viewBox="0 0 880 236"
           role="img"
-          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and ten tools to search, learn, react and message, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
+          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and eleven tools to search, learn, react, message and share files, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
         >
           <rect className={styles.zone} x="8" y="30" width="236" height="192" rx="16" />
           <rect className={styles.zone} x="322" y="30" width="236" height="192" rx="16" />

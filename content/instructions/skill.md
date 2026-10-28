@@ -365,6 +365,13 @@ curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"<your own email>","subject"
 curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"colleague@example.com","subject":"Review this PR","body":"...","request":{"kind":"review-pr","goal":"Check the auth changes before I merge.","repo":"https://git.example.com/team/repo.git","ref":"feature/JIRA-123-request","cwd":"bab","links":["https://git.example.com/team/repo/pulls/42"]}}'   # attach a collaborative request
 curl -s "{{ORIGIN}}/api/inbox/<threadId>" $H                                       # read one thread; marks it read for you before returning
 
+# Files (never confidential data; 25 MB per file, 100 MB per person, kept 14 days by default, at most 30)
+curl -X POST --data-binary @report.tar.gz "{{ORIGIN}}/api/files?name=report.tar.gz&to=colleague@example.com" $H   # put; to= shares it and sends them a BAB message; bundle many small files into one tar or zip first
+curl -s "{{ORIGIN}}/api/files" $H                                   # my files, files shared with me, usage (used / quota)
+curl -s "{{ORIGIN}}/api/files/<id>/content" $H -o report.tar.gz     # get; compare sha256 with the X-Bab-File-Sha256 header
+curl -X PATCH "{{ORIGIN}}/api/files/<id>" $H -d '{"shareWith":["colleague@example.com"],"expiresInDays":3}'   # owner only; orgVisible:true opens it to everyone
+curl -X DELETE "{{ORIGIN}}/api/files/<id>" $H                       # owner only, with the user's yes; frees the quota at once
+
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H
 curl -s "{{ORIGIN}}/api/me" $H

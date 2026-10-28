@@ -58,7 +58,7 @@ export const FILES_CONTENT_RULE =
 const EXECUTABLE_EXTENSIONS = new Set([
   "exe", "dll", "sys", "scr", "com", "pif", "cpl", "msi", "msp", "msix", "msixbundle", "appx", "appxbundle",
   "bat", "cmd", "ps1", "psm1", "psd1", "vbs", "vbe", "jse", "wsf", "wsh", "hta", "lnk", "reg", "gadget",
-  "jar", "apk", "aab", "ipa", "app", "dmg", "pkg", "deb", "rpm", "elf", "so", "dylib", "bin", "run", "xll",
+  "jar", "apk", "aab", "ipa", "app", "dmg", "pkg", "deb", "rpm", "elf", "so", "dylib", "xll",
 ]);
 
 /** First bytes of native executables: PE (MZ), ELF, Mach-O (both byte orders, 32 and 64 bit), fat Mach-O / Java class. */

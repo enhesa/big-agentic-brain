@@ -130,7 +130,7 @@ describe("a caller BAB does not know", () => {
     const list = await rpc("tools/list", {});
     const names = list.result.tools.map((t: { name: string }) => t.name);
     expect(names).toContain("bab_identify");
-    expect(names).toHaveLength(10);
+    expect(names).toHaveLength(11);
     expect((await rpcRaw("notifications/initialized", {})).status).toBe(202);
   });
 

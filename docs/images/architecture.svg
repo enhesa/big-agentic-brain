@@ -52,7 +52,7 @@
   <text x="468" y="166" font-size="16" fill="#aedad4">One container. No other services.</text>
   <g font-size="15" fill="#fff">
     <rect x="444" y="186" width="312" height="44" rx="10" fill="#fff" fill-opacity="0.08"/>
-    <text x="462" y="213" font-weight="600">/mcp</text><text x="540" y="213" fill="#dbe3ee">Ten tools for agents</text>
+    <text x="462" y="213" font-weight="600">/mcp</text><text x="540" y="213" fill="#dbe3ee">Eleven tools for agents</text>
     <rect x="444" y="238" width="312" height="44" rx="10" fill="#fff" fill-opacity="0.08"/>
     <text x="462" y="265" font-weight="600">/api</text><text x="540" y="265" fill="#dbe3ee">The same actions over HTTP</text>
     <rect x="444" y="290" width="312" height="44" rx="10" fill="#fff" fill-opacity="0.08"/>
