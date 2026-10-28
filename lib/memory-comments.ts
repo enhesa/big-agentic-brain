@@ -177,7 +177,9 @@ export interface CommentDigest {
 }
 
 function cut(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+  // By code point, so a cut never splits a surrogate pair.
+  const chars = Array.from(text);
+  return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
 }
 
 /**
@@ -191,13 +193,13 @@ export function commentDigestFor(learningIds: string[]): Map<string, CommentDige
   const marks = ids.map(() => "?").join(", ");
   const rows = getDb()
     .prepare(
-      `SELECT learning_id, author_id, author_name, body, created_at, n FROM (
+      `SELECT learning_id, author_id, author_name, body, created_at, n, rn FROM (
          SELECT c.learning_id, c.author_id, u.name AS author_name, c.body, c.created_at,
                 ROW_NUMBER() OVER (PARTITION BY c.learning_id ORDER BY c.created_at DESC, c.rowid DESC) AS rn,
                 COUNT(*) OVER (PARTITION BY c.learning_id) AS n
          FROM memory_comments c LEFT JOIN users u ON u.id = c.author_id
          WHERE c.learning_id IN (${marks}) AND c.deleted_at IS NULL
-       ) WHERE rn <= ? ORDER BY learning_id, created_at DESC`,
+       ) WHERE rn <= ? ORDER BY learning_id, rn`,
     )
     .all(...ids, SEARCH_COMMENTS_LATEST) as Array<{
     learning_id: string;

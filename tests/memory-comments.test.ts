@@ -130,6 +130,21 @@ describe("commentDigestFor", () => {
     expect(da.latest[0].body).toHaveLength(SEARCH_COMMENT_CUT);
     expect(commentDigestFor([]).size).toBe(0);
   });
+
+  it("orders comments of the same second by insertion, newest first, and cuts by code point", async () => {
+    const l = await seed();
+    const { getDb } = await import("../lib/db");
+    const { commentDigestFor, SEARCH_COMMENT_CUT } = await import("../lib/memory-comments");
+    const insert = getDb().prepare("INSERT INTO memory_comments (id, learning_id, author_id, body, created_at) VALUES (?, ?, ?, ?, '2026-10-01 10:00:00')");
+    for (const id of ["z1", "a2", "m3", "b4"]) insert.run(id, l.id, BEN, `body ${id}`);
+    const smile = String.fromCodePoint(0x1f600);
+    insert.run("e5", l.id, BEN, smile.repeat(SEARCH_COMMENT_CUT + 5));
+    const d = commentDigestFor([l.id]).get(l.id)!;
+    expect(d.count).toBe(5);
+    expect(d.latest.slice(1).map((c) => c.body)).toEqual(["body b4", "body m3"]);
+    expect(Array.from(d.latest[0].body)).toHaveLength(SEARCH_COMMENT_CUT);
+    expect(d.latest[0].body.endsWith(`${smile}…`)).toBe(true);
+  });
 });
 
 describe("MCP", () => {
