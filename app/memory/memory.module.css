@@ -862,3 +862,105 @@
   font-size: 0.7rem;
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------- reactions */
+
+.react {
+  border: 1px solid var(--mist);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin: 0 0 18px;
+}
+
+.reactHeading {
+  font-size: 0.95rem;
+  margin: 0 0 10px;
+}
+
+.reactRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.reactBtn {
+  font: inherit;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--steel);
+  background: #fff;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.reactBtn:hover {
+  border-color: var(--navy);
+}
+
+.reactBtn:focus-visible,
+.reactInput:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.reactBtn[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.reactLabel {
+  font-size: 0.82rem;
+  color: var(--steel);
+  flex: 1 1 100%;
+}
+
+.reactInput {
+  font: inherit;
+  font-size: 0.9rem;
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--steel);
+  border-radius: 10px;
+}
+
+.reactHint {
+  font-size: 0.82rem;
+  color: var(--steel);
+  margin: 0;
+}
+
+.reactHint + .reactHint {
+  margin-top: 6px;
+}
+
+.reactHint a {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.reactOk,
+.reactNote {
+  font-size: 0.86rem;
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin: 0 0 10px;
+}
+
+.reactOk {
+  background: rgba(0, 150, 136, 0.1);
+  color: var(--navy);
+}
+
+.reactNote {
+  background: rgba(63, 81, 117, 0.08);
+  color: var(--navy);
+}

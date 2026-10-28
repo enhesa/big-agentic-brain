@@ -20,8 +20,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-28",
-    title: "Smaller runtime image",
-    changes: ["The server image no longer ships npm, which it never used, closing a reported vulnerability."],
+    title: "Smaller runtime image, reactions on the memory page",
+    changes: [
+      "The server image no longer ships npm, which it never used, closing a reported vulnerability.",
+      "Linked browsers can mark a memory helpful or not helpful, or give kudos, on its page.",
+    ],
   },
   {
     date: "2026-10-27",

@@ -6,7 +6,10 @@ import LiveUpdates from "@/app/components/shell/LiveUpdates";
 import Avatar from "@/app/components/shell/Avatar";
 import { readAppliesTo } from "@/lib/applies-to";
 import { CONFIDENCE_LABEL, STANDING_LABEL } from "@/lib/standing";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
+import { getViewer } from "@/lib/notify-auth";
+import { reactMessage } from "@/lib/memory-react-web";
+import ReactionPanel from "./ReactionPanel";
 import { auditRequest } from "@/lib/request-audit";
 import {
   getById,
@@ -19,6 +22,7 @@ import {
   recentNotes,
   lastRetire,
   readAliases,
+  ownReactions,
 } from "@/lib/learnings";
 import { formatRelativeTime, formatAge, formatExpiry } from "@/lib/relative-time";
 import { getDb } from "@/lib/db";
@@ -57,8 +61,15 @@ function authorName(authorId: string): string {
   return row?.name ?? authorId;
 }
 
-export default async function LearningDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LearningDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ react?: string | string[] }>;
+}) {
   const { id } = await params;
+  const { react } = (await searchParams) ?? {};
   // Read-only page: no identity required, see app/memory/page.tsx.
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: `/memory/${id}`, via: "ui" });
@@ -90,6 +101,12 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
   const standing = standingsFor([learning]).get(learning.id)!;
   const notes = recentNotes(learning.id);
   const retireEvent = lastRetire(learning);
+
+  // Reacting needs a person: a browser linked to a BAB identity (getViewer). A signed-in viewer
+  // who is not linked yet is pointed at /me/devices; with no sign-in at all the panel says nothing.
+  const viewer = learning.status === "deleted" ? null : await getViewer();
+  const needsLink = !viewer && learning.status !== "deleted" && (await pendingProxyLinkUser()) !== null;
+  const mine = viewer && viewer.ownerId !== learning.author_id ? ownReactions(learning.id, viewer.ownerId) : null;
 
   const facts: Array<[string, string]> = [
     [STANDING_LABEL, `${standing.standing} (${standing.standingReason})`],
@@ -210,6 +227,15 @@ export default async function LearningDetailPage({ params }: { params: Promise<{
             </li>
           ) : null}
         </ul>
+
+        {viewer || needsLink ? (
+          <ReactionPanel
+            learningId={learning.id}
+            state={!viewer ? "link" : mine ? "open" : "own"}
+            mine={mine}
+            message={reactMessage(Array.isArray(react) ? react[0] : react)}
+          />
+        ) : null}
 
         {notes.length > 0 || retireEvent ? (
           <section className={styles.notes} aria-label="Recent confirmations, flags and retirements">

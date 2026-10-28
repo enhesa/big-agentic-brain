@@ -1989,6 +1989,8 @@ export interface VoteResult {
  * says the memory is in use, so it counts as a read like the first one.
  * Switching kind (helpful <-> not_helpful) replaces the previous one, since a
  * voter only ever holds one opinion at a time (`changed: true`, 200).
+ * `via` matters: "ui" (the default, and a click on the memory page) is a person, not an agent
+ * read, so it never counts as a read. Agent callers pass "mcp".
  */
 export function vote(
   learningId: string,
@@ -2013,7 +2015,7 @@ export function vote(
 
     // The vote is already recorded and stays as it is. A repeat helpful is still use, though.
     if (existing && existing.kind === choice) {
-      if (choice === "helpful") touchRead(db, [learningId]);
+      if (choice === "helpful" && via !== "ui") touchRead(db, [learningId]);
       return false;
     }
 
@@ -2033,8 +2035,9 @@ export function vote(
     audit(db, voterId, choice, "learning", learningId, via);
 
     recomputeScore(learningId);
-    // Only a helpful says the memory is in use; not_helpful says nothing about that.
-    if (choice === "helpful") touchRead(db, [learningId]);
+    // Only a helpful says the memory is in use; not_helpful says nothing about that. A click on
+    // the memory page (via "ui") is a person, not an agent read, so it leaves the read count alone.
+    if (choice === "helpful" && via !== "ui") touchRead(db, [learningId]);
     return true;
   });
 
@@ -2044,7 +2047,7 @@ export function vote(
   return { learning: getById(learningId)!, changed: true };
 }
 
-const KUDOS_NOTE_MAX = 500;
+export const KUDOS_NOTE_MAX = 500;
 export const CONFIRM_NOTE_MAX = 300;
 /** A repeat confirm by the same person inside this window is a no-op (see confirm()). */
 export const CONFIRM_REFRESH_DAYS = 30;
@@ -2085,6 +2088,7 @@ export function noteArg(raw: unknown): string | null {
  * groundwork): a distinct vote kind, one per identity per learning, never
  * on your own. A repeat is an explicit 409 (`ConflictError`), not a silent
  * no-op — the agent should tell the human it already thanked this author.
+ * Like vote(), via "ui" (the default) is not counted as a read; agent callers pass "mcp".
  */
 export function giveKudos(
   learningId: string,
@@ -2115,7 +2119,8 @@ export function giveKudos(
     audit(db, voterId, "kudos", "learning", learningId, via);
 
     recomputeScore(learningId);
-    touchRead(db, [learningId]);
+    // Kudos from the memory page is a person, not an agent read (see vote()).
+    if (via !== "ui") touchRead(db, [learningId]);
   });
   emit("kudos", learningId, { id: learningId, title: learning.title });
 
@@ -2557,6 +2562,23 @@ export interface LearningVoteCounts {
   flag: number;
   kudos: number;
   confirm: number;
+}
+
+/** One person's own helpful, not helpful and kudos on a memory, for the memory page's buttons. */
+export interface OwnReactions {
+  vote: VoteChoice | null;
+  kudos: boolean;
+}
+
+export function ownReactions(learningId: string, voterId: string): OwnReactions {
+  const rows = getDb()
+    .prepare("SELECT kind FROM votes WHERE learning_id = ? AND voter_id = ? AND kind IN ('helpful', 'not_helpful', 'kudos')")
+    .all(learningId, voterId) as unknown as { kind: string }[];
+  const kinds = new Set(rows.map((r) => r.kind));
+  return {
+    vote: kinds.has("helpful") ? "helpful" : kinds.has("not_helpful") ? "not_helpful" : null,
+    kudos: kinds.has("kudos"),
+  };
 }
 
 export function voteCounts(learningId: string): LearningVoteCounts {
