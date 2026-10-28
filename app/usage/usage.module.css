@@ -1012,6 +1012,13 @@ a.mini:hover {
   white-space: nowrap;
 }
 
+/* Two-word count headers ("Memories saved") wrap onto two lines so the Users table fits. */
+.table th.numWrap {
+  white-space: normal;
+  width: 6.5em;
+  vertical-align: bottom;
+}
+
 .wide {
   min-width: 180px;
   overflow-wrap: anywhere;

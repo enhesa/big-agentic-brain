@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Linked browsers can mark a memory helpful or not helpful, or give kudos, on its page.",
       "The usage page charts messages, conversations and reminders per week. Users shows memories saved and used.",
       "Maintainers see each person's messages and conversations in the Users table. Reminders stay totals only.",
+      "Everyone now sees messages exchanged and conversations in Users, and the memory columns say they are memories.",
     ],
   },
   {

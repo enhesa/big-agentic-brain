@@ -1300,10 +1300,11 @@ every time.
   8. Users: the user directory that was `/people` (name, email, last seen), most
      recently seen first, 10 per page with Previous and Next (`?users=N`, clamped to the last page;
      `#users` anchor). Open to everyone, as `/people` was. `/people` redirects (307) to `/usage#users`.
-     Two all-time memory columns for everyone: Saved (not deleted) and Used (memories by someone else
-     the person marked helpful or gave kudos, one per memory; searches record no reader, so a use
-     without a reaction is not counted). Maintainers also see Messages (sent plus received, the
-     split in the hover) and Conversations (distinct threads). `activityCountsForUsers` in
+     Four all-time count columns, for everyone like the rest of the directory: Memories saved (not
+     deleted), Memories used (memories by someone else the person marked helpful or gave kudos, one
+     per memory; searches record no reader, so a use without a reaction is not counted), Messages
+     exchanged (sent plus received, the split in the hover) and Conversations (distinct threads with
+     a message from or to the person). Counts only, never a subject or body. `activityCountsForUsers` in
      lib/users.ts reads only the page's ids, on the votes and messages indexes.
   9. Health: Stop-nudge conversion (a nudge counts as followed when the same person calls `bab_learn`
      within 10 minutes), identify problems (loops of more than 3 identifies from one device or
@@ -1311,8 +1312,8 @@ every time.
      decisions, and protected memories marked not helpful, waiting for a maintainer (the same ids as the
      maintainer nudge), with their titles.
 - Personal detail is for maintainers only (`isMaintainer`), except the Users directory above: the identify-loop rows (email or name,
-  device, connection or address label), the kind, author, date and flagger count of each flag, and
-  each person's message and conversation counts in Users. Everyone else sees the counts and the flagged titles. The page never shows an IP address.
+  device, connection or address label), and the kind, author, date and flagger count of each flag.
+  Everyone else sees the counts and the flagged titles. The page never shows an IP address.
 - Honest about missing data: weeks before the first recorded activity collapse into one "No data
   before" note; numbers recorded only since 6 Oct (nudges, refusals, sessions, models) say "since 6
   Oct"; an empty chart is a short note, never a row of zeros; there is no division by zero.
