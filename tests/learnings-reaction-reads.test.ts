@@ -135,7 +135,7 @@ describe("a refused reaction is not a read", () => {
     const l = await mk();
     const { giveKudos } = await import("../lib/learnings");
     const { ConflictError } = await import("../lib/errors");
-    giveKudos(l.id, "voter-1", null);
+    giveKudos(l.id, "voter-1", null, "mcp");
     await ageRead(l.id, 3);
     expect(() => giveKudos(l.id, "voter-1", null)).toThrow(ConflictError);
     expect((await row(l.id)).access_days).toBe(1);
@@ -159,10 +159,10 @@ describe("repeats and switches", () => {
     await seedUsers();
     const l = await mk();
     const { vote } = await import("../lib/learnings");
-    vote(l.id, "voter-1", "not_helpful");
-    vote(l.id, "voter-1", "not_helpful");
+    vote(l.id, "voter-1", "not_helpful", "mcp");
+    vote(l.id, "voter-1", "not_helpful", "mcp");
     expect((await row(l.id)).access_days).toBe(0);
-    vote(l.id, "voter-1", "helpful");
+    vote(l.id, "voter-1", "helpful", "mcp");
     expect((await row(l.id)).access_days).toBe(1);
   });
 });
@@ -175,7 +175,7 @@ describe("archived and deleted memories", () => {
     for (const status of ["archived", "deleted"]) {
       const l = await mk();
       getDb().prepare("UPDATE learnings SET status = ? WHERE id = ?").run(status, l.id);
-      vote(l.id, "voter-1", "helpful");
+      vote(l.id, "voter-1", "helpful", "mcp");
       const after = await row(l.id);
       expect(after.status).toBe(status);
       expect(after.access_days).toBe(0);
@@ -193,10 +193,10 @@ describe("what a reaction emits", () => {
     const seen: string[] = [];
     const off = subscribe((e) => seen.push(e.type));
     try {
-      vote(l.id, "voter-1", "helpful");
+      vote(l.id, "voter-1", "helpful", "mcp");
       expect(seen).toEqual(["vote"]);
       await ageRead(l.id, 3);
-      vote(l.id, "voter-1", "helpful"); // unchanged vote, but a read on a new day
+      vote(l.id, "voter-1", "helpful", "mcp"); // unchanged vote, but a read on a new day
       expect(seen).toEqual(["vote"]);
       expect((await row(l.id)).access_days).toBe(2);
     } finally {

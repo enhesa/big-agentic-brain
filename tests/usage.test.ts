@@ -45,12 +45,12 @@ async function row(
   actor: string,
   action: string,
   at: string,
-  over: { path?: string; entity?: string; entityId?: string; details?: unknown } = {},
+  over: { path?: string; entity?: string; entityId?: string; details?: unknown; via?: "mcp" | "ui" } = {},
 ) {
   const { getDb } = await import("../lib/db");
   getDb()
-    .prepare("INSERT INTO audit_log (actor_id, action, entity, entity_id, via, at, path, details) VALUES (?, ?, ?, ?, 'mcp', ?, ?, ?)")
-    .run(actor, action, over.entity ?? "request", over.entityId ?? "x", at, over.path ?? null, over.details === undefined ? null : JSON.stringify(over.details));
+    .prepare("INSERT INTO audit_log (actor_id, action, entity, entity_id, via, at, path, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(actor, action, over.entity ?? "request", over.entityId ?? "x", over.via ?? "mcp", at, over.path ?? null, over.details === undefined ? null : JSON.stringify(over.details));
 }
 const learnCall = (actor: string, at: string, cx?: string) => row(actor, "POST", at, { path: LEARN, details: cx ? { cx } : undefined });
 
@@ -432,6 +432,16 @@ describe("activity per week and the hero tiles", () => {
     const r = usageReport(NOW);
     expect(r.activity.at(-1)).toMatchObject({ searches: 6, helpedSearches: 1 });
     expect(r.totals.helpedSearches).toBe(1);
+  });
+
+  it("never credits a search with a reaction from the memory page, but counts it as found helpful", async () => {
+    await row(A, "POST", "2026-10-06 09:00:00", { path: "/mcp#tools/call:bab_search" });
+    await row(A, "helpful", "2026-10-06 09:05:00", { entity: "learning", via: "ui" });
+    await row(A, "kudos", "2026-10-06 09:06:00", { entity: "learning", via: "ui" });
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.totals.helpedSearches).toBe(0);
+    expect(r.totals.reactions).toBe(2);
   });
 
   it("counts a search exactly 30 minutes before the reaction", async () => {
