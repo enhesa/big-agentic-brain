@@ -34,6 +34,8 @@ RUN pnpm run build
 
 # ---- runtime: the standalone bundle only, non-root, no registry egress ----
 FROM base AS runtime
+# The runtime never runs npm; dropping the base image's bundled copy removes its CVEs (Forge auto-patch, CVE-2026-109869).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app
 RUN addgroup -S app && adduser -S app -G app
 
