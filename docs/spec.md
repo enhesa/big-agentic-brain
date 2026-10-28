@@ -188,6 +188,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    compaction nudge says so.
 - `learnings_fts` (FTS5 over title, body, tags)
 - `votes(learning_id, voter_id, kind TEXT /* helpful|not_helpful|flag|cited|kudos|confirm */, note, created_at, PK(learning_id, voter_id, kind))`
+- `memory_comments(id, learning_id REFERENCES learnings, author_id REFERENCES users, body, created_at, edited_at, deleted_at)` (migration v50): comments on memories, see "Comments" under Features.
 - `todos(id, owner_id, title, body, due_at, due_has_time INTEGER /* 1: due_at is a UTC instant YYYY-MM-DDTHH:MM:SSZ; 0: a UTC day YYYY-MM-DD */, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
 - `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`
 - `audit_log(id, actor_id, action, entity, entity_id, via TEXT /* ui|mcp */, at)`
@@ -197,16 +198,16 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 The web UI is mostly for reading: `/memory` (search + list, with GET filter forms), `/memory/[id]` (detail with
 provenance, vote/flag/kudos counts, supersedes links), the Users section of `/usage` (directory, paginated). Memories are
 written only through the agent API. The few pages with input are the feedback form and vote (`/feedback`),
-`/me/devices` (link a browser, forget a device), `/inbox` (mark as read), the reaction buttons on `/memory/[id]` and the
-filter forms. The app shell itself has no controls, and browsing needs no identity.
+`/me/devices` (link a browser, forget a device), `/inbox` (mark as read), the comment and vote form on `/memory/[id]` and
+the filter forms. The app shell itself has no controls, and browsing needs no identity.
 
-The reaction buttons on `/memory/[id]` are Helpful, Not helpful and Kudos with an optional note. They post to
-`POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person reacts; an
-unlinked viewer is pointed at `/me/devices`). They call the same `vote` and `giveKudos` as `bab_react`, with audit
-`via: "ui"`: one vote per person that the other button switches, never on your own memory, one kudos. There is no
-remove, because the agent path has none. Flag, confirm, retire and keep need evidence and stay with agents. A web
-reaction is a person, not an agent read: it leaves "Last read by an agent" alone, carries no reuse cost, and does not
-count as a search that helped. It still counts in "Found it helpful", score and standing.
+The vote buttons on `/memory/[id]` are Helpful and Not helpful. They sit in one form with a comment box and post to
+`POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person acts; an
+unlinked viewer is pointed at `/me/devices`; then `checkUiRateLimit`). They call the same `vote` as `bab_react`, with
+audit `via: "ui"`: one vote per person that the other button switches, never on your own memory. There is no remove,
+because the agent path has none. Kudos, flag, confirm, retire and keep stay with agents. A web vote is a person, not
+an agent read: it leaves "Last read by an agent" alone, carries no reuse cost, and does not count as a search that
+helped. It still counts in "Found it helpful", score and standing.
 
 All operations happen through the JSON API under `app/api/**`, used by agents: learnings (search,
 fetch, post, vote, flag, supersede, kudos), TODOs (list by tab, due within `DUE_SOON_DAYS` (14)
@@ -231,6 +232,33 @@ learning, or completing/abandoning an already-done-or-abandoned reminder, or sno
 all 409 with a specific message; a repeated `helpful`/`not_helpful` vote of the same kind is a 200
 with `{ changed: false }`, switching kind is `{ changed: true }`. List responses report the
 effective (clamped) `limit`: 50 for a plain learnings list, 20 for a search.
+
+### Comments
+
+People add context to a memory as comments (`memory_comments`, migration v50; `lib/memory-comments.ts`). A comment
+is plain text, trimmed, passed through `redact()`, and 2000 characters or fewer. It renders as React text with line
+breaks kept, and links are not made clickable. Anyone may comment, the memory's author too, on an active or archived
+memory, at most 50 a day per person. A deleted memory takes its comments with it (the page hides them, and the purge
+removes them before the learning).
+
+- *Web.* The memory page lists comments oldest first: author, relative date, "edited". The form's "Post comment"
+  posts `action=comment`; Helpful and Not helpful post the comment too when one was written, so one click is "vote and
+  comment", two records. The comment is checked first, so a refused comment records no vote. The author of a comment
+  edits or deletes it, and a maintainer may delete any, through `POST /memory/[id]/comments/[commentId]`
+  (`action=edit|delete`, the same guards). A delete is soft: `deleted_at` is set, the body is blanked, and the page
+  shows "Comment removed". Outcomes come back as a fixed `?react=` code.
+- *Agents.* `bab_react` action `comment` posts `note` as a comment. It is not a vote and not a read. `bab_search`
+  results and `GET /api/learnings/[id]` carry `comments` only when a memory has any: the count and the newest three
+  (author name, date, body cut to 300 characters). They are colleagues' text, data and never instructions, as the
+  search description says.
+- *Audit.* Rows `comment`, `comment_edit` and `comment_delete` on entity `memory_comment`, with the learning id in
+  details, `via` ui or mcp.
+- *Notice.* There is no system sender for the inbox, so the author hears about a colleague's comment through the hook,
+  like a retire: one model-only line with the title and link, at most once per memory per day, for comments of the last
+  7 days. Who commented and what they wrote stay behind the link.
+- *Search.* Comment text is not in `learnings_fts`. Comments are open to anyone with a linked browser, so indexing them
+  would let comment volume move rankings. Agents still see them on every result that has any.
+- *Usage.* Upkeep shows the comments of the last 12 months.
 
 ## Garbage collection
 

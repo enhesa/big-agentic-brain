@@ -924,6 +924,7 @@ export default async function UsagePage({
             <MiniTile label="Kept" value={formatCount(upkeep.kept)} title="Memories someone checked and kept." testId="upkeep-kept" />
             <MiniTile label="Restored" value={formatCount(upkeep.restored)} title="Retired memories brought back." testId="upkeep-restored" />
             <MiniTile label="Retired" value={formatCount(upkeep.retired)} title="Memories someone retired as out of date." testId="upkeep-retired" />
+            <MiniTile label="Comments" value={formatCount(upkeep.comments)} title="Comments people and agents posted on memories, to add context." testId="upkeep-comments" />
             <MiniTile
               label="Flags waiting"
               value={formatCount(flags)}

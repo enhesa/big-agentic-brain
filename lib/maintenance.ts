@@ -82,6 +82,7 @@ const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
   { table: "threads", id: "id", columns: ["subject"] },
   { table: "messages", id: "id", columns: ["body"] },
   { table: "votes", id: "rowid", columns: ["note"] },
+  { table: "memory_comments", id: "id", columns: ["body"] },
   { table: "users", id: "id", columns: ["name"] },
   // Composite primary key (area, user_id): the rowid names the row.
   { table: "area_contacts", id: "rowid", columns: ["note"] },
@@ -273,6 +274,8 @@ function sweepDeletedLearnings(db: Db): number {
     (idList, ids) =>
       inTransaction(db, () => {
         db.prepare(`DELETE FROM votes WHERE learning_id IN (${idList})`).run(...ids);
+        // Foreign key to learnings, like votes: gone first, or the DELETE below fails.
+        db.prepare(`DELETE FROM memory_comments WHERE learning_id IN (${idList})`).run(...ids);
         db.prepare(`DELETE FROM reuse_costs WHERE learning_id IN (${idList})`).run(...ids);
         db.prepare(`DELETE FROM learning_costs WHERE learning_id IN (${idList})`).run(...ids);
         // supersession_links and learnings.supersedes_id both hold foreign keys to learnings;

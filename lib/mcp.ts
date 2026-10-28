@@ -68,6 +68,7 @@ import { isCalendarDate, parseDueAt, DUE_AT_FORM } from "./dates";
 import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./users";
 import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, normalizeArea, removeAreaContact, setHomeTeam } from "./area-contacts";
 import { resetPromptsSinceLearn } from "./sessions";
+import { addComment, commentDigestFor } from "./memory-comments";
 import {
   create as createFeedback,
   list as listFeedback,
@@ -189,7 +190,7 @@ export interface Tool {
 }
 
 const CONFIDENCE_VALUES: LearningConfidence[] = ["low", "medium", "high"];
-const REACT_ACTIONS = ["helpful", "not_helpful", "flag", "kudos", "confirm", "keep", "retire", "delete", "pin", "unpin", "label"] as const;
+const REACT_ACTIONS = ["helpful", "not_helpful", "flag", "kudos", "confirm", "keep", "retire", "delete", "pin", "unpin", "label", "comment"] as const;
 type ReactAction = (typeof REACT_ACTIONS)[number];
 const INBOX_LIMIT_DEFAULT = 20;
 const INBOX_LIMIT_MAX = 50;
@@ -294,6 +295,8 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   const found = multi
     ? searchFused(phrasings, filters, limit, offset)
     : { results: search(single, filters, limit, offset), total: undefined };
+  // Colleagues' comments: count and the newest few, only on memories that have any.
+  const comments = commentDigestFor(found.results.filter((h) => h.status !== "deleted").map((h) => h.id));
   const results = found.results.map((hit) => ({
     // A memory due for a check carries its warning right after the title, where an agent reads
     // it, not only in verifyHint at the end (#32: agents read stale memories in 88% of eval runs
@@ -305,6 +308,7 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
     url: memoryUrl(ctx, hit.id),
     // Only on the caller's own entries: BAB refuses a vote, confirm or kudos by the author.
     ...(hit.author_id === actor.id ? { own: true } : {}),
+    ...(comments.has(hit.id) ? { comments: comments.get(hit.id) } : {}),
   }));
   // The agent got these memories: a read (lib/learnings.ts touchRead). Maintenance views do not count.
   recordSearchRead(results, filters);
@@ -627,12 +631,18 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
 
   const action = str(args.action);
   if (!REACT_ACTIONS.includes(action as ReactAction)) {
-    throw new ValidationError("action must be one of helpful, not_helpful, flag, kudos, confirm, keep, retire, delete, pin, unpin, label");
+    throw new ValidationError(`action must be one of ${REACT_ACTIONS.join(", ")}`);
   }
   // Measured by the plugin between the search that surfaced the memory and this reaction; /usage only.
   const cost = parseCost(args.cost);
   if (cost && action !== "helpful" && action !== "kudos") throw new ValidationError("cost is only for helpful and kudos");
 
+  if (action === "comment") {
+    // Context for colleagues, shown on the memory page and in bab_search. Anyone may comment, the
+    // author too. Not a read and not a vote: a comment can just as well say the memory is wrong.
+    const comment = addComment(learningId, actor.id, args.note, "mcp");
+    return JSON.stringify({ comment: { id: comment.id, at: comment.createdAt, body: comment.body }, url: `${memoryUrl(ctx, learningId)}#comment-${comment.id}` });
+  }
   if (action === "flag") {
     const note = noteArg(args.note);
     return withUrl(ctx, { learning: flag(learningId, actor.id, "mcp", note) });
@@ -1029,11 +1039,11 @@ export const TOOLS: Tool[] = [
         learningId: { type: "string", description: "The learning to react to." },
         action: {
           type: "string",
-          enum: ["helpful", "not_helpful", "flag", "kudos", "confirm", "keep", "retire", "delete", "pin", "unpin", "label"],
-          description: "Which reaction. flag needs a note. keep says you verified the memory is still true, counts as a read, does not move an author's valid-until date, and restores an archived one (a non-author needs a note). retire: anyone may retire a learning or practice, a non-author must give a note; for someone else's standard or decision, flag it instead. delete is author-only, irreversible, needs the user's yes. pin and unpin make or end a house rule (maintainers). label sets appliesTo ([] for anywhere).",
+          enum: ["helpful", "not_helpful", "flag", "kudos", "confirm", "keep", "retire", "delete", "pin", "unpin", "label", "comment"],
+          description: "Which reaction. flag needs a note. keep says you verified the memory is still true, counts as a read, does not move an author's valid-until date, and restores an archived one (a non-author needs a note). retire: anyone may retire a learning or practice, a non-author must give a note; for someone else's standard or decision, flag it instead. pin and unpin make or end a house rule (maintainers). label sets appliesTo ([] for anywhere).",
         },
         appliesTo: { type: "array", items: { type: "string" }, description: "label only: the new stack or platform labels, as in bab_learn; replaces the old ones, [] means anywhere." },
-        note: { type: "string", description: "Required for confirm, flag, a non-author's retire and a non-author's restore by keep: one factual line saying where and when you checked, 300 characters or fewer, no code, client names or secrets. Else optional (kudos: 500)." },
+        note: { type: "string", description: "Required for confirm, flag, a non-author's retire and a non-author's restore by keep: one factual line saying where and when you checked, 300 characters or fewer, no code, client names or secrets. Else optional (kudos: 500). comment: the text, 2000 or fewer." },
       },
       required: ["learningId", "action"],
     },

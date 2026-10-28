@@ -23,6 +23,7 @@ import { getDb } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { isMaintainer, maintainerFeedbackNudge } from "@/lib/feedback";
 import { publicOrigin } from "@/lib/origin";
+import { commentedOwnMemories } from "@/lib/memory-comments";
 
 export const dynamic = "force-dynamic";
 
@@ -348,6 +349,7 @@ export async function POST(req: Request) {
       ...digest.lines,
       ...downvotedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...retiredNudgeFor(owner, sessionId, publicOrigin(req.headers)),
+      ...commentedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...due.lines,
       ...maintainerNudgeFor(owner),
       ...flaggedStandardsNudgeFor(owner, sessionId),
@@ -551,6 +553,46 @@ function retiredNudgeFor(ownerId: string, sessionId: string, origin: string): st
     (r) =>
       `BAB: a colleague's agent retired your memory "${capTitle(r.title).replace(/"/g, "'")}" (${origin}/memory/${r.id}). ` +
       "If it is still true, keep it with a note.",
+  );
+}
+
+/** How far back a colleague's comment is worth telling the author about. */
+const COMMENT_NUDGE_DAYS = 7;
+/** At most this many comment lines in one prompt; the rest follow on the next prompts. */
+const COMMENT_NUDGE_MAX = 3;
+
+/**
+ * Author nudge after a comment: when someone else commented on one of your memories in the last
+ * COMMENT_NUDGE_DAYS days, your session hears it with the title and the link, at most once per
+ * memory per day (the key holds the UTC day of the newest comment). Who commented and what they
+ * wrote stay behind the link: this route is unauthenticated (see projectNudgeFor). Dedup is per
+ * owner, across sessions, in session_learning_deliveries, like retiredNudgeFor. Model-only.
+ */
+function commentedNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
+  const commented = commentedOwnMemories(ownerId, COMMENT_NUDGE_DAYS);
+  if (commented.length === 0) return [];
+  const db = getDb();
+  const told = new Set(
+    (
+      db
+        .prepare(
+          `SELECT sld.learning_id AS key FROM session_learning_deliveries sld
+           JOIN sessions s ON s.id = sld.session_id
+           WHERE s.owner_id = ? AND sld.learning_id LIKE 'commented:%'`,
+        )
+        .all(ownerId) as Array<{ key: string }>
+    ).map((r) => r.key),
+  );
+  const fresh = commented
+    .map((c) => ({ ...c, key: `commented:${c.id}:${c.day}` }))
+    .filter((c) => !told.has(c.key))
+    .slice(0, COMMENT_NUDGE_MAX);
+  const record = db.prepare("INSERT OR IGNORE INTO session_learning_deliveries (session_id, learning_id) VALUES (?, ?)");
+  for (const c of fresh) record.run(sessionId, c.key);
+  return fresh.map(
+    (c) =>
+      `BAB: a colleague commented on your memory "${capTitle(c.title).replace(/"/g, "'")}" (${origin}/memory/${c.id}#comments). ` +
+      "Tell the user; read it there if it matters to this task.",
   );
 }
 

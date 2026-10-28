@@ -9,7 +9,9 @@ import { CONFIDENCE_LABEL, STANDING_LABEL } from "@/lib/standing";
 import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
 import { getViewer } from "@/lib/notify-auth";
 import { reactMessage } from "@/lib/memory-react-web";
-import ReactionPanel from "./ReactionPanel";
+import CommentsPanel from "./CommentsPanel";
+import { commentsFor } from "@/lib/memory-comments";
+import { isMaintainer } from "@/lib/feedback";
 import { auditRequest } from "@/lib/request-audit";
 import {
   getById,
@@ -66,10 +68,10 @@ export default async function LearningDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ react?: string | string[] }>;
+  searchParams?: Promise<{ react?: string | string[]; edit?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { react } = (await searchParams) ?? {};
+  const { react, edit } = (await searchParams) ?? {};
   // Read-only page: no identity required, see app/memory/page.tsx.
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: `/memory/${id}`, via: "ui" });
@@ -102,11 +104,15 @@ export default async function LearningDetailPage({
   const notes = recentNotes(learning.id);
   const retireEvent = lastRetire(learning);
 
-  // Reacting needs a person: a browser linked to a BAB identity (getViewer). A signed-in viewer
-  // who is not linked yet is pointed at /me/devices; with no sign-in at all the panel says nothing.
+  // Voting and commenting need a person: a browser linked to a BAB identity (getViewer). A signed-in
+  // viewer who is not linked yet is pointed at /me/devices; anyone else reads the comments only.
   const viewer = learning.status === "deleted" ? null : await getViewer();
   const needsLink = !viewer && learning.status !== "deleted" && (await pendingProxyLinkUser()) !== null;
   const mine = viewer && viewer.ownerId !== learning.author_id ? ownReactions(learning.id, viewer.ownerId) : null;
+  // A deleted memory is a wiped tombstone: its comments go with it.
+  const comments = learning.status === "deleted" ? [] : commentsFor(learning.id);
+  const editId = Array.isArray(edit) ? edit[0] : edit;
+  const editing = viewer && editId && comments.some((c) => c.id === editId && c.authorId === viewer.ownerId && !c.deletedAt) ? editId : null;
 
   const facts: Array<[string, string]> = [
     [STANDING_LABEL, `${standing.standing} (${standing.standingReason})`],
@@ -228,11 +234,15 @@ export default async function LearningDetailPage({
           ) : null}
         </ul>
 
-        {viewer || needsLink ? (
-          <ReactionPanel
+        {learning.status !== "deleted" ? (
+          <CommentsPanel
             learningId={learning.id}
-            state={!viewer ? "link" : mine ? "open" : "own"}
+            comments={comments}
+            state={viewer ? (mine ? "open" : "own") : needsLink ? "link" : "none"}
+            viewerId={viewer?.ownerId ?? null}
+            maintainer={viewer ? isMaintainer(viewer.ownerId) : false}
             mine={mine}
+            editing={editing}
             message={reactMessage(Array.isArray(react) ? react[0] : react)}
           />
         ) : null}

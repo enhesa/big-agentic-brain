@@ -903,8 +903,7 @@
   border-color: var(--navy);
 }
 
-.reactBtn:focus-visible,
-.reactInput:focus-visible {
+.reactBtn:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
 }
@@ -919,17 +918,6 @@
   font-size: 0.82rem;
   color: var(--steel);
   flex: 1 1 100%;
-}
-
-.reactInput {
-  font: inherit;
-  font-size: 0.9rem;
-  flex: 1 1 220px;
-  min-width: 0;
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 1px solid var(--steel);
-  border-radius: 10px;
 }
 
 .reactHint {
@@ -963,4 +951,114 @@
 .reactNote {
   background: rgba(63, 81, 117, 0.08);
   color: var(--navy);
+}
+
+/* -------------------------------------------------------------- comments */
+
+.comments {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.comment {
+  padding: 10px 0;
+  border-top: 1px solid var(--mist);
+}
+
+.comment:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.commentMeta {
+  font-size: 0.82rem;
+  color: var(--steel);
+  margin: 0 0 4px;
+}
+
+.commentMeta strong {
+  color: var(--navy);
+}
+
+.commentBody {
+  margin: 0;
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.commentRemoved {
+  margin: 0;
+  font-size: 0.86rem;
+  font-style: italic;
+  color: var(--steel);
+}
+
+.commentActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.commentAction {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--teal);
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  min-height: 32px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.commentAction:focus-visible,
+.commentInput:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.commentForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.commentForm .reactRow {
+  margin: 0;
+}
+
+.commentInput {
+  font: inherit;
+  font-size: 0.92rem;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid var(--steel);
+  border-radius: 10px;
+  resize: vertical;
+}
+
+.voteGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.voteLabel {
+  font-size: 0.82rem;
+  color: var(--steel);
+}
+
+@media (max-width: 480px) {
+  .voteGroup {
+    margin-left: 0;
+    width: 100%;
+  }
 }
