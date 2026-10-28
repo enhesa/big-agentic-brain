@@ -59,6 +59,8 @@ export interface BabConfig {
   /** Default MCP tool list (BAB_MCP_TOOLS): full, or lean (bab_search, bab_learn, bab_react). A connection can override it with ?tools=. */
   mcpTools: "full" | "lean";
   inboxPage: boolean;
+  /** The file store (lib/files.ts). Sizes in bytes, expiry in days. */
+  files: { enabled: boolean; maxFileBytes: number; userQuotaBytes: number; defaultExpiryDays: number; maxExpiryDays: number; diskFullPercent: number };
   clientIpHeader: "x-real-ip" | "x-forwarded-for-rightmost" | null;
   /** The unrecognised BAB_CLIENT_IP_HEADER value (lowercased) that was ignored, for a one-time warning; else null. */
   clientIpHeaderInvalid: string | null;
@@ -112,6 +114,22 @@ function int(env: Env, name: string, def: number): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n <= 0) throw new ConfigError(name + ' must be a positive integer, got "' + v + '"');
   return n;
+}
+
+/** The hard ceiling for one upload: reverse proxies in front of BAB commonly refuse bodies over 50 MB. */
+export const FILES_MAX_FILE_BYTES_CEILING = 50 * 1024 * 1024;
+
+function filesOf(env: Env): BabConfig["files"] {
+  const maxFileBytes = int(env, "BAB_FILES_MAX_FILE_BYTES", 25 * 1024 * 1024);
+  const userQuotaBytes = int(env, "BAB_FILES_USER_QUOTA_BYTES", 100 * 1024 * 1024);
+  const defaultExpiryDays = int(env, "BAB_FILES_DEFAULT_EXPIRY_DAYS", 14);
+  const maxExpiryDays = int(env, "BAB_FILES_MAX_EXPIRY_DAYS", 30);
+  const diskFullPercent = int(env, "BAB_FILES_DISK_FULL_PERCENT", 85);
+  if (maxFileBytes > FILES_MAX_FILE_BYTES_CEILING) throw new ConfigError("BAB_FILES_MAX_FILE_BYTES must be at most " + FILES_MAX_FILE_BYTES_CEILING + ", got " + maxFileBytes);
+  if (maxFileBytes > userQuotaBytes) throw new ConfigError("BAB_FILES_MAX_FILE_BYTES (" + maxFileBytes + ") must not exceed BAB_FILES_USER_QUOTA_BYTES (" + userQuotaBytes + ")");
+  if (defaultExpiryDays > maxExpiryDays) throw new ConfigError("BAB_FILES_DEFAULT_EXPIRY_DAYS (" + defaultExpiryDays + ") must not exceed BAB_FILES_MAX_EXPIRY_DAYS (" + maxExpiryDays + ")");
+  if (diskFullPercent > 99) throw new ConfigError("BAB_FILES_DISK_FULL_PERCENT must be 1-99, got " + diskFullPercent);
+  return { enabled: bool(env, "BAB_FILES", true), maxFileBytes, userQuotaBytes, defaultExpiryDays, maxExpiryDays, diskFullPercent };
 }
 
 function csvOf(v: string | undefined): string[] {
@@ -306,6 +324,7 @@ function parse(env: Env): BabConfig {
     devices: bool(env, "BAB_DEVICES", true),
     mcpTools: mcpToolsOf(env),
     inboxPage: bool(env, "BAB_INBOX_PAGE", true),
+    files: filesOf(env),
     clientIpHeader: clientIp,
     clientIpHeaderInvalid: clientIpInvalid,
   };
@@ -349,6 +368,8 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   const b = c.branding;
   log("[config] branding: org=" + b.orgName + " accent=" + b.accentColor + " marketplace=" + b.pluginMarketplace + " (" + b.pluginMarketplaceName + ") locale=" + b.locale + " tz=" + b.timeZone);
   log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage);
+  const f = c.files;
+  log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent);
   if (isOpen(c)) {
     log("[config] WARN: open mode, no proxy identity and no API tokens configured, callers are not authenticated");
   } else if (c.tokens !== null) {

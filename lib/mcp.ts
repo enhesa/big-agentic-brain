@@ -1,5 +1,5 @@
 /**
- * The ten MCP tools, table-driven so app/mcp/route.ts stays a thin
+ * The eleven MCP tools, table-driven so app/mcp/route.ts stays a thin
  * JSON-RPC dispatcher: every `run` reuses the same lib function the
  * equivalent app/api/**\/route.ts handler calls, with the same "mcp" audit
  * `via` those handlers already pass. A tool never re-implements business
@@ -69,6 +69,19 @@ import { listUsers, learningCountsByAuthor, getUsersByIds, publicUser } from "./
 import { addAreaContact, areasByUser, CONTACTS_HINT, contactsForArea, contactsForSearch, normalizeArea, removeAreaContact, setHomeTeam } from "./area-contacts";
 import { resetPromptsSinceLearn } from "./sessions";
 import { addComment, commentDigestFor } from "./memory-comments";
+import {
+  putFileBytes,
+  listFiles,
+  fileForActor,
+  fileView,
+  createDownloadLink,
+  deleteFile,
+  updateFile,
+  inlineText,
+  assertFilesEnabled,
+  FILES_CONTENT_RULE,
+  FILE_INLINE_MAX_BYTES,
+} from "./files";
 import {
   create as createFeedback,
   list as listFeedback,
@@ -518,6 +531,69 @@ function runSend(actor: SessionUser, args: Record<string, unknown>): string {
 
   const result = send({ fromId: actor.id, to, subject, body, threadId, request }, "mcp");
   return JSON.stringify(result);
+}
+
+// ---------------------------------------------------------------------------
+// bab_files
+// ---------------------------------------------------------------------------
+
+const FILES_ACTIONS = ["put", "get", "list", "delete", "share"] as const;
+
+function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string {
+  const action = str(args.action);
+  if (!FILES_ACTIONS.includes(action as (typeof FILES_ACTIONS)[number])) {
+    throw new ValidationError("action must be one of put, get, list, delete, share; required, has no default");
+  }
+  assertFilesEnabled();
+  const origin = originOf(ctx);
+  if (action === "list") return JSON.stringify(listFiles(actor.id));
+  if (action === "put") {
+    const hasText = typeof args.content === "string";
+    const hasB64 = typeof args.contentBase64 === "string";
+    if (hasText === hasB64) throw new ValidationError("put needs exactly one of content (text) or contentBase64");
+    let bytes: Uint8Array;
+    if (hasB64) {
+      const b64 = String(args.contentBase64).replace(/\s+/g, "");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new ValidationError("contentBase64 is not valid base64");
+      bytes = Buffer.from(b64, "base64");
+    } else {
+      bytes = Buffer.from(String(args.content), "utf8");
+    }
+    const result = putFileBytes(
+      {
+        ownerId: actor.id,
+        name: args.name,
+        body: bytes,
+        expiresInDays: args.expiresInDays,
+        shareWith: args.shareWith,
+        orgVisible: args.orgVisible,
+        to: args.to,
+        subject: args.subject,
+        note: args.note,
+      },
+      "mcp",
+      origin,
+    );
+    return JSON.stringify(result);
+  }
+  const id = str(args.id).trim();
+  if (!id) throw new ValidationError(`${action} needs id`);
+  if (action === "delete") return JSON.stringify(deleteFile(actor.id, id, "mcp"));
+  if (action === "share") {
+    return JSON.stringify({
+      file: updateFile(actor.id, id, { shareWith: args.shareWith, unshare: args.unshare, orgVisible: args.orgVisible, expiresInDays: args.expiresInDays }, "mcp"),
+    });
+  }
+  // get
+  const file = fileForActor(actor.id, id);
+  const download = createDownloadLink(actor.id, id, origin);
+  const wantContent = args.includeContent !== false && args.includeContent !== "false";
+  const content = wantContent ? inlineText(file, actor.id, "mcp") : null;
+  return JSON.stringify({
+    file: fileView(actor.id, id),
+    download,
+    ...(content !== null ? { content } : { contentHint: `Not inline (binary, over ${FILE_INLINE_MAX_BYTES} bytes, or includeContent false): fetch download.url, for example curl -fo <name> "<url>", within the hour.` }),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1078,6 +1154,39 @@ export const TOOLS: Tool[] = [
       required: ["action"],
     },
     run: runFeedback,
+  },
+  {
+    name: "bab_files",
+    title: "Share files",
+    annotations: { title: "Share files", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    description:
+      "Stores files in BAB so other sessions, your other machine or colleagues can fetch them: put, get, list, delete, share. " +
+      FILES_CONTENT_RULE + " " +
+      "A file is yours: only you delete or share it; others see it only when you share it with them (shareWith) or with everyone (orgVisible). " +
+      "Limits: 25 MB per file and 100 MB per person in total by default (list shows usage used/quota), executables refused, files expire after 14 days by default (expiresInDays, at most 30). " +
+      "put takes content (text) or contentBase64, for small files only (about 700 KB); bigger files: curl -X POST --data-binary @file \"<origin>/api/files?name=<name>\" with your BAB identity headers. " +
+      "Many small files: bundle them into one tar or zip first. to=<user id> shares the file and sends them a BAB message naming it. " +
+      "get returns details, a download link valid for an hour, and the text inline for small text files. delete needs the user's yes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: [...FILES_ACTIONS], description: "Which operation to perform; required, has no default." },
+        id: { type: "string", description: "get, delete, share: the file id." },
+        name: { type: "string", description: "put: the file name, such as report.md (no path)." },
+        content: { type: "string", description: "put: the file's text (UTF-8). Use contentBase64 for binary." },
+        contentBase64: { type: "string", description: "put: the file's bytes, base64." },
+        expiresInDays: { type: "number", description: "put, share: keep the file this many days from now (default 14, at most 30 from the upload)." },
+        shareWith: { type: "array", items: { type: "string" }, description: "put, share: user ids (emails) who may fetch it." },
+        unshare: { type: "array", items: { type: "string" }, description: "share: user ids to remove." },
+        orgVisible: { type: "boolean", description: "put, share: true lets every BAB user fetch it." },
+        to: { type: "string", description: "put: a user id to deliver to: the file is shared with them and a BAB message names it. Your own id works, for your other machine." },
+        subject: { type: "string", description: "put with to: the message subject (default \"File: <name>\")." },
+        note: { type: "string", description: "put with to: a short message sent with the file." },
+        includeContent: { type: "boolean", description: "get: return small text files inline (default true)." },
+      },
+      required: ["action"],
+    },
+    run: runFiles,
   },
 ];
 

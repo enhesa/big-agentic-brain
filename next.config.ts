@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // No page uses next/image, so the image optimizer (and its attack surface) stays off.
   images: { unoptimized: true },
+  // The request proxy (proxy.ts) sees /api/*, and Next cuts a body it buffers for a proxy at 10 MB by
+  // default. File uploads (POST /api/files) may be up to BAB_FILES_MAX_FILE_BYTES, which config caps at
+  // 50 MB; lib/gate.ts and lib/files.ts enforce the real limits.
+  experimental: { proxyClientMaxBodySize: "50mb" },
   outputFileTracingIncludes: {
     "/instructions/**": ["./content/instructions/*"],
   },
