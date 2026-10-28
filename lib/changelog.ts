@@ -20,10 +20,12 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-28",
-    title: "Smaller runtime image, reactions on the memory page",
+    title: "Smaller runtime image, reactions on the memory page, messages and reminders on the usage page",
     changes: [
       "The server image no longer ships npm, which it never used, closing a reported vulnerability.",
       "Linked browsers can mark a memory helpful or not helpful, or give kudos, on its page.",
+      "The usage page charts messages, conversations and reminders per week. Users shows memories saved and used.",
+      "Maintainers see each person's messages and conversations in the Users table. Reminders stay totals only.",
     ],
   },
   {
