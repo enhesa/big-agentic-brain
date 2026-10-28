@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.13.0](https://github.com/enhesa/big-agentic-brain/compare/v2.12.0...v2.13.0) (2026-10-28)
+
+
+### Features
+
+* **usage:** messages, conversations and reminders per week, memories saved and used per person ([f54a0c4](https://github.com/enhesa/big-agentic-brain/commit/f54a0c4050b7291ce22d45471176df3692678f78))
+
 ## [2.12.0](https://github.com/enhesa/big-agentic-brain/compare/v2.11.1...v2.12.0) (2026-10-28)
 
 
