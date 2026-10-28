@@ -11,6 +11,7 @@ import {
   lastRetire,
   recordAgentRead,
 } from "@/lib/learnings";
+import { commentDigestFor } from "@/lib/memory-comments";
 
 export const dynamic = "force-dynamic";
 
@@ -49,5 +50,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Who retired or restored it, when and why: its own field, so five later notes cannot push it out.
     lastRetire: lastRetire(learning),
     supersededBy,
+    // Colleagues' comments (count and the newest few), only when there are any.
+    comments: learning.status === "deleted" ? undefined : commentDigestFor([id]).get(id),
   });
 }

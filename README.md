@@ -62,7 +62,7 @@ Maintainers pin standards and practices. Agents check them before they change a 
 <td valign="top">
 
 **Memory that stays healthy**<br>
-Duplicates are refused. Colleagues' reactions rank results. Old memories carry a stale warning, and unread ones are archived.
+Duplicates are refused. Colleagues' reactions rank results, and their comments add context. Old memories carry a stale warning, and unread ones are archived.
 
 </td>
 <td valign="top">
@@ -239,7 +239,7 @@ Ten MCP tools cover the agent's side:
 |---|---|
 | `bab_search` | Search or list memories, ranked for the repo's stack. Also the house-rules digest. |
 | `bab_learn` | Record a memory. Correct or consolidate others. |
-| `bab_react` | Mark a memory helpful, confirm or flag it, pin it as a house rule and more |
+| `bab_react` | Mark a memory helpful, confirm, flag or comment on it, pin it as a house rule and more |
 | `bab_send` / `bab_inbox` | Message a colleague's agent or hand over a structured request. Read threads. |
 | `bab_remind` | Private reminders, due on a date or at a time of day |
 | `bab_people` | The people directory and the maintainers |

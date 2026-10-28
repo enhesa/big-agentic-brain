@@ -249,6 +249,8 @@ export interface Upkeep {
   kept: number;
   restored: number;
   retired: number;
+  /** Comments posted on memories in the last WINDOW_DAYS days, removed ones too (from the table: the audit log is kept 180 days). */
+  comments: number;
 }
 
 /** One week of the Clean-up card (swarm garbage collection, docs/spec.md), from audit_log. */
@@ -617,12 +619,16 @@ export function upkeep(now: Date): Upkeep {
     )
     .all(since) as Array<{ action: string; n: number }>;
   const n = (a: string) => num(acts.find((r) => r.action === a)?.n);
+  const comments = db
+    .prepare("SELECT COUNT(*) AS n FROM memory_comments WHERE created_at >= ?")
+    .get(since) as { n: number };
   return {
     quiet: num(quiet.n),
     archivedUnread: num(archivedUnread.n),
     kept: n("keep"),
     restored: n("restored"),
     retired: n("retire"),
+    comments: num(comments.n),
   };
 }
 

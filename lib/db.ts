@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 49;
+export const CURRENT_VERSION = 50;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -321,6 +321,34 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(49);
     appliedVersion = 49;
   }
+
+  if (appliedVersion < 50) {
+    runMigrationV50(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(50);
+    appliedVersion = 50;
+  }
+}
+
+function runMigrationV50(database: DatabaseSync) {
+  // Comments on memories (lib/memory-comments.ts): colleagues add context to a memory from its page
+  // or with bab_react comment. A delete is soft: deleted_at is set and the body is blanked, so the
+  // page can say "comment removed" in its place. Foreign keys like votes: the purge of a deleted
+  // learning removes its comments first (lib/maintenance.ts). Not in learnings_fts on purpose.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS memory_comments (
+      id TEXT PRIMARY KEY,
+      learning_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      edited_at TEXT,
+      deleted_at TEXT,
+      FOREIGN KEY (learning_id) REFERENCES learnings(id),
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_comments_learning ON memory_comments(learning_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_memory_comments_author ON memory_comments(author_id, created_at);
+  `);
 }
 
 function runMigrationV49(database: DatabaseSync) {

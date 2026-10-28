@@ -47,6 +47,7 @@ export default function DataDiagram({
         { name: "votes", sub: "reactions to a memory" },
         { name: "learnings", sub: "with learnings_fts index", main: true },
         { name: "supersession_links", sub: "old to new memory" },
+        { name: "memory_comments", sub: "context" },
       ],
     },
     {
@@ -81,7 +82,7 @@ export default function DataDiagram({
       tables: [
         { name: "feedback", sub: "with feedback_fts index" },
         { name: "feedback_votes", sub: "colleagues' votes" },
-        { name: "feedback_comments", sub: "the discussion" },
+        { name: "feedback_comments", sub: "discussion" },
         { name: "maintainer_feedback_seen", sub: "maintainer last looked" },
       ],
     },
@@ -130,6 +131,7 @@ export default function DataDiagram({
   const learnings = tableBox("memory", "learnings");
   const votes = tableBox("memory", "votes");
   const links = tableBox("memory", "supersession_links");
+  const comments = tableBox("memory", "memory_comments");
   const threads = tableBox("messages", "threads");
   const messages = tableBox("messages", "messages");
   const users = tableBox("people", "users");
@@ -139,9 +141,9 @@ export default function DataDiagram({
   const fk = (d: string) => <path className={styles.edge} d={d} markerEnd={`url(#${marker})`} />;
 
   const aria =
-    "The data, one SQLite file, bab.db, in five groups of tables. Memory: learnings with a learnings_fts full-text index, votes and supersession_links. People and identity: users, proxy_links, devices, mcp_connections, sessions and session_links. Messages: threads and messages. Reminders: todos and reminder_deliveries. Feedback: feedback with a feedback_fts index, feedback_votes, feedback_comments and maintainer_feedback_seen. Bookkeeping: " +
+    "The data, one SQLite file, bab.db, in five groups of tables. Memory: learnings with a learnings_fts full-text index, votes, supersession_links and memory_comments. People and identity: users, proxy_links, devices, mcp_connections, sessions and session_links. Messages: threads and messages. Reminders: todos and reminder_deliveries. Feedback: feedback with a feedback_fts index, feedback_votes, feedback_comments and maintainer_feedback_seen. Bookkeeping: " +
     `audit_log, kept ${auditDays} days; migrations, numbered 1 to ${migrations}; idempotency; session_nudges; session_deliveries and session_learning_deliveries. ` +
-    "Foreign keys, drawn as arrows: votes point at learnings, supersession_links point at learnings, messages point at threads, and learnings point at users as their author.";
+    "Foreign keys, drawn as arrows: votes and memory_comments point at learnings, supersession_links point at learnings, messages point at threads, and learnings point at users as their author.";
 
   return (
     <DiagramFigure title={TITLE} wide>
@@ -176,6 +178,7 @@ export default function DataDiagram({
         {/* Foreign keys: from the table that holds the key to the row it names. */}
         {fk(`M${votes.x + 30} ${votes.bottom} V${learnings.top}`)}
         {fk(`M${links.x + 30} ${links.top} V${learnings.bottom}`)}
+        {fk(`M${comments.x + BOX_W - 30} ${comments.top} V${learnings.bottom}`)}
         {fk(`M${messages.x + 30} ${messages.top} V${threads.bottom}`)}
         {fk(`M${learnings.x + BOX_W} ${learnings.centre} H${users.x}`)}
         <text className={styles.edgeLabel} x={(COL_X[0] + ZONE_W + COL_X[1]) / 2} y={learnings.centre - 7} textAnchor="middle">author</text>

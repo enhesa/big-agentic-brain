@@ -54,7 +54,7 @@ a maintainer's `keep` answers a flag on a standard or decision.
 **What people see.** The memory page shows Helpful, Kudos, Not helpful and Flags (always, also at 0), "Last read
 by an agent", "Days read by agents", "Valid until" (when set) and, after a sweep archive, a banner with the reason (while its audit row exists, 180 days). On `/usage`, Upkeep shows
 "Quiet 9+ months" (live learnings and practices, not pinned, unread for 270 days, three months before the sweep),
-"Archived unread" (last 30 days), Kept, Restored, Retired and Flags waiting. Quiet shows nothing before July 2027,
+"Archived unread" (last 30 days), Kept, Restored, Retired, Comments and Flags waiting. Quiet shows nothing before July 2027,
 Archived unread nothing before October 2027. The Clean-up card shows the last 8 weeks of archives (unread, not
 helpful, flags), retires, keeps and restores, and confirms on old memories that were due a check.
 

@@ -389,7 +389,7 @@ describe("activity per week and the hero tiles", () => {
     expect(r.contents.standing).toEqual({ strong: 0, fair: 0, weak: 0 });
     expect(r.topHelpful).toEqual([]);
     expect(r.models).toEqual([]);
-    expect(r.upkeep).toEqual({ quiet: 0, archivedUnread: 0, kept: 0, restored: 0, retired: 0 });
+    expect(r.upkeep).toEqual({ quiet: 0, archivedUnread: 0, kept: 0, restored: 0, retired: 0, comments: 0 });
     expect(r.dataSince).toBeNull();
     expect(allFinite(r)).toBe(true);
   });
@@ -690,7 +690,7 @@ describe("upkeep", () => {
     await row(A, "retire", "2026-08-20 10:00:00", { entity: "learning" }); // 6 weeks ago: inside now
     await row(A, "retire", "2025-10-07 11:30:00", { entity: "learning" }); // just outside
     const { upkeep } = await import("../lib/usage");
-    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 4, restored: 1, retired: 3 });
+    expect(upkeep(NOW)).toEqual({ quiet: 0, archivedUnread: 0, kept: 4, restored: 1, retired: 3, comments: 0 });
   });
 
   it("counts a live learning or practice as quiet 270 days after its last agent read, else its save day, never from before reads began", async () => {

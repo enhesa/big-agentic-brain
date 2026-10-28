@@ -1555,3 +1555,74 @@ describe("prompt auto-retrieval (#28)", () => {
     expect(JSON.stringify(await out.json())).not.toContain(m.id);
   });
 });
+
+/**
+ * Comment nudge: when a colleague comments on one of your memories, your session hears it with the
+ * title and the link, at most once per memory per day, across your sessions. Model-only, and who
+ * commented and what they wrote stay behind the link.
+ */
+describe("commented-memory nudge (POST /api/hook)", () => {
+  const OTHER = "carl.example@example.com";
+  const ORIGIN = "https://bab.example.com";
+
+  async function seed(title: string, authorId = ME) {
+    const { upsertUser } = await import("../lib/users");
+    for (const id of [authorId, OTHER]) upsertUser({ id, email: id, name: id.split("@")[0], roles: [] });
+    const { create } = await import("../lib/learnings");
+    return create({ authorId, title, body: `Unique body ${title}`, confirmNotDuplicate: true });
+  }
+
+  async function prompt(sessionId: string) {
+    return (await post({ hook_event_name: "UserPromptSubmit", session_id: sessionId })).json();
+  }
+
+  function commentLines(out: { hookSpecificOutput?: { additionalContext?: string } }): string[] {
+    return (out.hookSpecificOutput?.additionalContext ?? "").split(/\r?\n/).filter((l) => l.startsWith("BAB: a colleague commented"));
+  }
+
+  it("tells the author once a day per memory, with the title and link, never the comment text", async () => {
+    await linkSession("sess-cm-1", ME);
+    await linkSession("sess-cm-2", ME);
+    const l = await seed("Kiosk resets after deploy");
+    const { addComment } = await import("../lib/memory-comments");
+    addComment(l.id, OTHER, "Secret-free but private wording", "mcp");
+
+    const out = await prompt("sess-cm-1");
+    expect(commentLines(out)).toEqual([
+      `BAB: a colleague commented on your memory "Kiosk resets after deploy" (${ORIGIN}/memory/${l.id}#comments). Tell the user; read it there if it matters to this task.`,
+    ]);
+    expect(out.systemMessage).toBeUndefined();
+    expect(out.hookSpecificOutput.additionalContext).not.toContain("private wording");
+    expect(out.hookSpecificOutput.additionalContext).not.toContain(OTHER);
+
+    // A second comment the same day, another prompt, another session: nothing more today.
+    addComment(l.id, OTHER, "And one more", "mcp");
+    expect(commentLines(await prompt("sess-cm-1"))).toEqual([]);
+    expect(commentLines(await prompt("sess-cm-2"))).toEqual([]);
+
+    // A comment on a later day is told again.
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE memory_comments SET created_at = datetime('now', '-1 day') WHERE learning_id = ?").run(l.id);
+    getDb()
+      .prepare("UPDATE session_learning_deliveries SET learning_id = ? WHERE learning_id LIKE 'commented:%'")
+      .run(`commented:${l.id}:2000-01-01`);
+    expect(commentLines(await prompt("sess-cm-2"))).toHaveLength(1);
+  });
+
+  it("says nothing about the author's own comment, a removed one, someone else's memory or one older than 7 days", async () => {
+    await linkSession("sess-cm-3", ME);
+    const own = await seed("Own comment only");
+    const removed = await seed("Comment removed again");
+    const theirs = await seed("Not my memory", OTHER);
+    const old = await seed("Commented long ago");
+    const { addComment, removeComment } = await import("../lib/memory-comments");
+    const { getDb } = await import("../lib/db");
+    addComment(own.id, ME, "note to self", "ui");
+    const gone = addComment(removed.id, OTHER, "oops", "ui");
+    removeComment(removed.id, gone.id, OTHER, "ui");
+    addComment(theirs.id, OTHER, "on their own", "ui");
+    const c = addComment(old.id, OTHER, "ancient", "ui");
+    getDb().prepare("UPDATE memory_comments SET created_at = datetime('now', '-8 days') WHERE id = ?").run(c.id);
+    expect(commentLines(await prompt("sess-cm-3"))).toEqual([]);
+  });
+});

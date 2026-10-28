@@ -153,7 +153,7 @@ describe("getDb", () => {
     // 46: the porter stemmer on the learnings_fts index, and
     // 47: learnings.aliases and its learnings_fts column; 48: todos.due_has_time;
     // 49: the learning_costs and reuse_costs tables for measured agent effort).
-    expect(migrations.n).toBe(49);
+    expect(migrations.n).toBe(50);
   });
 });
 
@@ -651,7 +651,7 @@ describe("migration order: v40, then v41 to v47", () => {
   it("a fresh database gets all seven, in order", async () => {
     const db = (await import("../lib/db")).getDb();
     const versions = (db.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY rowid").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
+    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]);
     const cols = new Set((db.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     for (const c of ["last_accessed_at", "access_days", "applies_to", "pinned_by", "pinned_at", "aliases"]) expect(cols.has(c)).toBe(true);
   });
@@ -667,7 +667,7 @@ describe("migration order: v40, then v41 to v47", () => {
 
     const again = (await import("../lib/db")).getDb();
     const versions = (again.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY version").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
+    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]);
     const cols = new Set((again.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     expect(cols.has("applies_to")).toBe(true);
     expect({ ...again.prepare("SELECT title FROM sessions WHERE id = 's1'").get() }).toEqual({ title: null });
