@@ -5,7 +5,7 @@ import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { isMaintainer } from "@/lib/feedback";
 import { parseDbTime } from "@/lib/dates";
-import { getUsersByIds, learningCountsByAuthor, listUsersPage } from "@/lib/users";
+import { activityCountsForUsers, getUsersByIds, learningCountsByAuthor, listUsersPage } from "@/lib/users";
 import { areasByUser } from "@/lib/area-contacts";
 import { GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import {
@@ -229,11 +229,12 @@ export default async function UsagePage({
   const maintainer = viewer !== null && isMaintainer(viewer.ownerId);
   const usersPage = listUsersPage(Number((await searchParams)?.users));
   const memoryCounts = learningCountsByAuthor();
+  const userCounts = activityCountsForUsers(usersPage.users.map((u) => u.id));
   const areaCounts = areasByUser();
 
   const report = cachedUsageReport();
   const generated = new Date(report.generatedAt);
-  const { activity, capture, identify, quality, growth, contents, upkeep } = report;
+  const { activity, capture, identify, quality, growth, contents, upkeep, messages, reminders } = report;
   const n = report.weeks.length;
   const current = activity[n - 1];
   const totals = report.totals;
@@ -251,7 +252,9 @@ export default async function UsagePage({
           capture[i].learnCalls +
           identify[i].identifies +
           identify[i].refused +
-          quality[i].duplicateRejected >
+          quality[i].duplicateRejected +
+          messages[i].messages +
+          reminders[i].created >
         0,
     ) ?? report.weeks[n - 1];
   const firstWeek = auditWeek === null ? report.weeks[n - 1] : auditWeek > activeWeek ? auditWeek : activeWeek;
@@ -380,6 +383,19 @@ export default async function UsagePage({
     { key: "verified", label: "Old memories verified", values: cleanup.map((w) => w.verified), className: styles.ord3, title: "Confirmations on memories over 90 days old that nobody had checked lately." },
   ];
   const cleanupTotal = cleanupRows.reduce((s, r) => s + r.values.reduce((a, b) => a + b, 0), 0);
+
+  // Messages and reminders: totals per week for everyone. Reminders are private, so never per person.
+  const shownMessages = messages.filter((w) => w.week >= firstWeek);
+  const messagesTotal = shownMessages.reduce((s, w) => s + w.messages, 0);
+  const shownReminders = reminders.filter((w) => w.week >= firstWeek);
+  const reminderWeeks = shownReminders.map((w) => weekOf(w.week));
+  const reminderRows: MiniBarRow[] = [
+    { key: "created", label: "Set", values: shownReminders.map((w) => w.created), className: styles.fill1, title: "Reminders people asked their agent to set." },
+    { key: "done", label: "Done", values: shownReminders.map((w) => w.done), className: styles.fill2, title: "Reminders marked done." },
+    { key: "snoozed", label: "Snoozed", values: shownReminders.map((w) => w.snoozed), className: styles.fillMuted, title: "Reminders pushed to a later date." },
+    { key: "dropped", label: "Dropped", values: shownReminders.map((w) => w.dropped), className: styles.fill3, title: "Reminders dropped without being done." },
+  ];
+  const remindersTotal = reminderRows.reduce((s, r) => s + r.values.reduce((a, b) => a + b, 0), 0);
 
   const people = maintainer ? getUsersByIds(report.flagged.map((f) => f.authorId)) : new Map();
   const nameOf = (id: string) => people.get(id)?.name ?? id;
@@ -642,6 +658,78 @@ export default async function UsagePage({
           )}
         </div>
 
+        {/* 3c. Messages and reminders: totals only, never who or what */}
+        <section className={styles.group} aria-labelledby="messages-h" id="messages">
+          <h2 id="messages-h" className={styles.h2}>
+            Messages and reminders
+          </h2>
+          <div className={styles.grid}>
+            <Card
+              title="Messages per week"
+              span="s7"
+              sub={
+                <>
+                  <span className={styles.chip} title="Messages sent through BAB in the last 12 months, by agents or in the browser." data-testid="messages-total">
+                    {plural(messagesTotal, "message")} in 12 months
+                  </span>{" "}
+                  <LegendMessages />
+                </>
+              }
+            >
+              {messagesTotal === 0 ? (
+                <Empty>No messages yet.</Empty>
+              ) : (
+                <>
+                  <GroupedBars
+                    label={`Messages and conversations per week, last ${plural(shownMessages.length, "week")}`}
+                    series={[
+                      { name: "Messages", className: styles.fill1 },
+                      { name: "Conversations", className: styles.fill2 },
+                    ]}
+                    data={shownMessages.map((w) => ({
+                      label: dayMonth(w.week),
+                      values: [w.messages, w.conversations],
+                      title: `${weekOf(w.week)}: ${plural(w.messages, "message")} in ${plural(w.conversations, "conversation")}, from ${plural(w.senders, "person", "people")}`,
+                    }))}
+                  />
+                  <details className={styles.numbers}>
+                    <summary>Numbers</summary>
+                    <div className={styles.tableWrap}>
+                      <table className={styles.table} data-testid="messages-table">
+                        <thead>
+                          <tr>
+                            <th>Week of</th>
+                            <th className={styles.num}>Messages</th>
+                            <th className={styles.num}>Conversations</th>
+                            <th className={styles.num}>Senders</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shownMessages.map((w) => (
+                            <tr key={w.week}>
+                              <td>{dayMonth(w.week)}</td>
+                              <td className={styles.num}>{formatCount(w.messages)}</td>
+                              <td className={styles.num}>{formatCount(w.conversations)}</td>
+                              <td className={styles.num}>{formatCount(w.senders)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </>
+              )}
+            </Card>
+            <Card title="Reminders" span="s5" sub="Last 12 months, totals only" id="reminders">
+              {remindersTotal === 0 ? (
+                <Empty>No reminders yet.</Empty>
+              ) : (
+                <MiniBars label="Reminders set, done, snoozed and dropped per week, last 12 months" rows={reminderRows} weeks={reminderWeeks} />
+              )}
+            </Card>
+          </div>
+        </section>
+
         {/* 4. What's in BAB */}
         <section className={styles.group} aria-labelledby="contents-h">
           <h2 id="contents-h" className={styles.h2}>
@@ -870,13 +958,28 @@ export default async function UsagePage({
                   <th>Team</th>
                   <th>Contact for</th>
                   <th>Last seen</th>
-                  <th className={styles.num}>Memories</th>
+                  <th className={styles.num} title="Memories this person saved that are not deleted.">
+                    Saved
+                  </th>
+                  <th className={styles.num} title="Memories by someone else this person marked helpful or gave kudos. Searches do not record who read what, so a memory used without a reaction is not counted.">
+                    Used
+                  </th>
+                  {maintainer && (
+                    <>
+                      <th className={styles.num} title="Messages sent and received, all time. Maintainers only.">
+                        Messages
+                      </th>
+                      <th className={styles.num} title="Threads with a message from or to this person, all time. Maintainers only.">
+                        Conversations
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {usersPage.users.length === 0 && (
                   <tr>
-                    <td colSpan={6}>No users yet.</td>
+                    <td colSpan={maintainer ? 9 : 7}>No users yet.</td>
                   </tr>
                 )}
                 {usersPage.users.map((u) => (
@@ -887,6 +990,15 @@ export default async function UsagePage({
                     <td>{(areaCounts.get(u.id) ?? []).map((a) => a.area).join(", ") || "-"}</td>
                     <td className={styles.nowrap}>{parseDbTime(u.last_seen_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</td>
                     <td className={styles.num}>{memoryCounts[u.id] ?? 0}</td>
+                    <td className={styles.num}>{userCounts[u.id]?.used ?? 0}</td>
+                    {maintainer && (
+                      <>
+                        <td className={styles.num} title={`${formatCount(userCounts[u.id]?.sent ?? 0)} sent, ${formatCount(userCounts[u.id]?.received ?? 0)} received`}>
+                          {formatCount((userCounts[u.id]?.sent ?? 0) + (userCounts[u.id]?.received ?? 0))}
+                        </td>
+                        <td className={styles.num}>{formatCount(userCounts[u.id]?.conversations ?? 0)}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1059,6 +1171,19 @@ function Legend2() {
       </li>
       <li>
         <span className={`${styles.swatch} ${styles.sw3}`} /> New
+      </li>
+    </ul>
+  );
+}
+
+function LegendMessages() {
+  return (
+    <ul className={styles.legend} aria-label="Legend">
+      <li>
+        <span className={`${styles.swatch} ${styles.sw1}`} /> Messages
+      </li>
+      <li>
+        <span className={`${styles.swatch} ${styles.sw2}`} /> Conversations
       </li>
     </ul>
   );

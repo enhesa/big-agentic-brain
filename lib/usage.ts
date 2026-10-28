@@ -292,6 +292,30 @@ export interface CleanupWeek {
   verified: number;
 }
 
+export interface MessageWeek {
+  week: string;
+  label: string;
+  /** Messages agents sent for their people (`send` on a message). */
+  messages: number;
+  /** Distinct threads with a message that week. */
+  conversations: number;
+  /** Distinct people who sent one. */
+  senders: number;
+}
+
+export interface ReminderWeek {
+  week: string;
+  label: string;
+  /** `create` on a todo. */
+  created: number;
+  /** `complete`. */
+  done: number;
+  /** `snooze`. */
+  snoozed: number;
+  /** `abandon`. */
+  dropped: number;
+}
+
 export interface UsageReport {
   weeks: string[];
   activity: ActivityWeek[];
@@ -318,6 +342,8 @@ export interface UsageReport {
   quality: QualityWeek[];
   teams: TeamWeek[];
   cleanup: CleanupWeek[];
+  messages: MessageWeek[];
+  reminders: ReminderWeek[];
   flagged: FlaggedItem[];
   /** When the oldest audit row was written (SQL datetime), or null for an empty audit log. */
   dataSince: string | null;
@@ -908,6 +934,61 @@ export function cleanupByWeek(weeks: string[]): CleanupWeek[] {
 }
 
 /**
+ * Agent-to-agent messages per week: one query on idx_audit_action_at (`send` on a message), joined to
+ * messages by primary key for the thread. A message deleted since still counts as sent, without a
+ * thread. Counts only, never a subject or body.
+ */
+export function messagesByWeek(weeks: string[]): MessageWeek[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ${weekSql("a.at")} AS week, COUNT(*) AS messages,
+              COUNT(DISTINCT m.thread_id) AS conversations, COUNT(DISTINCT a.actor_id) AS senders
+       FROM audit_log a LEFT JOIN messages m ON m.id = a.entity_id
+       WHERE a.action = 'send' AND a.at >= ? AND +a.entity = 'message'
+       GROUP BY week`,
+    )
+    .all(sqlDate(weeks[0])) as Array<{ week: string; messages: number; conversations: number; senders: number }>;
+  return weeks.map((week) => {
+    const r = rows.find((x) => x.week === week);
+    return {
+      week,
+      label: isoWeekLabel(week),
+      messages: num(r?.messages),
+      conversations: num(r?.conversations),
+      senders: num(r?.senders),
+    };
+  });
+}
+
+/**
+ * Reminders per week: created, done, snoozed and dropped, one query on idx_audit_action_at. Totals
+ * only: reminders are private, so the page never says whose they are or what they say.
+ */
+export function remindersByWeek(weeks: string[]): ReminderWeek[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ${weekSql("at")} AS week,
+              SUM(action = 'create') AS created, SUM(action = 'complete') AS done,
+              SUM(action = 'snooze') AS snoozed, SUM(action = 'abandon') AS dropped
+       FROM audit_log
+       WHERE action IN ('create', 'complete', 'snooze', 'abandon') AND at >= ? AND +entity = 'todo'
+       GROUP BY week`,
+    )
+    .all(sqlDate(weeks[0])) as Array<{ week: string; created: number; done: number; snoozed: number; dropped: number }>;
+  return weeks.map((week) => {
+    const r = rows.find((x) => x.week === week);
+    return {
+      week,
+      label: isoWeekLabel(week),
+      created: num(r?.created),
+      done: num(r?.done),
+      snoozed: num(r?.snoozed),
+      dropped: num(r?.dropped),
+    };
+  });
+}
+
+/**
  * The flagged standards and decisions, and the protected memories marked not helpful, that a
  * maintainer still has to decide (flaggedStandardsWaitingIds), newest first. "Flaggers" counts the
  * people who flagged or marked it not helpful.
@@ -969,6 +1050,8 @@ export function usageReport(now: Date = new Date()): UsageReport {
     quality: qualityByWeek(weeks),
     teams: authorsPerTeamByWeek(weeks),
     cleanup: cleanupByWeek(weeks),
+    messages: messagesByWeek(weeks),
+    reminders: remindersByWeek(weeks),
     flagged: flaggedWaiting(),
   };
 }

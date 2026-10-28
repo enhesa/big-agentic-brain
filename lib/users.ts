@@ -143,3 +143,52 @@ export function learningCountsByAuthor(): Record<string, number> {
   for (const r of rows) map[r.authorId] = r.n;
   return map;
 }
+
+export interface UserActivityCounts {
+  /** Memories by someone else this person marked helpful or gave kudos (one per memory). */
+  used: number;
+  /** Messages this person's agent sent. */
+  sent: number;
+  /** Messages this person received. */
+  received: number;
+  /** Distinct threads this person sent or received a message in. */
+  conversations: number;
+}
+
+/**
+ * Memories used, messages and conversations for a page of users (the /usage Users table), keyed by
+ * user id. All time, counts only. Each query runs on an index over the given ids: idx_votes_voter_id,
+ * idx_messages_from_id and idx_messages_to_created_at.
+ */
+export function activityCountsForUsers(ids: string[]): Record<string, UserActivityCounts> {
+  const unique = Array.from(new Set(ids));
+  const out: Record<string, UserActivityCounts> = {};
+  for (const id of unique) out[id] = { used: 0, sent: 0, received: 0, conversations: 0 };
+  if (unique.length === 0) return out;
+  const db = getDb();
+  const marks = unique.map(() => "?").join(",");
+  const fill = (key: keyof UserActivityCounts, sql: string, args: string[]) => {
+    for (const r of db.prepare(sql).all(...args) as unknown as { id: string; n: number }[]) {
+      if (out[r.id]) out[r.id][key] = Number(r.n);
+    }
+  };
+  fill(
+    "used",
+    `SELECT v.voter_id AS id, COUNT(DISTINCT v.learning_id) AS n
+     FROM votes v JOIN learnings l ON l.id = v.learning_id
+     WHERE v.voter_id IN (${marks}) AND v.kind IN ('helpful', 'kudos') AND l.author_id != v.voter_id AND l.status != 'deleted'
+     GROUP BY v.voter_id`,
+    unique,
+  );
+  fill("sent", `SELECT from_id AS id, COUNT(*) AS n FROM messages WHERE from_id IN (${marks}) GROUP BY from_id`, unique);
+  fill("received", `SELECT to_id AS id, COUNT(*) AS n FROM messages WHERE to_id IN (${marks}) GROUP BY to_id`, unique);
+  fill(
+    "conversations",
+    `SELECT id, COUNT(DISTINCT thread_id) AS n FROM (
+       SELECT from_id AS id, thread_id FROM messages WHERE from_id IN (${marks})
+       UNION SELECT to_id AS id, thread_id FROM messages WHERE to_id IN (${marks})
+     ) GROUP BY id`,
+    [...unique, ...unique],
+  );
+  return out;
+}

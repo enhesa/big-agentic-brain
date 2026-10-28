@@ -1235,6 +1235,13 @@ every time.
      grouped bars: returning (people minus new) and new (first active that week in the window).
      Maintainers also see "Searches that found nothing": the 10 most repeated zero-result queries,
      grouped case-insensitively, most recent first on a tie. Nobody else sees query text.
+     Then "Messages and reminders" (`#messages`), counts only, never a subject, body, title or name.
+     Messages per week: messages sent (audit `send` on a message, by agents or in the browser) and
+     conversations (distinct threads with a message that week, from the message row by primary
+     key) as grouped bars, with a numbers table that adds senders; a chip gives the 12-month total.
+     Reminders (`#reminders`): set, done, snoozed and dropped per week (`create`, `complete`,
+     `snooze`, `abandon` on a todo) as `MiniBars`. Reminders are private, so they are totals only.
+     `messagesByWeek` and `remindersByWeek` are one query each on `audit_log(action, at)`.
   4. What's in BAB: live memories by kind and by team tag (a memory with two team tags counts for
      both; unreadable tags count as no team tag; its hover says authors can add one), and the
      standing mix (strong, fair, weak, from `standingsFor`, over the newest 5,000 live memories).
@@ -1254,17 +1261,22 @@ every time.
      (`retire`), restored or kept (`restored`, `keep`) and old memories verified (`confirm` with details
      `verified`). `cleanupByWeek` is one query on `audit_log(action, at)`; weeks before an action was
      first recorded read 0.
-  8. Users: the user directory that was `/people` (name, email, last seen, memory count), most
+  8. Users: the user directory that was `/people` (name, email, last seen), most
      recently seen first, 10 per page with Previous and Next (`?users=N`, clamped to the last page;
      `#users` anchor). Open to everyone, as `/people` was. `/people` redirects (307) to `/usage#users`.
+     Two all-time memory columns for everyone: Saved (not deleted) and Used (memories by someone else
+     the person marked helpful or gave kudos, one per memory; searches record no reader, so a use
+     without a reaction is not counted). Maintainers also see Messages (sent plus received, the
+     split in the hover) and Conversations (distinct threads). `activityCountsForUsers` in
+     lib/users.ts reads only the page's ids, on the votes and messages indexes.
   9. Health: Stop-nudge conversion (a nudge counts as followed when the same person calls `bab_learn`
      within 10 minutes), identify problems (loops of more than 3 identifies from one device or
      connection in a day, plus refusals), duplicates the 409 guard caught, and flagged standards and
      decisions, and protected memories marked not helpful, waiting for a maintainer (the same ids as the
      maintainer nudge), with their titles.
 - Personal detail is for maintainers only (`isMaintainer`), except the Users directory above: the identify-loop rows (email or name,
-  device, connection or address label), and the kind, author, date and flagger count of each flag.
-  Everyone else sees the counts and the flagged titles. The page never shows an IP address.
+  device, connection or address label), the kind, author, date and flagger count of each flag, and
+  each person's message and conversation counts in Users. Everyone else sees the counts and the flagged titles. The page never shows an IP address.
 - Honest about missing data: weeks before the first recorded activity collapse into one "No data
   before" note; numbers recorded only since 6 Oct (nudges, refusals, sessions, models) say "since 6
   Oct"; an empty chart is a short note, never a row of zeros; there is no division by zero.

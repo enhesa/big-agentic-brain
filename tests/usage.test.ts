@@ -721,6 +721,65 @@ describe("upkeep", () => {
   });
 });
 
+/* ------------------------------------------------------- messages, reminders */
+
+describe("messages and reminders per week", () => {
+  it("counts messages, conversations and senders in the week they were sent", async () => {
+    await people(A, B, MAINT);
+    const { send } = await import("../lib/messages");
+    const first = send({ fromId: A, to: B, subject: "Hello", body: "One." }, "mcp");
+    send({ fromId: B, threadId: first.thread.id, body: "Two." }, "mcp");
+    send({ fromId: A, to: MAINT, subject: "Other", body: "Three." }, "mcp");
+    // An older send, a week earlier: its own week, and no message row left for its thread.
+    const { lastWeeks, messagesByWeek, weekStart } = await import("../lib/usage");
+    const weeks = lastWeeks(new Date());
+    const earlier = new Date(`${weeks[50]}T10:00:00Z`).toISOString().slice(0, 19).replace("T", " ");
+    await row(A, "send", earlier, { entity: "message", entityId: "gone" });
+    const byWeek = messagesByWeek(weeks);
+    const now = byWeek.find((w) => w.week === weekStart(new Date()))!;
+    expect(now).toMatchObject({ messages: 3, conversations: 2, senders: 2 });
+    expect(byWeek[50]).toMatchObject({ messages: 1, conversations: 0, senders: 1 });
+    expect(byWeek.slice(0, 50).every((w) => w.messages === 0)).toBe(true);
+  });
+
+  it("counts reminders set, done, snoozed and dropped, and nothing from other entities", async () => {
+    await people(A);
+    const todos = await import("../lib/todos");
+    const a = todos.create({ ownerId: A, title: "One" }, "mcp");
+    const b = todos.create({ ownerId: A, title: "Two", dueAt: "2030-01-01" }, "mcp");
+    const c = todos.create({ ownerId: A, title: "Three" }, "mcp");
+    todos.complete(a.id, A, "mcp");
+    todos.snooze(b.id, A, "mcp", "2030-02-01");
+    todos.abandon(c.id, A, "mcp");
+    await memory(A, {}); // a learning `create` is not a reminder
+    const { lastWeeks, remindersByWeek } = await import("../lib/usage");
+    const byWeek = remindersByWeek(lastWeeks(new Date()));
+    expect(byWeek[51]).toMatchObject({ created: 3, done: 1, snoozed: 1, dropped: 1 });
+  });
+
+  it("counts memories used, messages and conversations per person", async () => {
+    await people(A, B, MAINT);
+    const others = await memory(B, {});
+    const another = await memory(MAINT, {});
+    const own = await memory(A, {});
+    await vote(others, A, "helpful");
+    await vote(others, A, "kudos"); // the same memory counts once
+    await vote(another, A, "kudos");
+    await vote(own, A, "helpful"); // the author's own memory is not use
+    await vote(another, B, "not_helpful"); // not use
+    const { send } = await import("../lib/messages");
+    const t = send({ fromId: A, to: B, subject: "Hi", body: "One." }, "mcp");
+    send({ fromId: B, threadId: t.thread.id, body: "Two." }, "mcp");
+    send({ fromId: MAINT, to: A, subject: "Other", body: "Three." }, "mcp");
+    const { activityCountsForUsers } = await import("../lib/users");
+    const c = activityCountsForUsers([A, B, "nobody@example.com"]);
+    expect(c[A]).toEqual({ used: 2, sent: 1, received: 2, conversations: 2 });
+    expect(c[B]).toEqual({ used: 0, sent: 1, received: 1, conversations: 1 });
+    expect(c["nobody@example.com"]).toEqual({ used: 0, sent: 0, received: 0, conversations: 0 });
+    expect(activityCountsForUsers([])).toEqual({});
+  });
+});
+
 /* -------------------------------------------------------------------- cache */
 
 describe("the 5-minute cache", () => {
@@ -843,6 +902,41 @@ describe("/usage page", () => {
     expect(second).toContain('href="/usage?users=1#users"');
     expect(await render(MAINT, "99")).toContain("Page 2 of 2");
     expect(await render(MAINT, "abc")).toContain("Page 1 of 2");
+  });
+
+  async function seedMessageAndReminder() {
+    await people(A, B);
+    const { send } = await import("../lib/messages");
+    send({ fromId: A, to: B, subject: "Private subject qx7", body: "Private body qx7." }, "mcp");
+    const todos = await import("../lib/todos");
+    todos.create({ ownerId: A, title: "Secret reminder qx7" }, "mcp");
+  }
+  const usersOf = (html: string) => html.match(/<section id="users".*?<\/section>/s)?.[0] ?? "";
+
+  it("shows everyone message and reminder totals, but no per-person message counts and no text", async () => {
+    await seedMessageAndReminder();
+    const html = await render(B);
+    expect(html).toContain("Messages and reminders");
+    expect(html).toMatch(/data-testid="messages-total"[^>]*>1 message in 12 months</);
+    expect(html).toContain("Reminders set, done, snoozed and dropped per week");
+    expect(html).not.toContain("qx7");
+    expect(usersOf(html)).toContain(">Used<");
+    expect(usersOf(html)).not.toContain(">Conversations<");
+    expect(usersOf(html)).not.toContain(" sent, ");
+  });
+
+  it("shows a maintainer per-person message and conversation counts, still without text", async () => {
+    await seedMessageAndReminder();
+    const html = await render(MAINT);
+    expect(usersOf(html)).toContain(">Conversations<");
+    expect(usersOf(html)).toContain('title="1 sent, 0 received"');
+    expect(html).not.toContain("qx7");
+  });
+
+  it("says so when there are no messages or reminders yet", async () => {
+    const html = await render(B);
+    expect(html).toContain("No messages yet.");
+    expect(html).toContain("No reminders yet.");
   });
 
   it("redirects /people to the Users section of /usage", async () => {
