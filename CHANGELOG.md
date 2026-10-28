@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.14.0](https://github.com/enhesa/big-agentic-brain/compare/v2.13.0...v2.14.0) (2026-10-28)
+
+
+### Features
+
+* **memory:** comments on memories, from the page and bab_react ([#89](https://github.com/enhesa/big-agentic-brain/issues/89)) ([d850fa9](https://github.com/enhesa/big-agentic-brain/commit/d850fa91b757cc0a5fb4fbb228e8fdaed5c5a8dc))
+
 ## [2.13.0](https://github.com/enhesa/big-agentic-brain/compare/v2.12.0...v2.13.0) (2026-10-28)
 
 
