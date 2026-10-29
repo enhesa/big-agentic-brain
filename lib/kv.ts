@@ -650,7 +650,7 @@ function loadSnapshotInto(s: Store, now: number): void {
     const [key, e] = item as [unknown, unknown];
     const entry = checkedEntry(key, e, now);
     if (!entry || s.entries.has(key as string)) {
-      if (!entry || s.entries.has(key as string)) dropped += 1;
+      dropped += 1;
       continue;
     }
     try {
