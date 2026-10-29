@@ -20,6 +20,8 @@ export const PUBLIC_PATHS = [
   "/api/events",
   // Short-lived file download links: the 256-bit token in the path is the credential (lib/files.ts createDownloadLink).
   "/api/files/dl/",
+  // Single-use upload links: the 256-bit token in the path is the credential (lib/files.ts createUploadLink).
+  "/api/files/up/",
 ];
 
 /** Exact match, or prefix match for entries that end with "/". */

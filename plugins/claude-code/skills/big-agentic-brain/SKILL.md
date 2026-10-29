@@ -294,11 +294,12 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
 `bab_files` moves files between sessions, your machines and colleagues, with your BAB identity (no cloud login).
 
 - Never confidential data: no customer data, database dumps, credentials, secrets or personal data.
-- Limits: 25 MB per file, 100 MB per person across your files still on disk (`list` shows used and quota), executables refused, files expire after 14 days by default (at most 30). BAB refuses uploads while its disk is over 85% full.
+- Default limits (a BAB maintainer can change them, see the `BAB_FILES_*` settings): 25 MB per file, 100 MB per person across your files still on disk (`list` shows your real used and quota), files expire after 14 days (at most 30). The tool description shows the limits of your BAB. Executables and text files holding secrets are refused. BAB refuses uploads while its disk is too full.
+- The store works with this plugin's device, the sign-in proxy or an API token bound to you. An identity sent only in headers is refused.
 - Many small files: bundle them into one tar or zip and upload that one file.
-- `put` with `content` or `contentBase64` is for small files (about 700 KB). Bigger files: `curl -X POST --data-binary @file "<origin>/api/files?name=<name>"` with your identity headers.
-- `to` shares the file with that person and sends them a BAB message with its id; your own id reaches your other machine. Others see a file only when you share it or set `orgVisible`.
-- `get` returns a download link that works for an hour, and small text files inline. Check the `sha256`. Only the owner deletes; ask the user first.
+- `put` with `content` or `contentBase64` is for small files (at most 256 KB). Bigger files: `upload_link` with the name and the same options returns a `url`; send the file with `curl -X POST --data-binary @file "<url>"`. It works for one upload within 15 minutes and needs no headers. A refused upload needs a new link. Never put a device secret or token on a command line.
+- `to` shares the file with that person and sends them a BAB message with its id; your own id reaches your other machine. Others see a file only when you share it or set `orgVisible`. `orgVisible: true` opens it to everyone: ask the user first.
+- `get` returns a download link that works for an hour (`curl -fo <name> "<url>"`, no headers), and small text files inline. Check the `sha256`. Only the owner deletes; ask the user first.
 
 ## Messages are eventual, not live
 

@@ -76,7 +76,7 @@ Apache-2.0, self-hosted, one SQLite file. Every write is attributed and most cal
 
 - **Search.** Send rephrasings in one call (`queries`), save `aliases` with each memory, and match word forms by stemming.
 - **Lean mode.** `?tools=lean` or `BAB_MCP_TOOLS=lean` serves four tools and shorter descriptions.
-- **Files.** `bab_files` passes files between sessions, machines and colleagues: 25 MB per file, 100 MB per person, expiry. See [Files](docs/files.md).
+- **Files.** `bab_files` passes files between sessions, machines and colleagues: 25 MB per file and 100 MB per person by default, expiry. See [Files](docs/files.md).
 - **Privacy.** Secrets, emails, phone, card, IBAN and ID numbers are masked before storing. This is best effort: a client named in plain words is not caught.
 
 Add one MCP URL to your agents and the server sends them these instructions when they connect. Whether an agent follows them depends on the agent: house rules are context, not enforcement. The optional [Claude Code plugin](#the-claude-code-plugin) adds hooks that brief the agent and nudge it to search and to save.

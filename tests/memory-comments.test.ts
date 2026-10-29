@@ -150,7 +150,7 @@ describe("commentDigestFor", () => {
 describe("MCP", () => {
   async function tool(name: string, actorId: string, args: Record<string, unknown>) {
     const { findTool } = await import("../lib/mcp");
-    return JSON.parse(findTool(name)!.run({ id: actorId } as never, args, { origin: "https://bab.example.com" } as never));
+    return JSON.parse(findTool(name)!.run({ id: actorId } as never, args, { origin: "https://bab.example.com" } as never) as string);
   }
 
   it("bab_react comment posts the note as a comment, the author too, audited via mcp, not a read", async () => {

@@ -3,7 +3,7 @@ import { globSync, readFileSync } from "node:fs";
 import { sep } from "node:path";
 import { isPublicPath } from "../lib/public-paths";
 
-const IDENTITY_HELPERS = ["requireActorForApi", "getSessionUser", "requireUser", "currentUser", "pendingProxyLinkUser", "getViewer"];
+const IDENTITY_HELPERS = ["requireActorForApi", "requireFilesActor", "getSessionUser", "requireUser", "currentUser", "pendingProxyLinkUser", "getViewer"];
 
 /**
  * Routes and pages that deliberately resolve no identity. Each needs a one-line reason; a new

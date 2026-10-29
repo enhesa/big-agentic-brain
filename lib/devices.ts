@@ -117,6 +117,8 @@ export interface BoundDevice {
   deviceId: string;
   /** Who the device belonged to before (live or forgotten), null for a brand new one. */
   previousUserId: string | null;
+  /** True when the device had been forgotten (revoked) and this bind brought it back. */
+  wasRevoked: boolean;
 }
 
 /**
@@ -128,8 +130,8 @@ export interface BoundDevice {
 export function bindDevice(secretHash: string, userId: string, label: string, ip: string | null): BoundDevice {
   const db = getDb();
   const now = clock();
-  const existing = db.prepare("SELECT id, user_id FROM devices WHERE secret_hash = ?").get(secretHash) as
-    | { id: string; user_id: string }
+  const existing = db.prepare("SELECT id, user_id, revoked_at FROM devices WHERE secret_hash = ?").get(secretHash) as
+    | { id: string; user_id: string; revoked_at: number | null }
     | undefined;
   if (existing) {
     db.prepare(
@@ -137,13 +139,13 @@ export function bindDevice(secretHash: string, userId: string, label: string, ip
          created_at = CASE WHEN user_id = ? AND revoked_at IS NULL THEN created_at ELSE ? END
        WHERE id = ?`,
     ).run(userId, label, ip, userId, now, existing.id);
-    return { deviceId: existing.id, previousUserId: existing.user_id };
+    return { deviceId: existing.id, previousUserId: existing.user_id, wasRevoked: existing.revoked_at !== null };
   }
   const deviceId = randomBytes(8).toString("hex");
   db.prepare(
     "INSERT INTO devices (id, user_id, secret_hash, label, created_at, last_seen_at, connected_ip) VALUES (?, ?, ?, ?, ?, ?, ?)",
   ).run(deviceId, userId, secretHash, label, now, now, ip);
-  return { deviceId, previousUserId: null };
+  return { deviceId, previousUserId: null, wasRevoked: false };
 }
 
 export interface DeviceSummary {
@@ -246,6 +248,55 @@ export function revokeStaleDevices(maxAgeDays: number = config().retention.stale
   // One row per run with the count, not one per device: the hourly sweep must not flood the log.
   if (n > 0) audit(db, "system", "device-expire", "device", "sweep", "ui", { details: { count: n, maxAgeDays } });
   return n;
+}
+
+/** How long a person's sessions hear about a newly connected device. */
+export const DEVICE_NOTICE_DAYS = 7;
+
+/**
+ * Records that a device was newly connected as `userId` when that person already had another live
+ * device or a linked browser, so their sessions hear about it (app/api/hook/route.ts). The first
+ * device of a person with nothing else is not recorded: there is nobody else to tell. Returns true
+ * when a notice was recorded. Called by bab_identify only for a new binding (a brand new device, or
+ * one that was someone else's), never for the same device identifying again.
+ */
+export function noteNewDevice(userId: string, deviceId: string, label: string): boolean {
+  const db = getDb();
+  const otherDevice = db.prepare("SELECT 1 FROM devices WHERE user_id = ? AND id != ? AND revoked_at IS NULL LIMIT 1").get(userId, deviceId);
+  const browser = db.prepare("SELECT 1 FROM proxy_links WHERE user_id = ? LIMIT 1").get(userId);
+  if (!otherDevice && !browser) return false;
+  db.prepare("INSERT INTO device_bind_notices (user_id, device_id, label, created_at) VALUES (?, ?, ?, ?)").run(userId, deviceId, label, clock());
+  return true;
+}
+
+export interface DeviceNotice {
+  id: number;
+  label: string;
+  createdAt: number;
+}
+
+/**
+ * Device notices for this person from the last DEVICE_NOTICE_DAYS days, newest first, one per device,
+ * and only for devices still bound to them and not forgotten: once the person forgets a device on
+ * /me/devices, its notice stops.
+ */
+export function recentDeviceNotices(userId: string, now: number = clock()): DeviceNotice[] {
+  return (
+    getDb()
+      .prepare(
+        `SELECT MAX(n.id) AS id, n.label AS label, MAX(n.created_at) AS created_at FROM device_bind_notices n
+         JOIN devices d ON d.id = n.device_id AND d.user_id = n.user_id AND d.revoked_at IS NULL
+         WHERE n.user_id = ? AND n.created_at > ?
+         GROUP BY n.device_id ORDER BY created_at DESC LIMIT 20`,
+      )
+      .all(userId, now - DEVICE_NOTICE_DAYS * DAY_MS) as { id: number; label: string; created_at: number }[]
+  ).map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at }));
+}
+
+/** Deletes device notices older than DEVICE_NOTICE_DAYS. Run by the hourly maintenance. Returns how many. */
+export function purgeDeviceNotices(now: number = clock()): number {
+  const res = getDb().prepare("DELETE FROM device_bind_notices WHERE created_at <= ?").run(now - DEVICE_NOTICE_DAYS * DAY_MS);
+  return Number(res.changes ?? 0);
 }
 
 /** Test-only: inject a fake clock. Reset by passing nothing. */

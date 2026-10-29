@@ -34,6 +34,8 @@ export interface SessionUser extends ProxyUser {
   proxyUserId?: string;
   /** Only for source "device": the devices row id (never the secret or its hash). */
   deviceId?: string;
+  /** Set when a bearer token configured as token=email named this person (fromToken). Source stays "declared". */
+  tokenBound?: true;
 }
 
 /**
@@ -111,7 +113,7 @@ async function fromToken(mode: AgentMode): Promise<SessionUser | null> {
   const email = tokenIdentityFor(await headers());
   if (!email) return null;
   const stored = getUser(email);
-  return { id: email, email, name: stored?.name ?? derivedNameFromEmail(email), roles: [], source: "declared" };
+  return { id: email, email, name: stored?.name ?? derivedNameFromEmail(email), roles: [], source: "declared", tokenBound: true };
 }
 
 /**

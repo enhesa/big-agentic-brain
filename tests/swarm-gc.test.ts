@@ -408,7 +408,7 @@ describe("old memories are marked verify in search", () => {
     const { VERIFY_HINT } = await import("../lib/swarm-gc");
     const actor = { id: KEEPER, email: KEEPER, name: "Kim" } as never;
     const old = await mk({ title: "Hint gotcha zqhint", body: "Body zqhint" });
-    const run = (q: string) => JSON.parse(findTool("bab_search")!.run(actor, { query: q }));
+    const run = (q: string) => JSON.parse(findTool("bab_search")!.run(actor, { query: q }) as string);
 
     expect(run("zqhint").verifyHint).toBeUndefined();
     expect(run("zqhint").results[0].stale).toBeUndefined();

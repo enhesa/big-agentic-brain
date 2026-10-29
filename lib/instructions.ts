@@ -5,6 +5,7 @@ import { branding } from "./branding";
 import { platformLabels } from "./applies-to";
 import { teamTags } from "./teams";
 import { identityDomain, identityHint } from "./identity";
+import { config } from "./config";
 
 const contentDir = path.join(process.cwd(), "content", "instructions");
 
@@ -12,7 +13,7 @@ const rawInstall = readFileSync(path.join(contentDir, "install.md"), "utf8");
 const rawSkill = readFileSync(path.join(contentDir, "skill.md"), "utf8");
 
 const PLACEHOLDER_RE =
-  /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS|TEAM_TAGS)\}\}|<origin>|__BAB_ORIGIN__/g;
+  /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS|TEAM_TAGS|FILES_LIMITS)\}\}|<origin>|__BAB_ORIGIN__/g;
 
 /** Replaces every placeholder with the current configuration. `origin` null leaves the origin placeholders in place. */
 export function renderInstructionText(text: string, origin: string | null): string {
@@ -28,11 +29,25 @@ export function renderInstructionText(text: string, origin: string | null): stri
     "{{PLIST_ID}}": `com.${b.orgName.toLowerCase().replace(/[^a-z0-9]/g, "")}.bab-listener`,
     "{{PLATFORM_LABELS}}": platformLabels().join(", "),
     "{{TEAM_TAGS}}": teamTags().map((t) => `\`${t}\``).join(", "),
+    "{{FILES_LIMITS}}": filesLimits(),
   };
   return text.replace(PLACEHOLDER_RE, (m, name?: string) => {
     if (name === "ORIGIN" || m === "<origin>" || m === "__BAB_ORIGIN__") return origin ?? (m.startsWith("{{") ? m : "{{ORIGIN}}");
     return values[m] ?? m;
   });
+}
+
+/** Bytes as whole GB when they are a whole number of them, else MB (one decimal when needed). */
+export function sizeText(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1024 && Number.isInteger(mb / 1024)) return `${mb / 1024} GB`;
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
+}
+
+/** The file store's limits on this deployment, for the served skill (config().files). */
+function filesLimits(): string {
+  const f = config().files;
+  return `${sizeText(f.maxFileBytes)} per file, ${sizeText(f.userQuotaBytes)} per person, kept ${f.defaultExpiryDays} days by default, at most ${f.maxExpiryDays}`;
 }
 
 export interface Instructions {

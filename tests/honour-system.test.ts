@@ -58,7 +58,7 @@ async function users() {
 /** Runs an MCP tool the way the route does: an identified actor and the tool's own arguments. */
 async function tool(name: string, args: Record<string, unknown>) {
   const { findTool } = await import("../lib/mcp");
-  return JSON.parse(findTool(name)!.run({ id: AGENT.id } as never, args));
+  return JSON.parse(findTool(name)!.run({ id: AGENT.id } as never, args) as string);
 }
 
 describe("a non-maintainer can post a standard", () => {

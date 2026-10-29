@@ -114,8 +114,15 @@ describe("names and types", () => {
   it("refuses executables by extension and by their first bytes", async () => {
     await expect(put(OWNER, "setup.EXE", bytes(10))).rejects.toThrow(/\.exe files are refused/);
     await expect(put(OWNER, "run.ps1", bytes(10))).rejects.toThrow(/refused/);
-    const pe = new Uint8Array([0x4d, 0x5a, 0x90, 0, 1, 2, 3]);
+    // A Windows program: "MZ", and at 0x3C the offset of a "PE\0\0" header.
+    const pe = new Uint8Array(0x80);
+    pe.set([0x4d, 0x5a], 0);
+    new DataView(pe.buffer).setUint32(0x3c, 0x40, true);
+    pe.set([0x50, 0x45, 0, 0], 0x40);
     await expect(put(OWNER, "innocent.txt", pe)).rejects.toThrow(/executable/);
+    // Text that merely starts with "MZ" has no PE header: allowed.
+    const mzText = new TextEncoder().encode("MZ notes from the planning meeting, " + "x".repeat(100));
+    expect((await put(OWNER, "mz-notes.txt", mzText)).file.size).toBe(mzText.length);
     const elf = new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 2, 1]);
     await expect(put(OWNER, "data.bin.txt", elf)).rejects.toThrow(/executable/);
     // A shell script is source text: allowed.
@@ -195,7 +202,7 @@ describe("uploads at once", () => {
         c.enqueue(bytes(5));
       },
     });
-    await expect(stageUpload(body, 1000, 50)).rejects.toBeInstanceOf(UploadStalledError);
+    await expect(stageUpload(body, 1000, { idleMs: 50 })).rejects.toBeInstanceOf(UploadStalledError);
     expect(readdirSync(path.join(dataDir, "files", "tmp"))).toEqual([]);
   });
 
@@ -293,10 +300,16 @@ describe("disk guard", () => {
   });
 
   it("refuses an upload that would push the volume over the threshold", async () => {
+    // The fake volume is 1000 MB; an upload reserves the per-file cap (10 MB here) until it ends.
+    process.env.BAB_FILES_DISK_RESERVE_BYTES = "1";
+    process.env.BAB_FILES_MAX_FILE_BYTES = String(10 * MB);
+    process.env.BAB_FILES_USER_QUOTA_BYTES = String(100 * MB);
     const { _setStatfsForTests } = await import("../lib/file-store");
-    _setStatfsForTests(() => ({ blocks: 1000, bsize: 1000, bavail: 200 }));
-    await expect(put(OWNER, "a.txt", bytes(60_000))).rejects.toMatchObject({ status: 507 });
+    _setStatfsForTests(() => ({ blocks: 1000, bsize: MB, bavail: 200 }));
     expect((await put(OWNER, "b.txt", bytes(10_000))).file.size).toBe(10_000);
+    // 84.5% used: the 10 MB reservation would take it past 85%.
+    _setStatfsForTests(() => ({ blocks: 1000, bsize: MB, bavail: 155 }));
+    await expect(put(OWNER, "a.txt", bytes(10))).rejects.toMatchObject({ status: 507 });
   });
 
   it("allows uploads when the platform cannot report the volume", async () => {
@@ -491,10 +504,30 @@ describe("config", () => {
     expect(() => config()).toThrow(/1-99/);
   });
 
-  it("defaults to 25 MB per file, 100 MB per person, 14 and 30 days, 85 percent", async () => {
+  it("defaults to 25 MB per file, 100 MB per person, 14 and 30 days, 85 percent, a 64 MB reserve, 5 minutes per upload, no declared identities", async () => {
     const { config, _resetConfigForTests } = await import("../lib/config");
     _resetConfigForTests();
-    expect(config().files).toEqual({ enabled: true, maxFileBytes: 25 * MB, userQuotaBytes: 100 * MB, defaultExpiryDays: 14, maxExpiryDays: 30, diskFullPercent: 85 });
+    expect(config().files).toEqual({
+      enabled: true,
+      maxFileBytes: 25 * MB,
+      userQuotaBytes: 100 * MB,
+      defaultExpiryDays: 14,
+      maxExpiryDays: 30,
+      diskFullPercent: 85,
+      diskReserveBytes: 64 * MB,
+      uploadDeadlineMs: 300_000,
+      allowDeclared: false,
+    });
+  });
+
+  it("refuses an upload deadline under 10 seconds or over 30 minutes", async () => {
+    const { config, _resetConfigForTests } = await import("../lib/config");
+    process.env.BAB_FILES_UPLOAD_DEADLINE_SECONDS = "5";
+    _resetConfigForTests();
+    expect(() => config()).toThrow(/10-1800/);
+    process.env.BAB_FILES_UPLOAD_DEADLINE_SECONDS = "3600";
+    _resetConfigForTests();
+    expect(() => config()).toThrow(/10-1800/);
   });
 });
 
@@ -502,11 +535,11 @@ describe("migration", () => {
   it("creates the file tables when a database is rewound to v50", async () => {
     const { getDb, closeDb } = await import("../lib/db");
     const db = getDb();
-    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DELETE FROM migrations WHERE version = 51;");
+    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DROP TABLE file_upload_links; DROP TABLE device_bind_notices; DELETE FROM migrations WHERE version IN (51, 52);");
     closeDb();
     vi.resetModules();
     const again = await import("../lib/db");
     const tables = (again.getDb().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'file%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
-    expect(tables).toEqual(["file_links", "file_shares", "files"]);
+    expect(tables).toEqual(["file_links", "file_shares", "file_upload_links", "files"]);
   });
 });

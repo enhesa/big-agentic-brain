@@ -19,6 +19,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-29",
+    title: "Safer file store",
+    changes: [
+      "Files need a BAB device, the sign-in proxy or a token bound to you. Headers alone are refused.",
+      "Uploads keep free disk space for the database, end after five minutes, and are capped per address.",
+      "Text files holding secrets, disk images, shortcuts and app packages are refused.",
+      "Send bigger files with bab_files upload_link and plain curl: no secret on the command line.",
+      "Your sessions hear when a new device is connected as you, so a stranger's device does not go unnoticed.",
+    ],
+  },
+  {
     date: "2026-10-28",
     title: "Smaller runtime image, comments and votes on the memory page, messages and reminders on the usage page",
     changes: [

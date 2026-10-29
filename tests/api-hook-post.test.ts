@@ -905,7 +905,7 @@ describe("first-prompt project nudge", () => {
     expect(text).not.toContain(deleted.id);
 
     const { findTool } = await import("../lib/mcp");
-    const found = JSON.parse(findTool("bab_search")!.run({ id: ME } as never, { query: "", project: "billing.api" }));
+    const found = JSON.parse(findTool("bab_search")!.run({ id: ME } as never, { query: "", project: "billing.api" }) as string);
     expect(found.total).toBe(2);
   });
 });
@@ -1561,6 +1561,74 @@ describe("prompt auto-retrieval (#28)", () => {
  * title and the link, at most once per memory per day, across your sessions. Model-only, and who
  * commented and what they wrote stay behind the link.
  */
+describe("new-device notice (POST /api/hook)", () => {
+  const ORIGIN = "https://bab.example.com";
+  const hex = (c: string) => c.repeat(64);
+
+  async function identifyAs(email: string, secretChar: string, label: string) {
+    const { identify } = await import("../lib/identify");
+    const { hashSecret } = await import("../lib/devices");
+    return identify({ email, name: "Alice Example" }, { deviceHash: hashSecret(hex(secretChar)), deviceLabel: label, connectionId: null, ip: null });
+  }
+
+  function deviceLines(out: { hookSpecificOutput?: { additionalContext?: string } }): string[] {
+    return (out.hookSpecificOutput?.additionalContext ?? "").split(/\r?\n/).filter((l) => l.startsWith("BAB: a new device"));
+  }
+
+  async function prompt(sessionId: string) {
+    return (await post({ hook_event_name: "UserPromptSubmit", session_id: sessionId })).json();
+  }
+
+  it("tells every session of a person once when a second device is connected as them", async () => {
+    await linkSession("sess-dev-1", ME);
+    await linkSession("sess-dev-2", ME);
+    await identifyAs(ME, "a", "Linux laptop-1");
+    // The first device of a person with nothing else is not news.
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+    // The same device identifying again is not news either.
+    await identifyAs(ME, "a", "Linux laptop-1");
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+
+    await identifyAs(ME, "b", "MINGW64 stranger-pc");
+    const first = deviceLines(await prompt("sess-dev-1"));
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatch(/^BAB: a new device was connected as you at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\. /);
+    expect(first[0]).toContain(`${ORIGIN}/me/devices`);
+    // The label is the new device's own words: it never reaches the model.
+    expect(first[0]).not.toContain("stranger-pc");
+    // Once per session, and every other session still hears it.
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+    expect(deviceLines(await prompt("sess-dev-2"))).toHaveLength(1);
+  });
+
+  it("tells again when a forgotten device is brought back, and stops once the device is forgotten", async () => {
+    await linkSession("sess-dev-4", ME);
+    await identifyAs(ME, "d", "Linux laptop-1");
+    const second = await identifyAs(ME, "e", "Linux stolen-1");
+    expect(deviceLines(await prompt("sess-dev-4"))).toHaveLength(1);
+    const { getDb } = await import("../lib/db");
+    const deviceId = (getDb().prepare("SELECT id FROM devices WHERE label = ?").get("Linux stolen-1") as { id: string }).id;
+    const { revokeDevice } = await import("../lib/devices");
+    expect(revokeDevice(deviceId, { id: ME })).toBe(true);
+    // Forgotten: its notice stops in a new session.
+    await linkSession("sess-dev-5", ME);
+    expect(deviceLines(await prompt("sess-dev-5"))).toEqual([]);
+    // The same secret identifies as the person again: news again.
+    await identifyAs(ME, "e", "Linux stolen-1");
+    await linkSession("sess-dev-6", ME);
+    expect(deviceLines(await prompt("sess-dev-6"))).toHaveLength(1);
+    expect(second.remembered).toBe("device");
+  });
+
+  it("tells a person with a linked browser about their first device", async () => {
+    await linkSession("sess-dev-3", ME);
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES (?, ?)").run("sso-alice", ME);
+    await identifyAs(ME, "c", "Darwin mac-1");
+    expect(deviceLines(await prompt("sess-dev-3"))).toHaveLength(1);
+  });
+});
+
 describe("commented-memory nudge (POST /api/hook)", () => {
   const OTHER = "carl.example@example.com";
   const ORIGIN = "https://bab.example.com";

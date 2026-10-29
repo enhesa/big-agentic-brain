@@ -7,8 +7,9 @@ export default function proxy(req: Request) {
 }
 
 /**
- * Every /api path and /mcp, except /api/files itself: for a path the proxy matches, Next copies the
- * whole request body into memory before the route runs (10 MB by default, cut silently past that).
- * A file upload must stream to disk instead, so app/api/files/route.ts calls gate() itself.
+ * Every /api path and /mcp, except the two upload paths, /api/files and /api/files/up/<token>: for a
+ * path the proxy matches, Next copies the whole request body into memory before the route runs (10 MB
+ * by default, cut silently past that). A file upload must stream to disk instead, so those routes call
+ * gate() themselves (so do the other /api/files routes).
  */
-export const config = { matcher: ["/api", "/api/((?!files$).*)", "/mcp"] };
+export const config = { matcher: ["/api", "/api/((?!files$|files/up/).*)", "/mcp"] };

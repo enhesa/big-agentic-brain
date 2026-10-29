@@ -79,9 +79,14 @@ import {
   updateFile,
   inlineText,
   assertFilesEnabled,
+  assertFilesIdentity,
   FILES_CONTENT_RULE,
   FILE_INLINE_MAX_BYTES,
+  FILE_MCP_PUT_MAX_BYTES,
+  UPLOAD_LINK_TTL_MINUTES,
+  createUploadLink,
 } from "./files";
+import { sizeText } from "./instructions";
 import {
   create as createFeedback,
   list as listFeedback,
@@ -199,7 +204,8 @@ export interface Tool {
   annotations: ToolAnnotations;
   description: string;
   inputSchema: Record<string, unknown>;
-  run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string;
+  /** The result text. bab_files answers with a Promise (it writes to disk); the /mcp route awaits every tool. */
+  run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string | Promise<string>;
 }
 
 const CONFIDENCE_VALUES: LearningConfidence[] = ["low", "medium", "high"];
@@ -537,16 +543,40 @@ function runSend(actor: SessionUser, args: Record<string, unknown>): string {
 // bab_files
 // ---------------------------------------------------------------------------
 
-const FILES_ACTIONS = ["put", "get", "list", "delete", "share"] as const;
+const FILES_ACTIONS = ["put", "upload_link", "get", "list", "delete", "share"] as const;
 
-function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string {
+/** The bab_files description, with this deployment's limits (config().files), built when the tool list is served. */
+function filesDescription(): string {
+  const f = config().files;
+  return (
+    "Passes files between sessions, your machines and colleagues. " +
+    FILES_CONTENT_RULE + " " +
+    "Yours only, unless you shareWith people; orgVisible:true opens it to everyone and needs the user's yes. " +
+    `Limits: ${sizeText(f.maxFileBytes)} per file, ${sizeText(f.userQuotaBytes)} per person (list shows used/quota), executables and text holding secrets refused, expiry ${f.defaultExpiryDays} days by default, at most ${f.maxExpiryDays}. ` +
+    `put: content or contentBase64, at most ${Math.floor(FILE_MCP_PUT_MAX_BYTES / 1024)} KB. Bigger: upload_link (name, put options) returns a url for one upload within ${UPLOAD_LINK_TTL_MINUTES} minutes: curl -X POST --data-binary @file "<url>". ` +
+    "Many small files: bundle into one tar or zip. to: shares it and sends that person a BAB message (your own id reaches your other machine). " +
+    "get: details, a one-hour download link (curl -fo <name> \"<url>\"), small text inline; check sha256. delete needs the user's yes."
+  );
+}
+
+async function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): Promise<string> {
   const action = str(args.action);
   if (!FILES_ACTIONS.includes(action as (typeof FILES_ACTIONS)[number])) {
-    throw new ValidationError("action must be one of put, get, list, delete, share; required, has no default");
+    throw new ValidationError("action must be one of put, upload_link, get, list, delete, share; required, has no default");
   }
   assertFilesEnabled();
+  assertFilesIdentity(actor);
   const origin = originOf(ctx);
   if (action === "list") return JSON.stringify(listFiles(actor.id));
+  if (action === "upload_link") {
+    const link = createUploadLink(
+      actor.id,
+      { name: args.name, expiresInDays: args.expiresInDays, shareWith: args.shareWith, orgVisible: args.orgVisible, to: args.to, subject: args.subject, note: args.note },
+      origin,
+      "mcp",
+    );
+    return JSON.stringify({ ...link, how: `curl -X POST --data-binary @<file> "${link.url}" (one upload; the answer is the stored file and its sha256; a refused upload needs a new link)` });
+  }
   if (action === "put") {
     const hasText = typeof args.content === "string";
     const hasB64 = typeof args.contentBase64 === "string";
@@ -559,7 +589,7 @@ function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     } else {
       bytes = Buffer.from(String(args.content), "utf8");
     }
-    const result = putFileBytes(
+    const result = await putFileBytes(
       {
         ownerId: actor.id,
         name: args.name,
@@ -1159,26 +1189,23 @@ export const TOOLS: Tool[] = [
     name: "bab_files",
     title: "Share files",
     annotations: { title: "Share files", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-    description:
-      "Passes files between sessions, your machines and colleagues. " +
-      FILES_CONTENT_RULE + " " +
-      "Yours only, unless you shareWith people or set orgVisible. Limits: 25 MB per file, 100 MB per person (list shows used/quota), executables refused, expiry 14 days by default, at most 30. " +
-      "put: content or contentBase64, small files only (about 700 KB); bigger: curl -X POST --data-binary @file \"<origin>/api/files?name=<name>\" with your identity headers. " +
-      "Many small files: bundle into one tar or zip. to: shares it and sends that person a BAB message (your own id reaches your other machine). " +
-      "get: details, a one-hour download link, small text inline; check sha256. delete needs the user's yes.",
+    // A getter: the limits come from config(), read when the tool list is served.
+    get description() {
+      return filesDescription();
+    },
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: [...FILES_ACTIONS], description: "Required, has no default." },
         id: { type: "string", description: "get, delete, share: the file id." },
-        name: { type: "string", description: "put: file name, no path." },
+        name: { type: "string", description: "put, upload_link: file name, no path." },
         content: { type: "string", description: "put: UTF-8 text." },
         contentBase64: { type: "string", description: "put: bytes, base64." },
-        expiresInDays: { type: "number", description: "put, share: days from now." },
-        shareWith: { type: "array", items: { type: "string" }, description: "put, share: user ids." },
+        expiresInDays: { type: "number", description: "put, upload_link, share: days from now." },
+        shareWith: { type: "array", items: { type: "string" }, description: "put, upload_link, share: user ids." },
         unshare: { type: "array", items: { type: "string" }, description: "share: user ids." },
-        orgVisible: { type: "boolean", description: "put, share: everyone may fetch it." },
-        to: { type: "string", description: "put: user id to deliver to." },
+        orgVisible: { type: "boolean", description: "put, upload_link, share: everyone may fetch it. Only with the user's yes." },
+        to: { type: "string", description: "put, upload_link: user id to deliver to." },
         subject: { type: "string", description: "put with to: message subject." },
         note: { type: "string", description: "put with to: message text." },
         includeContent: { type: "boolean", description: "get: inline small text (default true)." },

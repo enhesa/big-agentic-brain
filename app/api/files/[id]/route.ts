@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
 import { createDownloadLink, deleteFile, fileView, updateFile } from "@/lib/files";
+import { requireFilesActor } from "@/lib/files-route";
 import { toApiError } from "@/lib/errors";
 import { publicOrigin } from "@/lib/origin";
 
@@ -10,13 +10,8 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 async function run(req: NextRequest, ctx: Ctx, method: string, fn: (actorId: string, id: string) => Promise<{ status: number; body: unknown }> | { status: number; body: unknown }) {
-  let user;
-  try {
-    user = await requireActorForApi();
-  } catch (e) {
-    if (e instanceof Response) return e;
-    throw e;
-  }
+  const user = await requireFilesActor(req);
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
   await auditRequest({ actor: user, method, path: `/api/files/${id}`, via: "mcp" });
   try {

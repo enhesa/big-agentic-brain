@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 51;
+export const CURRENT_VERSION = 52;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -332,6 +332,44 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(51);
     appliedVersion = 51;
   }
+  if (appliedVersion < 52) {
+    runMigrationV52(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(52);
+    appliedVersion = 52;
+  }
+}
+
+function runMigrationV52(database: DatabaseSync) {
+  // Upload links (lib/files.ts createUploadLink): a single-use URL an agent uploads to with plain curl,
+  // so no credential goes on a command line. Everything about the file is fixed when the link is made;
+  // only the sha256 of the token is stored. used_at is set the moment an upload starts.
+  // device_bind_notices (lib/devices.ts): a new device was connected as a person who already had
+  // another device or a linked browser; their sessions hear about it (app/api/hook/route.ts).
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS file_upload_links (
+      token_hash TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      expires_in_days INTEGER NOT NULL,
+      share_with TEXT NOT NULL DEFAULT '[]',
+      org_visible INTEGER NOT NULL DEFAULT 0,
+      to_id TEXT,
+      subject TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_upload_links_owner ON file_upload_links(owner_id, used_at, expires_at);
+    CREATE TABLE IF NOT EXISTS device_bind_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_device_bind_notices_user ON device_bind_notices(user_id, created_at);
+  `);
 }
 
 function runMigrationV51(database: DatabaseSync) {
