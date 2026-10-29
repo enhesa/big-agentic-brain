@@ -24,6 +24,7 @@ import { audit } from "@/lib/audit";
 import { isMaintainer, maintainerFeedbackNudge } from "@/lib/feedback";
 import { publicOrigin } from "@/lib/origin";
 import { commentedOwnMemories } from "@/lib/memory-comments";
+import { recentDeviceNotices } from "@/lib/devices";
 
 export const dynamic = "force-dynamic";
 
@@ -350,6 +351,7 @@ export async function POST(req: Request) {
       ...downvotedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...retiredNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...commentedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
+      ...newDeviceNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...due.lines,
       ...maintainerNudgeFor(owner),
       ...flaggedStandardsNudgeFor(owner, sessionId),
@@ -593,6 +595,39 @@ function commentedNudgeFor(ownerId: string, sessionId: string, origin: string): 
     (c) =>
       `BAB: a colleague commented on your memory "${capTitle(c.title).replace(/"/g, "'")}" (${origin}/memory/${c.id}#comments). ` +
       "Tell the user; read it there if it matters to this task.",
+  );
+}
+
+/** At most this many new-device lines in one prompt. */
+const DEVICE_NUDGE_MAX = 3;
+
+/**
+ * New-device notice (lib/devices.ts noteNewDevice): a device was connected as this person while they
+ * already had another device or a linked browser. Dedup is per SESSION, not per owner: the new device's
+ * own session may be the first to ask, and the person's other sessions must still hear it. Only the
+ * cleaned device label, the time and the devices page: this route is unauthenticated. Model-only.
+ */
+function newDeviceNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
+  const notices = recentDeviceNotices(ownerId);
+  if (notices.length === 0) return [];
+  const db = getDb();
+  const told = new Set(
+    (
+      db
+        .prepare("SELECT learning_id AS key FROM session_learning_deliveries WHERE session_id = ? AND learning_id LIKE 'device:%'")
+        .all(sessionId) as Array<{ key: string }>
+    ).map((r) => r.key),
+  );
+  const fresh = notices
+    .map((n) => ({ ...n, key: `device:${n.id}` }))
+    .filter((n) => !told.has(n.key))
+    .slice(0, DEVICE_NUDGE_MAX);
+  const record = db.prepare("INSERT OR IGNORE INTO session_learning_deliveries (session_id, learning_id) VALUES (?, ?)");
+  for (const n of fresh) record.run(sessionId, n.key);
+  return fresh.map(
+    (n) =>
+      `BAB: a new device "${n.label.replace(/"/g, "'")}" was connected as you at ${new Date(n.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC. ` +
+      `Tell the user. If it was not them, they forget it on ${origin}/me/devices.`,
   );
 }
 

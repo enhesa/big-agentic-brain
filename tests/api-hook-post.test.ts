@@ -1561,6 +1561,53 @@ describe("prompt auto-retrieval (#28)", () => {
  * title and the link, at most once per memory per day, across your sessions. Model-only, and who
  * commented and what they wrote stay behind the link.
  */
+describe("new-device notice (POST /api/hook)", () => {
+  const ORIGIN = "https://bab.example.com";
+  const hex = (c: string) => c.repeat(64);
+
+  async function identifyAs(email: string, secretChar: string, label: string) {
+    const { identify } = await import("../lib/identify");
+    const { hashSecret } = await import("../lib/devices");
+    return identify({ email, name: "Alice Example" }, { deviceHash: hashSecret(hex(secretChar)), deviceLabel: label, connectionId: null, ip: null });
+  }
+
+  function deviceLines(out: { hookSpecificOutput?: { additionalContext?: string } }): string[] {
+    return (out.hookSpecificOutput?.additionalContext ?? "").split(/\r?\n/).filter((l) => l.startsWith("BAB: a new device"));
+  }
+
+  async function prompt(sessionId: string) {
+    return (await post({ hook_event_name: "UserPromptSubmit", session_id: sessionId })).json();
+  }
+
+  it("tells every session of a person once when a second device is connected as them", async () => {
+    await linkSession("sess-dev-1", ME);
+    await linkSession("sess-dev-2", ME);
+    await identifyAs(ME, "a", "Linux laptop-1");
+    // The first device of a person with nothing else is not news.
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+    // The same device identifying again is not news either.
+    await identifyAs(ME, "a", "Linux laptop-1");
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+
+    await identifyAs(ME, "b", "MINGW64 stranger-pc");
+    const first = deviceLines(await prompt("sess-dev-1"));
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatch(/^BAB: a new device "MINGW64 stranger-pc" was connected as you at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\. /);
+    expect(first[0]).toContain(`${ORIGIN}/me/devices`);
+    // Once per session, and every other session still hears it.
+    expect(deviceLines(await prompt("sess-dev-1"))).toEqual([]);
+    expect(deviceLines(await prompt("sess-dev-2"))).toHaveLength(1);
+  });
+
+  it("tells a person with a linked browser about their first device", async () => {
+    await linkSession("sess-dev-3", ME);
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("INSERT INTO proxy_links (proxy_user_id, user_id) VALUES (?, ?)").run("sso-alice", ME);
+    await identifyAs(ME, "c", "Darwin mac-1");
+    expect(deviceLines(await prompt("sess-dev-3"))).toHaveLength(1);
+  });
+});
+
 describe("commented-memory nudge (POST /api/hook)", () => {
   const OTHER = "carl.example@example.com";
   const ORIGIN = "https://bab.example.com";

@@ -248,6 +248,40 @@ export function revokeStaleDevices(maxAgeDays: number = config().retention.stale
   return n;
 }
 
+/** How long a person's sessions hear about a newly connected device. */
+export const DEVICE_NOTICE_DAYS = 7;
+
+/**
+ * Records that a device was newly connected as `userId` when that person already had another live
+ * device or a linked browser, so their sessions hear about it (app/api/hook/route.ts). The first
+ * device of a person with nothing else is not recorded: there is nobody else to tell. Returns true
+ * when a notice was recorded. Called by bab_identify only for a new binding (a brand new device, or
+ * one that was someone else's), never for the same device identifying again.
+ */
+export function noteNewDevice(userId: string, deviceId: string, label: string): boolean {
+  const db = getDb();
+  const otherDevice = db.prepare("SELECT 1 FROM devices WHERE user_id = ? AND id != ? AND revoked_at IS NULL LIMIT 1").get(userId, deviceId);
+  const browser = db.prepare("SELECT 1 FROM proxy_links WHERE user_id = ? LIMIT 1").get(userId);
+  if (!otherDevice && !browser) return false;
+  db.prepare("INSERT INTO device_bind_notices (user_id, device_id, label, created_at) VALUES (?, ?, ?, ?)").run(userId, deviceId, label, clock());
+  return true;
+}
+
+export interface DeviceNotice {
+  id: number;
+  label: string;
+  createdAt: number;
+}
+
+/** Device notices for this person from the last DEVICE_NOTICE_DAYS days, newest first. */
+export function recentDeviceNotices(userId: string, now: number = clock()): DeviceNotice[] {
+  return (
+    getDb()
+      .prepare("SELECT id, label, created_at FROM device_bind_notices WHERE user_id = ? AND created_at > ? ORDER BY created_at DESC, id DESC LIMIT 20")
+      .all(userId, now - DEVICE_NOTICE_DAYS * DAY_MS) as { id: number; label: string; created_at: number }[]
+  ).map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at }));
+}
+
 /** Test-only: inject a fake clock. Reset by passing nothing. */
 export function _setDeviceClockForTests(fn?: () => number): void {
   clock = fn ?? (() => Date.now());
