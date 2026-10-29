@@ -143,7 +143,7 @@ describe("/docs", () => {
     const html = await render();
     expect(html).toContain("Four skills");
     expect(html).toContain("Three hooks");
-    expect(html).toContain("Ten tools");
+    expect(html).toContain("Eleven tools");
     expect(html).toContain("four with ?tools=lean");
     expect(html).not.toMatch(/listen\.mjs|hook\.mjs|guard\.mjs/);
     // The old install, with its curl hooks and permission rules, is not what the card draws any more.
@@ -169,10 +169,10 @@ describe("/docs", () => {
   });
 
   it("counts the tools the way the code does", async () => {
-    // The card says ten tools. Add or remove one in lib/mcp.ts and this fails, so the card, and
+    // The card says eleven tools. Add or remove one in lib/mcp.ts and this fails, so the card, and
     // its list of what the tools do, get a look in the same change.
     const { TOOLS } = await import("../lib/mcp");
-    expect(TOOLS).toHaveLength(10);
+    expect(TOOLS).toHaveLength(11);
   });
 
   // The whole complaint that produced this page was that it read like an essay.

@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 50;
+export const CURRENT_VERSION = 51;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -327,6 +327,50 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(50);
     appliedVersion = 50;
   }
+  if (appliedVersion < 51) {
+    runMigrationV51(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(51);
+    appliedVersion = 51;
+  }
+}
+
+function runMigrationV51(database: DatabaseSync) {
+  // The file store (lib/files.ts, docs/files.md). The bytes live on disk under DATA_DIR/files, named
+  // by id only; these rows hold what BAB knows about them. removed_at is set once the bytes are gone
+  // (delete or expiry): a file counts towards its owner's quota until then. file_shares lists who
+  // else may fetch it; org_visible opens it to every BAB user. file_links holds short-lived download
+  // links by the sha256 of their token, never the token itself.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS files (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL,
+      org_visible INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      deleted_at TEXT,
+      removed_at TEXT,
+      FOREIGN KEY (owner_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id, removed_at);
+    CREATE INDEX IF NOT EXISTS idx_files_expiry ON files(removed_at, expires_at);
+    CREATE TABLE IF NOT EXISTS file_shares (
+      file_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (file_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_shares_user ON file_shares(user_id);
+    CREATE TABLE IF NOT EXISTS file_links (
+      token_hash TEXT PRIMARY KEY,
+      file_id TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_links_file ON file_links(file_id);
+  `);
 }
 
 function runMigrationV50(database: DatabaseSync) {

@@ -54,7 +54,7 @@ describe("lean tool list", () => {
 
   it("the default list is unchanged: all ten tools", async () => {
     const all = names(await rpc("tools/list", {}));
-    expect(all).toHaveLength(10);
+    expect(all).toHaveLength(11);
     expect(all).toEqual(expect.arrayContaining(["bab_inbox", "bab_send", "bab_remind", "bab_feedback", "bab_identify", "bab_link_session"]));
     expect(names(await rpc("tools/list", {}, "?tools=full"))).toEqual(all);
   });
@@ -93,7 +93,7 @@ describe("lean tool list", () => {
     expect(out.result.content[0].text).toContain("bab_identify");
     expect(out.result.content[0].text).not.toContain("tools=full");
     expect(names(await rpc("tools/list", {}, "?tools=LEAN"))).toHaveLength(4);
-    expect(names(await rpc("tools/list", {}, "?tools=Full"))).toHaveLength(10);
+    expect(names(await rpc("tools/list", {}, "?tools=Full"))).toHaveLength(11);
   });
 
   it("lean instructions are short, drop the hidden tools and keep the safety rules", async () => {
@@ -113,7 +113,7 @@ describe("lean tool list", () => {
     process.env.BAB_MCP_TOOLS = "lean";
     (await import("../lib/config"))._resetConfigForTests();
     expect(names(await rpc("tools/list", {}))).toHaveLength(4);
-    expect(names(await rpc("tools/list", {}, "?tools=full"))).toHaveLength(10);
+    expect(names(await rpc("tools/list", {}, "?tools=full"))).toHaveLength(11);
   });
 
   it("BAB_MCP_TOOLS rejects a value other than full or lean", async () => {
@@ -139,5 +139,6 @@ describe("tool description size", () => {
   });
 });
 
-const CEILING_FULL = 20000;
+// 20000 until bab_files (2026-10-28), the eleventh tool, added about 1600 characters.
+const CEILING_FULL = 21800;
 const CEILING_LEAN = 11200;

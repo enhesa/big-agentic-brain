@@ -18,6 +18,8 @@ export const PUBLIC_PATHS = [
   "/sw.js",
   // browser EventSource cannot send Authorization; payload is public by design, per-IP capped
   "/api/events",
+  // Short-lived file download links: the 256-bit token in the path is the credential (lib/files.ts createDownloadLink).
+  "/api/files/dl/",
 ];
 
 /** Exact match, or prefix match for entries that end with "/". */

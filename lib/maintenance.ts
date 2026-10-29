@@ -9,6 +9,7 @@ import { INACTIVITY_ARCHIVE_DAYS, INACTIVITY_CLOCK_START } from "./learnings";
 import { maybeSnapshotBackup } from "./backup";
 import { revokeStaleDevices } from "./devices";
 import { expireStaleConnections } from "./mcp-connections";
+import { purgeRemovable as purgeRemovableFiles } from "./files";
 
 /** How long an idempotency-replay row is kept (matches TTL_MS in lib/idempotency.ts). */
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -71,6 +72,8 @@ export interface MaintenanceResult {
   devicesExpired: number;
   /** MCP connections (Mcp-Session-Id) deleted because they were not seen for 7 days. */
   connectionsExpired: number;
+  /** Stored files whose bytes were removed because they expired or were deleted (lib/files.ts). */
+  filesPurged: number;
 }
 
 type Db = ReturnType<typeof getDb>;
@@ -472,6 +475,7 @@ export function runMaintenance(force = false): MaintenanceResult | null {
     const sessionNudgesPurged = step("sweepStaleNudges", () => sweepStaleNudges(db), 0);
     const devicesExpired = step("revokeStaleDevices", () => revokeStaleDevices(), 0);
     const connectionsExpired = step("expireStaleConnections", () => expireStaleConnections(), 0);
+    const filesPurged = step("purgeRemovableFiles", () => purgeRemovableFiles(), 0);
 
     db.exec("PRAGMA optimize;");
 
@@ -493,6 +497,7 @@ export function runMaintenance(force = false): MaintenanceResult | null {
       sessionNudgesPurged,
       devicesExpired,
       connectionsExpired,
+      filesPurged,
     };
   } catch (err) {
     console.error("runMaintenance failed", err);

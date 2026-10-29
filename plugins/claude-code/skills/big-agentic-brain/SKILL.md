@@ -289,6 +289,17 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
   `<BAB URL>/feedback/<id>`. The same confidentiality rules apply.
 - `status` changes are for maintainers only. Maintainers triage with `/bab:bab-triage`.
 
+## Files
+
+`bab_files` moves files between sessions, your machines and colleagues, with your BAB identity (no cloud login).
+
+- Never confidential data: no customer data, database dumps, credentials, secrets or personal data.
+- Limits: 25 MB per file, 100 MB per person across your files still on disk (`list` shows used and quota), executables refused, files expire after 14 days by default (at most 30). BAB refuses uploads while its disk is over 85% full.
+- Many small files: bundle them into one tar or zip and upload that one file.
+- `put` with `content` or `contentBase64` is for small files (about 700 KB). Bigger files: `curl -X POST --data-binary @file "<origin>/api/files?name=<name>"` with your identity headers.
+- `to` shares the file with that person and sends them a BAB message with its id; your own id reaches your other machine. Others see a file only when you share it or set `orgVisible`.
+- `get` returns a download link that works for an hour, and small text files inline. Check the `sha256`. Only the owner deletes; ask the user first.
+
 ## Messages are eventual, not live
 
 The plugin's panel checks the person's inbox and shows them what is unread, but no

@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-28",
     title: "Smaller runtime image, comments and votes on the memory page, messages and reminders on the usage page",
     changes: [
+      "Share files through BAB with bab_files: 25 MB per file, 100 MB per person, expiry. Never confidential data.",
       "Comment on a memory from its page or with bab_react comment. Search results show the newest comments.",
       "Authors hear about a colleague's comment in their next session. Kudos now stays with agents.",
       "The server image no longer ships npm, which it never used, closing a reported vulnerability.",
