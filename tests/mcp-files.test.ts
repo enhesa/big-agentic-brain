@@ -9,7 +9,7 @@ let dataDir: string;
 const OWNER = "owner.one@example.com";
 const OTHER = "other.two@example.com";
 const ctx = { origin: "https://bab.example.com" };
-// The file store needs a proven identity (lib/files.ts assertFilesIdentity): these callers come from bound devices.
+// The file store refuses header-only identities (lib/files.ts assertFilesIdentity): these callers come from bound devices.
 const me: SessionUser = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" };
 const them: SessionUser = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" };
 
@@ -88,7 +88,7 @@ describe("bab_files", () => {
   it("enforces the inline put limit and points to the REST upload", async () => {
     const run = await tool();
     const { FILE_MCP_PUT_MAX_BYTES } = await import("../lib/files");
-    await expect(run(me, { action: "put", name: "big.txt", content: "a".repeat(FILE_MCP_PUT_MAX_BYTES + 1) })).rejects.toThrow(/curl -X POST --data-binary/);
+    await expect(run(me, { action: "put", name: "big.txt", content: "a".repeat(FILE_MCP_PUT_MAX_BYTES + 1) })).rejects.toThrow(/upload_link/);
     expect((await run(me, { action: "put", name: "ok.txt", content: "a".repeat(1000) })).file.size).toBe(1000);
   });
 
@@ -102,8 +102,8 @@ describe("bab_files", () => {
 
   it("refuses callers identified only by headers or a connection", async () => {
     const run = await tool();
-    await expect(run({ ...me, source: "declared" }, { action: "list" })).rejects.toThrow(/proven identity/);
-    await expect(run({ ...me, source: "connection" }, { action: "list" })).rejects.toThrow(/proven identity/);
+    await expect(run({ ...me, source: "declared" }, { action: "list" })).rejects.toThrow(/identity BAB remembers or checks/);
+    await expect(run({ ...me, source: "connection" }, { action: "list" })).rejects.toThrow(/identity BAB remembers or checks/);
     expect((await run({ ...me, source: "declared", tokenBound: true }, { action: "list" })).files).toEqual([]);
   });
 

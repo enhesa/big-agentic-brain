@@ -78,19 +78,32 @@ const PACKAGE_MANIFESTS = new Set(["androidmanifest.xml", "appxmanifest.xml", "a
  * Reads only the end of the file, the central directory and that one small entry, so bytes put in
  * front of the zip (a self-extracting stub) do not hide it. A manifest it cannot read counts as
  * runnable. A zip whose directory it cannot read at all (zip64, a directory over 4 MB) is not refused.
+ * Every end-of-directory record in the last 64 KB is tried (at most ZIP_END_CANDIDATES), not only the
+ * last one, so a fake record hidden in the zip comment cannot point the check at a harmless directory.
  */
 function zipProgramKind(filePath: string, size: number): string | null {
   if (size < 22) return null;
   const tailLen = Math.min(size, 22 + 0xffff);
   const tail = readRange(filePath, size - tailLen, tailLen);
-  let end = -1;
-  for (let i = tail.length - 22; i >= 0; i--) {
-    if (tail.readUInt32LE(i) === ZIP_END) {
-      end = i;
-      break;
+  let tried = 0;
+  for (let i = tail.length - 22; i >= 0 && tried < ZIP_END_CANDIDATES; i--) {
+    if (tail.readUInt32LE(i) !== ZIP_END) continue;
+    tried += 1;
+    let kind: string | null = null;
+    try {
+      kind = directoryProgramKind(filePath, size, tail, tailLen, i);
+    } catch {
+      kind = null;
     }
+    if (kind) return kind;
   }
-  if (end < 0) return null;
+  return null;
+}
+
+const ZIP_END_CANDIDATES = 16;
+
+/** zipProgramKind for one end-of-directory record at `end` in `tail`. */
+function directoryProgramKind(filePath: string, size: number, tail: Buffer, tailLen: number, end: number): string | null {
   const cdSize = tail.readUInt32LE(end + 12);
   const cdOffset = tail.readUInt32LE(end + 16);
   if (cdSize === 0xffffffff || cdOffset === 0xffffffff || cdSize > ZIP_CENTRAL_MAX) return null;

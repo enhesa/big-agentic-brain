@@ -535,11 +535,11 @@ describe("migration", () => {
   it("creates the file tables when a database is rewound to v50", async () => {
     const { getDb, closeDb } = await import("../lib/db");
     const db = getDb();
-    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DELETE FROM migrations WHERE version = 51;");
+    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DROP TABLE file_upload_links; DROP TABLE device_bind_notices; DELETE FROM migrations WHERE version IN (51, 52);");
     closeDb();
     vi.resetModules();
     const again = await import("../lib/db");
     const tables = (again.getDb().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'file%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
-    expect(tables).toEqual(["file_links", "file_shares", "files"]);
+    expect(tables).toEqual(["file_links", "file_shares", "file_upload_links", "files"]);
   });
 });

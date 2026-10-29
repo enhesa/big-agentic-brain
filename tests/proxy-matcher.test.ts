@@ -7,8 +7,11 @@ import { config } from "../proxy";
 describe("proxy matcher", () => {
   const matches = (url: string) => unstable_doesMiddlewareMatch({ config, url });
 
-  it("skips /api/files itself and nothing else under /api", () => {
+  it("skips /api/files and upload links, and nothing else under /api", () => {
     expect(matches("/api/files")).toBe(false);
-    for (const p of ["/api", "/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/learnings", "/api/filesx", "/mcp"]) expect(matches(p), p).toBe(true);
+    expect(matches("/api/files/up/abc")).toBe(false);
+    for (const p of ["/api", "/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/files/upload", "/api/files/upx", "/api/learnings", "/api/filesx", "/mcp"]) {
+      expect(matches(p), p).toBe(true);
+    }
   });
 });

@@ -366,13 +366,11 @@ curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"colleague@example.com","sub
 curl -s "{{ORIGIN}}/api/inbox/<threadId>" $H                                       # read one thread; marks it read for you before returning
 
 # Files (never confidential data; {{FILES_LIMITS}}). Executables and text holding secrets are refused.
-# Files need a proven identity, not the headers in $H: the plugin's X-Bab-Device header (the device-secret file in the BAB plugin's data folder) or a token bound to you.
-F='-H "X-Bab-Device: <device secret>"'   # or: F='-H "Authorization: Bearer <your token>"'
-curl -X POST --data-binary @report.tar.gz "{{ORIGIN}}/api/files?name=report.tar.gz&to=colleague@example.com" $F   # put; to= shares it and sends them a BAB message; bundle many small files into one tar or zip first
-curl -s "{{ORIGIN}}/api/files" $F                                   # my files, files shared with me, usage (used / quota)
-curl -s "{{ORIGIN}}/api/files/<id>/content" $F -o report.tar.gz     # get; compare sha256 with the X-Bab-File-Sha256 header
-curl -X PATCH "{{ORIGIN}}/api/files/<id>" $F -d '{"shareWith":["colleague@example.com"],"expiresInDays":3}'   # owner only; orgVisible:true opens it to everyone, only with the user's yes
-curl -X DELETE "{{ORIGIN}}/api/files/<id>" $F                       # owner only, with the user's yes; frees the quota at once
+# Files go through the bab_files tool: the headers in $H alone are refused, and a device secret never goes on a command line.
+# put (small), list, share, delete: bab_files. Bigger files: bab_files action=upload_link name=report.tar.gz to=colleague@example.com returns a url, then:
+curl -X POST --data-binary @report.tar.gz "<upload link url>"      # one upload within 15 minutes, no headers; a refused upload needs a new link; bundle many small files into one tar or zip first
+curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for an hour, no headers; compare the sha256 bab_files gave you
+# orgVisible:true opens a file to everyone: only with the user's yes. delete: owner only, with the user's yes.
 
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H

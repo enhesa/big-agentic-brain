@@ -6,8 +6,9 @@
  * - A file belongs to its uploader. Only the owner deletes, shares or changes it.
  * - Others fetch it only when the owner shared it with them or made it visible to the whole org.
  *   A file someone may not see answers "not found", never "forbidden", so ids cannot be probed.
- * - Only a caller whose identity is proven may use it: a bound device, the sign-in proxy or a token
- *   bound to that person (assertFilesIdentity). Header-declared identities are refused.
+ * - Only a caller whose identity BAB remembers or checks may use it: a bound device, the sign-in proxy
+ *   or a token bound to that person (assertFilesIdentity). Header-declared identities are refused. A
+ *   device is still the person's own word from bab_identify, remembered: not proof of who they are.
  * - Caps: BAB_FILES_MAX_FILE_BYTES per file, BAB_FILES_USER_QUOTA_BYTES per owner across their files
  *   still on disk, and no uploads while the volume is fuller than BAB_FILES_DISK_FULL_PERCENT or its
  *   free space would drop under the floor that keeps SQLite and its snapshot safe (diskFloorBytes).
@@ -62,8 +63,14 @@ export const FILE_SHARES_MAX = 50;
 export const FILE_NOTE_MAX = 2000;
 /** Largest file a bab_files get returns inline as text. */
 export const FILE_INLINE_MAX_BYTES = 256 * 1024;
-/** Largest file a bab_files put takes inline: an MCP call is limited to 1 MB, and base64 adds a third. */
-export const FILE_MCP_PUT_MAX_BYTES = 700 * 1024;
+/**
+ * Largest file a bab_files put takes inline. An MCP call is limited to 1 MB (BAB_MAX_BODY_BYTES), and
+ * base64 adds a third and JSON escaping of text can add more; bigger files go through an upload link.
+ */
+export const FILE_MCP_PUT_MAX_BYTES = 256 * 1024;
+/** How long an upload link works, and how many unused ones one person may hold. */
+export const UPLOAD_LINK_TTL_MINUTES = 15;
+export const UPLOAD_LINKS_PER_OWNER = 20;
 
 /** What every caller is told about content. Shown in the tool description and the docs. */
 export const FILES_CONTENT_RULE =
@@ -93,8 +100,8 @@ export function assertFilesIdentity(caller: FilesCaller): void {
   if (caller.source === "proxy" || caller.source === "device" || caller.tokenBound) return;
   if (config().files.allowDeclared) return;
   throw new ForbiddenError(
-    "The file store needs a proven identity: the BAB plugin's device, the sign-in proxy, or an API token bound to you. " +
-      "An identity sent only in headers, or said with bab_identify on a connection with no device, can name anyone, so it cannot reach files. " +
+    "The file store needs an identity BAB remembers or checks: the BAB plugin's device, the sign-in proxy, or an API token bound to you. " +
+      "An identity sent only in headers, or said with bab_identify on a connection with no device, is refused. " +
       "Install the BAB plugin, or ask a BAB maintainer for a token bound to you.",
   );
 }
@@ -379,6 +386,8 @@ interface PreparedPut {
   to: string | null;
   note: string;
   subject: string;
+  /** The verified client address, for the audit row. */
+  ip: string | null;
 }
 
 /** Everything that needs no bytes: name, type, recipient, caps from the declared size, disk. */
@@ -408,7 +417,7 @@ function preparePut(input: PutInput): PreparedPut {
   }
   // Every upload in progress, this one included, may still grow to the per-file cap.
   assertVolumeRoom(reservedBytes());
-  return { ownerId: input.ownerId, name, days, orgVisible, shares, to, note, subject };
+  return { ownerId: input.ownerId, name, days, orgVisible, shares, to, note, subject, ip: input.ip ?? null };
 }
 
 function tooLargeMessage(size?: number): string {
@@ -455,7 +464,7 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
         `INSERT INTO files (id, owner_id, name, size, sha256, org_visible, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, p.ownerId, p.name, staged.size, staged.sha256, p.orgVisible ? 1 : 0, createdAt, expiresAt);
       for (const s of shareIds) db.prepare("INSERT OR IGNORE INTO file_shares (file_id, user_id) VALUES (?, ?)").run(id, s);
-      audit(db, p.ownerId, "file_put", "file", id, via, { details: { size: staged.size, sha256: staged.sha256, expiresAt, orgVisible: p.orgVisible, shares: shareIds.length } });
+      audit(db, p.ownerId, "file_put", "file", id, via, { ip: p.ip, details: { size: staged.size, sha256: staged.sha256, expiresAt, orgVisible: p.orgVisible, shares: shareIds.length } });
     });
   } catch (err) {
     removeBlob(id);
@@ -483,6 +492,30 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
   return result;
 }
 
+/** Takes an upload slot for this owner (and verified address), or refuses. Pair with releaseSlot. */
+function takeSlot(ownerId: string, ip: string | null): void {
+  const mine = inFlight.get(ownerId) ?? 0;
+  const fromIp = ip ? (inFlightByIp.get(ip) ?? 0) : 0;
+  if (mine >= UPLOADS_IN_FLIGHT_PER_USER) throw new TooManyRequestsError(`Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`);
+  if (ip && fromIp >= UPLOADS_IN_FLIGHT_PER_IP) throw new TooManyRequestsError(`Too many uploads at once from this address (at most ${UPLOADS_IN_FLIGHT_PER_IP}): wait for one to finish`);
+  if (inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) throw new TooManyRequestsError("BAB is busy with other uploads: try again in a minute");
+  inFlight.set(ownerId, mine + 1);
+  if (ip) inFlightByIp.set(ip, fromIp + 1);
+  inFlightTotal += 1;
+}
+
+function releaseSlot(ownerId: string, ip: string | null): void {
+  inFlightTotal -= 1;
+  const left = (inFlight.get(ownerId) ?? 1) - 1;
+  if (left > 0) inFlight.set(ownerId, left);
+  else inFlight.delete(ownerId);
+  if (ip) {
+    const ipLeft = (inFlightByIp.get(ip) ?? 1) - 1;
+    if (ipLeft > 0) inFlightByIp.set(ip, ipLeft);
+    else inFlightByIp.delete(ip);
+  }
+}
+
 /**
  * Stores one file from a request body. Checks everything that needs no bytes first, then streams
  * the body to disk with the per-file cap enforced on the bytes themselves (Content-Length is only a
@@ -492,14 +525,7 @@ export async function putFile(input: PutInput, via: AuditVia, origin: string): P
   assertFilesEnabled();
   const ip = input.ip ?? null;
   // Take the slot first, so this upload's own reservation counts when preparePut checks the disk.
-  const mine = inFlight.get(input.ownerId) ?? 0;
-  const fromIp = ip ? (inFlightByIp.get(ip) ?? 0) : 0;
-  if (mine >= UPLOADS_IN_FLIGHT_PER_USER) throw new TooManyRequestsError(`Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`);
-  if (ip && fromIp >= UPLOADS_IN_FLIGHT_PER_IP) throw new TooManyRequestsError(`Too many uploads at once from this address (at most ${UPLOADS_IN_FLIGHT_PER_IP}): wait for one to finish`);
-  if (inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) throw new TooManyRequestsError("BAB is busy with other uploads: try again in a minute");
-  inFlight.set(input.ownerId, mine + 1);
-  if (ip) inFlightByIp.set(ip, fromIp + 1);
-  inFlightTotal += 1;
+  takeSlot(input.ownerId, ip);
   try {
     const p = preparePut(input);
     const f = config().files;
@@ -524,39 +550,131 @@ export async function putFile(input: PutInput, via: AuditVia, origin: string): P
     }
     return finishPut(p, staged, via, origin);
   } finally {
-    inFlightTotal -= 1;
-    const left = (inFlight.get(input.ownerId) ?? 1) - 1;
-    if (left > 0) inFlight.set(input.ownerId, left);
-    else inFlight.delete(input.ownerId);
-    if (ip) {
-      const ipLeft = (inFlightByIp.get(ip) ?? 1) - 1;
-      if (ipLeft > 0) inFlightByIp.set(ip, ipLeft);
-      else inFlightByIp.delete(ip);
-    }
+    releaseSlot(input.ownerId, ip);
   }
 }
 
-/** The same for bytes already in memory (the MCP tool). At most FILE_MCP_PUT_MAX_BYTES. */
+/** The same for bytes already in memory (the MCP tool). At most FILE_MCP_PUT_MAX_BYTES. Takes an upload slot too. */
 export async function putFileBytes(input: PutInput & { body: Uint8Array }, via: AuditVia, origin: string): Promise<PutResult> {
   assertFilesEnabled();
   const size = input.body.byteLength;
   if (size > FILE_MCP_PUT_MAX_BYTES) {
     throw new FileTooLargeError(
       `Too big for bab_files put: ${size} bytes, the limit is ${FILE_MCP_PUT_MAX_BYTES} bytes (${mb(FILE_MCP_PUT_MAX_BYTES)}). ` +
-        'Upload it with curl -X POST --data-binary @file "<origin>/api/files?name=<name>" instead.',
+        "Make an upload link with bab_files action=upload_link and send the file to it with curl.",
     );
   }
-  const p = preparePut({ ...input, declaredSize: size });
-  // preparePut counted the uploads in progress; this one is in memory and adds only its own size.
-  assertVolumeRoom(reservedBytes() + size);
-  let staged: StagedUpload;
+  const ip = input.ip ?? null;
+  takeSlot(input.ownerId, ip);
   try {
-    staged = await stageBuffer(input.body, config().files.maxFileBytes);
-  } catch (err) {
-    if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage(size));
-    throw err;
+    // preparePut reserves the per-file cap for this upload too, like every other upload in progress.
+    const p = preparePut({ ...input, declaredSize: size });
+    let staged: StagedUpload;
+    try {
+      staged = await stageBuffer(input.body, config().files.maxFileBytes);
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage(size));
+      throw err;
+    }
+    return finishPut(p, staged, via, origin);
+  } finally {
+    releaseSlot(input.ownerId, ip);
   }
-  return finishPut(p, staged, via, origin);
+}
+
+export interface UploadLinkInput {
+  name?: unknown;
+  expiresInDays?: unknown;
+  shareWith?: unknown;
+  orgVisible?: unknown;
+  to?: unknown;
+  subject?: unknown;
+  note?: unknown;
+}
+
+export interface UploadLinkResult {
+  /** POST the file's bytes here: curl -X POST --data-binary @file "<url>". Works once. */
+  url: string;
+  expiresAt: string;
+  name: string;
+}
+
+/**
+ * A single-use upload link for a file the caller will own. Everything about the file (name, expiry,
+ * shares, recipient, message) is fixed now and checked now; the link carries no identity of its own,
+ * so no credential ever goes on a command line. Only the sha256 of the token is stored.
+ */
+export function createUploadLink(ownerId: string, input: UploadLinkInput, origin: string, via: AuditVia): UploadLinkResult {
+  assertFilesEnabled();
+  const name = cleanFileName(input.name);
+  assertNotExecutableName(name);
+  const days = parseExpiryDays(input.expiresInDays);
+  const orgVisible = parseBool(input.orgVisible, "orgVisible") ?? false;
+  const shares = parseShareList(input.shareWith);
+  const to = input.to == null || input.to === "" ? null : String(input.to).trim().toLowerCase();
+  if (to && !getUser(to)) throw new ValidationError(`Unknown recipient ${to}: find people with bab_people`);
+  const note = input.note == null ? "" : String(input.note).trim();
+  if (note.length > FILE_NOTE_MAX) throw new ValidationError(`note must be ${FILE_NOTE_MAX} characters or fewer`);
+  const subject = input.subject == null ? "" : String(input.subject).trim();
+  const db = getDb();
+  const now = Date.now();
+  const iso = nowIso(now);
+  const open = db
+    .prepare("SELECT COUNT(*) AS n FROM file_upload_links WHERE owner_id = ? AND used_at IS NULL AND expires_at > ?")
+    .get(ownerId, iso) as unknown as { n: number };
+  if (Number(open.n) >= UPLOAD_LINKS_PER_OWNER) {
+    throw new TooManyRequestsError(`You have ${UPLOAD_LINKS_PER_OWNER} unused upload links: use them or wait ${UPLOAD_LINK_TTL_MINUTES} minutes for them to expire`);
+  }
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = nowIso(now + UPLOAD_LINK_TTL_MINUTES * 60 * 1000);
+  db.prepare(
+    `INSERT INTO file_upload_links (token_hash, owner_id, name, expires_in_days, share_with, org_visible, to_id, subject, note, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(hashToken(token), ownerId, name, days, JSON.stringify(shares), orgVisible ? 1 : 0, to, subject || null, note || null, iso, expiresAt);
+  audit(db, ownerId, "file_upload_link", "file", "-", via, { details: { name, expiresAt } });
+  return { url: `${origin}/api/files/up/${token}`, expiresAt, name };
+}
+
+interface UploadLinkRow {
+  owner_id: string;
+  name: string;
+  expires_in_days: number;
+  share_with: string;
+  org_visible: number;
+  to_id: string | null;
+  subject: string | null;
+  note: string | null;
+}
+
+/**
+ * Spends an upload link: marks it used in one statement, so two uploads racing on one link cannot both
+ * get it, and returns what the link fixed. Null for an unknown, used, expired or malformed token.
+ */
+export function consumeUploadLink(token: string): (UploadLinkInput & { ownerId: string; name: string }) | null {
+  if (!config().files.enabled) return null;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const db = getDb();
+  const iso = nowIso();
+  const hash = hashToken(token);
+  const res = db.prepare("UPDATE file_upload_links SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").run(iso, hash, iso);
+  if (Number(res.changes ?? 0) !== 1) return null;
+  const row = db.prepare("SELECT * FROM file_upload_links WHERE token_hash = ?").get(hash) as unknown as UploadLinkRow;
+  let shares: unknown = [];
+  try {
+    shares = JSON.parse(row.share_with);
+  } catch {
+    shares = [];
+  }
+  return {
+    ownerId: row.owner_id,
+    name: row.name,
+    expiresInDays: row.expires_in_days,
+    shareWith: shares,
+    orgVisible: !!row.org_visible,
+    to: row.to_id,
+    subject: row.subject,
+    note: row.note,
+  };
 }
 
 export interface FileListing {
@@ -675,6 +793,7 @@ export function purgeRemovable(now: number = Date.now(), limit = 500, ownerId?: 
   }
   if (!ownerId) {
     db.prepare("DELETE FROM file_links WHERE expires_at <= ?").run(iso);
+    db.prepare("DELETE FROM file_upload_links WHERE used_at IS NOT NULL OR expires_at <= ?").run(iso);
     sweepStaleTemps(now);
     dropRowsWithoutBytes(iso);
     const known = db.prepare("SELECT 1 FROM files WHERE id = ?");

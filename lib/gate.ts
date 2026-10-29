@@ -84,9 +84,14 @@ export function gate(req: Request): Response | null {
   const pathname = new URL(req.url).pathname.replace(/\/{2,}/g, "/");
   const length = Number(req.headers.get("content-length"));
   // /api/hook must always answer 200 {}: a hook failing loudly would break the agent session.
-  // A file upload (POST /api/files) has its own cap, the per-file size; lib/files.ts enforces it again on the bytes.
-  const maxBody = pathname === "/api/files" ? Math.max(c.network.maxBodyBytes, c.files.maxFileBytes) : c.network.maxBodyBytes;
-  if (pathname !== "/api/hook" && pathname !== "/api/hook/" && Number.isFinite(length) && length > maxBody) return json(413, "request body too large");
+  // A file upload (POST /api/files, or an upload link /api/files/up/<token>) has its own cap, the
+  // per-file size; lib/files.ts enforces it again on the bytes.
+  const upload = pathname === "/api/files" || pathname.startsWith("/api/files/up/");
+  const maxBody = upload ? Math.max(c.network.maxBodyBytes, c.files.maxFileBytes) : c.network.maxBodyBytes;
+  if (pathname !== "/api/hook" && pathname !== "/api/hook/" && Number.isFinite(length) && length > maxBody) {
+    // An MCP call this big is almost always a bab_files put: say how to send a big file instead.
+    return json(413, pathname === "/mcp" ? "request body too large: for a file, use bab_files action=upload_link and curl" : "request body too large");
+  }
 
   const gated = tokenModeOn();
   if (!gated) return null;

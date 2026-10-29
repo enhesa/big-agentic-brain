@@ -123,8 +123,8 @@ describe("identity rule", () => {
     expect(() => assertFilesIdentity({ source: "device" })).not.toThrow();
     expect(() => assertFilesIdentity({ source: "proxy" })).not.toThrow();
     expect(() => assertFilesIdentity({ source: "declared", tokenBound: true })).not.toThrow();
-    expect(() => assertFilesIdentity({ source: "declared" })).toThrow(/proven identity/);
-    expect(() => assertFilesIdentity({ source: "connection" })).toThrow(/proven identity/);
+    expect(() => assertFilesIdentity({ source: "declared" })).toThrow(/identity BAB remembers or checks/);
+    expect(() => assertFilesIdentity({ source: "connection" })).toThrow(/identity BAB remembers or checks/);
     try {
       assertFilesIdentity({ source: "declared" });
     } catch (e) {
@@ -245,6 +245,16 @@ describe("executables", () => {
     const apk = zip({ "AndroidManifest.xml": "<manifest/>" });
     const prefixed = new Uint8Array([...text('#!/bin/sh\nexec java -jar "$0"\n'), ...apk]);
     await expect(put(OWNER, "setup.dat", prefixed)).rejects.toThrow(/Android app/);
+  });
+
+  it("tries every end-of-directory record, so a fake one in the zip comment does not hide an app", async () => {
+    const apk = Buffer.from(zip({ "AndroidManifest.xml": "<manifest/>" }));
+    // A harmless directory of its own, then a fake end record pointing at it, all inside the comment.
+    const decoy = Buffer.from(zip({ "readme.md": "hi" }));
+    const comment = Buffer.concat([decoy]);
+    apk.writeUInt16LE(comment.length, apk.length - 2);
+    const crafted = new Uint8Array(Buffer.concat([apk, comment]));
+    await expect(put(OWNER, "game.zip", crafted)).rejects.toThrow(/Android app/);
   });
 
   it("treats a manifest that inflates past the cap as runnable", async () => {

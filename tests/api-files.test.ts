@@ -160,7 +160,7 @@ describe("identity rule", () => {
     as(OWNER, "Owner One");
     expect(await refusedEverywhere()).toEqual([403, 403, 403, 403, 403, 403]);
     const { GET } = await import("../app/api/files/route");
-    expect((await (await GET(new Request("http://x/api/files"))).json()).error).toMatch(/proven identity/);
+    expect((await (await GET(new Request("http://x/api/files"))).json()).error).toMatch(/identity BAB remembers or checks/);
   });
 
   it("serves a caller whose token is bound to them", async () => {
@@ -201,7 +201,7 @@ describe("download link audit", () => {
 describe("proxy", () => {
   it("leaves POST /api/files out of the request proxy, so Next never buffers an upload, and keeps every other API path in", async () => {
     const { config } = await import("../proxy");
-    expect(config.matcher).toEqual(["/api", "/api/((?!files$).*)", "/mcp"]);
+    expect(config.matcher).toEqual(["/api", "/api/((?!files$|files/up/).*)", "/mcp"]);
     // Next's own matcher logic runs in tests/proxy-matcher.test.ts.
   });
 
