@@ -16,7 +16,7 @@
  *   cannot overwrite them.
  * - Live keys are written to DATA_DIR/kv-snapshot.json every 30 seconds when something changed and on
  *   SIGTERM, and read back at start without the expired ones. A crash loses at most 30 seconds.
- * - Writes are audited (user, key, operation, result), never values. Reads are not.
+ * - Writes are audited (user, key, operation, result), never values. Reads get only the generic request row.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -25,6 +25,7 @@ import { getDb, resolveDataDir } from "./db";
 import { config } from "./config";
 import { audit } from "./audit";
 import { sensitiveKind } from "./file-checks";
+import { redact } from "./redact";
 import { assertBoundIdentity, type BoundCaller } from "./bound-identity";
 import { checkKvRateLimit, KV_RATE_LIMIT_BURST, KV_RATE_LIMIT_PER_MINUTE } from "./rate-limit";
 import { ApiError, ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from "./errors";
@@ -176,6 +177,10 @@ function checkName(name: string, what: string): void {
       throw new ValidationError(`${what} may hold only lowercase letters, digits, dots, underscores and hyphens, in segments joined by single slashes (no empty, . or .. segments)`);
     }
   }
+  // Keys show in shared lists and in the audit log: refuse one that redaction would change.
+  if (redact(name) !== name) {
+    throw new ValidationError(`${what} looks like it holds a secret or personal data, such as a long number or a token; name it by what it is for, such as pr/1234 or build/lock`);
+  }
 }
 
 export interface ResolvedKey {
@@ -207,6 +212,8 @@ function sharedNamespaceRefusal(ns: string): ForbiddenError {
 function splitKey(actorId: string, raw: unknown, prefix: boolean): { namespace: string; bucket: string; own: boolean; rest: string } {
   if (raw != null && typeof raw !== "string") throw new ValidationError(`${prefix ? "prefix" : "key"} must be a string`);
   const text = raw ?? "";
+  // An id with a slash would make u/<id>/ a prefix of someone else's keys (u/a@x.com/s/ inside u/a@x.com/).
+  if (actorId.includes("/") || !actorId) throw new ForbiddenError("The key-value store cannot serve an identity that contains a slash");
   const ownNs = `u/${actorId}/`;
   if (text === "u" || text.startsWith("u/")) {
     // u/ alone, or u/<id> without the slash, as a list prefix: the caller's own space if it is theirs.

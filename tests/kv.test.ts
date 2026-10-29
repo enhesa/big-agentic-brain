@@ -76,6 +76,29 @@ describe("keys and namespaces", () => {
     expect(() => kv.resolveKey(ME.id, 42)).toThrow(/must be a string/);
   });
 
+  it("refuses an identity with a slash, so one person's space is never a prefix of another's", () => {
+    const sneaky = "owner.one@example.com/secret";
+    for (const call of [() => kv.resolveKey(sneaky, "k"), () => kv.resolvePrefix(sneaky, ""), () => kv.kvGet({ id: sneaky }, "k"), () => kv.kvList({ id: sneaky }, "")]) {
+      try {
+        call();
+        throw new Error("no throw");
+      } catch (e) {
+        expect((e as { status?: number }).status).toBe(403);
+        expect((e as Error).message).toMatch(/contains a slash/);
+      }
+    }
+    kv.kvSet(ME, { key: "secret/k", value: "mine", ttlSeconds: 30 }, "mcp");
+    expect(() => kv.kvGet({ id: sneaky }, "k")).toThrow(/contains a slash/);
+  });
+
+  it("refuses keys that redaction would change, and keeps ordinary ones", () => {
+    for (const k of ["pr/1234", "repo-a/build-98765", "sha/3f9c2ab", "shared/bitbucket-push/repo.app/pull-requests", "deploy/2026-10-29"]) {
+      expect(() => kv.resolveKey(ME.id, k), k).not.toThrow();
+    }
+    expect(() => kv.resolveKey(ME.id, "card/4111111111111111")).toThrow(/looks like it holds a secret or personal data/);
+    expect(() => kv.resolvePrefix(ME.id, "card/4111111111111111")).toThrow(/looks like it holds a secret or personal data/);
+  });
+
   it("caps a key at 200 characters after the namespace", () => {
     expect(kv.resolveKey(ME.id, "a".repeat(200)).key).toHaveLength(`u/${ME.id}/`.length + 200);
     expect(() => kv.resolveKey(ME.id, "a".repeat(201))).toThrow(/200 characters/);

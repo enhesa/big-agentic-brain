@@ -12,7 +12,7 @@ The store is not storage. Every key has a time-to-live, and a crash can lose the
 
 ## Keys and namespaces
 
-A key is lowercase letters, digits, `.`, `_`, `-` and `/`, at most 200 characters after its namespace, with no empty, `.` or `..` segments. Keys are taken exactly as given: BAB does not lowercase or decode them, so `U/...`, `%2e%2e` or `shared/Build/...` are refused, never mapped somewhere else.
+A key is lowercase letters, digits, `.`, `_`, `-` and `/`, at most 200 characters after its namespace, with no empty, `.` or `..` segments. A key that redaction would change (a token, a long number such as a card or phone number) is refused: keys show in shared lists and in the audit log. An identity that contains a slash cannot use the store, so one person's space can never be a prefix of another's. Keys are taken exactly as given: BAB does not lowercase or decode them, so `U/...`, `%2e%2e` or `shared/Build/...` are refused, never mapped somewhere else.
 
 - `u/<your id>/...` is yours alone. Nobody else can read, list or change it. A key with no namespace goes there: `build/lock` means `u/<your id>/build/lock`.
 - `shared/<name>/...` is open to everyone with a BAB identity, but only for the names in `BAB_KV_SHARED_NAMESPACES` (default `bitbucket-push`). Any other `shared/` name is refused.
@@ -91,4 +91,4 @@ A crash loses at most the last 30 seconds of writes. Every key has a TTL, so loc
 
 ## Audit
 
-Every `set`, `cas`, `incr`, `delete`, `throttle`, `lock`, `unlock` and `renew` writes an audit row (`kv_set`, `kv_lock`, ...) with the person, the key and the result, such as `set`, `exists`, `swapped`, `mismatch`, `acquired`, `held` or `token_mismatch`. Values and tokens are never written to the audit log. Reads are not audited one by one.
+Every `set`, `cas`, `incr`, `delete`, `throttle`, `lock`, `unlock` and `renew` writes an audit row (`kv_set`, `kv_lock`, ...) with the person, the key and the result, such as `set`, `exists`, `swapped`, `mismatch`, `acquired`, `held` or `token_mismatch`. Values and tokens are never written to the audit log. Reads write no `kv_` row; like every API call, a REST read is recorded only as a request (method and path).
