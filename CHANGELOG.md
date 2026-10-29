@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.15.1](https://github.com/enhesa/big-agentic-brain/compare/v2.15.0...v2.15.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **files:** tell a connection-only caller to link its device with bab_identify ([#95](https://github.com/enhesa/big-agentic-brain/issues/95)) ([d1216ae](https://github.com/enhesa/big-agentic-brain/commit/d1216aea6b3204fffca90c7302e21781ec60a782))
+* **usage:** name the memory columns and show messages and conversations to everyone ([6373f61](https://github.com/enhesa/big-agentic-brain/commit/6373f61ab050fb78aad647aa1f6bb208ad478a6c))
+
 ## [2.15.0](https://github.com/enhesa/big-agentic-brain/compare/v2.14.0...v2.15.0) (2026-10-29)
 
 
