@@ -78,17 +78,19 @@ const PACKAGE_MANIFESTS = new Set(["androidmanifest.xml", "appxmanifest.xml", "a
  * Reads only the end of the file, the central directory and that one small entry, so bytes put in
  * front of the zip (a self-extracting stub) do not hide it. A manifest it cannot read counts as
  * runnable. A zip whose directory it cannot read at all (zip64, a directory over 4 MB) is not refused.
- * Every end-of-directory record in the last 64 KB is tried (at most ZIP_END_CANDIDATES), not only the
+ * Every end-of-directory record in the last 64 KB is tried (more than ZIP_END_CANDIDATES is refused), not only the
  * last one, so a fake record hidden in the zip comment cannot point the check at a harmless directory.
  */
 function zipProgramKind(filePath: string, size: number): string | null {
   if (size < 22) return null;
   const tailLen = Math.min(size, 22 + 0xffff);
   const tail = readRange(filePath, size - tailLen, tailLen);
-  let tried = 0;
-  for (let i = tail.length - 22; i >= 0 && tried < ZIP_END_CANDIDATES; i--) {
-    if (tail.readUInt32LE(i) !== ZIP_END) continue;
-    tried += 1;
+  const candidates: number[] = [];
+  for (let i = tail.length - 22; i >= 0; i--) if (tail.readUInt32LE(i) === ZIP_END) candidates.push(i);
+  // A real zip has one such record at its end. Many of them are made to hide the real one behind
+  // decoys: refuse rather than read a directory for each.
+  if (candidates.length > ZIP_END_CANDIDATES) return "an archive BAB cannot check";
+  for (const i of candidates) {
     let kind: string | null = null;
     try {
       kind = directoryProgramKind(filePath, size, tail, tailLen, i);

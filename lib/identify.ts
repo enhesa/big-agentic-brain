@@ -195,10 +195,10 @@ export function identify(args: { email?: unknown; name?: unknown }, ctx: Identif
     if (bound.previousUserId && bound.previousUserId !== email) {
       audit(db, actor, "device-rebind", "device", bound.deviceId, "mcp", { details: { from: bound.previousUserId, to: email } });
     }
-    // A device newly connected as this person (brand new, or someone else's until now): if they already
-    // have another device or a linked browser, their sessions hear about it, so a stranger who says
-    // "I am you" does not go unnoticed. The same device identifying again is not news.
-    if (bound.previousUserId !== email) noteNewDevice(email, bound.deviceId, ctx.deviceLabel);
+    // A device newly connected as this person (brand new, someone else's until now, or one they had
+    // forgotten): if they already have another device or a linked browser, their sessions hear about
+    // it, so a stranger who says "I am you" does not go unnoticed. A live device identifying again is not news.
+    if (bound.previousUserId !== email || bound.wasRevoked) noteNewDevice(email, bound.deviceId, ctx.deviceLabel);
     audit(db, actor, "identify", "user", email, "mcp", {
       details: { source: "device", cx: callerKey(bound.deviceId, null), deviceId: bound.deviceId, label: ctx.deviceLabel, ip: ctx.ip },
     });

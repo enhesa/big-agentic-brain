@@ -257,6 +257,15 @@ describe("executables", () => {
     await expect(put(OWNER, "game.zip", crafted)).rejects.toThrow(/Android app/);
   });
 
+  it("refuses a zip whose comment holds many end-of-directory records", async () => {
+    const apk = Buffer.from(zip({ "AndroidManifest.xml": "<manifest/>" }));
+    const fake = Buffer.alloc(22);
+    fake.writeUInt32LE(0x06054b50, 0);
+    const comment = Buffer.concat(Array.from({ length: 40 }, () => fake));
+    apk.writeUInt16LE(comment.length, apk.length - 2);
+    await expect(put(OWNER, "game.zip", new Uint8Array(Buffer.concat([apk, comment])))).rejects.toThrow(/cannot check/);
+  });
+
   it("treats a manifest that inflates past the cap as runnable", async () => {
     // Small when compressed, far over the cap when inflated: the check must not give up and allow it.
     const bomb = zip({ "META-INF/MANIFEST.MF": "Manifest-Version: 1.0\n" + " ".repeat(2 * 1024 * 1024) }, true);

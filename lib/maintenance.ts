@@ -7,7 +7,7 @@ import { todayUtc } from "./dates";
 import { audit } from "./audit";
 import { INACTIVITY_ARCHIVE_DAYS, INACTIVITY_CLOCK_START } from "./learnings";
 import { maybeSnapshotBackup } from "./backup";
-import { revokeStaleDevices } from "./devices";
+import { revokeStaleDevices, purgeDeviceNotices } from "./devices";
 import { expireStaleConnections } from "./mcp-connections";
 import { purgeRemovable as purgeRemovableFiles } from "./files";
 
@@ -475,6 +475,7 @@ export function runMaintenance(force = false): MaintenanceResult | null {
     const sessionNudgesPurged = step("sweepStaleNudges", () => sweepStaleNudges(db), 0);
     const devicesExpired = step("revokeStaleDevices", () => revokeStaleDevices(), 0);
     const connectionsExpired = step("expireStaleConnections", () => expireStaleConnections(), 0);
+    step("purgeDeviceNotices", () => purgeDeviceNotices(), 0);
     const filesPurged = step("purgeRemovableFiles", () => purgeRemovableFiles(), 0);
 
     db.exec("PRAGMA optimize;");

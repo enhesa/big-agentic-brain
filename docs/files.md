@@ -31,7 +31,7 @@ BAB checks text files up to 1 MB (UTF-8, no NUL bytes) with the same redaction r
 - Executables are refused, by extension and by their bytes:
   - Extensions: Windows programs and installers (`.exe`, `.dll`, `.msi`, `.msix`, `.application`, `.appref-ms`), scripts and shortcuts Windows runs on a double click (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.hta`, `.lnk`, `.url`, `.scf`, `.library-ms`, `.chm`), Office files with macros (`.docm`, `.xlsm`, `.xlam`), OneNote (`.one`), disk images (`.iso`, `.img`, `.vhd`, `.vhdx`), Java, Android and Apple packages (`.jar`, `.apk`, `.ipa`, `.dmg`, `.pkg`), Linux packages and libraries (`.deb`, `.rpm`, `.so`), and similar.
   - Bytes: Windows programs (an `MZ` header that points to a `PE` header; plain text that starts with "MZ" is fine), Linux and macOS programs, Java classes.
-  - Zip files: BAB reads the zip's table of contents from the end of the file, so bytes put in front of a zip do not hide it. It refuses Android apps (`AndroidManifest.xml`), Windows app packages (`AppxManifest.xml`) and runnable Java programs (`META-INF/MANIFEST.MF` with `Main-Class`, or a manifest it cannot read). It does not unpack anything else, so other files inside an archive are not inspected. A zip64 file or a table of contents over 4 MB is not inspected.
+  - Zip files: BAB reads the zip's table of contents from the end of the file, so bytes put in front of a zip do not hide it. It refuses Android apps (`AndroidManifest.xml`), Windows app packages (`AppxManifest.xml`) and runnable Java programs (`META-INF/MANIFEST.MF` with `Main-Class`, or a manifest it cannot read). It does not unpack anything else, so other files inside an archive are not inspected. A zip64 file or a table of contents over 4 MB is not inspected. A zip with more than 16 end-of-directory records in its last 64 KB is refused.
   - Source code such as `.sh`, `.py` or `.js` is text and is allowed.
 
 ## Who sees what
@@ -50,7 +50,7 @@ The file store serves only a caller whose identity BAB remembers or checks:
 
 A caller identified only by `X-Bab-Actor-*` headers, or by `bab_identify` on an MCP connection with no device, gets 403 on every files route and `bab_files` action. Those can name anyone, and a file store must not let anyone read, share or delete another person's files just by sending a header. `BAB_FILES_ALLOW_DECLARED=1` lifts this for local development only; BAB warns at startup when it is on.
 
-A device is still the person's own word, remembered: `bab_identify` binds a new device secret to the address it is given, and can rebind a device that was someone else's (audited as `device-rebind`). A device is not proof of who someone is. The rule above stops header spoofing, not a caller who identifies as someone else on purpose. To make that visible, when a new device is connected as a person who already has another device or a linked browser, each of that person's sessions is told once, with the device label and time, and pointed at `/me/devices` to forget it. The first device of someone with nothing else cannot be noticed this way, and a person who does not run the plugin's hooks does not hear it. Where that matters, put BAB behind the sign-in proxy or give people tokens bound to them (see [Operating BAB](operations.md), trust model).
+A device is still the person's own word, remembered: `bab_identify` binds a new device secret to the address it is given, and can rebind a device that was someone else's (audited as `device-rebind`). A device is not proof of who someone is. The rule above stops header spoofing, not a caller who identifies as someone else on purpose. To make that visible, when a new device is connected as a person who already has another device or a linked browser (or a device they had forgotten comes back), each of that person's sessions is told once, with the time, and pointed at `/me/devices`, where the device's name is shown and it can be forgotten. The notice stops once the device is forgotten, and after 7 days. The first device of someone with nothing else cannot be noticed this way, and a person who does not run the plugin's hooks does not hear it. Where that matters, put BAB behind the sign-in proxy or give people tokens bound to them (see [Operating BAB](operations.md), trust model).
 
 ## How an agent uses it
 
@@ -74,7 +74,7 @@ curl -X POST --data-binary @sweep.tar.gz "https://bab.example.com/api/files/up/<
 curl -fo sweep.tar.gz "https://bab.example.com/api/files/dl/<token>"
 ```
 
-A client with a token bound to the person can also use `POST /api/files?name=...` and `GET /api/files/<id>/content` with that token. Never put a device secret on a command line.
+Agents use the links above. A program that already keeps a token bound to a person in its own configuration can call `POST /api/files?name=...` and `GET /api/files/<id>/content` with it. Never type a device secret or a token into a command line.
 
 Every answer carries the file's `sha256`; the content route sends it as `X-Bab-File-Sha256`. Check it after a download.
 
@@ -86,7 +86,7 @@ A link is `https://bab.example.com/api/files/dl/<token>`: 256 random bits, valid
 
 ## Upload links
 
-An upload link is `https://bab.example.com/api/files/up/<token>`: 256 random bits, one upload, 15 minutes. BAB stores only the sha256 of the token and marks it used before it reads the body, so two uploads to one link cannot both succeed. The link belongs to the person who made it; whoever holds it can upload one file into that person's store in those 15 minutes, with every limit and check above. Like a download link, the token is in the URL path, so a reverse proxy in front of BAB may log it. The audit log records who made the link, its use and the verified client address.
+An upload link is `https://bab.example.com/api/files/up/<token>`: 256 random bits, one upload, 15 minutes. BAB stores only the sha256 of the token and marks it used before it reads the body, so two uploads to one link cannot both succeed. The link belongs to the person who made it; whoever holds it can upload one file into that person's store in those 15 minutes, with every limit and check above. A link made before a device is forgotten still works until it expires. Like a download link, the token is in the URL path, so a reverse proxy in front of BAB may log it. The audit log records who made the link, its use and the verified client address.
 
 ## Storage and backup
 
