@@ -102,7 +102,9 @@ export function assertFilesIdentity(caller: FilesCaller): void {
   throw new ForbiddenError(
     "The file store needs an identity BAB remembers or checks: the BAB plugin's device, the sign-in proxy, or an API token bound to you. " +
       "An identity sent only in headers, or said with bab_identify on a connection with no device, is refused. " +
-      "Install the BAB plugin, or ask a BAB maintainer for a token bound to you.",
+      (caller.source === "connection"
+        ? "BAB knows you on this connection but not this machine's device yet: call bab_identify once with the user's own work email (it links the device the BAB plugin sends), then retry."
+        : "Install the BAB plugin and call bab_identify once with the user's own work email, or ask a BAB maintainer for a token bound to you."),
   );
 }
 

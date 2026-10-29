@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-29",
     title: "Safer file store",
     changes: [
+      "A file store refusal now says how to link your device: call bab_identify once with your own email.",
       "Files need a BAB device, the sign-in proxy or a token bound to you. Headers alone are refused.",
       "Uploads keep free disk space for the database, end after five minutes, and are capped per address.",
       "Text files holding secrets, disk images, shortcuts and app packages are refused.",

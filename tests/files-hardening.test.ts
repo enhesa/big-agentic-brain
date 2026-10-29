@@ -125,6 +125,8 @@ describe("identity rule", () => {
     expect(() => assertFilesIdentity({ source: "declared", tokenBound: true })).not.toThrow();
     expect(() => assertFilesIdentity({ source: "declared" })).toThrow(/identity BAB remembers or checks/);
     expect(() => assertFilesIdentity({ source: "connection" })).toThrow(/identity BAB remembers or checks/);
+    expect(() => assertFilesIdentity({ source: "connection" })).toThrow(/call bab_identify once/);
+    expect(() => assertFilesIdentity({ source: "declared" })).toThrow(/Install the BAB plugin/);
     try {
       assertFilesIdentity({ source: "declared" });
     } catch (e) {
