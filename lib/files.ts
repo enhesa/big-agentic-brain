@@ -30,6 +30,8 @@ import type { AuditVia } from "./types";
 import { assertNotExecutableFile, assertNotExecutableName, assertNoSecretsInText, SECRET_SCAN_MAX_BYTES } from "./file-checks";
 import {
   blobExists,
+  blobState,
+  filesDirReadable,
   databaseBytes,
   commitUpload,
   discardUpload,
@@ -336,7 +338,9 @@ export function resolveDownloadLink(token: string): { file: FileRow; createdBy: 
 
 /** Records a fetch and returns the bytes. */
 export function openForDownload(file: FileRow, actorId: string, via: AuditVia, how: "direct" | "link" | "inline", ip: string | null = null): ReadableStream<Uint8Array> {
-  if (!blobExists(file.id)) throw new NotFoundError("File not found (its bytes are gone)");
+  const state = blobState(file.id);
+  if (state === "unknown") throw new ApiError("The file store cannot read this file right now. Try again later or tell a BAB maintainer.", 503);
+  if (state === "missing") throw new NotFoundError("File not found (its bytes are gone)");
   audit(getDb(), actorId, "file_get", "file", file.id, via, { ip, details: { how, size: file.size } });
   return readBlob(file.id);
 }
@@ -684,15 +688,29 @@ const LOST_ROWS_PER_RUN = 100;
 
 /**
  * Live rows whose bytes are gone (a hand-deleted file, a lost disk block): marked deleted and removed,
- * so they stop counting towards the quota and stop showing in lists. Returns how many. When every live
- * row is missing its bytes, the volume is more likely unmounted or empty for a moment than lost: that
- * run changes nothing and warns, since a drop cannot be undone.
+ * so they stop counting towards the quota and stop showing in lists. Returns how many. A drop cannot
+ * be undone, so the run changes nothing (and warns) whenever the volume may only be away for a moment:
+ * DATA_DIR/files cannot be listed, any file answers an error other than "does not exist", or every
+ * live file is missing at once.
  */
 function dropRowsWithoutBytes(iso: string): number {
   const db = getDb();
   const rows = db.prepare("SELECT id, owner_id, size FROM files WHERE removed_at IS NULL AND deleted_at IS NULL").all() as unknown as { id: string; owner_id: string; size: number }[];
-  const missing = rows.filter((r) => !blobExists(r.id));
-  if (missing.length > 1 && missing.length === rows.length) {
+  if (rows.length === 0) return 0;
+  if (!filesDirReadable()) {
+    console.warn("bab: the file store folder cannot be read; is the data volume mounted? Not dropping any file rows.");
+    return 0;
+  }
+  const missing: typeof rows = [];
+  for (const r of rows) {
+    const state = blobState(r.id);
+    if (state === "unknown") {
+      console.warn("bab: a stored file could not be checked (not a plain 'does not exist'); not dropping any file rows this run.");
+      return 0;
+    }
+    if (state === "missing") missing.push(r);
+  }
+  if (missing.length > 0 && missing.length === rows.length) {
     console.warn(`bab: all ${rows.length} stored files are missing their bytes; is the data volume mounted? Not dropping them.`);
     return 0;
   }

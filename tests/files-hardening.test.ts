@@ -304,7 +304,7 @@ describe("crash safety", () => {
     expect(stored).toHaveLength(1);
   });
 
-  it("drops nothing when every stored file is missing at once (a volume that is not mounted)", async () => {
+  it("drops nothing when the file store folder is gone (a volume that is not mounted)", async () => {
     const a = await put(OWNER, "a.bin", bytes(100));
     const b = await put(OWNER, "b.bin", bytes(100));
     rmSync(path.join(dataDir, "files"), { recursive: true, force: true });
@@ -316,8 +316,44 @@ describe("crash safety", () => {
     expect(listFiles(OWNER).files.map((f) => f.id).sort()).toEqual([a.file.id, b.file.id].sort());
   });
 
+  it("drops nothing when the only stored file is missing", async () => {
+    const a = await put(OWNER, "a.bin", bytes(100));
+    const { blobPath } = await import("../lib/file-store");
+    rmSync(blobPath(a.file.id));
+    const { purgeRemovable, listFiles } = await lib();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    purgeRemovable();
+    warn.mockRestore();
+    expect(listFiles(OWNER).files.map((f) => f.id)).toEqual([a.file.id]);
+  });
+
+  it("drops nothing when a file answers an error other than does-not-exist", async () => {
+    const a = await put(OWNER, "a.bin", bytes(100));
+    const b = await put(OWNER, "b.bin", bytes(100));
+    const { blobPath, _setBlobStatForTests } = await import("../lib/file-store");
+    rmSync(blobPath(a.file.id));
+    _setBlobStatForTests((p) => {
+      if (p.endsWith(b.file.id)) throw Object.assign(new Error("I/O error"), { code: "EIO" });
+      const e = Object.assign(new Error("gone"), { code: "ENOENT" });
+      if (p.endsWith(a.file.id)) throw e;
+      return { isFile: () => true };
+    });
+    try {
+      const { purgeRemovable, listFiles, fileForActor, openForDownload } = await lib();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      purgeRemovable();
+      warn.mockRestore();
+      expect(listFiles(OWNER).files).toHaveLength(2);
+      // A download of a file that cannot be checked is an error, not "gone".
+      expect(() => openForDownload(fileForActor(OWNER, b.file.id), OWNER, "mcp", "direct")).toThrow(expect.objectContaining({ status: 503 }));
+    } finally {
+      _setBlobStatForTests(null);
+    }
+  });
+
   it("maintenance drops live rows whose bytes are gone, and old bytes that have no row", async () => {
     const a = await put(OWNER, "a.bin", bytes(100));
+    const kept = await put(OWNER, "kept.bin", bytes(50));
     const { blobPath, newFileId } = await import("../lib/file-store");
     rmSync(blobPath(a.file.id));
     const orphan = newFileId();
@@ -331,8 +367,8 @@ describe("crash safety", () => {
 
     const { purgeRemovable, listFiles, quotaUsage } = await lib();
     purgeRemovable();
-    expect(listFiles(OWNER).files).toEqual([]);
-    expect(quotaUsage(OWNER).usedBytes).toBe(0);
+    expect(listFiles(OWNER).files.map((f) => f.id)).toEqual([kept.file.id]);
+    expect(quotaUsage(OWNER).usedBytes).toBe(50);
     expect(existsSync(blobPath(orphan))).toBe(false);
     // A young file may be an upload writing its row right now: kept.
     expect(existsSync(blobPath(young))).toBe(true);

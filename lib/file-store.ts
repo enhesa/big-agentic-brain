@@ -228,12 +228,39 @@ export function removeBlob(id: string): boolean {
   }
 }
 
-export function blobExists(id: string): boolean {
+type StatFn = (p: string) => { isFile(): boolean };
+let statBlob: StatFn = (p) => statSync(p);
+
+/**
+ * Whether a stored file's bytes are on disk: "missing" only when the file system says the path does
+ * not exist (ENOENT); any other error (permissions, I/O, a volume that went away) is "unknown".
+ */
+export function blobState(id: string): "present" | "missing" | "unknown" {
   try {
-    return statSync(blobPath(id)).isFile();
+    return statBlob(blobPath(id)).isFile() ? "present" : "unknown";
+  } catch (err) {
+    return (err as NodeJS.ErrnoException)?.code === "ENOENT" ? "missing" : "unknown";
+  }
+}
+
+/** True when the bytes are there. Anything but a clear "present" is false: a fetch then answers not found. */
+export function blobExists(id: string): boolean {
+  return blobState(id) === "present";
+}
+
+/** True when DATA_DIR/files can be listed: the volume is there and readable. */
+export function filesDirReadable(): boolean {
+  try {
+    readdirSync(filesDir());
+    return true;
   } catch {
     return false;
   }
+}
+
+/** Test-only: replace the stat used by blobState. Pass null to restore. */
+export function _setBlobStatForTests(fn: StatFn | null): void {
+  statBlob = fn ?? ((p) => statSync(p));
 }
 
 /** A web stream of a stored file's bytes. */
