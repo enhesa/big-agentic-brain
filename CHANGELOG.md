@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.15.0](https://github.com/enhesa/big-agentic-brain/compare/v2.14.0...v2.15.0) (2026-10-29)
+
+
+### Features
+
+* **files:** file store with bab_files, per-person quota and expiry ([#91](https://github.com/enhesa/big-agentic-brain/issues/91)) ([aa510f6](https://github.com/enhesa/big-agentic-brain/commit/aa510f6fb991dab2942fc38f3d24ced5ad370f8a))
+
+
+### Bug Fixes
+
+* **files:** review fixes for the file store ([#93](https://github.com/enhesa/big-agentic-brain/issues/93)) ([5961c0f](https://github.com/enhesa/big-agentic-brain/commit/5961c0f78ed4a2e56aa79d3d588f8fdd4bfb1899))
+
 ## [2.14.0](https://github.com/enhesa/big-agentic-brain/compare/v2.13.0...v2.14.0) (2026-10-28)
 
 
