@@ -308,7 +308,8 @@ describe("delete and list", () => {
 
 describe("throttle", () => {
   it("spaces many concurrent callers exactly one interval apart", () => {
-    const calls = Array.from({ length: 50 }, (_, i) => kv.kvThrottle(i % 2 ? ME : THEM, { key: "shared/bitbucket-push/global", minIntervalSeconds: 10 }, "mcp"));
+    // Fifty people at once: each may hold a few future slots, so the spacing comes from the pace, not from one caller.
+    const calls = Array.from({ length: 50 }, (_, i) => kv.kvThrottle({ id: `agent${i}.person@example.com` }, { key: "shared/bitbucket-push/global", minIntervalSeconds: 10 }, "mcp"));
     expect(calls.map((c) => c.waitSeconds)).toEqual(Array.from({ length: 50 }, (_, i) => i * 10));
     expect(new Set(calls.map((c) => c.slotAt)).size).toBe(50);
     expect(calls[0].slotAt).toBe(new Date(T0).toISOString());
@@ -396,6 +397,7 @@ describe("lock", () => {
 describe("limits", () => {
   it("caps the keys per person and per shared namespace", async () => {
     process.env.BAB_KV_MAX_KEYS_PER_USER = "3";
+    process.env.BAB_KV_SHARED_MAX_KEYS_PER_USER = "3";
     (await import("../lib/config"))._resetConfigForTests();
     for (const k of ["a", "b", "c"]) kv.kvSet(ME, { key: k, value: 1, ttlSeconds: 30 }, "mcp");
     expect(kv.kvSet(ME, { key: "a", value: 2, ttlSeconds: 30 }, "mcp").set).toBe(true);
@@ -417,6 +419,7 @@ describe("limits", () => {
   it("caps the bytes per person and in all", async () => {
     process.env.BAB_KV_MAX_VALUE_BYTES = "1000";
     process.env.BAB_KV_MAX_BYTES_PER_USER = "3000";
+    process.env.BAB_KV_SHARED_MAX_BYTES_PER_USER = "3000";
     process.env.BAB_KV_MAX_TOTAL_BYTES = "4000";
     (await import("../lib/config"))._resetConfigForTests();
     const v = "x".repeat(900);

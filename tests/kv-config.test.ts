@@ -25,6 +25,9 @@ describe("key-value settings", () => {
       maxBytesPerUser: 4194304,
       maxTotalBytes: 20971520,
       maxTtlSeconds: 86400,
+      sharedMaxTtlSeconds: 3600,
+      sharedMaxKeysPerUser: 50,
+      sharedMaxBytesPerUser: 524288,
       allowDeclared: false,
     });
     expect(config().replicas).toBe(1);
@@ -54,6 +57,16 @@ describe("key-value settings", () => {
     expect(withEnv({ BAB_REPLICAS: "0" })).toThrow(/positive integer/);
     clear();
     expect(withEnv({ BAB_KV: "maybe" })).toThrow(/boolean/);
+    clear();
+    expect(withEnv({ BAB_KV_SHARED_MAX_TTL_SECONDS: "90000" })).toThrow(/must not exceed BAB_KV_MAX_TTL_SECONDS/);
+    clear();
+    expect(withEnv({ BAB_KV_SHARED_MAX_KEYS_PER_USER: "2000" })).toThrow(/must not exceed BAB_KV_MAX_KEYS_PER_USER/);
+    clear();
+    expect(withEnv({ BAB_KV_SHARED_MAX_BYTES_PER_USER: "5000000" })).toThrow(/must not exceed BAB_KV_MAX_BYTES_PER_USER/);
+  });
+
+  it("keeps the shared TTL cap under a lower general one when unset", () => {
+    expect(withEnv({ BAB_KV_MAX_TTL_SECONDS: "60" })().kv.sharedMaxTtlSeconds).toBe(60);
   });
 
   it("takes names with or without shared/, drops duplicates, and none means none", () => {

@@ -641,13 +641,13 @@ function kvDescription(): string {
   const k = config().kv;
   const shared = k.sharedNamespaces.length ? k.sharedNamespaces.map((n) => `shared/${n}/`).join(", ") : "none";
   return (
-    "Atomic key-value store for coordination between sessions, machines and colleagues: locks, counters, pacing. " +
+    "Atomic key-value store to coordinate sessions, machines and colleagues. " +
     KV_CONTENT_RULE + " " +
-    `Keys: lowercase a-z 0-9 . _ - and /, at most ${KV_KEY_MAX_CHARS} chars; no prefix means your own u/<your id>/ space (only you). Shared, open to everyone: ${shared}. ` +
-    `Every write needs ttlSeconds (1 to ${k.maxTtlSeconds}). Values are JSON, at most ${kvSize(k.maxValueBytes)}; ${k.maxKeysPerUser} keys and ${sizeText(k.maxBytesPerUser)} per person. ` +
+    `Keys: a-z 0-9 . _ - /, at most ${KV_KEY_MAX_CHARS} chars; no prefix: your own u/<id>/ space. Shared with everyone: ${shared}. ` +
+    `Every write needs ttlSeconds (1 to ${k.maxTtlSeconds}; shared keys at most ${k.sharedMaxTtlSeconds}). Values are JSON, at most ${kvSize(k.maxValueBytes)}; ${k.maxKeysPerUser} keys and ${sizeText(k.maxBytesPerUser)} per person, ${k.sharedMaxKeysPerUser} keys each per shared namespace. ` +
     "set (ifAbsent, ifExists), cas (expected, value), incr (by, ttl on create), delete (optional expected), get, list (prefix: keys and ttl). " +
-    `throttle (minIntervalSeconds, at most ${KV_THROTTLE_MAX_SECONDS}): books your slot on a shared pace; sleep waitSeconds, then act. ` +
-    "lock (ttlSeconds) returns a token, or the holder and ttl left; unlock and renew need that token. Answers like set:false or acquired:false are normal outcomes, not errors."
+    `throttle (minIntervalSeconds, at most ${KV_THROTTLE_MAX_SECONDS}, fixed by whoever creates the key): books your slot on a shared pace; sleep waitSeconds, then act. ` +
+    "lock (ttlSeconds) returns a token, or the holder and ttl left; unlock and renew need it. force_delete (key) and purge (user): maintainers only. set:false and acquired:false are normal."
   );
 }
 
@@ -1255,16 +1255,17 @@ export const TOOLS: Tool[] = [
       type: "object",
       properties: {
         action: { type: "string", enum: [...KV_ACTIONS], description: "Required, has no default." },
-        key: { type: "string", description: "Every action but list. Own space when it has no u/ or shared/ prefix." },
+        key: { type: "string", description: "All but list and purge. No u/ or shared/ prefix: your own space." },
         value: { description: "set, cas: any JSON value." },
-        expected: { description: "cas, delete: the value you read; the write happens only if it still holds." },
+        expected: { description: "cas, delete: write only if the key still holds this." },
         ttlSeconds: { type: "number", description: "set, cas, lock, renew; incr when it creates the key." },
         ifAbsent: { type: "boolean", description: "set: only when the key is missing." },
         ifExists: { type: "boolean", description: "set: only when the key exists." },
         by: { type: "number", description: "incr: whole number to add (default 1)." },
-        prefix: { type: "string", description: "list: start of the keys, such as shared/<name>/ (default your own space)." },
-        minIntervalSeconds: { type: "number", description: "throttle: seconds between slots." },
+        prefix: { type: "string", description: "list: start of the keys, such as shared/<name>/ (default: your space)." },
+        minIntervalSeconds: { type: "number", description: "throttle: seconds between slots; must match the key's." },
         token: { type: "string", description: "unlock, renew: the token lock returned." },
+        user: { type: "string", description: "purge (maintainers): whose keys to remove." },
       },
       required: ["action"],
     },

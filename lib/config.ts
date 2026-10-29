@@ -84,6 +84,11 @@ export interface BabConfig {
     maxBytesPerUser: number;
     maxTotalBytes: number;
     maxTtlSeconds: number;
+    /** Longest TTL a key in a shared namespace may have (at most maxTtlSeconds). */
+    sharedMaxTtlSeconds: number;
+    /** Keys and bytes one person may hold inside each shared namespace, counted against whoever wrote them. */
+    sharedMaxKeysPerUser: number;
+    sharedMaxBytesPerUser: number;
     /** Lets header-declared and connection identities use the store (BAB_KV_ALLOW_DECLARED). Local development only. */
     allowDeclared: boolean;
   };
@@ -207,6 +212,13 @@ function kvOf(env: Env): BabConfig["kv"] {
   if (maxBytesPerUser > maxTotalBytes) throw new ConfigError("BAB_KV_MAX_BYTES_PER_USER (" + maxBytesPerUser + ") must not exceed BAB_KV_MAX_TOTAL_BYTES (" + maxTotalBytes + ")");
   if (maxTotalBytes > KV_MAX_TOTAL_BYTES_CEILING) throw new ConfigError("BAB_KV_MAX_TOTAL_BYTES must be at most " + KV_MAX_TOTAL_BYTES_CEILING + ", got " + maxTotalBytes);
   if (maxTtlSeconds > KV_MAX_TTL_SECONDS_CEILING) throw new ConfigError("BAB_KV_MAX_TTL_SECONDS must be at most " + KV_MAX_TTL_SECONDS_CEILING + ", got " + maxTtlSeconds);
+  // Unset: an hour, or the general maximum when that is shorter. Set: must not exceed the general maximum.
+  const sharedMaxTtlSeconds = read(env, "BAB_KV_SHARED_MAX_TTL_SECONDS") === undefined ? Math.min(3600, maxTtlSeconds) : int(env, "BAB_KV_SHARED_MAX_TTL_SECONDS", 3600);
+  const sharedMaxKeysPerUser = int(env, "BAB_KV_SHARED_MAX_KEYS_PER_USER", 50);
+  const sharedMaxBytesPerUser = int(env, "BAB_KV_SHARED_MAX_BYTES_PER_USER", 512 * 1024);
+  if (sharedMaxTtlSeconds > maxTtlSeconds) throw new ConfigError("BAB_KV_SHARED_MAX_TTL_SECONDS (" + sharedMaxTtlSeconds + ") must not exceed BAB_KV_MAX_TTL_SECONDS (" + maxTtlSeconds + ")");
+  if (sharedMaxKeysPerUser > maxKeysPerUser) throw new ConfigError("BAB_KV_SHARED_MAX_KEYS_PER_USER (" + sharedMaxKeysPerUser + ") must not exceed BAB_KV_MAX_KEYS_PER_USER (" + maxKeysPerUser + ")");
+  if (sharedMaxBytesPerUser > maxBytesPerUser) throw new ConfigError("BAB_KV_SHARED_MAX_BYTES_PER_USER (" + sharedMaxBytesPerUser + ") must not exceed BAB_KV_MAX_BYTES_PER_USER (" + maxBytesPerUser + ")");
   return {
     enabled: bool(env, "BAB_KV", true),
     sharedNamespaces: kvNamespaces(env),
@@ -215,6 +227,9 @@ function kvOf(env: Env): BabConfig["kv"] {
     maxBytesPerUser,
     maxTotalBytes,
     maxTtlSeconds,
+    sharedMaxTtlSeconds,
+    sharedMaxKeysPerUser,
+    sharedMaxBytesPerUser,
     allowDeclared: bool(env, "BAB_KV_ALLOW_DECLARED", false),
   };
 }
@@ -461,7 +476,7 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent + " diskReserveBytes=" + f.diskReserveBytes + " uploadDeadlineMs=" + f.uploadDeadlineMs + " allowDeclared=" + f.allowDeclared);
   if (f.enabled && f.allowDeclared) log("[config] WARN: BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can read and delete other people's files");
   const k = c.kv;
-  log("[config] kv: enabled=" + k.enabled + " shared=" + (k.sharedNamespaces.join(",") || "none") + " maxValueBytes=" + k.maxValueBytes + " maxKeysPerUser=" + k.maxKeysPerUser + " maxBytesPerUser=" + k.maxBytesPerUser + " maxTotalBytes=" + k.maxTotalBytes + " maxTtlSeconds=" + k.maxTtlSeconds + " allowDeclared=" + k.allowDeclared + " replicas=" + c.replicas);
+  log("[config] kv: enabled=" + k.enabled + " shared=" + (k.sharedNamespaces.join(",") || "none") + " maxValueBytes=" + k.maxValueBytes + " maxKeysPerUser=" + k.maxKeysPerUser + " maxBytesPerUser=" + k.maxBytesPerUser + " maxTotalBytes=" + k.maxTotalBytes + " maxTtlSeconds=" + k.maxTtlSeconds + " shared(ttl/keys/bytes per person)=" + k.sharedMaxTtlSeconds + "/" + k.sharedMaxKeysPerUser + "/" + k.sharedMaxBytesPerUser + " allowDeclared=" + k.allowDeclared + " replicas=" + c.replicas);
   if (k.enabled && k.allowDeclared) log("[config] WARN: BAB_KV_ALLOW_DECLARED is on: callers identified only by headers can read and change other people's keys");
   if (k.enabled && c.replicas > 1) log("[config] WARN: BAB_REPLICAS is " + c.replicas + ": the key-value store is atomic only in one process, so it refuses every call");
   if (isOpen(c)) {
