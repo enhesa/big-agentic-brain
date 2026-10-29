@@ -77,6 +77,7 @@ Apache-2.0, self-hosted, one SQLite file. Every write is attributed and most cal
 - **Search.** Send rephrasings in one call (`queries`), save `aliases` with each memory, and match word forms by stemming.
 - **Lean mode.** `?tools=lean` or `BAB_MCP_TOOLS=lean` serves four tools and shorter descriptions.
 - **Files.** `bab_files` passes files between sessions, machines and colleagues: 25 MB per file and 100 MB per person by default, expiry. See [Files](docs/files.md).
+- **Key-value store.** `bab_kv` gives agents atomic locks, counters and a shared pace for bulk work, every key with a TTL. Never secrets or personal data. See [Key-value store](docs/kv.md).
 - **Privacy.** Secrets, emails, phone, card, IBAN and ID numbers are masked before storing. This is best effort: a client named in plain words is not caught.
 
 Add one MCP URL to your agents and the server sends them these instructions when they connect. Whether an agent follows them depends on the agent: house rules are context, not enforcement. The optional [Claude Code plugin](#the-claude-code-plugin) adds hooks that brief the agent and nudge it to search and to save.
@@ -189,7 +190,7 @@ It appears on the Memory page and in every agent's search. For sample content, r
 
 | Your agent | How it connects | What it gets |
 |---|---|---|
-| **Any MCP client** that supports remote Streamable HTTP servers | `https://<your-bab>/mcp`, no SDK | All eleven tools, plus the server's usage instructions at connect time. |
+| **Any MCP client** that supports remote Streamable HTTP servers | `https://<your-bab>/mcp`, no SDK | All twelve tools, plus the server's usage instructions at connect time. |
 | **Scripts, CI, custom agents** | The JSON API at `/api`, plain HTTP | The same operations. `GET /api` lists every endpoint. |
 | **Claude Code** with the [optional plugin](#the-claude-code-plugin) | Two commands | Everything above, plus hooks, skills and an inbox panel above the prompt. |
 
@@ -297,6 +298,7 @@ BAB is the organization's memory and the channel between its agents. It is not a
 - [Connecting an agent](docs/connecting.md) and [How BAB works](docs/how-it-works.md)
 - [Savings model](docs/savings.md)
 - [Files](docs/files.md): limits, sharing, what not to upload
+- [Key-value store](docs/kv.md): locks, counters, throttles, namespaces, limits
 - [Claude Code plugin](plugins/claude-code/README.md)
 - [Security policy](SECURITY.md) and [contributing](CONTRIBUTING.md)
 

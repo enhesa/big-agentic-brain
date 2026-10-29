@@ -1,4 +1,4 @@
-import { RATE_LIMIT_PER_MINUTE } from "@/lib/rate-limit";
+import { RATE_LIMIT_PER_MINUTE, KV_RATE_LIMIT_PER_MINUTE, KV_RATE_LIMIT_BURST } from "@/lib/rate-limit";
 import { FEEDBACK_DAILY_LIMIT } from "@/lib/feedback";
 import { identityHint } from "@/lib/identity";
 import { config, sourceLinkText } from "@/lib/config";
@@ -56,6 +56,8 @@ export async function GET() {
       "DELETE /api/files/:id": "Owner only. The bytes are removed at once and the quota frees at once -> { deleted, usage }.",
       "POST /api/files/up/:token": "A single-use upload link from bab_files action=upload_link: curl -X POST --data-binary @file \"<url>\". No identity or headers; works once, within 15 minutes; name, owner, shares and recipient were fixed when the link was made (query parameters are ignored). Same limits and answers as POST /api/files; a refused upload needs a new link.",
       "GET /api/files/dl/:token": "A download link from a put or GET /api/files/:id. No identity needed; works for an hour, and only while its maker may still see the file.",
+      "GET /api/kv": `?key=<key> reads one key -> { key, found, kind, value?, ttlSeconds, holder? }; ?prefix=<prefix> (default your own space) lists keys and their TTL, never values. Keys: lowercase a-z 0-9 . _ - and /; no prefix is your own u/<your id>/ space, shared/<name>/ only for ${config().kv.sharedNamespaces.map((n) => `shared/${n}/`).join(", ") || "no names on this BAB"}. Needs a BAB device, the sign-in proxy or a token bound to you; X-Bab-Actor-* headers alone get 403.`,
+      "POST /api/kv": `{ action, key, ... } with the bab_kv actions: set { value, ttlSeconds, ifAbsent?, ifExists? }, cas { expected, value, ttlSeconds }, incr { by?, ttlSeconds on create }, delete { expected? }, get, list { prefix }, throttle { minIntervalSeconds } -> { waitSeconds, slotAt }, lock { ttlSeconds } -> { acquired, token | holder }, unlock { token }, renew { token, ttlSeconds }. TTL 1 to ${config().kv.maxTtlSeconds} seconds, values at most ${config().kv.maxValueBytes} bytes of JSON, ${config().kv.maxKeysPerUser} keys and ${config().kv.maxBytesPerUser} bytes per person, ${KV_RATE_LIMIT_PER_MINUTE} calls a minute (${KV_RATE_LIMIT_BURST} at once). Never secrets, credentials or personal data: short-lived coordination state only.`,
       "DELETE /api/me/areas": "?area=&user= — drop yourself from an area. user is for maintainers only, to remove someone else (403 otherwise); a maintainer never adds anyone. -> { removed }.",
     },
   });

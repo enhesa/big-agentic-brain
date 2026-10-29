@@ -83,6 +83,37 @@ export function checkRateLimit(actorId: string, limit: number = LIMIT, windowMs:
   return bucket.count <= limit;
 }
 
+/** Key-value store calls a person may make a minute on average (lib/kv.ts), on top of the general limit. */
+export const KV_RATE_LIMIT_PER_MINUTE = 60;
+/** Key-value store calls a person may make at once before the per-minute pace applies. */
+export const KV_RATE_LIMIT_BURST = 20;
+
+interface TokenBucket {
+  tokens: number;
+  at: number;
+}
+const kvBuckets = new Map<string, TokenBucket>();
+
+/**
+ * A token bucket per person for the key-value store: KV_RATE_LIMIT_BURST calls at once, then one
+ * more each 60 / KV_RATE_LIMIT_PER_MINUTE seconds. True if this call is allowed (and spends a token).
+ */
+export function checkKvRateLimit(actorId: string): boolean {
+  const now = clock();
+  const perMs = KV_RATE_LIMIT_PER_MINUTE / WINDOW_MS;
+  if (kvBuckets.size > 10_000) {
+    for (const [k, b] of kvBuckets) if (b.tokens + (now - b.at) * perMs >= KV_RATE_LIMIT_BURST) kvBuckets.delete(k);
+  }
+  const b = kvBuckets.get(actorId) ?? { tokens: KV_RATE_LIMIT_BURST, at: now };
+  const tokens = Math.min(KV_RATE_LIMIT_BURST, b.tokens + Math.max(0, now - b.at) * perMs);
+  if (tokens < 1) {
+    kvBuckets.set(actorId, { tokens, at: now });
+    return false;
+  }
+  kvBuckets.set(actorId, { tokens: tokens - 1, at: now });
+  return true;
+}
+
 /** Test-only: inject a fake clock so a test can advance past the window without sleeping. */
 export function _setClockForTests(fn: () => number): void {
   clock = fn;
@@ -91,6 +122,7 @@ export function _setClockForTests(fn: () => number): void {
 /** Test-only: clears all buckets and restores the real clock. */
 export function resetForTests(): void {
   buckets.clear();
+  kvBuckets.clear();
   clock = () => Date.now();
   hitsSinceLastPrune = 0;
 }

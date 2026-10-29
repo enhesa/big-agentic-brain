@@ -52,9 +52,9 @@ describe("lean tool list", () => {
     expect(names(await rpc("tools/list", {}, "?tools=lean")).sort()).toEqual(["bab_identify", "bab_learn", "bab_react", "bab_search"]);
   });
 
-  it("the default list is unchanged: all ten tools", async () => {
+  it("the default list is unchanged: all twelve tools", async () => {
     const all = names(await rpc("tools/list", {}));
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(12);
     expect(all).toEqual(expect.arrayContaining(["bab_inbox", "bab_send", "bab_remind", "bab_feedback", "bab_identify", "bab_link_session"]));
     expect(names(await rpc("tools/list", {}, "?tools=full"))).toEqual(all);
   });
@@ -93,7 +93,7 @@ describe("lean tool list", () => {
     expect(out.result.content[0].text).toContain("bab_identify");
     expect(out.result.content[0].text).not.toContain("tools=full");
     expect(names(await rpc("tools/list", {}, "?tools=LEAN"))).toHaveLength(4);
-    expect(names(await rpc("tools/list", {}, "?tools=Full"))).toHaveLength(11);
+    expect(names(await rpc("tools/list", {}, "?tools=Full"))).toHaveLength(12);
   });
 
   it("lean instructions are short, drop the hidden tools and keep the safety rules", async () => {
@@ -113,7 +113,7 @@ describe("lean tool list", () => {
     process.env.BAB_MCP_TOOLS = "lean";
     (await import("../lib/config"))._resetConfigForTests();
     expect(names(await rpc("tools/list", {}))).toHaveLength(4);
-    expect(names(await rpc("tools/list", {}, "?tools=full"))).toHaveLength(11);
+    expect(names(await rpc("tools/list", {}, "?tools=full"))).toHaveLength(12);
   });
 
   it("BAB_MCP_TOOLS rejects a value other than full or lean", async () => {
@@ -139,6 +139,6 @@ describe("tool description size", () => {
   });
 });
 
-// 20000 until bab_files (2026-10-28), the eleventh tool, added about 1600 characters.
-const CEILING_FULL = 21800;
+// 20000 until bab_files (2026-10-28), the eleventh tool, added about 1600 characters; bab_kv (2026-10-29), the twelfth, about 2100.
+const CEILING_FULL = 24000;
 const CEILING_LEAN = 11200;

@@ -74,6 +74,21 @@ export interface BabConfig {
     /** Lets header-declared and connection identities use the store (BAB_FILES_ALLOW_DECLARED). Local development only. */
     allowDeclared: boolean;
   };
+  /** The key-value store (lib/kv.ts). Sizes in bytes, TTL in seconds. */
+  kv: {
+    enabled: boolean;
+    /** Names allowed after shared/, such as "build-push" for shared/build-push/. Empty: no shared namespaces. */
+    sharedNamespaces: string[];
+    maxValueBytes: number;
+    maxKeysPerUser: number;
+    maxBytesPerUser: number;
+    maxTotalBytes: number;
+    maxTtlSeconds: number;
+    /** Lets header-declared and connection identities use the store (BAB_KV_ALLOW_DECLARED). Local development only. */
+    allowDeclared: boolean;
+  };
+  /** How many BAB processes serve this data (BAB_REPLICAS). BAB supports 1; above that the key-value store refuses every call. */
+  replicas: number;
   clientIpHeader: "x-real-ip" | "x-forwarded-for-rightmost" | null;
   /** The unrecognised BAB_CLIENT_IP_HEADER value (lowercased) that was ignored, for a one-time warning; else null. */
   clientIpHeaderInvalid: string | null;
@@ -156,6 +171,51 @@ function filesOf(env: Env): BabConfig["files"] {
     diskReserveBytes,
     uploadDeadlineMs: deadlineSeconds * 1000,
     allowDeclared: bool(env, "BAB_FILES_ALLOW_DECLARED", false),
+  };
+}
+
+/** Hard ceilings for the key-value store: one value must fit in an MCP call, and the store lives in memory. */
+export const KV_MAX_VALUE_BYTES_CEILING = 256 * 1024;
+export const KV_MAX_TOTAL_BYTES_CEILING = 256 * 1024 * 1024;
+export const KV_MAX_TTL_SECONDS_CEILING = 7 * 24 * 60 * 60;
+
+function kvNamespaces(env: Env): string[] {
+  const raw = read(env, "BAB_KV_SHARED_NAMESPACES")?.trim() ?? "bitbucket-push";
+  if (raw.toLowerCase() === "none") return [];
+  const names = raw
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((v) => (v.startsWith("shared/") ? v.slice("shared/".length) : v).replace(/\/+$/, ""));
+  if (names.length === 0) throw new ConfigError("BAB_KV_SHARED_NAMESPACES must hold at least one name, or none");
+  for (const n of names) {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(n) || n.includes("..")) {
+      throw new ConfigError('BAB_KV_SHARED_NAMESPACES holds a name that is not lowercase letters, digits, dots, underscores and hyphens, got "' + n + '"');
+    }
+  }
+  return [...new Set(names)];
+}
+
+function kvOf(env: Env): BabConfig["kv"] {
+  const maxValueBytes = int(env, "BAB_KV_MAX_VALUE_BYTES", 64 * 1024);
+  const maxKeysPerUser = int(env, "BAB_KV_MAX_KEYS_PER_USER", 1000);
+  const maxBytesPerUser = int(env, "BAB_KV_MAX_BYTES_PER_USER", 4 * 1024 * 1024);
+  const maxTotalBytes = int(env, "BAB_KV_MAX_TOTAL_BYTES", 20 * 1024 * 1024);
+  const maxTtlSeconds = int(env, "BAB_KV_MAX_TTL_SECONDS", 24 * 60 * 60);
+  if (maxValueBytes > KV_MAX_VALUE_BYTES_CEILING) throw new ConfigError("BAB_KV_MAX_VALUE_BYTES must be at most " + KV_MAX_VALUE_BYTES_CEILING + ", got " + maxValueBytes);
+  if (maxValueBytes > maxBytesPerUser) throw new ConfigError("BAB_KV_MAX_VALUE_BYTES (" + maxValueBytes + ") must not exceed BAB_KV_MAX_BYTES_PER_USER (" + maxBytesPerUser + ")");
+  if (maxBytesPerUser > maxTotalBytes) throw new ConfigError("BAB_KV_MAX_BYTES_PER_USER (" + maxBytesPerUser + ") must not exceed BAB_KV_MAX_TOTAL_BYTES (" + maxTotalBytes + ")");
+  if (maxTotalBytes > KV_MAX_TOTAL_BYTES_CEILING) throw new ConfigError("BAB_KV_MAX_TOTAL_BYTES must be at most " + KV_MAX_TOTAL_BYTES_CEILING + ", got " + maxTotalBytes);
+  if (maxTtlSeconds > KV_MAX_TTL_SECONDS_CEILING) throw new ConfigError("BAB_KV_MAX_TTL_SECONDS must be at most " + KV_MAX_TTL_SECONDS_CEILING + ", got " + maxTtlSeconds);
+  return {
+    enabled: bool(env, "BAB_KV", true),
+    sharedNamespaces: kvNamespaces(env),
+    maxValueBytes,
+    maxKeysPerUser,
+    maxBytesPerUser,
+    maxTotalBytes,
+    maxTtlSeconds,
+    allowDeclared: bool(env, "BAB_KV_ALLOW_DECLARED", false),
   };
 }
 
@@ -352,6 +412,8 @@ function parse(env: Env): BabConfig {
     mcpTools: mcpToolsOf(env),
     inboxPage: bool(env, "BAB_INBOX_PAGE", true),
     files: filesOf(env),
+    kv: kvOf(env),
+    replicas: int(env, "BAB_REPLICAS", 1),
     clientIpHeader: clientIp,
     clientIpHeaderInvalid: clientIpInvalid,
   };
@@ -398,6 +460,10 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   const f = c.files;
   log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent + " diskReserveBytes=" + f.diskReserveBytes + " uploadDeadlineMs=" + f.uploadDeadlineMs + " allowDeclared=" + f.allowDeclared);
   if (f.enabled && f.allowDeclared) log("[config] WARN: BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can read and delete other people's files");
+  const k = c.kv;
+  log("[config] kv: enabled=" + k.enabled + " shared=" + (k.sharedNamespaces.join(",") || "none") + " maxValueBytes=" + k.maxValueBytes + " maxKeysPerUser=" + k.maxKeysPerUser + " maxBytesPerUser=" + k.maxBytesPerUser + " maxTotalBytes=" + k.maxTotalBytes + " maxTtlSeconds=" + k.maxTtlSeconds + " allowDeclared=" + k.allowDeclared + " replicas=" + c.replicas);
+  if (k.enabled && k.allowDeclared) log("[config] WARN: BAB_KV_ALLOW_DECLARED is on: callers identified only by headers can read and change other people's keys");
+  if (k.enabled && c.replicas > 1) log("[config] WARN: BAB_REPLICAS is " + c.replicas + ": the key-value store is atomic only in one process, so it refuses every call");
   if (isOpen(c)) {
     log("[config] WARN: open mode, no proxy identity and no API tokens configured, callers are not authenticated");
   } else if (c.tokens !== null) {

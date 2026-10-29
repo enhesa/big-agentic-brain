@@ -28,6 +28,7 @@ import { getUser } from "./users";
 import { send } from "./messages";
 import { ApiError, NotFoundError, ValidationError, ForbiddenError, TooManyRequestsError } from "./errors";
 import type { AuditVia } from "./types";
+import { assertBoundIdentity, type BoundCaller } from "./bound-identity";
 import { assertNotExecutableFile, assertNotExecutableName, assertNoSecretsInText, SECRET_SCAN_MAX_BYTES } from "./file-checks";
 import {
   blobExists,
@@ -85,10 +86,7 @@ const inFlightByIp = new Map<string, number>();
 let inFlightTotal = 0;
 
 /** The identity of a caller, as far as the file store needs it (lib/session.ts SessionUser). */
-export interface FilesCaller {
-  source: "proxy" | "declared" | "device" | "connection";
-  tokenBound?: true;
-}
+export type FilesCaller = BoundCaller;
 
 /**
  * Refuses a caller whose identity is only their own word in this request: X-Bab-Actor-* headers
@@ -97,15 +95,7 @@ export interface FilesCaller {
  * the person. BAB_FILES_ALLOW_DECLARED=1 lifts it for local development.
  */
 export function assertFilesIdentity(caller: FilesCaller): void {
-  if (caller.source === "proxy" || caller.source === "device" || caller.tokenBound) return;
-  if (config().files.allowDeclared) return;
-  throw new ForbiddenError(
-    "The file store needs an identity BAB remembers or checks: the BAB plugin's device, the sign-in proxy, or an API token bound to you. " +
-      "An identity sent only in headers, or said with bab_identify on a connection with no device, is refused. " +
-      (caller.source === "connection"
-        ? "BAB knows you on this connection but not this machine's device yet: call bab_identify once with the user's own work email (it links the device the BAB plugin sends), then retry."
-        : "Install the BAB plugin and call bab_identify once with the user's own work email, or ask a BAB maintainer for a token bound to you."),
-  );
+  assertBoundIdentity(caller, config().files.allowDeclared, "The file store");
 }
 
 /** 413: the upload is bigger than the per-file cap. */
