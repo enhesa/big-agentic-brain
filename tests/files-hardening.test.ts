@@ -240,9 +240,30 @@ describe("executables", () => {
     expect((await put(OWNER, "lib.zip", zip({ "META-INF/MANIFEST.MF": "Manifest-Version: 1.0\n" }, true))).file.name).toBe("lib.zip");
     expect((await put(OWNER, "docs.zip", zip({ "readme.md": "hello", "notes/a.txt": "b" }))).file.name).toBe("docs.zip");
   });
+
+  it("finds a zip behind bytes put in front of it", async () => {
+    const apk = zip({ "AndroidManifest.xml": "<manifest/>" });
+    const prefixed = new Uint8Array([...text('#!/bin/sh\nexec java -jar "$0"\n'), ...apk]);
+    await expect(put(OWNER, "setup.dat", prefixed)).rejects.toThrow(/Android app/);
+  });
+
+  it("treats a manifest that inflates past the cap as runnable", async () => {
+    // Small when compressed, far over the cap when inflated: the check must not give up and allow it.
+    const bomb = zip({ "META-INF/MANIFEST.MF": "Manifest-Version: 1.0\n" + " ".repeat(2 * 1024 * 1024) }, true);
+    await expect(put(OWNER, "big.zip", bomb)).rejects.toThrow(/cannot check/);
+  });
 });
 
 describe("secrets in text files", () => {
+  it("scans 1 MB of key-value lines quickly", async () => {
+    const { sensitiveKind } = await import("../lib/file-checks");
+    const line = "pass" + "word: changeme pass" + "word: changeme token: abc\n";
+    const big = line.repeat(Math.floor((1024 * 1024) / line.length));
+    const t0 = Date.now();
+    expect(sensitiveKind(big)).toMatch(/secret/);
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+
   // Built at runtime so the source holds no real-looking secret.
   const secretLine = () => "pass" + "word=" + "Zq7" + "Xv9Lm2Rt";
 
@@ -281,6 +302,18 @@ describe("crash safety", () => {
     await expect(putFile({ ownerId: OWNER, name: "b.bin", body: streamOf(bytes(900)) }, "mcp", ORIGIN)).rejects.toMatchObject({ status: 507 });
     const stored = readdirSync(path.join(dataDir, "files")).filter((d) => d !== "tmp").flatMap((d) => readdirSync(path.join(dataDir, "files", d)));
     expect(stored).toHaveLength(1);
+  });
+
+  it("drops nothing when every stored file is missing at once (a volume that is not mounted)", async () => {
+    const a = await put(OWNER, "a.bin", bytes(100));
+    const b = await put(OWNER, "b.bin", bytes(100));
+    rmSync(path.join(dataDir, "files"), { recursive: true, force: true });
+    const { purgeRemovable, listFiles } = await lib();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    purgeRemovable();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/volume mounted/));
+    warn.mockRestore();
+    expect(listFiles(OWNER).files.map((f) => f.id).sort()).toEqual([a.file.id, b.file.id].sort());
   });
 
   it("maintenance drops live rows whose bytes are gone, and old bytes that have no row", async () => {

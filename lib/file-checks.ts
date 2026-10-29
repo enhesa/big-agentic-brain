@@ -75,7 +75,9 @@ const PACKAGE_MANIFESTS = new Set(["androidmanifest.xml", "appxmanifest.xml", "a
 /**
  * The kind of program a zip file is, or null: an Android app (AndroidManifest.xml), a Windows app
  * package (AppxManifest.xml), or a runnable Java archive (META-INF/MANIFEST.MF with Main-Class).
- * Reads only the central directory and that one small entry. A zip it cannot read is not refused here.
+ * Reads only the end of the file, the central directory and that one small entry, so bytes put in
+ * front of the zip (a self-extracting stub) do not hide it. A manifest it cannot read counts as
+ * runnable. A zip whose directory it cannot read at all (zip64, a directory over 4 MB) is not refused.
  */
 function zipProgramKind(filePath: string, size: number): string | null {
   if (size < 22) return null;
@@ -91,30 +93,37 @@ function zipProgramKind(filePath: string, size: number): string | null {
   if (end < 0) return null;
   const cdSize = tail.readUInt32LE(end + 12);
   const cdOffset = tail.readUInt32LE(end + 16);
-  if (cdSize === 0xffffffff || cdOffset === 0xffffffff || cdSize > ZIP_CENTRAL_MAX || cdOffset + cdSize > size) return null;
-  const cd = readRange(filePath, cdOffset, cdSize);
+  if (cdSize === 0xffffffff || cdOffset === 0xffffffff || cdSize > ZIP_CENTRAL_MAX) return null;
+  // Offsets in the directory count from the start of the zip; bytes in front of it shift them all.
+  const cdStart = size - tailLen + end - cdSize;
+  const shift = cdStart - cdOffset;
+  if (cdStart < 0 || shift < 0) return null;
+  const cd = readRange(filePath, cdStart, cdSize);
   for (let p = 0; p + 46 <= cd.length && cd.readUInt32LE(p) === ZIP_CENTRAL; ) {
     const method = cd.readUInt16LE(p + 10);
     const compressed = cd.readUInt32LE(p + 20);
     const nameLen = cd.readUInt16LE(p + 28);
     const extraLen = cd.readUInt16LE(p + 30);
     const commentLen = cd.readUInt16LE(p + 32);
-    const localOffset = cd.readUInt32LE(p + 42);
+    const localOffset = cd.readUInt32LE(p + 42) + shift;
     const name = cd.subarray(p + 46, p + 46 + nameLen).toString("utf8").toLowerCase();
     if (PACKAGE_MANIFESTS.has(name)) return name.startsWith("android") ? "an Android app" : "a Windows app package";
-    if (name === "meta-inf/manifest.mf" && compressed <= ZIP_MANIFEST_MAX && (method === 0 || method === 8)) {
+    if (name === "meta-inf/manifest.mf") {
+      // A real manifest is small and stored or deflated. Anything else (too big, another method, a
+      // broken entry, or one that inflates past the cap) cannot be checked, so it counts as runnable.
+      const unreadable = "a Java archive whose manifest BAB cannot check";
+      if (compressed > ZIP_MANIFEST_MAX || (method !== 0 && method !== 8)) return unreadable;
       const local = readRange(filePath, localOffset, 30);
-      if (local.length === 30 && local.readUInt32LE(0) === ZIP_LOCAL) {
-        const dataAt = localOffset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
-        const raw = readRange(filePath, dataAt, compressed);
-        let text = "";
-        try {
-          text = (method === 0 ? raw : inflateRawSync(raw, { maxOutputLength: ZIP_MANIFEST_MAX * 4 })).toString("utf8");
-        } catch {
-          text = "";
-        }
-        if (/^Main-Class\s*:/im.test(text)) return "a runnable Java program";
+      if (local.length !== 30 || local.readUInt32LE(0) !== ZIP_LOCAL) return unreadable;
+      const dataAt = localOffset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
+      const raw = readRange(filePath, dataAt, compressed);
+      let text: string;
+      try {
+        text = (method === 0 ? raw : inflateRawSync(raw, { maxOutputLength: ZIP_MANIFEST_MAX * 4 })).toString("utf8");
+      } catch {
+        return unreadable;
       }
+      if (/^Main-Class\s*:/im.test(text)) return "a runnable Java program";
     }
     p += 46 + nameLen + extraLen + commentLen;
   }
@@ -125,15 +134,14 @@ function zipProgramKind(filePath: string, size: number): string | null {
 export function assertNotExecutableFile(filePath: string, size: number, head: Buffer): void {
   if (EXECUTABLE_MAGIC.some((m) => head.length >= m.length && head.subarray(0, m.length).equals(m))) throw new ValidationError(EXECUTABLE_REFUSAL);
   if (isPortableExecutable(filePath, size, head)) throw new ValidationError(EXECUTABLE_REFUSAL);
-  if (head.length >= 4 && head.readUInt32LE(0) === ZIP_LOCAL) {
-    let kind: string | null = null;
-    try {
-      kind = zipProgramKind(filePath, size);
-    } catch {
-      kind = null;
-    }
-    if (kind) throw new ValidationError(`this zip file is ${kind}, and BAB does not store executables`);
+  // Every file, not only those starting with "PK": a zip read from its end may have bytes in front.
+  let kind: string | null = null;
+  try {
+    kind = zipProgramKind(filePath, size);
+  } catch {
+    kind = null;
   }
+  if (kind) throw new ValidationError(`this zip file is ${kind}, and BAB does not store executables`);
 }
 
 /** Text files up to this size are checked for secrets before they are stored. */

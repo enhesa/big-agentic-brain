@@ -144,7 +144,8 @@ function filesOf(env: Env): BabConfig["files"] {
   if (maxFileBytes > userQuotaBytes) throw new ConfigError("BAB_FILES_MAX_FILE_BYTES (" + maxFileBytes + ") must not exceed BAB_FILES_USER_QUOTA_BYTES (" + userQuotaBytes + ")");
   if (defaultExpiryDays > maxExpiryDays) throw new ConfigError("BAB_FILES_DEFAULT_EXPIRY_DAYS (" + defaultExpiryDays + ") must not exceed BAB_FILES_MAX_EXPIRY_DAYS (" + maxExpiryDays + ")");
   if (diskFullPercent > 99) throw new ConfigError("BAB_FILES_DISK_FULL_PERCENT must be 1-99, got " + diskFullPercent);
-  if (deadlineSeconds < 10) throw new ConfigError("BAB_FILES_UPLOAD_DEADLINE_SECONDS must be at least 10, got " + deadlineSeconds);
+  // At most 30 minutes: the hourly sweep deletes temp uploads older than an hour.
+  if (deadlineSeconds < 10 || deadlineSeconds > 1800) throw new ConfigError("BAB_FILES_UPLOAD_DEADLINE_SECONDS must be 10-1800, got " + deadlineSeconds);
   return {
     enabled: bool(env, "BAB_FILES", true),
     maxFileBytes,

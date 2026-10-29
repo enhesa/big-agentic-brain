@@ -6,7 +6,7 @@ BAB stores files so agents, your other machines and colleagues can pass them to 
 
 Never confidential data: no customer data, database dumps, credentials, secrets or personal data. BAB is shared company infrastructure, and a file can be opened to the whole organisation. The rule is in the tool description and the served skill too.
 
-BAB checks text files up to 1 MB (UTF-8, no NUL bytes) with the same redaction rules as memories and messages. A file that holds a password, token, key, connection string, an outside email address, a phone, card, bank account or national ID number is refused. The answer names the kind of thing found, never the value. Binary files and archives are not inspected.
+BAB checks text files up to 1 MB (UTF-8, no NUL bytes) with the same redaction rules as memories and messages. A file that holds a password, token, key, connection string, an outside email address, a phone, card, bank account or national ID number is refused. The answer names the kind of thing found, never the value. Bigger text files, other encodings (such as UTF-16), binary files and archives are not inspected, so this catches mistakes, not someone set on getting a secret past it.
 
 ## Limits
 
@@ -18,7 +18,7 @@ BAB checks text files up to 1 MB (UTF-8, no NUL bytes) with the same redaction r
 | Longest expiry | 30 days | `BAB_FILES_MAX_EXPIRY_DAYS` |
 | Disk guard, percentage | refuse uploads above 85% full | `BAB_FILES_DISK_FULL_PERCENT` |
 | Disk guard, free space | keep twice the database size plus 64 MB free | `BAB_FILES_DISK_RESERVE_BYTES` |
-| Time for one upload | 5 minutes | `BAB_FILES_UPLOAD_DEADLINE_SECONDS` |
+| Time for one upload | 5 minutes | `BAB_FILES_UPLOAD_DEADLINE_SECONDS` (10 seconds to 30 minutes) |
 | Uploads at once | 2 per person, 3 per client address, 6 in all | fixed |
 | Inline `put` with `bab_files` | 700 KB | fixed (an MCP call is limited to 1 MB) |
 | Switch | on | `BAB_FILES` |
@@ -30,7 +30,7 @@ BAB checks text files up to 1 MB (UTF-8, no NUL bytes) with the same redaction r
 - Executables are refused, by extension and by their bytes:
   - Extensions: Windows programs and installers (`.exe`, `.dll`, `.msi`, `.msix`, `.application`, `.appref-ms`), scripts and shortcuts Windows runs on a double click (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.hta`, `.lnk`, `.url`, `.scf`, `.library-ms`, `.chm`), Office files with macros (`.docm`, `.xlsm`, `.xlam`), OneNote (`.one`), disk images (`.iso`, `.img`, `.vhd`, `.vhdx`), Java, Android and Apple packages (`.jar`, `.apk`, `.ipa`, `.dmg`, `.pkg`), Linux packages and libraries (`.deb`, `.rpm`, `.so`), and similar.
   - Bytes: Windows programs (an `MZ` header that points to a `PE` header; plain text that starts with "MZ" is fine), Linux and macOS programs, Java classes.
-  - Zip files: BAB reads the zip's table of contents and refuses Android apps (`AndroidManifest.xml`), Windows app packages (`AppxManifest.xml`) and runnable Java programs (`META-INF/MANIFEST.MF` with `Main-Class`). It does not unpack anything else, so other files inside an archive are not inspected.
+  - Zip files: BAB reads the zip's table of contents from the end of the file, so bytes put in front of a zip do not hide it. It refuses Android apps (`AndroidManifest.xml`), Windows app packages (`AppxManifest.xml`) and runnable Java programs (`META-INF/MANIFEST.MF` with `Main-Class`, or a manifest it cannot read). It does not unpack anything else, so other files inside an archive are not inspected. A zip64 file or a table of contents over 4 MB is not inspected.
   - Source code such as `.sh`, `.py` or `.js` is text and is allowed.
 
 ## Who sees what
@@ -81,7 +81,7 @@ A link is `https://bab.example.com/api/files/dl/<token>`: 256 random bits, valid
 
 ## Storage and backup
 
-The bytes live on BAB's data volume under `DATA_DIR/files`, named by a random id, never by the uploaded name. An upload streams to `DATA_DIR/files/tmp` and moves into place when it is complete and checked, so a backup never sees half a file under a final name. The bytes move into place before the row is written: a crash in between leaves bytes with no row, which the hourly maintenance deletes after an hour. The same maintenance marks a row whose bytes are missing as deleted, so it stops counting towards the quota. Rows in SQLite (`files`, `file_shares`, `file_links`) hold the name, owner, size, checksum, expiry and shares. Anything that backs up the data volume backs up the files; plan its size for the per-person total times the number of people who upload.
+The bytes live on BAB's data volume under `DATA_DIR/files`, named by a random id, never by the uploaded name. An upload streams to `DATA_DIR/files/tmp` and moves into place when it is complete and checked, so a backup never sees half a file under a final name. The bytes move into place before the row is written: a crash in between leaves bytes with no row, which the hourly maintenance deletes after an hour. The same maintenance marks a row whose bytes are missing as deleted, so it stops counting towards the quota: at most 100 a run, and none when every stored file is missing at once, which points at a volume that is not mounted (BAB logs a warning instead). Rows in SQLite (`files`, `file_shares`, `file_links`) hold the name, owner, size, checksum, expiry and shares. Anything that backs up the data volume backs up the files; plan its size for the per-person total times the number of people who upload.
 
 Every put, fetch, share, expiry, loss and delete writes an audit row.
 

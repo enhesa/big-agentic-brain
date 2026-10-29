@@ -679,16 +679,25 @@ export function purgeRemovable(now: number = Date.now(), limit = 500, ownerId?: 
   return removed;
 }
 
+/** Most rows dropped for missing bytes in one maintenance run. */
+const LOST_ROWS_PER_RUN = 100;
+
 /**
- * Live rows whose bytes are gone (a lost volume, a hand-deleted file): marked deleted and removed, so
- * they stop counting towards the quota and stop showing in lists. Returns how many.
+ * Live rows whose bytes are gone (a hand-deleted file, a lost disk block): marked deleted and removed,
+ * so they stop counting towards the quota and stop showing in lists. Returns how many. When every live
+ * row is missing its bytes, the volume is more likely unmounted or empty for a moment than lost: that
+ * run changes nothing and warns, since a drop cannot be undone.
  */
 function dropRowsWithoutBytes(iso: string): number {
   const db = getDb();
   const rows = db.prepare("SELECT id, owner_id, size FROM files WHERE removed_at IS NULL AND deleted_at IS NULL").all() as unknown as { id: string; owner_id: string; size: number }[];
+  const missing = rows.filter((r) => !blobExists(r.id));
+  if (missing.length > 1 && missing.length === rows.length) {
+    console.warn(`bab: all ${rows.length} stored files are missing their bytes; is the data volume mounted? Not dropping them.`);
+    return 0;
+  }
   let dropped = 0;
-  for (const r of rows) {
-    if (blobExists(r.id)) continue;
+  for (const r of missing.slice(0, LOST_ROWS_PER_RUN)) {
     inTransaction(db, () => {
       db.prepare("UPDATE files SET deleted_at = ?, removed_at = ? WHERE id = ? AND removed_at IS NULL").run(iso, iso, r.id);
       db.prepare("DELETE FROM file_links WHERE file_id = ?").run(r.id);
