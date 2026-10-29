@@ -959,28 +959,24 @@ export default async function UsagePage({
                   <th>Team</th>
                   <th>Contact for</th>
                   <th>Last seen</th>
-                  <th className={styles.num} title="Memories this person saved that are not deleted.">
-                    Saved
+                  <th className={`${styles.num} ${styles.numWrap}`} title="Memories this person saved that are not deleted.">
+                    Memories saved
                   </th>
-                  <th className={styles.num} title="Memories by someone else this person marked helpful or gave kudos. Searches do not record who read what, so a memory used without a reaction is not counted.">
-                    Used
+                  <th className={`${styles.num} ${styles.numWrap}`} title="Memories by someone else this person marked helpful or gave kudos. Searches do not record who read what, so a memory used without a reaction is not counted.">
+                    Memories used
                   </th>
-                  {maintainer && (
-                    <>
-                      <th className={styles.num} title="Messages sent and received, all time. Maintainers only.">
-                        Messages
-                      </th>
-                      <th className={styles.num} title="Threads with a message from or to this person, all time. Maintainers only.">
-                        Conversations
-                      </th>
-                    </>
-                  )}
+                  <th className={`${styles.num} ${styles.numWrap}`} title="Messages this person sent or received through BAB, all time. Counts only, never the text.">
+                    Messages exchanged
+                  </th>
+                  <th className={`${styles.num} ${styles.numWrap}`} title="Threads with a message from or to this person, all time.">
+                    Conversations
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {usersPage.users.length === 0 && (
                   <tr>
-                    <td colSpan={maintainer ? 9 : 7}>No users yet.</td>
+                    <td colSpan={9}>No users yet.</td>
                   </tr>
                 )}
                 {usersPage.users.map((u) => (
@@ -992,14 +988,10 @@ export default async function UsagePage({
                     <td className={styles.nowrap}>{parseDbTime(u.last_seen_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</td>
                     <td className={styles.num}>{memoryCounts[u.id] ?? 0}</td>
                     <td className={styles.num}>{userCounts[u.id]?.used ?? 0}</td>
-                    {maintainer && (
-                      <>
-                        <td className={styles.num} title={`${formatCount(userCounts[u.id]?.sent ?? 0)} sent, ${formatCount(userCounts[u.id]?.received ?? 0)} received`}>
-                          {formatCount((userCounts[u.id]?.sent ?? 0) + (userCounts[u.id]?.received ?? 0))}
-                        </td>
-                        <td className={styles.num}>{formatCount(userCounts[u.id]?.conversations ?? 0)}</td>
-                      </>
-                    )}
+                    <td className={styles.num} title={`${formatCount(userCounts[u.id]?.sent ?? 0)} sent, ${formatCount(userCounts[u.id]?.received ?? 0)} received`}>
+                      {formatCount((userCounts[u.id]?.sent ?? 0) + (userCounts[u.id]?.received ?? 0))}
+                    </td>
+                    <td className={styles.num}>{formatCount(userCounts[u.id]?.conversations ?? 0)}</td>
                   </tr>
                 ))}
               </tbody>

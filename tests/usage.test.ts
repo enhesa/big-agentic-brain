@@ -923,23 +923,23 @@ describe("/usage page", () => {
   }
   const usersOf = (html: string) => html.match(/<section id="users".*?<\/section>/s)?.[0] ?? "";
 
-  it("shows everyone message and reminder totals, but no per-person message counts and no text", async () => {
+  it("shows everyone message and reminder totals and each person's message counts, never the text", async () => {
     await seedMessageAndReminder();
     const html = await render(B);
     expect(html).toContain("Messages and reminders");
     expect(html).toMatch(/data-testid="messages-total"[^>]*>1 message in 12 months</);
     expect(html).toContain("Reminders set, done, snoozed and dropped per week");
     expect(html).not.toContain("qx7");
-    expect(usersOf(html)).toContain(">Used<");
-    expect(usersOf(html)).not.toContain(">Conversations<");
-    expect(usersOf(html)).not.toContain(" sent, ");
+    const users = usersOf(html);
+    for (const th of ["Memories saved", "Memories used", "Messages exchanged", "Conversations"]) expect(users).toContain(`>${th}</th>`);
+    expect(users).toContain('title="1 sent, 0 received"');
+    expect(users).toContain('title="0 sent, 1 received"');
   });
 
-  it("shows a maintainer per-person message and conversation counts, still without text", async () => {
+  it("shows an anonymous viewer the same Users columns", async () => {
     await seedMessageAndReminder();
-    const html = await render(MAINT);
-    expect(usersOf(html)).toContain(">Conversations<");
-    expect(usersOf(html)).toContain('title="1 sent, 0 received"');
+    const html = await render(null);
+    expect(usersOf(html)).toContain(">Messages exchanged</th>");
     expect(html).not.toContain("qx7");
   });
 
