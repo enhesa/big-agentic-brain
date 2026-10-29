@@ -60,7 +60,20 @@ export interface BabConfig {
   mcpTools: "full" | "lean";
   inboxPage: boolean;
   /** The file store (lib/files.ts). Sizes in bytes, expiry in days. */
-  files: { enabled: boolean; maxFileBytes: number; userQuotaBytes: number; defaultExpiryDays: number; maxExpiryDays: number; diskFullPercent: number };
+  files: {
+    enabled: boolean;
+    maxFileBytes: number;
+    userQuotaBytes: number;
+    defaultExpiryDays: number;
+    maxExpiryDays: number;
+    diskFullPercent: number;
+    /** Free bytes kept on top of twice the database size (BAB_FILES_DISK_RESERVE_BYTES). */
+    diskReserveBytes: number;
+    /** Longest one upload may take, in milliseconds (BAB_FILES_UPLOAD_DEADLINE_SECONDS). */
+    uploadDeadlineMs: number;
+    /** Lets header-declared and connection identities use the store (BAB_FILES_ALLOW_DECLARED). Local development only. */
+    allowDeclared: boolean;
+  };
   clientIpHeader: "x-real-ip" | "x-forwarded-for-rightmost" | null;
   /** The unrecognised BAB_CLIENT_IP_HEADER value (lowercased) that was ignored, for a one-time warning; else null. */
   clientIpHeaderInvalid: string | null;
@@ -125,11 +138,24 @@ function filesOf(env: Env): BabConfig["files"] {
   const defaultExpiryDays = int(env, "BAB_FILES_DEFAULT_EXPIRY_DAYS", 14);
   const maxExpiryDays = int(env, "BAB_FILES_MAX_EXPIRY_DAYS", 30);
   const diskFullPercent = int(env, "BAB_FILES_DISK_FULL_PERCENT", 85);
+  const diskReserveBytes = int(env, "BAB_FILES_DISK_RESERVE_BYTES", 64 * 1024 * 1024);
+  const deadlineSeconds = int(env, "BAB_FILES_UPLOAD_DEADLINE_SECONDS", 300);
   if (maxFileBytes > FILES_MAX_FILE_BYTES_CEILING) throw new ConfigError("BAB_FILES_MAX_FILE_BYTES must be at most " + FILES_MAX_FILE_BYTES_CEILING + ", got " + maxFileBytes);
   if (maxFileBytes > userQuotaBytes) throw new ConfigError("BAB_FILES_MAX_FILE_BYTES (" + maxFileBytes + ") must not exceed BAB_FILES_USER_QUOTA_BYTES (" + userQuotaBytes + ")");
   if (defaultExpiryDays > maxExpiryDays) throw new ConfigError("BAB_FILES_DEFAULT_EXPIRY_DAYS (" + defaultExpiryDays + ") must not exceed BAB_FILES_MAX_EXPIRY_DAYS (" + maxExpiryDays + ")");
   if (diskFullPercent > 99) throw new ConfigError("BAB_FILES_DISK_FULL_PERCENT must be 1-99, got " + diskFullPercent);
-  return { enabled: bool(env, "BAB_FILES", true), maxFileBytes, userQuotaBytes, defaultExpiryDays, maxExpiryDays, diskFullPercent };
+  if (deadlineSeconds < 10) throw new ConfigError("BAB_FILES_UPLOAD_DEADLINE_SECONDS must be at least 10, got " + deadlineSeconds);
+  return {
+    enabled: bool(env, "BAB_FILES", true),
+    maxFileBytes,
+    userQuotaBytes,
+    defaultExpiryDays,
+    maxExpiryDays,
+    diskFullPercent,
+    diskReserveBytes,
+    uploadDeadlineMs: deadlineSeconds * 1000,
+    allowDeclared: bool(env, "BAB_FILES_ALLOW_DECLARED", false),
+  };
 }
 
 function csvOf(v: string | undefined): string[] {
@@ -369,7 +395,8 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   log("[config] branding: org=" + b.orgName + " accent=" + b.accentColor + " marketplace=" + b.pluginMarketplace + " (" + b.pluginMarketplaceName + ") locale=" + b.locale + " tz=" + b.timeZone);
   log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage);
   const f = c.files;
-  log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent);
+  log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent + " diskReserveBytes=" + f.diskReserveBytes + " uploadDeadlineMs=" + f.uploadDeadlineMs + " allowDeclared=" + f.allowDeclared);
+  if (f.enabled && f.allowDeclared) log("[config] WARN: BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can read and delete other people's files");
   if (isOpen(c)) {
     log("[config] WARN: open mode, no proxy identity and no API tokens configured, callers are not authenticated");
   } else if (c.tokens !== null) {

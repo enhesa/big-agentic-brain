@@ -67,7 +67,7 @@ async function rule(opts: {
 
 async function tool(name: string, args: Record<string, unknown>, actor = ME) {
   const { findTool } = await import("../lib/mcp");
-  return JSON.parse(findTool(name)!.run({ id: actor } as never, args));
+  return JSON.parse(findTool(name)!.run({ id: actor } as never, args) as string);
 }
 
 async function post(body: Record<string, unknown>) {

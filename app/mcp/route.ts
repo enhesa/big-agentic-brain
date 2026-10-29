@@ -281,7 +281,7 @@ export async function POST(req: Request): Promise<Response> {
         });
       }
       try {
-        const text = tool.run(actor, args, { origin, auditId });
+        const text = await tool.run(actor, args, { origin, auditId });
         return rpcResult(id, { content: [{ type: "text", text }] });
       } catch (err) {
         // A business refusal is a tool-level failure, not a broken request:

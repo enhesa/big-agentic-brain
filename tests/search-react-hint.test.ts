@@ -42,7 +42,7 @@ async function memory(authorId: string, title: string, body = "Deploys go throug
 
 async function search(actorId: string, query: string, extra: Record<string, unknown> = {}) {
   const { findTool } = await import("../lib/mcp");
-  return JSON.parse(findTool("bab_search")!.run({ id: actorId } as never, { query, ...extra }));
+  return JSON.parse(findTool("bab_search")!.run({ id: actorId } as never, { query, ...extra }) as string);
 }
 
 describe("bab_search answers", () => {

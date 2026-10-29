@@ -79,9 +79,12 @@ import {
   updateFile,
   inlineText,
   assertFilesEnabled,
+  assertFilesIdentity,
   FILES_CONTENT_RULE,
   FILE_INLINE_MAX_BYTES,
+  FILE_MCP_PUT_MAX_BYTES,
 } from "./files";
+import { sizeText } from "./instructions";
 import {
   create as createFeedback,
   list as listFeedback,
@@ -199,7 +202,8 @@ export interface Tool {
   annotations: ToolAnnotations;
   description: string;
   inputSchema: Record<string, unknown>;
-  run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string;
+  /** The result text. bab_files answers with a Promise (it writes to disk); the /mcp route awaits every tool. */
+  run(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string | Promise<string>;
 }
 
 const CONFIDENCE_VALUES: LearningConfidence[] = ["low", "medium", "high"];
@@ -539,12 +543,27 @@ function runSend(actor: SessionUser, args: Record<string, unknown>): string {
 
 const FILES_ACTIONS = ["put", "get", "list", "delete", "share"] as const;
 
-function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): string {
+/** The bab_files description, with this deployment's limits (config().files), built when the tool list is served. */
+function filesDescription(): string {
+  const f = config().files;
+  return (
+    "Passes files between sessions, your machines and colleagues. " +
+    FILES_CONTENT_RULE + " " +
+    "Yours only, unless you shareWith people; orgVisible:true opens it to everyone and needs the user's yes. " +
+    `Limits: ${sizeText(f.maxFileBytes)} per file, ${sizeText(f.userQuotaBytes)} per person (list shows used/quota), executables and text holding secrets refused, expiry ${f.defaultExpiryDays} days by default, at most ${f.maxExpiryDays}. ` +
+    `put: content or contentBase64, at most ${Math.floor(FILE_MCP_PUT_MAX_BYTES / 1024)} KB; bigger: curl -X POST --data-binary @file "<origin>/api/files?name=<name>" with your X-Bab-Device header or a token bound to you (X-Bab-Actor-* alone is refused). ` +
+    "Many small files: bundle into one tar or zip. to: shares it and sends that person a BAB message (your own id reaches your other machine). " +
+    "get: details, a one-hour download link, small text inline; check sha256. delete needs the user's yes."
+  );
+}
+
+async function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolContext): Promise<string> {
   const action = str(args.action);
   if (!FILES_ACTIONS.includes(action as (typeof FILES_ACTIONS)[number])) {
     throw new ValidationError("action must be one of put, get, list, delete, share; required, has no default");
   }
   assertFilesEnabled();
+  assertFilesIdentity(actor);
   const origin = originOf(ctx);
   if (action === "list") return JSON.stringify(listFiles(actor.id));
   if (action === "put") {
@@ -559,7 +578,7 @@ function runFiles(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     } else {
       bytes = Buffer.from(String(args.content), "utf8");
     }
-    const result = putFileBytes(
+    const result = await putFileBytes(
       {
         ownerId: actor.id,
         name: args.name,
@@ -1159,13 +1178,10 @@ export const TOOLS: Tool[] = [
     name: "bab_files",
     title: "Share files",
     annotations: { title: "Share files", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-    description:
-      "Passes files between sessions, your machines and colleagues. " +
-      FILES_CONTENT_RULE + " " +
-      "Yours only, unless you shareWith people or set orgVisible. Limits: 25 MB per file, 100 MB per person (list shows used/quota), executables refused, expiry 14 days by default, at most 30. " +
-      "put: content or contentBase64, small files only (about 700 KB); bigger: curl -X POST --data-binary @file \"<origin>/api/files?name=<name>\" with your identity headers. " +
-      "Many small files: bundle into one tar or zip. to: shares it and sends that person a BAB message (your own id reaches your other machine). " +
-      "get: details, a one-hour download link, small text inline; check sha256. delete needs the user's yes.",
+    // A getter: the limits come from config(), read when the tool list is served.
+    get description() {
+      return filesDescription();
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -1177,7 +1193,7 @@ export const TOOLS: Tool[] = [
         expiresInDays: { type: "number", description: "put, share: days from now." },
         shareWith: { type: "array", items: { type: "string" }, description: "put, share: user ids." },
         unshare: { type: "array", items: { type: "string" }, description: "share: user ids." },
-        orgVisible: { type: "boolean", description: "put, share: everyone may fetch it." },
+        orgVisible: { type: "boolean", description: "put, share: everyone may fetch it. Only with the user's yes." },
         to: { type: "string", description: "put: user id to deliver to." },
         subject: { type: "string", description: "put with to: message subject." },
         note: { type: "string", description: "put with to: message text." },

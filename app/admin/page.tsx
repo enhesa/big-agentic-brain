@@ -36,7 +36,9 @@ export default async function AdminIndexPage() {
         {files.volume
           ? `${mb(files.volume.usedBytes)} of ${mb(files.volume.totalBytes)} used (${files.volume.usedPercent}%), ${mb(files.volume.freeBytes)} free.`
           : "size unknown on this platform."}{" "}
-        Uploads stop above {files.diskFullPercent}%{files.uploadsBlocked ? ": uploads are refused now." : "."}
+        Uploads stop above {files.diskFullPercent}% or under {mb(files.diskFloorBytes)} free (twice the database plus the reserve)
+        {files.uploadsBlocked ? ": uploads are refused now." : "."}
+        {f.allowDeclared ? " BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can reach other people's files." : ""}
       </p>
       <p>
         {files.liveFiles} files on disk, {mb(files.bytesOnDisk)}, from {files.owners} people. Limits: {mb(f.maxFileBytes)} per file, {mb(f.userQuotaBytes)} per person,

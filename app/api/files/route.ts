@@ -1,27 +1,16 @@
 import { NextRequest } from "next/server";
-import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
 import { listFiles, putFile } from "@/lib/files";
+import { requireFilesActor } from "@/lib/files-route";
 import { toApiError } from "@/lib/errors";
 import { publicOrigin } from "@/lib/origin";
-import { gate } from "@/lib/gate";
+import { clientIp, clientIpVerified } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
-async function actorOr(): Promise<Awaited<ReturnType<typeof requireActorForApi>> | Response> {
-  try {
-    return await requireActorForApi();
-  } catch (e) {
-    if (e instanceof Response) return e;
-    throw e;
-  }
-}
-
-/** GET /api/files: my live files, files shared with me, and my quota use. proxy.ts skips this path, so the gate runs here. */
+/** GET /api/files: my live files, files shared with me, and my quota use. proxy.ts skips this path, so the gate runs in requireFilesActor. */
 export async function GET(req: Request) {
-  const refused = gate(req);
-  if (refused) return refused;
-  const user = await actorOr();
+  const user = await requireFilesActor(req);
   if (user instanceof Response) return user;
   await auditRequest({ actor: user, method: "GET", path: "/api/files", via: "mcp" });
   try {
@@ -38,10 +27,8 @@ export async function GET(req: Request) {
  * that would buffer the whole body; a retried upload is a second file, which the owner can delete.
  */
 export async function POST(req: NextRequest) {
-  // proxy.ts skips this path so Next never buffers the upload: the size cap and token check run here.
-  const refused = gate(req);
-  if (refused) return refused;
-  const user = await actorOr();
+  // proxy.ts skips this path so Next never buffers the upload: the size cap and token check run in requireFilesActor.
+  const user = await requireFilesActor(req);
   if (user instanceof Response) return user;
   await auditRequest({ actor: user, method: "POST", path: "/api/files", via: "mcp" });
   const q = new URL(req.url).searchParams;
@@ -53,6 +40,7 @@ export async function POST(req: NextRequest) {
         name: q.get("name"),
         body: req.body,
         declaredSize: length == null ? null : Number(length),
+        ip: clientIpVerified() ? clientIp(req.headers) : null,
         expiresInDays: q.get("expiresInDays"),
         shareWith: q.get("shareWith"),
         orgVisible: q.get("orgVisible"),

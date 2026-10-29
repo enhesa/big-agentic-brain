@@ -62,7 +62,7 @@ async function row(id: string) {
 
 async function tool(args: Record<string, unknown>, actor: string) {
   const { findTool } = await import("../lib/mcp");
-  return JSON.parse(findTool("bab_react")!.run({ id: actor } as never, args));
+  return JSON.parse(findTool("bab_react")!.run({ id: actor } as never, args) as string);
 }
 
 describe("BAB_MAINTAINERS is set", () => {

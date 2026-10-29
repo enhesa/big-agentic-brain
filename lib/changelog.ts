@@ -19,6 +19,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-29",
+    title: "Safer file store",
+    changes: [
+      "Files need a proven identity: a BAB device, the sign-in proxy or a token bound to you.",
+      "Uploads keep free disk space for the database, end after five minutes, and are capped per address.",
+      "Text files holding secrets, disk images, shortcuts and app packages are refused.",
+    ],
+  },
+  {
     date: "2026-10-28",
     title: "Smaller runtime image, comments and votes on the memory page, messages and reminders on the usage page",
     changes: [

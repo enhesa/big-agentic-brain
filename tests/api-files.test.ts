@@ -13,6 +13,8 @@ beforeEach(async () => {
   dataDir = mkdtempSync(path.join(tmpdir(), "bab-api-files-test-"));
   process.env.DATA_DIR = dataDir;
   process.env.BAB_PUBLIC_ORIGIN = "https://bab.example.com";
+  // These flows use X-Bab-Actor-* headers; the identity rule itself is tested below with the setting off.
+  process.env.BAB_FILES_ALLOW_DECLARED = "1";
   vi.resetModules();
   actor = null;
   vi.doMock("next/headers", () => ({
@@ -30,6 +32,8 @@ afterEach(async () => {
   delete process.env.DATA_DIR;
   delete process.env.BAB_PUBLIC_ORIGIN;
   delete process.env.BAB_API_TOKENS;
+  delete process.env.BAB_FILES_ALLOW_DECLARED;
+  delete process.env.BAB_CLIENT_IP_HEADER;
   vi.doUnmock("next/headers");
   vi.resetModules();
 });
@@ -132,13 +136,84 @@ describe("download headers", () => {
   });
 });
 
+describe("identity rule", () => {
+  async function refusedEverywhere() {
+    const { GET, POST } = await import("../app/api/files/route");
+    const { GET: META, PATCH, DELETE } = await import("../app/api/files/[id]/route");
+    const { GET: CONTENT } = await import("../app/api/files/[id]/content/route");
+    const id = "a".repeat(32);
+    const statuses = [
+      (await GET(new Request("http://x/api/files"))).status,
+      (await POST(new Request("http://x/api/files?name=a.txt", { method: "POST", body: "abc", headers: { "content-length": "3" } }) as never)).status,
+      (await META(new Request("http://x") as never, ctx(id))).status,
+      (await PATCH(new Request("http://x", { method: "PATCH", body: "{}" }) as never, ctx(id))).status,
+      (await DELETE(new Request("http://x", { method: "DELETE" }) as never, ctx(id))).status,
+      (await CONTENT(new Request("http://x") as never, ctx(id))).status,
+    ];
+    return statuses;
+  }
+
+  it("refuses every route to a caller identified only by X-Bab-Actor-* headers", async () => {
+    delete process.env.BAB_FILES_ALLOW_DECLARED;
+    (await import("../lib/db"))._resetDbForTests();
+    vi.resetModules();
+    as(OWNER, "Owner One");
+    expect(await refusedEverywhere()).toEqual([403, 403, 403, 403, 403, 403]);
+    const { GET } = await import("../app/api/files/route");
+    expect((await (await GET(new Request("http://x/api/files"))).json()).error).toMatch(/proven identity/);
+  });
+
+  it("serves a caller whose token is bound to them", async () => {
+    delete process.env.BAB_FILES_ALLOW_DECLARED;
+    process.env.BAB_API_TOKENS = "owner-t0ken-for-tests=" + OWNER;
+    (await import("../lib/db"))._resetDbForTests();
+    const auth = { authorization: "Bearer owner-t0ken-for-tests" };
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers(auth) }));
+    vi.resetModules();
+    const { POST, GET } = await import("../app/api/files/route");
+    const res = await POST(new Request("http://x/api/files?name=a.txt", { method: "POST", body: "abc", headers: { "content-length": "3", ...auth } }) as never);
+    expect(res.status).toBe(201);
+    expect((await (await GET(new Request("http://x/api/files", { headers: auth }))).json()).files).toHaveLength(1);
+  });
+});
+
+describe("download link audit", () => {
+  it("records the verified client address, the same one the rate limit uses", async () => {
+    process.env.BAB_CLIENT_IP_HEADER = "x-real-ip";
+    (await import("../lib/db"))._resetDbForTests();
+    vi.resetModules();
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: OWNER, email: OWNER, name: "Owner One", roles: [] });
+    as(OWNER, "Owner One");
+    const put = await (await upload("a.txt", new Uint8Array([1, 2, 3]))).json();
+    const token = put.download.url.split("/").pop();
+    const { GET: DL } = await import("../app/api/files/dl/[token]/route");
+    const res = await DL(new Request("http://x", { headers: { "x-real-ip": "203.0.113.9" } }), { params: Promise.resolve({ token }) });
+    expect(res.status).toBe(200);
+    const { getDb } = await import("../lib/db");
+    const row = getDb().prepare("SELECT ip, path, details FROM audit_log WHERE action = 'file_get' ORDER BY id DESC LIMIT 1").get() as { ip: string; path: string | null; details: string };
+    expect(row.ip).toBe("203.0.113.9");
+    expect(JSON.parse(row.details)).toMatchObject({ how: "link" });
+    expect(JSON.stringify(row)).not.toContain(token);
+  });
+});
+
 describe("proxy", () => {
   it("leaves POST /api/files out of the request proxy, so Next never buffers an upload, and keeps every other API path in", async () => {
     const { config } = await import("../proxy");
     expect(config.matcher).toEqual(["/api", "/api/((?!files$).*)", "/mcp"]);
-    const re = new RegExp("^/api/((?!files$).*)$");
-    expect(re.test("/api/files")).toBe(false);
-    for (const p of ["/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/learnings", "/api/filesx"]) expect(re.test(p), p).toBe(true);
+    // Next's own matcher logic runs in tests/proxy-matcher.test.ts.
+  });
+
+  it("runs the gate inside the id and content routes too, not only through the proxy", async () => {
+    process.env.BAB_API_TOKENS = "t0ken-for-tests-only";
+    (await import("../lib/db"))._resetDbForTests();
+    vi.resetModules();
+    as(OWNER, "Owner One");
+    const { GET: META } = await import("../app/api/files/[id]/route");
+    const { GET: CONTENT } = await import("../app/api/files/[id]/content/route");
+    expect((await META(new Request("http://x/api/files/" + "a".repeat(32)) as never, ctx("a".repeat(32)))).status).toBe(401);
+    expect((await CONTENT(new Request("http://x/api/files/" + "a".repeat(32) + "/content") as never, ctx("a".repeat(32)))).status).toBe(401);
   });
 
   it("runs the gate inside the upload route: a token is required in token mode", async () => {

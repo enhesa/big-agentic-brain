@@ -905,7 +905,7 @@ describe("first-prompt project nudge", () => {
     expect(text).not.toContain(deleted.id);
 
     const { findTool } = await import("../lib/mcp");
-    const found = JSON.parse(findTool("bab_search")!.run({ id: ME } as never, { query: "", project: "billing.api" }));
+    const found = JSON.parse(findTool("bab_search")!.run({ id: ME } as never, { query: "", project: "billing.api" }) as string);
     expect(found.total).toBe(2);
   });
 });

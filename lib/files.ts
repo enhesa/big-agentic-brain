@@ -6,14 +6,19 @@
  * - A file belongs to its uploader. Only the owner deletes, shares or changes it.
  * - Others fetch it only when the owner shared it with them or made it visible to the whole org.
  *   A file someone may not see answers "not found", never "forbidden", so ids cannot be probed.
+ * - Only a caller whose identity is proven may use it: a bound device, the sign-in proxy or a token
+ *   bound to that person (assertFilesIdentity). Header-declared identities are refused.
  * - Caps: BAB_FILES_MAX_FILE_BYTES per file, BAB_FILES_USER_QUOTA_BYTES per owner across their files
- *   still on disk, and no uploads while the volume is fuller than BAB_FILES_DISK_FULL_PERCENT.
+ *   still on disk, and no uploads while the volume is fuller than BAB_FILES_DISK_FULL_PERCENT or its
+ *   free space would drop under the floor that keeps SQLite and its snapshot safe (diskFloorBytes).
  * - Every file expires (default 14 days, at most 30). Expired and deleted files stop counting
  *   towards the quota once their bytes are removed (purgeRemovable).
- * - Executables are refused by extension and by their first bytes.
+ * - Executables are refused by extension and by their bytes; text files holding secrets are refused
+ *   (lib/file-checks.ts).
  * - Every put, fetch, share and delete writes an audit row.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { getDb, inTransaction } from "./db";
 import { config } from "./config";
 import { audit } from "./audit";
@@ -22,8 +27,10 @@ import { getUser } from "./users";
 import { send } from "./messages";
 import { ApiError, NotFoundError, ValidationError, ForbiddenError, TooManyRequestsError } from "./errors";
 import type { AuditVia } from "./types";
+import { assertNotExecutableFile, assertNotExecutableName, assertNoSecretsInText, SECRET_SCAN_MAX_BYTES } from "./file-checks";
 import {
   blobExists,
+  databaseBytes,
   commitUpload,
   discardUpload,
   newFileId,
@@ -32,9 +39,11 @@ import {
   stageUpload,
   readBlobSync,
   stageBuffer,
+  sweepOrphanBlobs,
   sweepStaleTemps,
   UploadTooLargeError,
   UploadStalledError,
+  UploadDeadlineError,
   UPLOAD_IDLE_TIMEOUT_MS,
   type StagedUpload,
   volumeUsage,
@@ -51,34 +60,42 @@ export const FILE_SHARES_MAX = 50;
 export const FILE_NOTE_MAX = 2000;
 /** Largest file a bab_files get returns inline as text. */
 export const FILE_INLINE_MAX_BYTES = 256 * 1024;
+/** Largest file a bab_files put takes inline: an MCP call is limited to 1 MB, and base64 adds a third. */
+export const FILE_MCP_PUT_MAX_BYTES = 700 * 1024;
 
 /** What every caller is told about content. Shown in the tool description and the docs. */
 export const FILES_CONTENT_RULE =
   "Never upload confidential data: no customer data, database dumps, credentials, secrets or personal data.";
 
-/** Extensions refused as executables. Source code (.sh, .py, .js) is allowed: it is text. */
-const EXECUTABLE_EXTENSIONS = new Set([
-  "exe", "dll", "sys", "scr", "com", "pif", "cpl", "msi", "msp", "msix", "msixbundle", "appx", "appxbundle",
-  "bat", "cmd", "ps1", "psm1", "psd1", "vbs", "vbe", "jse", "wsf", "wsh", "hta", "lnk", "reg", "gadget",
-  "jar", "apk", "aab", "ipa", "app", "dmg", "pkg", "deb", "rpm", "elf", "so", "dylib", "xll",
-]);
-
-/** First bytes of native executables: PE (MZ), ELF, Mach-O (both byte orders, 32 and 64 bit), fat Mach-O / Java class. */
-const EXECUTABLE_MAGIC: Buffer[] = [
-  Buffer.from([0x4d, 0x5a]),
-  Buffer.from([0x7f, 0x45, 0x4c, 0x46]),
-  Buffer.from([0xfe, 0xed, 0xfa, 0xce]),
-  Buffer.from([0xfe, 0xed, 0xfa, 0xcf]),
-  Buffer.from([0xce, 0xfa, 0xed, 0xfe]),
-  Buffer.from([0xcf, 0xfa, 0xed, 0xfe]),
-  Buffer.from([0xca, 0xfe, 0xba, 0xbe]),
-];
-
-/** Streamed uploads running at once, per person and in all. */
+/** Streamed uploads running at once: per person, per verified client address, and in all. */
 export const UPLOADS_IN_FLIGHT_PER_USER = 2;
+export const UPLOADS_IN_FLIGHT_PER_IP = 3;
 export const UPLOADS_IN_FLIGHT_TOTAL = 6;
 const inFlight = new Map<string, number>();
+const inFlightByIp = new Map<string, number>();
 let inFlightTotal = 0;
+
+/** The identity of a caller, as far as the file store needs it (lib/session.ts SessionUser). */
+export interface FilesCaller {
+  source: "proxy" | "declared" | "device" | "connection";
+  tokenBound?: true;
+}
+
+/**
+ * Refuses a caller whose identity is only their own word in this request: X-Bab-Actor-* headers
+ * or an MCP connection. Those can name anyone, and a file store must not let anyone read, share
+ * or delete another person's files. Allowed: a bound device, the sign-in proxy, a token bound to
+ * the person. BAB_FILES_ALLOW_DECLARED=1 lifts it for local development.
+ */
+export function assertFilesIdentity(caller: FilesCaller): void {
+  if (caller.source === "proxy" || caller.source === "device" || caller.tokenBound) return;
+  if (config().files.allowDeclared) return;
+  throw new ForbiddenError(
+    "The file store needs a proven identity: the BAB plugin's device, the sign-in proxy, or an API token bound to you. " +
+      "An identity sent only in headers, or said with bab_identify on a connection with no device, can name anyone, so it cannot reach files. " +
+      "Install the BAB plugin, or ask a BAB maintainer for a token bound to you.",
+  );
+}
 
 /** 413: the upload is bigger than the per-file cap. */
 export class FileTooLargeError extends ApiError {
@@ -156,24 +173,6 @@ export function cleanFileName(raw: unknown): string {
   return name;
 }
 
-function extensionOf(name: string): string {
-  const i = name.lastIndexOf(".");
-  return i < 0 ? "" : name.slice(i + 1).toLowerCase();
-}
-
-/** Refuses executables by extension (from the name alone, so before any upload). */
-export function assertNotExecutableName(name: string): void {
-  const ext = extensionOf(name);
-  if (EXECUTABLE_EXTENSIONS.has(ext)) throw new ValidationError(`.${ext} files are refused: BAB does not store executables`);
-}
-
-/** Refuses executables by their first bytes. */
-export function assertNotExecutableContent(head: Buffer): void {
-  if (EXECUTABLE_MAGIC.some((m) => head.length >= m.length && head.subarray(0, m.length).equals(m))) {
-    throw new ValidationError("this looks like an executable program, and BAB does not store executables");
-  }
-}
-
 /** Expiry in days from the caller, else the default. Whole days, 1 to the maximum. */
 export function parseExpiryDays(raw: unknown): number {
   const f = config().files;
@@ -224,16 +223,36 @@ function quotaMessage(u: QuotaUsage, size: number): string {
   );
 }
 
-function assertVolumeRoom(extraBytes: number): void {
+/**
+ * Free bytes the file store never takes: twice the database (bab.db and its WAL), so SQLite can
+ * grow and the daily VACUUM INTO snapshot (lib/backup.ts) always fits, plus BAB_FILES_DISK_RESERVE_BYTES.
+ */
+export function diskFloorBytes(): number {
+  return 2 * databaseBytes() + config().files.diskReserveBytes;
+}
+
+/**
+ * Refuses an upload unless the volume can take `pendingBytes` more and still keep the floor and the
+ * percentage limit. Callers count every upload in progress at the full per-file size, because their
+ * bytes are not on disk yet.
+ */
+function assertVolumeRoom(pendingBytes: number): void {
   const v = volumeUsage();
   if (!v) return;
   const limit = config().files.diskFullPercent;
-  const after = ((v.usedBytes + extraBytes) / v.totalBytes) * 100;
-  if (v.usedPercent > limit || after > limit) {
+  const floor = diskFloorBytes();
+  const after = ((v.usedBytes + pendingBytes) / v.totalBytes) * 100;
+  if (v.usedPercent > limit || after > limit || v.freeBytes - pendingBytes < floor) {
     throw new InsufficientStorageError(
-      `BAB's disk is too full for uploads (${v.usedPercent}% used, uploads stop above ${limit}%). Try again later or tell a BAB maintainer.`,
+      `BAB's disk is too full for uploads (${v.usedPercent}% used, ${mb(v.freeBytes)} free; uploads stop above ${limit}% or under ${mb(floor)} free). ` +
+        "Try again later or tell a BAB maintainer.",
     );
   }
+}
+
+/** Bytes reserved for uploads in progress: each may still grow to the per-file cap. */
+function reservedBytes(): number {
+  return inFlightTotal * config().files.maxFileBytes;
 }
 
 function visibleTo(db: ReturnType<typeof getDb>, file: FileRow, actorId: string): boolean {
@@ -328,6 +347,8 @@ export interface PutInput {
   body: ReadableStream<Uint8Array> | Uint8Array | null;
   /** Content-Length when the caller sent one: lets an oversized upload be refused before it is read. */
   declaredSize?: number | null;
+  /** The verified client address (lib/client-ip.ts), or null: caps uploads at once per address. */
+  ip?: string | null;
   expiresInDays?: unknown;
   shareWith?: unknown;
   orgVisible?: unknown;
@@ -381,7 +402,8 @@ function preparePut(input: PutInput): PreparedPut {
     const u = quotaUsage(input.ownerId);
     if (declared > u.remainingBytes) throw new InsufficientStorageError(quotaMessage(u, declared));
   }
-  assertVolumeRoom(Number.isFinite(declared) && declared > 0 ? declared : 0);
+  // Every upload in progress, this one included, may still grow to the per-file cap.
+  assertVolumeRoom(reservedBytes());
   return { ownerId: input.ownerId, name, days, orgVisible, shares, to, note, subject };
 }
 
@@ -394,7 +416,8 @@ function tooLargeMessage(size?: number): string {
 function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: string): PutResult {
   try {
     if (staged.size === 0) throw new ValidationError("The file is empty: send its bytes as the request body");
-    assertNotExecutableContent(staged.head);
+    assertNotExecutableFile(staged.tmpPath, staged.size, staged.head);
+    if (staged.size <= SECRET_SCAN_MAX_BYTES) assertNoSecretsInText(readFileSync(staged.tmpPath));
     assertVolumeRoom(0);
   } catch (err) {
     discardUpload(staged);
@@ -411,6 +434,14 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
     discardUpload(staged);
     throw new ValidationError(`share with at most ${FILE_SHARES_MAX} people`);
   }
+  // Bytes first, row second: a crash in between leaves bytes with no row, which maintenance removes
+  // (sweepOrphanBlobs), never a row whose bytes are missing.
+  try {
+    commitUpload(staged, id);
+  } catch (err) {
+    discardUpload(staged);
+    throw err;
+  }
   try {
     // Quota check and insert in one transaction: two uploads by one owner cannot both slip under the cap.
     inTransaction(db, () => {
@@ -423,15 +454,7 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
       audit(db, p.ownerId, "file_put", "file", id, via, { details: { size: staged.size, sha256: staged.sha256, expiresAt, orgVisible: p.orgVisible, shares: shareIds.length } });
     });
   } catch (err) {
-    discardUpload(staged);
-    throw err;
-  }
-  try {
-    commitUpload(staged, id);
-  } catch (err) {
-    const t = nowIso();
-    db.prepare("UPDATE files SET removed_at = ?, deleted_at = COALESCE(deleted_at, ?) WHERE id = ?").run(t, t, id);
-    discardUpload(staged);
+    removeBlob(id);
     throw err;
   }
 
@@ -462,25 +485,31 @@ function finishPut(p: PreparedPut, staged: StagedUpload, via: AuditVia, origin: 
  * hint), then checks the quota again and records the row in one transaction.
  */
 export async function putFile(input: PutInput, via: AuditVia, origin: string): Promise<PutResult> {
-  const p = preparePut(input);
-  // Uploads in progress do not count towards the quota or the disk check yet, so cap how many run at once.
-  const mine = inFlight.get(p.ownerId) ?? 0;
-  if (mine >= UPLOADS_IN_FLIGHT_PER_USER || inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) {
-    throw new TooManyRequestsError(
-      mine >= UPLOADS_IN_FLIGHT_PER_USER
-        ? `Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`
-        : "BAB is busy with other uploads: try again in a minute",
-    );
-  }
-  inFlight.set(p.ownerId, mine + 1);
+  assertFilesEnabled();
+  const ip = input.ip ?? null;
+  // Take the slot first, so this upload's own reservation counts when preparePut checks the disk.
+  const mine = inFlight.get(input.ownerId) ?? 0;
+  const fromIp = ip ? (inFlightByIp.get(ip) ?? 0) : 0;
+  if (mine >= UPLOADS_IN_FLIGHT_PER_USER) throw new TooManyRequestsError(`Too many uploads at once (at most ${UPLOADS_IN_FLIGHT_PER_USER} per person): wait for one to finish`);
+  if (ip && fromIp >= UPLOADS_IN_FLIGHT_PER_IP) throw new TooManyRequestsError(`Too many uploads at once from this address (at most ${UPLOADS_IN_FLIGHT_PER_IP}): wait for one to finish`);
+  if (inFlightTotal >= UPLOADS_IN_FLIGHT_TOTAL) throw new TooManyRequestsError("BAB is busy with other uploads: try again in a minute");
+  inFlight.set(input.ownerId, mine + 1);
+  if (ip) inFlightByIp.set(ip, fromIp + 1);
   inFlightTotal += 1;
   try {
+    const p = preparePut(input);
+    const f = config().files;
     let staged: StagedUpload;
     try {
-      staged = await stageUpload(input.body, config().files.maxFileBytes);
+      staged = await stageUpload(input.body, f.maxFileBytes, {
+        deadlineMs: f.uploadDeadlineMs,
+        // Other uploads and the database may have filled the disk since the start: stop before the floor.
+        onProgress: () => assertVolumeRoom(0),
+      });
     } catch (err) {
       if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage());
       if (err instanceof UploadStalledError) throw new ValidationError(`The upload stalled: nothing arrived for ${UPLOAD_IDLE_TIMEOUT_MS / 1000} seconds`);
+      if (err instanceof UploadDeadlineError) throw new ValidationError(`The upload took too long: it must finish within ${f.uploadDeadlineMs / 1000} seconds. Try a faster connection or a smaller file.`);
       throw err;
     }
     // A body that ended early (a dropped connection) is not stored as if it were the whole file.
@@ -492,20 +521,35 @@ export async function putFile(input: PutInput, via: AuditVia, origin: string): P
     return finishPut(p, staged, via, origin);
   } finally {
     inFlightTotal -= 1;
-    const left = (inFlight.get(p.ownerId) ?? 1) - 1;
-    if (left > 0) inFlight.set(p.ownerId, left);
-    else inFlight.delete(p.ownerId);
+    const left = (inFlight.get(input.ownerId) ?? 1) - 1;
+    if (left > 0) inFlight.set(input.ownerId, left);
+    else inFlight.delete(input.ownerId);
+    if (ip) {
+      const ipLeft = (inFlightByIp.get(ip) ?? 1) - 1;
+      if (ipLeft > 0) inFlightByIp.set(ip, ipLeft);
+      else inFlightByIp.delete(ip);
+    }
   }
 }
 
-/** The same for bytes already in memory (the MCP tool), synchronously. */
-export function putFileBytes(input: PutInput & { body: Uint8Array }, via: AuditVia, origin: string): PutResult {
-  const p = preparePut({ ...input, declaredSize: input.body.byteLength });
+/** The same for bytes already in memory (the MCP tool). At most FILE_MCP_PUT_MAX_BYTES. */
+export async function putFileBytes(input: PutInput & { body: Uint8Array }, via: AuditVia, origin: string): Promise<PutResult> {
+  assertFilesEnabled();
+  const size = input.body.byteLength;
+  if (size > FILE_MCP_PUT_MAX_BYTES) {
+    throw new FileTooLargeError(
+      `Too big for bab_files put: ${size} bytes, the limit is ${FILE_MCP_PUT_MAX_BYTES} bytes (${mb(FILE_MCP_PUT_MAX_BYTES)}). ` +
+        'Upload it with curl -X POST --data-binary @file "<origin>/api/files?name=<name>" instead.',
+    );
+  }
+  const p = preparePut({ ...input, declaredSize: size });
+  // preparePut counted the uploads in progress; this one is in memory and adds only its own size.
+  assertVolumeRoom(reservedBytes() + size);
   let staged: StagedUpload;
   try {
-    staged = stageBuffer(input.body, config().files.maxFileBytes);
+    staged = await stageBuffer(input.body, config().files.maxFileBytes);
   } catch (err) {
-    if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage(input.body.byteLength));
+    if (err instanceof UploadTooLargeError) throw new FileTooLargeError(tooLargeMessage(size));
     throw err;
   }
   return finishPut(p, staged, via, origin);
@@ -628,13 +672,39 @@ export function purgeRemovable(now: number = Date.now(), limit = 500, ownerId?: 
   if (!ownerId) {
     db.prepare("DELETE FROM file_links WHERE expires_at <= ?").run(iso);
     sweepStaleTemps(now);
+    dropRowsWithoutBytes(iso);
+    const known = db.prepare("SELECT 1 FROM files WHERE id = ?");
+    sweepOrphanBlobs((id) => !!known.get(id), now);
   }
   return removed;
+}
+
+/**
+ * Live rows whose bytes are gone (a lost volume, a hand-deleted file): marked deleted and removed, so
+ * they stop counting towards the quota and stop showing in lists. Returns how many.
+ */
+function dropRowsWithoutBytes(iso: string): number {
+  const db = getDb();
+  const rows = db.prepare("SELECT id, owner_id, size FROM files WHERE removed_at IS NULL AND deleted_at IS NULL").all() as unknown as { id: string; owner_id: string; size: number }[];
+  let dropped = 0;
+  for (const r of rows) {
+    if (blobExists(r.id)) continue;
+    inTransaction(db, () => {
+      db.prepare("UPDATE files SET deleted_at = ?, removed_at = ? WHERE id = ? AND removed_at IS NULL").run(iso, iso, r.id);
+      db.prepare("DELETE FROM file_links WHERE file_id = ?").run(r.id);
+      db.prepare("DELETE FROM file_shares WHERE file_id = ?").run(r.id);
+      audit(db, "system", "file_lost", "file", r.id, "mcp", { details: { owner: r.owner_id, size: r.size } });
+    });
+    dropped += 1;
+  }
+  return dropped;
 }
 
 export interface FilesAdminSummary {
   volume: VolumeUsage | null;
   diskFullPercent: number;
+  /** Free bytes uploads never take (diskFloorBytes). */
+  diskFloorBytes: number;
   uploadsBlocked: boolean;
   liveFiles: number;
   bytesOnDisk: number;
@@ -647,6 +717,7 @@ export function filesAdminSummary(): FilesAdminSummary {
   const db = getDb();
   const volume = volumeUsage();
   const limit = config().files.diskFullPercent;
+  const floor = diskFloorBytes();
   const totals = db
     .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes, COUNT(DISTINCT owner_id) AS owners FROM files WHERE removed_at IS NULL")
     .get() as unknown as { n: number; bytes: number; owners: number };
@@ -656,7 +727,8 @@ export function filesAdminSummary(): FilesAdminSummary {
   return {
     volume,
     diskFullPercent: limit,
-    uploadsBlocked: !!volume && volume.usedPercent > limit,
+    diskFloorBytes: floor,
+    uploadsBlocked: !!volume && (volume.usedPercent > limit || volume.freeBytes < floor),
     liveFiles: Number(totals.n),
     bytesOnDisk: Number(totals.bytes),
     owners: Number(totals.owners),
