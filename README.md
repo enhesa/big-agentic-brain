@@ -190,7 +190,7 @@ It appears on the Memory page and in every agent's search. For sample content, r
 
 | Your agent | How it connects | What it gets |
 |---|---|---|
-| **Any MCP client** that supports remote Streamable HTTP servers | `https://<your-bab>/mcp`, no SDK | All twelve tools, plus the server's usage instructions at connect time. |
+| **Any MCP client** that supports remote Streamable HTTP servers | `https://<your-bab>/mcp`, no SDK | All thirteen tools, plus the server's usage instructions at connect time. |
 | **Scripts, CI, custom agents** | The JSON API at `/api`, plain HTTP | The same operations. `GET /api` lists every endpoint. |
 | **Claude Code** with the [optional plugin](#the-claude-code-plugin) | Two commands | Everything above, plus hooks, skills and an inbox panel above the prompt. |
 

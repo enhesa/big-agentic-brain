@@ -59,6 +59,8 @@ export interface BabConfig {
   /** Default MCP tool list (BAB_MCP_TOOLS): full, or lean (bab_search, bab_learn, bab_react). A connection can override it with ?tools=. */
   mcpTools: "full" | "lean";
   inboxPage: boolean;
+  /** Command Center (lib/command-center.ts): the page, its routes and the MCP tool. */
+  commandCenter: boolean;
   /** The file store (lib/files.ts). Sizes in bytes, expiry in days. */
   files: {
     enabled: boolean;
@@ -426,6 +428,7 @@ function parse(env: Env): BabConfig {
     devices: bool(env, "BAB_DEVICES", true),
     mcpTools: mcpToolsOf(env),
     inboxPage: bool(env, "BAB_INBOX_PAGE", true),
+    commandCenter: bool(env, "BAB_COMMAND_CENTER", true),
     files: filesOf(env),
     kv: kvOf(env),
     replicas: int(env, "BAB_REPLICAS", 1),
@@ -471,7 +474,7 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   log("[config] redact: pii=" + c.redact.pii + " domains=" + (c.redact.domains.join(",") || "none") + " sourceHosts=" + (c.sourceHosts?.join(",") ?? "any") + " projectKeyPrefixes=" + (c.projectKeyPrefixes.join(",") || "none"));
   const b = c.branding;
   log("[config] branding: org=" + b.orgName + " accent=" + b.accentColor + " marketplace=" + b.pluginMarketplace + " (" + b.pluginMarketplaceName + ") locale=" + b.locale + " tz=" + b.timeZone);
-  log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage);
+  log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage + " commandCenter=" + c.commandCenter);
   const f = c.files;
   log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent + " diskReserveBytes=" + f.diskReserveBytes + " uploadDeadlineMs=" + f.uploadDeadlineMs + " allowDeclared=" + f.allowDeclared);
   if (f.enabled && f.allowDeclared) log("[config] WARN: BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can read and delete other people's files");

@@ -377,6 +377,9 @@ curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for 
 # Pace bulk pushes or pull requests: bab_kv action=throttle key=shared/<name>/<what> minIntervalSeconds=30, sleep waitSeconds, then act. A 409 names the key's fixed interval: use it.
 # One at a time: bab_kv action=lock key=... ttlSeconds=600 returns a token; unlock with it when done. acquired:false names the holder: wait, never break it.
 
+# Command Center: the person's private {{ORIGIN}}/command-center page of initiatives, open questions and upkeep health.
+# Only when the optional command-center skill is loaded ({{ORIGIN}}/instructions/command-center.md) and the person switched it on there. It goes through the bab_command_center tool.
+
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H
 curl -s "{{ORIGIN}}/api/me" $H

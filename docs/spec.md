@@ -699,8 +699,8 @@ Plugin-delivery endpoints:
   the legacy hook.
 - `POST /mcp`, JSON-RPC 2.0 over HTTP (Streamable HTTP transport, one response per POST,
   no SSE stream): `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
-  Twelve tools (`TOOLS` in `lib/mcp.ts`): `bab_link_session`, `bab_identify`, `bab_search`, `bab_learn`, `bab_inbox`,
-  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, replacing the skill's curl examples with real
+  Thirteen tools (`TOOLS` in `lib/mcp.ts`): `bab_link_session`, `bab_identify`, `bab_search`, `bab_learn`, `bab_inbox`,
+  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, `bab_command_center`, replacing the skill's curl examples with real
   schemas. Identity resolves the same way as every other agent route,
   `requireActorForApi()` off `X-Bab-Actor-Email` (long-form addresses only, same
   validation as the REST API). `bab_link_session` redeems the token from `POST /api/hook`
