@@ -205,3 +205,19 @@ describe("users.listUsers and learningCountsByAuthor", () => {
     expect(learningCountsByAuthor()).toEqual({});
   });
 });
+
+describe("users.enrolledByWeek", () => {
+  it("counts every user row once, as a running total at the end of each ISO week", async () => {
+    const { upsertUser, enrolledByWeek } = await import("../lib/users");
+    const { getDb } = await import("../lib/db");
+    for (const id of ["a", "b", "c", "d"]) upsertUser({ id, email: `${id}@example.com`, name: id, roles: [] });
+    const set = getDb().prepare("UPDATE users SET created_at = ? WHERE id = ?");
+    set.run("2026-09-30 10:00:00", "a"); // before the first week shown
+    set.run("2026-10-05 23:59:59", "b"); // Sunday: still the week of 29 Sep
+    set.run("2026-10-06 00:00:00", "c"); // Monday 6 Oct
+    set.run("2026-10-14 08:00:00", "d"); // week of 13 Oct
+    expect(enrolledByWeek(["2026-10-06", "2026-10-13"])).toEqual({ total: 4, running: [3, 4], lastWeek: 1 });
+    expect(enrolledByWeek(["2026-09-29", "2026-10-06"])).toEqual({ total: 4, running: [2, 3], lastWeek: 2 });
+    expect(enrolledByWeek([])).toEqual({ total: 4, running: [], lastWeek: 0 });
+  });
+});

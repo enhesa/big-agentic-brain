@@ -1,25 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import styles from "../../landing.module.css";
 import { NAV_ITEMS } from "../nav-items";
 import InboxBadge from "../shell/InboxBadge";
 import { useInboxUnread } from "../shell/useInboxUnread";
 
 export default function TopBar({ orgName }: { orgName: string }) {
-  const [small, setSmall] = useState(false);
   const inbox = useInboxUnread();
 
-  useEffect(() => {
-    const onScroll = () => setSmall(window.scrollY > 40);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
-    <header className={`${styles.topbar} ${small ? styles.topbarSmall : ""}`}>
+    <header className={styles.topbar}>
       <div className={`${styles.wrap} ${styles.topbarInner}`}>
         <div className={styles.brand}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

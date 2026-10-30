@@ -131,6 +131,27 @@ export function getUsersByIds(ids: string[]): Map<string, UserRow> {
   return map;
 }
 
+/**
+ * People enrolled on BAB: every row in `users`, the same rows the Users directory on /usage lists.
+ * A row appears the first time someone reaches BAB as themselves (a linked device, the sign-in
+ * proxy or a bound token) and is never removed. `weeks` are ISO Mondays (YYYY-MM-DD), oldest first.
+ * Returns the total, the running total at the end of each week and how many joined in the last week.
+ */
+export function enrolledByWeek(weeks: string[]): { total: number; running: number[]; lastWeek: number } {
+  const rows = getDb()
+    .prepare("SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM users GROUP BY day")
+    .all() as unknown as { day: string; n: number }[];
+  const before = (day: string) => rows.reduce((s, r) => (r.day < day ? s + r.n : s), 0);
+  const weekEnd = (week: string) => {
+    const d = new Date(`${week}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  const last = weeks.at(-1);
+  return { total, running: weeks.map((w) => before(weekEnd(w))), lastWeek: last ? total - before(last) : 0 };
+}
+
 /** Count of active learnings authored by each user, keyed by author_id. */
 export function learningCountsByAuthor(): Record<string, number> {
   const db = getDb();

@@ -254,7 +254,7 @@ export interface Upkeep {
 }
 
 /** One week of the Clean-up card (swarm garbage collection, docs/spec.md), from audit_log. */
-/** "Found nothing": searches recorded with a result count (since SEARCH_RESULTS_SINCE) in the window. */
+/** Searches recorded with a result count (since SEARCH_RESULTS_SINCE) in the window, for the maintainers' "Searches that found nothing" card. */
 export interface SearchOutcomes {
   /** The first day with a recorded count in the window (YYYY-MM-DD), or null when there is none yet. */
   since: string | null;

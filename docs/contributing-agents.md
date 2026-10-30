@@ -9,7 +9,8 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Keep the house-rules block at `HOUSE_RULES_MAX_CHARS` (1200), set in `lib/learnings.ts:2298` and pinned by `tests/house-rules.test.ts:164`.
 - Keep the `/docs` page to diagrams. The visible word cap is 1350 (`tests/docs-page.test.ts:188`). Prose is a lede, one caption per section and a footnote, with word limits (`:194-202`). Shorten text. Do not raise the cap.
 - Keep `app/docs` components as server components, with no `"use client"` (`tests/docs-page.test.ts:212`).
-- Change the tool count in `tests/docs-page.test.ts:166` and `tests/mcp-identify.test.ts:133` when you add or remove an MCP tool. Both expect 10 today.
+- Change the tool count in `tests/docs-page.test.ts:198` and `tests/mcp-identify.test.ts:133` when you add or remove an MCP tool. Both expect 12 today.
+- Name every MCP tool in `docs/spec.md`, both skill files and the /docs page. `tests/docs-drift.test.ts` and `tests/docs-page.test.ts` fail on a tool that is missing.
 - Keep `content/instructions/*.md` free of control bytes except tab, LF and CR (`tests/instructions.test.ts:76`). Write them with an editor tool, never a shell heredoc (`tests/instructions.test.ts:72-74`). They must stay LF (`.gitattributes:4`).
 - Keep the served `{origin}` placeholders substituted (`tests/instructions.test.ts:51-59`). Keep the `skill.md` frontmatter valid (`:62`).
 - Know that any edit to `install.md` or `skill.md` changes the served version hash (`tests/instructions.test.ts:14-47`, `docs/spec.md:605`). Agents refresh themselves from it.
@@ -55,9 +56,9 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Refuse with an `ApiError` subclass: `ValidationError`, `NotFoundError`, `ForbiddenError`, `ConflictError` (`lib/errors.ts:9-52`). The route turns them into `isError` results (`lib/mcp.ts:8-13`). Anything else is a bug and surfaces as a protocol error.
 - Give an `action` argument no default. Say "required, has no default" (`lib/mcp.ts:889`, `:941`).
 - Refuse an unknown filter value. Never read it as "no filter" (`lib/learnings.ts:574-580`, used at `lib/mcp.ts:194`).
-- Update the tool count in `tests/docs-page.test.ts:166` and `tests/mcp-identify.test.ts:133`, and the "ten MCP tools" comment (`lib/mcp.ts:2`).
+- Update the tool count in `tests/docs-page.test.ts:198` and `tests/mcp-identify.test.ts:133`, and the "twelve MCP tools" comment (`lib/mcp.ts:2`). Name the tool in `docs/spec.md`, both skill files and the /docs architecture text alternative (`tests/docs-drift.test.ts`).
 - Re-check the instruction length tests (`tests/mcp-instructions.test.ts`) if the tool needs a rule in `mcpInstructions`.
-- Know that the lean tool list (`?tools=lean`, `LEAN_TOOL_NAMES` in `lib/mcp.ts`) hides every new tool. Add yours there only if a coding agent needs it, and update `tests/mcp-lean.test.ts` (it expects 4 lean and 10 full tools).
+- Know that the lean tool list (`?tools=lean`, `LEAN_TOOL_NAMES` in `lib/mcp.ts`) hides every new tool. Add yours there only if a coding agent needs it, and update `tests/mcp-lean.test.ts` (it expects 4 lean and 12 full tools).
 - Update both skill files (see the first section).
 - When a REST route does the same job, call the same `lib` function and pass the same audit `via` value (`app/api/todos/route.ts:22`).
 

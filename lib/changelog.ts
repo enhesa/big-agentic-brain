@@ -19,6 +19,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-30",
+    title: "Feedback in the footer, a steady top bar, people enrolled",
+    changes: [
+      "Feedback moved from the top bar to the home page footer, next to How it works and News.",
+      "The top bar keeps one size while you scroll. It no longer shrinks.",
+      "The usage page shows how many people are enrolled on BAB, instead of the Found nothing tile.",
+      "The How it works page and the docs now cover files, keys, comments and web votes.",
+    ],
+  },
+  {
     date: "2026-10-29",
     title: "Safer file store",
     changes: [

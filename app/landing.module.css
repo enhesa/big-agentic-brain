@@ -103,12 +103,6 @@
   flex-wrap: wrap;
   padding-top: 14px;
   padding-bottom: 14px;
-  transition: padding 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.topbarSmall .topbarInner {
-  padding-top: 7px;
-  padding-bottom: 7px;
 }
 
 .brand {
@@ -116,12 +110,6 @@
   align-items: center;
   gap: 14px;
   min-width: 0;
-  transform-origin: left center;
-  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.topbarSmall .brand {
-  transform: scale(0.9);
 }
 
 .wordmark {
