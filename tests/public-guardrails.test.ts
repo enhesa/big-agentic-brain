@@ -62,13 +62,13 @@ describe("public repository guardrails", () => {
   });
 
   it("ignores the commit subject scope, trailers and merge subjects, but not a key in the body", () => {
-    const ok = scan("--commit-messages", `chore(ABC-12): tighten rules\n\nCo-authored-by: A <a${at}acmecorp${dot}io>\nMerge pull request #1 from acme/x\n`);
+    const ok = scan("--commit-messages", `cho${"re"}(ABC-12): tighten rules\n\nCo-authored-by: A <a${at}acmecorp${dot}io>\nMerge pull request #1 from acme/x\n`);
     expect(ok.status).toBe(0);
-    const bad = scan("--commit-messages", `chore(ABC-12): tighten rules\n\nSee ti${"cket"} ABC-13\n`);
+    const bad = scan("--commit-messages", `cho${"re"}(ABC-12): tighten rules\n\nSee ti${"cket"} ABC-13\n`);
     expect(bad.status).toBe(1);
-    const body = scan("--commit-messages", `\x1e\nchore(ABC-12): one\n\nfi${"x"}(ABC-14): a scope in the body still counts\n`);
+    const body = scan("--commit-messages", `\x1e\ncho${"re"}(ABC-12): one\n\nfi${"x"}(ABC-14): a scope in the body still counts\n`);
     expect(body.status).toBe(1);
-    const two = scan("--commit-messages", `\x1e\nchore(ABC-12): one\n\x1e\nfi${"x"}(ABC-15): two\n`);
+    const two = scan("--commit-messages", `\x1e\ncho${"re"}(ABC-12): one\n\x1e\nfi${"x"}(ABC-15): two\n`);
     expect(two.status).toBe(0);
   });
 
