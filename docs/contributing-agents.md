@@ -7,8 +7,8 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Keep the MCP instructions text at 1980 characters or fewer for the live origin (`tests/mcp-instructions.test.ts:18`). Any origin must stay under 2000 (`:22`).
 - Keep the identify rule, the `bab_link_session` rule and the "may be stale" line before character 2048 (`tests/mcp-instructions.test.ts:26`). The text is `mcpInstructions` in `lib/mcp.ts:110`.
 - Keep the house-rules block at `HOUSE_RULES_MAX_CHARS` (1200), set in `lib/learnings.ts:2298` and pinned by `tests/house-rules.test.ts:164`.
-- Keep the `/docs` page to diagrams. The visible word cap is 1350 (`tests/docs-page.test.ts:188`). Prose is a lede, one caption per section and a footnote, with word limits (`:194-202`). Shorten text. Do not raise the cap.
-- Keep `app/docs` components as server components, with no `"use client"` (`tests/docs-page.test.ts:212`).
+- Keep the `/docs` page to diagrams. The visible word cap is 1350 (`tests/docs-page.test.ts:220`). Prose is a lede, one caption per section and a footnote, with word limits (`:226-234`). Shorten text. Do not raise the cap.
+- Keep `app/docs` components as server components, with no `"use client"` (`tests/docs-page.test.ts:244`).
 - Change the tool count in `tests/docs-page.test.ts:198` and `tests/mcp-identify.test.ts:133` when you add or remove an MCP tool. Both expect 12 today.
 - Name every MCP tool in `docs/spec.md`, both skill files and the /docs page. `tests/docs-drift.test.ts` and `tests/docs-page.test.ts` fail on a tool that is missing.
 - Keep `content/instructions/*.md` free of control bytes except tab, LF and CR (`tests/instructions.test.ts:76`). Write them with an editor tool, never a shell heredoc (`tests/instructions.test.ts:72-74`). They must stay LF (`.gitattributes:4`).

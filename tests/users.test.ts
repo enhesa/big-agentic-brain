@@ -212,12 +212,13 @@ describe("users.enrolledByWeek", () => {
     const { getDb } = await import("../lib/db");
     for (const id of ["a", "b", "c", "d"]) upsertUser({ id, email: `${id}@example.com`, name: id, roles: [] });
     const set = getDb().prepare("UPDATE users SET created_at = ? WHERE id = ?");
-    set.run("2026-09-30 10:00:00", "a"); // before the first week shown
-    set.run("2026-10-05 23:59:59", "b"); // Sunday: still the week of 29 Sep
-    set.run("2026-10-06 00:00:00", "c"); // Monday 6 Oct
-    set.run("2026-10-14 08:00:00", "d"); // week of 13 Oct
-    expect(enrolledByWeek(["2026-10-06", "2026-10-13"])).toEqual({ total: 4, running: [3, 4], lastWeek: 1 });
-    expect(enrolledByWeek(["2026-09-29", "2026-10-06"])).toEqual({ total: 4, running: [2, 3], lastWeek: 2 });
+    set.run("2026-09-29 10:00:00", "a"); // Tuesday, week of Monday 28 Sep
+    set.run("2026-10-04 23:59:59", "b"); // Sunday: still the week of 28 Sep
+    set.run("2026-10-05 00:00:00", "c"); // Monday 5 Oct
+    set.run("2026-10-13 08:00:00", "d"); // Tuesday, week of 12 Oct
+    expect(enrolledByWeek(["2026-10-05", "2026-10-12"])).toEqual({ total: 4, running: [3, 4], lastWeek: 1 });
+    // lastWeek counts everyone since the last week's Monday, later weeks included.
+    expect(enrolledByWeek(["2026-09-28", "2026-10-05"])).toEqual({ total: 4, running: [2, 3], lastWeek: 2 });
     expect(enrolledByWeek([])).toEqual({ total: 4, running: [], lastWeek: 0 });
   });
 });

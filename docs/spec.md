@@ -1283,7 +1283,7 @@ every time.
   directory are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
   (`MONTH_DAYS`). Top to bottom:
   1. Two rows of four tiles, outcomes first. Each tile has one label, the number, one short note
-     that names its window ("last 12 months", "this week" or "since <date>"), and a hover that says
+     that names its window ("last 12 months", "this week", "since <date>" or "All time"), and a hover that says
      how it is counted and what is left out. Under 1000px the rows are two columns.
      Outcomes: agent time saved and tokens saved (measured, docs/savings.md "Measured savings":
      per reuse, the memory's discovery cost minus the reaction's reuse cost, floored at 0, summed;
@@ -1293,8 +1293,8 @@ every time.
      <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; a click on the memory page, via `ui`, never credits a search); and
      People enrolled (every row in `users`, the people the Users directory lists, all time, with
      "+N new this week" and a running-total sparkline by week of `created_at`; `enrolledByWeek` in
-     lib/users.ts). A row appears the first time someone reaches BAB as themselves and is never
-     removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
+     lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the
+     sign-in proxy, a token or declared headers) and is not removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
      longer shown, but searches still record their result count for the maintainers' list below.
      Activity over the last 12 months: memories saved (audit `create` on a learning), searches
      (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and

@@ -480,7 +480,7 @@ export default async function UsagePage({
               label: `People enrolled, running total: ${shown.map((w, i) => `${dayMonth(w.week)} ${enrolled.running[i]}`).join(", ")}`,
             }}
             testId="tile-enrolled"
-            title="Everyone who has ever linked a device to BAB or reached it as themselves, each counted once: the people in the Users directory below. Nobody is removed."
+            title="Everyone who has ever reached BAB as themselves, through a linked device, the sign-in or their agent, each counted once: the people in the Users directory below."
             note={{ text: "All time", title: "Counted from the Users directory, not from the last 12 months of activity.", testId: "tile-enrolled-note" }}
           />
         </section>

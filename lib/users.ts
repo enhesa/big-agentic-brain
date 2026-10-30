@@ -134,8 +134,9 @@ export function getUsersByIds(ids: string[]): Map<string, UserRow> {
 /**
  * People enrolled on BAB: every row in `users`, the same rows the Users directory on /usage lists.
  * A row appears the first time someone reaches BAB as themselves (a linked device, the sign-in
- * proxy or a bound token) and is never removed. `weeks` are ISO Mondays (YYYY-MM-DD), oldest first.
- * Returns the total, the running total at the end of each week and how many joined in the last week.
+ * proxy, a bound token or declared headers) and is not removed. `weeks` are ISO Mondays (YYYY-MM-DD),
+ * oldest first. Returns the total, the running total at the end of each week and how many joined
+ * since the last week's Monday (the current week on /usage).
  */
 export function enrolledByWeek(weeks: string[]): { total: number; running: number[]; lastWeek: number } {
   const rows = getDb()

@@ -57,7 +57,7 @@ const SAVING: Flow = {
   title: "Saving something worth keeping",
   lanes: [YOU, AGENT, BRAIN],
   steps: [
-    { at: "agent", note: "a task ends with a lasting fact" },
+    { at: "agent", note: "a task taught a lasting fact" },
     { from: "agent", to: "brain", label: "save it, with aliases" },
     { from: "brain", to: "agent", label: "stored for everyone", back: true },
     { from: "agent", to: "you", label: "tells you title and link", back: true },
@@ -71,7 +71,7 @@ const ANSWERING: Flow = {
   steps: [
     { from: "you", to: "agent", label: "how do we do X?" },
     { from: "agent", to: "brain", label: "search, 3 phrasings" },
-    { from: "brain", to: "agent", label: "what we know, and who wrote it", back: true },
+    { from: "brain", to: "agent", label: "what we know, who wrote it", back: true },
     { at: "agent", note: "stale warning: check first" },
     { from: "agent", to: "you", label: "the answer, or nothing found", back: true },
   ],
@@ -84,7 +84,7 @@ const BEFORE_A_CHANGE: Flow = {
     { from: "you", to: "agent", label: "change this repo" },
     { from: "agent", to: "brain", label: "search rules, repo and company" },
     { from: "brain", to: "agent", label: "rules, with their standing", back: true },
-    { at: "agent", note: "checks them against the code" },
+    { at: "agent", note: "checks them in the code" },
     { from: "agent", to: "you", label: "PR with a short BAB section", back: true },
   ],
 };
@@ -161,6 +161,7 @@ const TOLD: Flow = {
     { from: "brain", to: "agent", label: "first prompt: rules, project titles", back: true },
     { from: "brain", to: "agent", label: "each prompt: unread, due, retired", back: true },
     { from: "brain", to: "agent", label: "new task: 3 titles", back: true },
+    { from: "agent", to: "you", label: "BAB: 2 unread", back: true },
     { from: "brain", to: "agent", label: "Stop: a nudge to record", back: true },
     { from: "brain", to: "agent", label: "after a compaction: re-read rules", back: true },
     { at: "agent", note: "a command fails: search BAB first" },
@@ -176,7 +177,7 @@ const INBOX: Flow = {
     { from: "you", to: "brain", label: "Inbox page: your threads" },
     { from: "you", to: "agent", label: "Continue in Claude" },
     { from: "agent", to: "brain", label: "reads it, you approve a reply" },
-    { at: "you", note: "inside Claude: the /bab panel, Open chat" },
+    { at: "you", note: "or the /bab panel in Claude" },
   ],
 };
 
