@@ -140,6 +140,6 @@ describe("tool description size", () => {
 });
 
 // 20000 until bab_files (2026-10-28), the eleventh tool, added about 1600 characters; bab_kv (2026-10-29), the twelfth, about 2100;
-// bab_command_center (2026-10-30), the thirteenth, about 1900.
-const CEILING_FULL = 26000;
+// bab_command_center (2026-10-30), the thirteenth, 531 (kept short: its rules live in its skill).
+const CEILING_FULL = 24530;
 const CEILING_LEAN = 11200;

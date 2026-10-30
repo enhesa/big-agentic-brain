@@ -1276,39 +1276,16 @@ export const TOOLS: Tool[] = [
     name: "bab_command_center",
     title: "Command Center",
     annotations: { title: "Command Center", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    // Kept short on purpose: every session pays for it. The field rules live in the command-center
+    // skill (content/instructions/command-center.md) and in the 400 answers, which name the fix.
     description:
-      "Use only when the command-center skill is loaded. Keeps the person's private /command-center page true. " +
-      CC_CONTENT_RULE + " " +
-      "publish: the whole record, same id every time: v 1, id (slug), title, area, key, state, kind project|recurring, cadence daily|weekly|drain, deadline YYYY-MM-DD, priority, tasks [{id,text,status}], questions [{id,text,options}] (at most 5 open; an id left out is cleared), health {level,reason,checkedAt} (recurring), comments [{id,text}], links [{label,url https}], source {machine,session}; optional expectSeq. " +
-      "clear_question (id, questionId) the turn the answer arrives. comment (id, text). health (id, level, reason, checkedAt). list. remove (id). " +
-      "A 403 saying it is off: tell the person once, then stop this session. Never switch it on yourself.",
+      "Use only when the command-center skill is loaded; it has the record format. publish (the whole record), clear_question, comment, health, list, remove. " +
+      CC_CONTENT_RULE,
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: [...CC_ACTIONS], description: "Required, has no default." },
-        v: { type: "number" },
-        id: { type: "string" },
-        title: { type: "string" },
-        area: { type: "string" },
-        key: { type: "string" },
-        state: { type: "string", enum: ["active", "done", "parked"] },
-        kind: { type: "string" },
-        cadence: { type: "string" },
-        deadline: { type: "string" },
-        priority: { type: "string", enum: ["urgent", "high", "low", "paused"] },
-        tasks: { type: "array", items: { type: "object" } },
-        questions: { type: "array", items: { type: "object" } },
-        health: { type: "object" },
-        comments: { type: "array", items: { type: "object" } },
-        links: { type: "array", items: { type: "object" } },
-        source: { type: "object" },
-        expectSeq: { type: "number" },
-        questionId: { type: "string" },
-        text: { type: "string" },
-        commentId: { type: "string" },
-        level: { type: "string", enum: ["green", "amber", "red", "unknown"] },
-        reason: { type: "string" },
-        checkedAt: { type: "string" },
+        id: { type: "string", description: "The initiative's slug." },
       },
       required: ["action"],
     },
