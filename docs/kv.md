@@ -30,7 +30,7 @@ With the plugin or any MCP client, the `bab_kv` tool takes an `action`. The REST
 | `incr` | `key`, `by` (whole number, default 1), `ttlSeconds` when it creates the key | the new `value`; the TTL stays as it was |
 | `delete` | `key`, optional `expected` | `deleted: true`, or `deleted: false` with `reason` |
 | `list` | `prefix` (default your own space) | keys with their kind and TTL left, never values; your usage |
-| `throttle` | `key`, `minIntervalSeconds` (0.1 to 3600, must match the key's) | `waitSeconds`, `slotAt` and the key's `minIntervalSeconds` |
+| `throttle` | `key`, `minIntervalSeconds` (0.1 to 3600 and at most the namespace's TTL cap, must match the key's) | `waitSeconds`, `slotAt` and the key's `minIntervalSeconds` |
 | `lock` | `key`, `ttlSeconds` | `acquired: true` with a `token`, or `acquired: false` with the `holder` and the TTL left |
 | `unlock` | `key`, `token` | `released: true`, or `released: false` with `reason` |
 | `renew` | `key`, `token`, `ttlSeconds` | `renewed: true` and the new TTL |
@@ -42,7 +42,7 @@ With the plugin or any MCP client, the `bab_kv` tool takes an `action`. The REST
 
 ### Throttle
 
-`throttle` books the next slot on a pace that everyone with the same key shares. The slot is `max(now, last slot + minIntervalSeconds)`. The caller sleeps `waitSeconds`, then does its work. Booking is atomic, so 50 agents calling at once get 50 slots, one interval apart. The interval is fixed by whoever creates the key: a call with another interval gets 409 and names the key's interval, so nobody can stretch the pace for others or skip it. One person holds at most 4 future slots on one key (429 after that), and no slot is booked more than an hour ahead, or further than the namespace's TTL cap (429). A throttle key that expires starts afresh with the next caller's interval. Someone who creates a shared throttle key with a slow pace holds that key name until it expires; pick another key, or ask a maintainer to `force_delete` it. Example for pull requests across all agents: `bab_kv action=throttle key=shared/bitbucket-push/pull-requests minIntervalSeconds=30`.
+`throttle` books the next slot on a pace that everyone with the same key shares. The slot is `max(now, last slot + minIntervalSeconds)`. The caller sleeps `waitSeconds`, then does its work. Booking is atomic, so 50 agents calling at once get 50 slots, one interval apart. The interval is fixed by whoever creates the key: a call with another interval gets 409 and names the key's interval, so nobody can stretch the pace for others or skip it. One person holds at most 4 future slots on one key (429 after that), and no slot is booked more than an hour ahead, or further than the namespace's TTL cap (429). An interval longer than the namespace's TTL cap is refused with 400. A throttle key ends at most one TTL cap after it was created, however often it is called, and the next caller starts it afresh with their own interval. Someone who creates a shared throttle key with a slow pace holds that key name for at most that long (an hour by default); pick another key meanwhile, or ask a maintainer to `force_delete` it. Example for pull requests across all agents: `bab_kv action=throttle key=shared/bitbucket-push/pull-requests minIntervalSeconds=30`.
 
 ### Lock
 
@@ -64,7 +64,7 @@ Locks and throttles are their own kinds of key. Their token is never shown, not 
 | Time-to-live in a shared namespace | 1 hour at most | `BAB_KV_SHARED_MAX_TTL_SECONDS` |
 | Key length after the namespace | 200 characters | fixed |
 | Calls per person | 60 a minute, 20 at once | fixed |
-| Throttle interval, and how far ahead a slot may be booked | 1 hour | fixed |
+| Throttle interval, and how far ahead a slot may be booked | 1 hour, or the namespace's TTL cap when shorter | fixed |
 | Future throttle slots one person may hold on one key | 4 | fixed |
 | Shared namespaces | `bitbucket-push` | `BAB_KV_SHARED_NAMESPACES` (`none` for none) |
 | Switch | on | `BAB_KV` |
@@ -96,6 +96,8 @@ A person in `BAB_MAINTAINERS` can clear a squatted shared namespace:
 
 Both are audited (`kv_force_delete`, `kv_purge`) with the maintainer, the key or person, and what was removed.
 
+The per-person shared limits stop one identity, not many: each new identity costs one `bab_identify`, so someone can still fill a namespace under several, and cleanup is one `purge` per identity. Maintainer status rests on the same device identity (see [Identity](#identity)).
+
 ## Atomicity and replicas
 
 The store is one map in memory in the BAB process. No operation waits for anything between its first read and its last write, so on Node's single thread no other request can run in the middle of one. That makes `set` with `ifAbsent`, `cas`, `incr`, `throttle` and `lock` atomic.
@@ -107,11 +109,13 @@ The setting is the operator's word, so BAB also checks. The first process to use
 - Two processes that start in the same moment can both write the lease; the loser notices at its next heartbeat (within 10 seconds) and stops serving the store.
 - After a crash, a new process on another host waits up to 30 seconds before it serves the store.
 - In a rolling update the new pod refuses the store until the old one is gone. BAB's chart uses `Recreate` with a ReadWriteOnce volume, so pods do not overlap.
+- A process that loses the lease to another answers 503 for every call until it restarts; it never takes the lease back.
+- A process that cannot write `DATA_DIR/kv.lease` (an unwritable or missing volume) answers 503 saying so, and tries again on the next call.
 - The lease only works when both processes see the same `DATA_DIR`. Two replicas with separate volumes do not see each other: keep `BAB_REPLICAS` honest.
 
 ## Restarts and snapshot
 
-Every 30 seconds, when something changed, BAB writes the live keys to `DATA_DIR/kv-snapshot.json`. It also writes it when it shuts down (SIGTERM). It writes a temporary file, flushes it to disk and renames it, so the file is never half written. Only the process that holds the lease writes it. At start, the first call loads the snapshot and checks every entry as strictly as a new write: it drops keys that expired meanwhile, keys outside an allowed namespace or with a bad name, expiry times that are not finite or exceed the TTL cap, malformed locks and throttles, duplicates, and entries over a limit. It logs how many it dropped. Locks keep their holder and token across a restart, and throttles carry on from their last slot.
+Every 30 seconds, when something changed, BAB writes the live keys to `DATA_DIR/kv-snapshot.json`. It also writes it when it shuts down (SIGTERM). It writes a temporary file, flushes it to disk and renames it, so the file is never half written. Only the process that holds the lease writes it. At start, the first call loads the snapshot and checks every entry as strictly as a new write: it drops keys that expired meanwhile, keys outside an allowed namespace or with a bad name, expiry times that are not finite or exceed the TTL cap, values that are too large, too deeply nested or look like a secret or personal data, malformed locks and throttles (including a throttle interval over the TTL cap, a slot booked further ahead than a new booking may be, or one that would outlive one TTL cap from its creation), duplicates, and entries over a limit. It logs how many it dropped. Locks keep their holder and token across a restart, and throttles carry on from their last slot.
 
 A crash loses at most the last 30 seconds of writes. Every key has a TTL, so locks and throttle slots heal on their own. The snapshot holds lock tokens and values: keep it as private as the rest of the data volume. A broken snapshot is logged and BAB starts with an empty store.
 

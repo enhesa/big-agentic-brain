@@ -189,9 +189,33 @@ describe("N2: incr checks numbers like any value", () => {
 describe("N3: throttles honour the TTL cap", () => {
   it("never keeps a throttle or books a slot past BAB_KV_MAX_TTL_SECONDS", async () => {
     await reconfigure({ BAB_KV_MAX_TTL_SECONDS: "60" });
-    kv.kvThrottle(A, { key: "t", minIntervalSeconds: 3600 }, "mcp");
+    kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
+    kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
     expect(kv.kvGet(A, "t").ttlSeconds).toBeLessThanOrEqual(60);
-    expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 3600 }, "mcp")).toThrow(/more than 60 seconds ahead/);
+    expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp")).toThrow(/more than 60 seconds ahead/);
+  });
+
+  it("refuses an interval longer than the namespace's TTL cap with 400 (X3)", async () => {
+    await reconfigure({ BAB_KV_MAX_TTL_SECONDS: "60" });
+    expect(status(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 61 }, "mcp"))).toBe(400);
+    expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 3600 }, "mcp")).toThrow(/at most 60/);
+    await reconfigure({ BAB_KV_MAX_TTL_SECONDS: undefined, BAB_KV_SHARED_MAX_TTL_SECONDS: "600" });
+    expect(() => kv.kvThrottle(A, { key: "shared/bitbucket-push/p", minIntervalSeconds: 601 }, "mcp")).toThrow(/at most 600 in a shared namespace/);
+    expect(kv.kvGet(A, "t").found).toBe(false);
+    expect(kv.kvGet(A, "shared/bitbucket-push/p").found).toBe(false);
+  });
+
+  it("ends a throttle one TTL cap after its creation, however often its creator calls it", () => {
+    // The creator pins a slow pace and books once per interval, which used to push the expiry on for ever.
+    const key = "shared/bitbucket-push/squat";
+    for (const t of [0, 1199, 2399, 3599]) {
+      vi.setSystemTime(T0 + t * 1000);
+      kv.kvThrottle(A, { key, minIntervalSeconds: 1200 }, "mcp");
+      expect(kv.kvGet(B, key).ttlSeconds).toBeLessThanOrEqual(3600 - t);
+    }
+    vi.setSystemTime(T0 + 3600_000);
+    expect(kv.kvGet(B, key).found).toBe(false);
+    expect(kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp")).toMatchObject({ waitSeconds: 0, minIntervalSeconds: 30 });
   });
 });
 
@@ -226,6 +250,22 @@ describe("N4: the snapshot is checked again on load", () => {
     expect(kv.kvList(B, "shared/bitbucket-push/").keys.map((k) => k.key)).toEqual(["shared/bitbucket-push/lock", "shared/bitbucket-push/pace"]);
     expect(kv.kvUnlock(A, { key: "shared/bitbucket-push/lock", token }, "mcp").released).toBe(true);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropped 12 key-value snapshot entries/));
+  });
+
+  it("re-checks values for secrets and bounds throttle slots and creation on load (X7)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    load([
+      [`u/${B.id}/card`, { kind: "value", value: "4111111111111111", expiresAt: later(), writer: B.id }],
+      [`u/${B.id}/nested`, { kind: "value", value: JSON.stringify({ note: { password: "Hunter2Hunter2!" } }), expiresAt: later(), writer: B.id }],
+      ["shared/bitbucket-push/farslot", { kind: "throttle", slotAt: T0 + 3601_000, intervalMs: 30_000, createdAt: T0, expiresAt: later(), writer: A.id }],
+      ["shared/bitbucket-push/old", { kind: "throttle", slotAt: T0, intervalMs: 30_000, createdAt: T0 - 3600_000, expiresAt: later(), writer: A.id }],
+      ["shared/bitbucket-push/future", { kind: "throttle", slotAt: T0, intervalMs: 30_000, createdAt: T0 + 1000, expiresAt: later(), writer: A.id }],
+      ["shared/bitbucket-push/ok", { kind: "throttle", slotAt: T0 + 30_000, intervalMs: 30_000, createdAt: T0 - 1000, booked: { [A.id]: [T0 + 30_000, T0 + 7200_000] }, expiresAt: later(), writer: A.id }],
+      [`u/${B.id}/fine`, { kind: "value", value: JSON.stringify({ step: 3 }), expiresAt: later(), writer: B.id }],
+    ]);
+    expect(kv.kvList(B, "").keys.map((k) => k.key)).toEqual([`u/${B.id}/fine`]);
+    expect(kv.kvList(A, "shared/bitbucket-push/").keys.map((k) => k.key)).toEqual(["shared/bitbucket-push/ok"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropped 5 key-value snapshot entries/));
   });
 
   it("applies the limits to what it loads", async () => {

@@ -74,9 +74,10 @@ interface Entry {
   /** lock: who holds it, and the token that releases it (never shown). */
   holder?: string;
   token?: string;
-  /** throttle: the last slot handed out, the interval fixed at creation, and each person's future slots. */
+  /** throttle: the last slot handed out, the interval fixed at creation, when it was created, and each person's future slots. */
   slotAt?: number;
   intervalMs?: number;
+  createdAt?: number;
   booked?: Record<string, number[]>;
 }
 
@@ -104,12 +105,17 @@ function existingStore(): Store | undefined {
   return (globalThis as Holder)[GLOBAL_KEY];
 }
 
-/** 503: another BAB process serves the store on this data volume. */
-function leaseRefusal(): ApiError {
-  return new ApiError(
-    "The key-value store is off in this BAB process: another BAB process serves it on the same data (DATA_DIR/kv.lease). BAB must run as one replica. Tell a BAB maintainer.",
-    503,
-  );
+/**
+ * 503: another BAB process serves the store on this data volume, this process lost the lease to one
+ * (it stays off until it restarts), or DATA_DIR cannot take the lease file.
+ */
+function leaseRefusal(why: "other" | "lost" | "unwritable"): ApiError {
+  const messages = {
+    other: "The key-value store is off in this BAB process: another BAB process serves it on the same data (DATA_DIR/kv.lease). BAB must run as one replica. Tell a BAB maintainer.",
+    lost: "The key-value store is off in this BAB process: another BAB process took it over on the same data (DATA_DIR/kv.lease), and it stays off here until this BAB restarts. BAB must run as one replica. Tell a BAB maintainer.",
+    unwritable: "The key-value store is off in this BAB process: it cannot write its lease file, DATA_DIR/kv.lease. Check that DATA_DIR is writable. Tell a BAB maintainer.",
+  };
+  return new ApiError(messages[why], 503);
 }
 
 function store(): Store {
@@ -117,7 +123,8 @@ function store(): Store {
   let s = g[GLOBAL_KEY];
   if (!s) {
     // Take the lease before reading the snapshot: a second process must not load, serve or save it.
-    if (!ensureKvLease()) throw leaseRefusal();
+    const lease = ensureKvLease();
+    if (lease !== "held") throw leaseRefusal(lease);
     s = { entries: new Map(), usage: new Map(), totalBytes: 0, dirty: false, timers: [] };
     g[GLOBAL_KEY] = s;
     loadSnapshotInto(s, Date.now());
@@ -127,8 +134,8 @@ function store(): Store {
     sweep.unref?.();
     s.timers.push(save, sweep);
   } else if (!holdsKvLease()) {
-    // Lost the lease at a heartbeat: another process took over.
-    throw leaseRefusal();
+    // Lost the lease at a heartbeat: another process took over. This process never takes it back.
+    throw leaseRefusal("lost");
   }
   return s;
 }
@@ -592,13 +599,15 @@ function checkedEntry(key: unknown, raw: unknown, now: number): Entry | null {
   const writer = typeof x.writer === "string" && x.writer && !x.writer.includes("/") ? x.writer : owner;
   if (x.kind === "value") {
     if (typeof x.value !== "string" || Buffer.byteLength(x.value, "utf8") > config().kv.maxValueBytes) return null;
+    let value: string;
     try {
-      JSON.parse(x.value);
+      // The same checks as a new write: JSON, size, depth, and no secret or personal data.
+      value = encodeValue(JSON.parse(x.value));
     } catch {
       return null;
     }
     if (!writer || (owner && writer !== owner)) return null;
-    return sized(key, { kind: "value", value: x.value, expiresAt: x.expiresAt, writer });
+    return sized(key, { kind: "value", value, expiresAt: x.expiresAt, writer });
   }
   if (x.kind === "lock") {
     if (typeof x.holder !== "string" || !x.holder || x.holder.includes("/") || typeof x.token !== "string" || !TOKEN_RE.test(x.token)) return null;
@@ -606,17 +615,22 @@ function checkedEntry(key: unknown, raw: unknown, now: number): Entry | null {
     return sized(key, { kind: "lock", holder: x.holder, token: x.token, expiresAt: x.expiresAt, writer: x.holder });
   }
   if (x.kind === "throttle") {
-    if (!finite(x.slotAt) || !finite(x.intervalMs) || x.intervalMs < 100 || x.intervalMs > KV_THROTTLE_MAX_SECONDS * 1000) return null;
+    const capMs = maxTtlFor(bucket) * 1000;
+    const horizon = now + Math.min(KV_THROTTLE_MAX_SECONDS * 1000, capMs);
+    if (!finite(x.slotAt) || x.slotAt > horizon || !finite(x.intervalMs) || x.intervalMs < 100 || x.intervalMs > Math.min(KV_THROTTLE_MAX_SECONDS * 1000, capMs)) return null;
+    // A snapshot without createdAt gets the earliest one its expiry allows, so it still ends by then.
+    const createdAt = x.createdAt === undefined ? x.expiresAt - capMs : x.createdAt;
+    if (!finite(createdAt) || createdAt > now || x.expiresAt > createdAt + capMs) return null;
     if (!writer || (owner && writer !== owner)) return null;
     const booked: Record<string, number[]> = {};
     if (x.booked && typeof x.booked === "object") {
       for (const [who, slots] of Object.entries(x.booked as Record<string, unknown>)) {
         if (!Array.isArray(slots) || who.includes("/")) continue;
-        const kept = slots.filter((t): t is number => finite(t) && t > now).slice(-KV_THROTTLE_SLOTS_PER_PERSON);
+        const kept = slots.filter((t): t is number => finite(t) && t > now && t <= horizon).slice(-KV_THROTTLE_SLOTS_PER_PERSON);
         if (kept.length) booked[who] = kept;
       }
     }
-    return sized(key, { kind: "throttle", slotAt: x.slotAt, intervalMs: x.intervalMs, booked, expiresAt: x.expiresAt, writer });
+    return sized(key, { kind: "throttle", slotAt: x.slotAt, intervalMs: x.intervalMs, booked, createdAt, expiresAt: x.expiresAt, writer });
   }
   return null;
 }
@@ -856,7 +870,8 @@ export function kvList(actor: KvActor, rawPrefix: unknown): { prefix: string; ke
  * callers at once get N slots `interval` apart. The interval is fixed by whoever created the key; a
  * different one is refused, so nobody can stretch or shrink the pace for others. One person holds
  * at most KV_THROTTLE_SLOTS_PER_PERSON future slots, and no slot is booked further ahead than
- * KV_THROTTLE_MAX_SECONDS (or the namespace's TTL cap, when shorter).
+ * KV_THROTTLE_MAX_SECONDS (or the namespace's TTL cap, when shorter). The interval may not exceed
+ * that TTL cap, and the key ends at most one TTL cap after it was created.
  */
 export function kvThrottle(actor: KvActor, input: { key: unknown; minIntervalSeconds: unknown }, via: AuditVia): { key: string; waitSeconds: number; slotAt: string; minIntervalSeconds: number } {
   const k = resolveKey(actor.id, input.key);
@@ -865,8 +880,13 @@ export function kvThrottle(actor: KvActor, input: { key: unknown; minIntervalSec
   if (!Number.isFinite(interval) || interval < 0.1 || interval > KV_THROTTLE_MAX_SECONDS) {
     throw new ValidationError(`minIntervalSeconds is required: seconds from 0.1 to ${KV_THROTTLE_MAX_SECONDS}`);
   }
+  const capSeconds = maxTtlFor(k.bucket);
+  if (interval > capSeconds) {
+    throw new ValidationError(`minIntervalSeconds must be at most ${capSeconds}${isShared(k.bucket) ? " in a shared namespace" : ""}: the longest TTL a key there may have`);
+  }
   const intervalMs = Math.round(interval * 1000);
-  const aheadMs = Math.min(KV_THROTTLE_MAX_SECONDS, maxTtlFor(k.bucket)) * 1000;
+  const capMs = capSeconds * 1000;
+  const aheadMs = Math.min(KV_THROTTLE_MAX_SECONDS * 1000, capMs);
   const s = store();
   const now = Date.now();
   const e = live(s, k.key, now);
@@ -896,9 +916,11 @@ export function kvThrottle(actor: KvActor, input: { key: unknown; minIntervalSec
     throw new TooManyRequestsError(`${k.key} is booked more than ${aheadMs / 1000} seconds ahead: try again later`);
   }
   booked[actor.id] = [...mine, slot].filter((t) => t > now);
-  // Kept until one interval after the last slot, never longer than the namespace's TTL cap from now.
-  const expiresAt = Math.max(now + 1000, Math.min(slot + intervalMs, now + maxTtlFor(k.bucket) * 1000));
-  commit(s, k.key, sized(k.key, { kind: "throttle", slotAt: slot, intervalMs, booked, expiresAt, writer: e?.writer ?? actor.id }), () =>
+  // Kept until one interval after the last slot, never longer than the namespace's TTL cap from now,
+  // and never longer than that cap from its creation: calls cannot keep a pinned pace alive for ever.
+  const createdAt = e?.createdAt ?? now;
+  const expiresAt = Math.min(Math.max(now + 1000, Math.min(slot + intervalMs, now + capMs)), createdAt + capMs);
+  commit(s, k.key, sized(k.key, { kind: "throttle", slotAt: slot, intervalMs, booked, createdAt, expiresAt, writer: e?.writer ?? actor.id }), () =>
     auditWrite(actor.id, "throttle", k.key, waitMs > 0 ? "wait" : "now", via, { minIntervalSeconds: interval, waitMs }),
   );
   return { key: k.key, waitSeconds: Math.round(waitMs) / 1000, slotAt: new Date(slot).toISOString(), minIntervalSeconds: interval };

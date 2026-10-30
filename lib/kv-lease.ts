@@ -95,7 +95,7 @@ function heartbeat(): void {
   if (lease && lease.instance !== st.instance) {
     // Someone else wrote the file since our last beat: stop serving rather than run two maps.
     st.held = false;
-    console.warn("bab: another BAB process took the key-value lease; this process stops serving the key-value store.");
+    console.warn("bab: another BAB process took the key-value lease; this process stops serving the key-value store until it restarts.");
     return;
   }
   try {
@@ -105,16 +105,19 @@ function heartbeat(): void {
   }
 }
 
+/** Why ensureKvLease refused: another live process holds the lease, or this one cannot write it. */
+export type KvLeaseResult = "held" | "other" | "unwritable";
+
 /**
- * Takes the lease when nobody else holds it, or keeps it. Returns whether this process may serve
- * the store. Synchronous, and cheap once held.
+ * Takes the lease when nobody else holds it, or keeps it. Returns "held" when this process may
+ * serve the store. Synchronous, and cheap once held.
  */
-export function ensureKvLease(): boolean {
+export function ensureKvLease(): KvLeaseResult {
   const st = state();
-  if (st.held) return true;
+  if (st.held) return "held";
   const file = leasePath();
   const lease = readLease();
-  if (otherHolder(st, lease)) return false;
+  if (otherHolder(st, lease)) return "other";
   try {
     mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     if (lease === null) {
@@ -129,23 +132,23 @@ export function ensureKvLease(): boolean {
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
         const now = readLease();
-        if (otherHolder(st, now) || now === null) return false;
+        if (otherHolder(st, now) || now === null) return "other";
         writeFileSync(file, body(st), { mode: 0o600 });
       }
     } else {
       writeFileSync(file, body(st), { mode: 0o600 });
     }
-    if (readLease()?.instance !== st.instance) return false;
+    if (readLease()?.instance !== st.instance) return "other";
   } catch (err) {
     console.warn("bab: could not take the key-value lease: " + (err as Error).message);
-    return false;
+    return "unwritable";
   }
   st.held = true;
   if (!st.timer) {
     st.timer = setInterval(heartbeat, KV_LEASE_HEARTBEAT_MS);
     st.timer.unref?.();
   }
-  return true;
+  return "held";
 }
 
 /** True while this process holds the lease. */
