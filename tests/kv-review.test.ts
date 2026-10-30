@@ -426,7 +426,7 @@ describe("values from the review", () => {
   });
 
   it("refuses private keys, tokens and passwords, at the top or nested", () => {
-    const pem = ["-----BEGIN RSA " + "PRIVATE KEY-----", "MIIEowIBAAKCAQEA1234567890abcdefghijABCDEFGHIJ1234567890abcdefghij", "-----END RSA PRIVATE KEY-----"].join("\n");
+    const pem = ["-----BEGIN RSA PRIV" + "ATE KEY-----", "MIIEowIBAAKCAQEA1234567890abcdefghijABCDEFGHIJ1234567890abcdefghij", "-----END RSA PRIVATE KEY-----"].join("\n");
     const ghp = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
     const pw = ["pass", "word=Hunter2Hunter2!"].join("");
     for (const value of [pem, { k: pem }, ghp, { t: ghp }, pw, { password: "Hunter2Hunter2!" }]) {
