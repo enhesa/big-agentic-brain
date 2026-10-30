@@ -191,7 +191,7 @@ describe("N3: throttles honour the TTL cap", () => {
     await reconfigure({ BAB_KV_MAX_TTL_SECONDS: "60" });
     kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
     kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
-    expect(kv.kvGet(A, "t").ttlSeconds).toBeLessThanOrEqual(60);
+    expect(kv.kvGet(A, "t").ttlSeconds).toBe(60);
     expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp")).toThrow(/more than 60 seconds ahead/);
   });
 
@@ -213,6 +213,8 @@ describe("N3: throttles honour the TTL cap", () => {
       kv.kvThrottle(A, { key, minIntervalSeconds: 1200 }, "mcp");
       expect(kv.kvGet(B, key).ttlSeconds).toBeLessThanOrEqual(3600 - t);
     }
+    // The old code pushed this to 1200 seconds; the creation cap leaves 1.
+    expect(kv.kvGet(B, key).ttlSeconds).toBe(1);
     vi.setSystemTime(T0 + 3600_000);
     expect(kv.kvGet(B, key).found).toBe(false);
     expect(kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp")).toMatchObject({ waitSeconds: 0, minIntervalSeconds: 30 });
@@ -261,11 +263,18 @@ describe("N4: the snapshot is checked again on load", () => {
       ["shared/bitbucket-push/old", { kind: "throttle", slotAt: T0, intervalMs: 30_000, createdAt: T0 - 3600_000, expiresAt: later(), writer: A.id }],
       ["shared/bitbucket-push/future", { kind: "throttle", slotAt: T0, intervalMs: 30_000, createdAt: T0 + 1000, expiresAt: later(), writer: A.id }],
       ["shared/bitbucket-push/ok", { kind: "throttle", slotAt: T0 + 30_000, intervalMs: 30_000, createdAt: T0 - 1000, booked: { [A.id]: [T0 + 30_000, T0 + 7200_000] }, expiresAt: later(), writer: A.id }],
+      ["shared/bitbucket-push/legacy", { kind: "throttle", slotAt: T0, intervalMs: 30_000, expiresAt: later(), writer: A.id }],
       [`u/${B.id}/fine`, { kind: "value", value: JSON.stringify({ step: 3 }), expiresAt: later(), writer: B.id }],
     ]);
     expect(kv.kvList(B, "").keys.map((k) => k.key)).toEqual([`u/${B.id}/fine`]);
-    expect(kv.kvList(A, "shared/bitbucket-push/").keys.map((k) => k.key)).toEqual(["shared/bitbucket-push/ok"]);
+    expect(kv.kvList(A, "shared/bitbucket-push/").keys.map((k) => k.key)).toEqual(["shared/bitbucket-push/legacy", "shared/bitbucket-push/ok"]);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropped 5 key-value snapshot entries/));
+    // The slot two hours ahead was dropped: A holds one future slot, so three more fit before the cap of 4.
+    for (let i = 0; i < 3; i += 1) kv.kvThrottle(A, { key: "shared/bitbucket-push/ok", minIntervalSeconds: 30 }, "mcp");
+    expect(() => kv.kvThrottle(A, { key: "shared/bitbucket-push/ok", minIntervalSeconds: 30 }, "mcp")).toThrow(/already hold 4 future slots/);
+    // A throttle saved without createdAt still ends by its saved expiry.
+    vi.setSystemTime(later());
+    expect(kv.kvGet(A, "shared/bitbucket-push/legacy").found).toBe(false);
   });
 
   it("applies the limits to what it loads", async () => {
