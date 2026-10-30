@@ -237,7 +237,7 @@ function sharedNamespaceRefusal(ns: string): ForbiddenError {
 }
 
 function assertUsableId(actorId: string): void {
-  // An id with a slash would make u/<id>/ a prefix of someone else's keys (u/a@x.com/s/ inside u/a@x.com/).
+  // An id with a slash would make u/<id>/ a prefix of someone else's keys (u/a@example.com/s/ inside u/a@example.com/).
   if (actorId.includes("/") || !actorId) throw new ForbiddenError("The key-value store cannot serve an identity that contains a slash");
 }
 

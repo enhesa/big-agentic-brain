@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-30",
+    title: "Public repository guardrails",
+    changes: [
+      "Contributions are scanned for personal data, internal hosts, workplace links, ticket keys and secrets before merge.",
+    ],
+  },
+  {
     date: "2026-10-29",
     title: "Safer file store",
     changes: [

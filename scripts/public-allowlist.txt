@@ -1,0 +1,54 @@
+# Exceptions for scripts/check-public-content.sh. Maintainers review every line.
+# Format: check:path:substring. check is email, host, ip, url, ticket, secret or *. substring * allows the whole file for that check.
+# Add a line only for a fictional or test value whose exact shape the test needs. Give the reason in a comment above it.
+
+# Redaction tests need real-shaped personal data, private IPs, ticket keys and internal hosts to prove they are masked.
+email:tests/redact-pii.test.ts:@customer-corp.com
+email:tests/redact-pii.test.ts:other@gmail.com
+email:tests/redact-pii.test.ts:a@b.io
+ip:tests/redact-pii.test.ts:IP 10.0.0.12 and CIDR 10.0.0.0/16
+ticket:tests/redact-pii.test.ts:ticket PROJ-109
+ticket:tests/redact-pii.test.ts:Jira key: EHS-123
+host:tests/redact-pii.test.ts:db.internal
+
+# Identity tests need addresses outside the allowed example.com domain, in several cases.
+email:tests/identity-pattern.test.ts:someone@other.com
+email:tests/identity-pattern.test.ts:@x.com
+email:tests/identity-pattern.test.ts:A@X.com
+email:tests/identity-pattern.test.ts:x@y.com
+email:tests/proxy-identity.test.ts:a@b.co
+email:tests/proxy-identity.test.ts:c@d.co
+email:tests/proxy-identity.test.ts:leaky@x.co
+email:tests/session.test.ts:test.user@gmail.com
+email:tests/usage.test.ts:@gmail.com
+email:tests/setup-env.test.ts:x@gmail.com
+
+# Outside-address refusals and a domain-suffix spoof need a domain that is not example.com.
+email:tests/kv.test.ts:@outside-corp.net
+email:tests/kv.test.ts:owner.one@example.com.evil
+email:tests/files-hardening.test.ts:someone@outside-company.net
+email:tests/learnings-flag-note.test.ts:someone@outside-example.org
+email:tests/files.test.ts:notes-for-someone@acme.org.txt
+
+# Forwarded-for parsing and the per-IP limiter use a private address on purpose.
+ip:tests/request-audit.test.ts:10.0.0.1
+ip:tests/identify.test.ts:10.250.250.250
+
+# A design note records a timeout measured against a non-routable address.
+ip:docs/design/offline-queue.md:http://10.255.255.1/
+
+# Frozen, generated eval corpora with fictional hosts, networks and ticket keys.
+host:evals/fixtures/distractors-synthetic.json:*
+ip:evals/fixtures/distractors-synthetic.json:*
+ticket:evals/fixtures/distractors-synthetic.json:*
+host:evals/fixtures/distractors-hard.json:*
+
+# Eval scenario around a fictional auth gateway and a fictional ticket.
+host:evals/fixtures/aliases-blind.json:gatekeeper.internal
+host:evals/fixtures/tk-colleague-learnings.json:gatekeeper.internal
+ticket:evals/fixtures/tk-colleague-learnings.json:LEDGERLY-4411
+host:evals/tasks-tk/tk7-colleague-billing-api/hidden/tests/test_hidden_tk7c.py:gatekeeper.internal
+host:evals/tasks-tk/tk7-colleague-billing-api/oracle/billing_api/auth.py:gatekeeper.internal
+host:evals/tasks-tk/tk7-colleague-billing-api/repo/docs/gatekeeper-migration.md:gatekeeper.internal
+host:evals/tasks-tk/tk7-eval-reports/hidden/tests/test_hidden_tk7.py:gatekeeper.internal
+host:evals/tasks-tk/tk7-eval-reports/oracle/reports/auth.py:gatekeeper.internal

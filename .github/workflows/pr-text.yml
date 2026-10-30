@@ -1,0 +1,40 @@
+# Scans the pull request title, body and commit messages for personal data, internal hosts,
+# workplace links, ticket keys and secrets (scripts/check-public-content.sh).
+# PR text reaches the shell only through env, never through ${{ }} inside run.
+name: pr-text
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-text-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pr-text:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan PR title and body
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | bash scripts/check-public-content.sh --text
+      - name: Scan commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          git log --format=%x1e%n%B "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/messages.txt"
+          bash scripts/check-public-content.sh --commit-messages < "$RUNNER_TEMP/messages.txt"
