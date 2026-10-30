@@ -153,10 +153,10 @@ it.each([
   expect(json.error.code).toBe(-32600);
 });
 
-it("tools/list returns exactly the eleven tools", async () => {
+it("tools/list returns exactly the twelve tools", async () => {
   const out = await rpc("tools/list", {}, ACTOR);
   expect(out.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
-    "bab_feedback", "bab_files", "bab_identify", "bab_inbox", "bab_learn", "bab_link_session", "bab_people",
+    "bab_feedback", "bab_files", "bab_identify", "bab_inbox", "bab_kv", "bab_learn", "bab_link_session", "bab_people",
     "bab_react", "bab_remind", "bab_search", "bab_send",
   ]);
 });

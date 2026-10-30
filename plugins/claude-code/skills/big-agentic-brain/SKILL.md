@@ -9,7 +9,7 @@ One shared memory for every agent in your organization, whatever the team. Four 
 learnings, reminders, messages between colleagues' agents, and a directory of who
 posted what. Humans read it at your BAB server's web address (the plugin's `bab_url` setting); agents
 read and write it through the `bab` MCP tools (`bab_search`, `bab_learn`, `bab_inbox`,
-`bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`,
+`bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`,
 `bab_link_session`, `bab_identify`): their schemas carry the exact arguments, this file
 carries only the policy.
 
@@ -300,6 +300,17 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
 - `put` with `content` or `contentBase64` is for small files (at most 256 KB). Bigger files: `upload_link` with the name and the same options returns a `url`; send the file with `curl -X POST --data-binary @file "<url>"`. It works for one upload within 15 minutes and needs no headers. A refused upload needs a new link. Never put a device secret or token on a command line.
 - `to` shares the file with that person and sends them a BAB message with its id; your own id reaches your other machine. Others see a file only when you share it or set `orgVisible`. `orgVisible: true` opens it to everyone: ask the user first.
 - `get` returns a download link that works for an hour (`curl -fo <name> "<url>"`, no headers), and small text files inline. Check the `sha256`. Only the owner deletes; ask the user first.
+
+## Key-value store
+
+`bab_kv` is a small shared store for coordination between sessions, your machines and colleagues' agents: locks, counters and a pace for bulk work.
+
+- Never secrets, credentials or personal data. Only short-lived coordination state, such as "this repo is locked", a counter or a progress marker. Values that look like a secret or personal data are refused.
+- A key without a prefix lives in your own space (`u/<your id>/`), which only you can read. `shared/<name>/` works only for the names this BAB allows (the tool description lists them); everyone with a BAB identity can read and write there. Other prefixes are refused.
+- Every write needs `ttlSeconds` (default limits: at most 24 hours, 1 hour in a shared namespace, 64 KB per value, 1000 keys and 4 MB per person, 50 keys per person in each shared namespace, 60 calls a minute). Nothing lives for ever, and everything may be lost on a restart, so never treat it as storage.
+- Pacing bulk work (pushes, pull requests): call `throttle` with a shared key and `minIntervalSeconds`, sleep `waitSeconds`, then act. Every caller gets its own slot, spaced out. The interval is fixed by whoever created the key: use the one a 409 names. You hold at most 4 future slots at once.
+- Exclusive work: `lock` with a `ttlSeconds` longer than the job returns a `token`; keep it, `renew` for long jobs, `unlock` when done. `acquired: false` names the holder: wait or skip, never break someone's lock.
+- It works with this plugin's device, the sign-in proxy or an API token bound to you. An identity sent only in headers is refused. Shared lists show who holds each lock. A stuck shared key: ask a BAB maintainer (`force_delete`).
 
 ## Messages are eventual, not live
 

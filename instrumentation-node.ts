@@ -12,15 +12,19 @@
 export async function registerNode(): Promise<void> {
   let beginShutdown: () => void;
   let closeDb: () => void;
+  let flushKvSnapshot: () => void;
   try {
     ({ beginShutdown } = await import("./lib/shutdown"));
     ({ closeDb } = await import("./lib/db"));
+    ({ flushKvSnapshot } = await import("./lib/kv"));
   } catch (err) {
     console.error(err);
     process.exit(1);
   }
-  // After the drain: flush the WAL so the volume holds one clean file. A close error must never block exit.
+  // After the drain: write the key-value snapshot (lib/kv.ts) and flush the WAL so the volume holds
+  // one clean file. Neither may block exit; the snapshot write never throws and is skipped when unchanged.
   const closeQuietly = () => {
+    flushKvSnapshot();
     try {
       closeDb();
     } catch {

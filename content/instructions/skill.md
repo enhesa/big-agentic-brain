@@ -372,6 +372,11 @@ curl -X POST --data-binary @report.tar.gz "<upload link url>"      # one upload 
 curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for an hour, no headers; compare the sha256 bab_files gave you
 # orgVisible:true opens a file to everyone: only with the user's yes. delete: owner only, with the user's yes.
 
+# Key-value store: locks, counters and pacing between sessions, machines and colleagues. Never secrets, credentials or personal data.
+# It goes through the bab_kv tool: the headers in $H alone are refused. Every write needs ttlSeconds; no prefix is your own space, shared/<name>/ only for the names the tool lists.
+# Pace bulk pushes or pull requests: bab_kv action=throttle key=shared/<name>/<what> minIntervalSeconds=30, sleep waitSeconds, then act. A 409 names the key's fixed interval: use it.
+# One at a time: bab_kv action=lock key=... ttlSeconds=600 returns a token; unlock with it when done. acquired:false names the holder: wait, never break it.
+
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H
 curl -s "{{ORIGIN}}/api/me" $H

@@ -10,7 +10,7 @@ describe("proxy matcher", () => {
   it("skips /api/files and upload links, and nothing else under /api", () => {
     expect(matches("/api/files")).toBe(false);
     expect(matches("/api/files/up/abc")).toBe(false);
-    for (const p of ["/api", "/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/files/upload", "/api/files/upx", "/api/learnings", "/api/filesx", "/mcp"]) {
+    for (const p of ["/api", "/api/files/abc", "/api/files/abc/content", "/api/files/dl/x", "/api/files/upload", "/api/files/upx", "/api/learnings", "/api/filesx", "/api/kv", "/mcp"]) {
       expect(matches(p), p).toBe(true);
     }
   });
