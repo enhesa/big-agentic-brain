@@ -220,7 +220,8 @@ describe("the command-center skill", () => {
 
   it("the plugin skill carries the same rule paragraph", () => {
     const served = readFileSync(path.join(process.cwd(), "content/instructions/command-center.md"), "utf8").replaceAll("{{ORIGIN}}", "<bab_url>");
-    const plugin = readFileSync(path.join(process.cwd(), "plugins/command-center/skills/command-center/SKILL.md"), "utf8");
+    // A Windows checkout with core.autocrlf has CRLF here (only content/instructions is pinned to LF).
+    const plugin = readFileSync(path.join(process.cwd(), "plugins/command-center/skills/command-center/SKILL.md"), "utf8").replaceAll("\r\n", "\n");
     const rule = served.slice(served.indexOf("## The rule"), served.indexOf("## The record"));
     expect(rule.length).toBeGreaterThan(200);
     expect(plugin).toContain(rule);

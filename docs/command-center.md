@@ -54,7 +54,8 @@ In short:
 - The server owns every time except `health.checkedAt`: `updatedAt`, `seq`, a question's
   `askedAt` and `clearedAt`, a task's `startedAt` and `finishedAt`, a comment's `at`, health
   `receivedAt`. Clock skew between machines never shows.
-- `expectSeq` that does not match is 409 with the current record.
+- `expectSeq` that does not match is 409 with the current record, unless the record you send is
+  already exactly the current one (a retried request): that is `unchanged: true`, not a 409.
 - Publishing the same record again changes nothing (`unchanged: true`): no new `seq`, time or audit row.
 - Leaving out `comments` or `health` keeps them, since they have their own actions; `[]` or `null` clears them.
 - A question the person dismissed on the page stays cleared while the agent sends the same id and text; the answer lists it in `dismissed`. A dismissal moves neither `seq` nor `updatedAt`.

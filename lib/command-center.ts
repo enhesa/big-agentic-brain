@@ -910,12 +910,7 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
   const input = validateRecord(body);
   const s = store();
   const prev = recordsOf(s, owner, now).get(input.id);
-  if (expectSeq !== null && expectSeq !== (prev?.seq ?? 0)) {
-    throw new CcConflictError(
-      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record (in current) and publish again with expectSeq ${prev?.seq ?? 0}.`,
-      prev ?? null,
-    );
-  }
+  const conflict = expectSeq !== null && expectSeq !== (prev?.seq ?? 0);
   const at = iso(now);
   const session = input.source?.session ?? null;
   // Questions: keep askedAt while the id stays; an open id missing from this publish is cleared now.
@@ -980,8 +975,15 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
     questions: r.questions.map((q) => ({ id: q.id, askedAt: q.askedAt, clearedAt: q.clearedAt })),
     ...(dismissed.length ? { dismissed } : {}),
   });
-  // A replay of the same record changes nothing: no new seq or time, no audit row.
+  // A replay of the same record changes nothing: no new seq or time, no audit row. That holds for
+  // a retried PUT whose expectSeq the first try already moved past, so a replay is never a 409.
   if (prev && contentOf(prev) === contentOf(next)) return { ...answer(prev), unchanged: true };
+  if (conflict) {
+    throw new CcConflictError(
+      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record (in current) and publish again with expectSeq ${prev?.seq ?? 0}.`,
+      prev ?? null,
+    );
+  }
   commit(s, owner, next, () => auditCc(owner, "publish", input.id, prev ? "updated" : "created", via));
   return answer(next);
 }

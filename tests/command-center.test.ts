@@ -162,11 +162,21 @@ describe("publish", () => {
 
   it("expectSeq mismatch is 409 with the current record", () => {
     publish();
-    const r = refusal(() => publish({ expectSeq: 0 }));
+    const r = refusal(() => publish({ expectSeq: 0, title: "Someone else's change" }));
     expect(r.status).toBe(409);
-    expect(r.current).toMatchObject({ id: "billing-export", seq: 1 });
+    expect(r.current).toMatchObject({ id: "billing-export", seq: 1, title: "Billing export" });
     expect(r.message).toMatch(/expectSeq 1/);
     expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2 });
+    expect(refusal(() => publish({ expectSeq: 1, title: "Stale" })).status).toBe(409);
+  });
+
+  it("a retried publish with the expectSeq the first try moved past is a no-op, not a 409", async () => {
+    expect(publish({ expectSeq: 0 })).toMatchObject({ seq: 1 });
+    // The answer was lost; the agent sends the very same request again.
+    expect(publish({ expectSeq: 0 })).toMatchObject({ seq: 1, unchanged: true });
+    expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2 });
+    expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2, unchanged: true });
+    expect(await auditRows("cc_publish")).toHaveLength(2);
   });
 
   it("refuses a token in a comment and names the field and the kind", () => {

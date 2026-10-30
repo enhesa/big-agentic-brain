@@ -5,6 +5,7 @@ import { auditRequest } from "@/lib/request-audit";
 import { config } from "@/lib/config";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { ccView, type CcView } from "@/lib/command-center";
+import { ApiError } from "@/lib/errors";
 import CommandCenterPoll from "./CommandCenterPoll";
 import styles from "./command-center.module.css";
 
@@ -47,7 +48,7 @@ export default async function CommandCenterPage() {
     return (
       <Shell>
         <h1 className={styles.h1}>Command Center</h1>
-        <p className="card">{err instanceof Error ? err.message : "Command Center is not available right now."}</p>
+        <p className="card">{err instanceof ApiError ? err.message : "Command Center is not available right now."}</p>
       </Shell>
     );
   }
