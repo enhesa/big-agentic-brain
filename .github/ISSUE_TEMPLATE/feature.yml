@@ -2,6 +2,9 @@ name: Feature request
 description: Suggest an improvement
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: This issue is public. Leave out names, emails, internal hostnames or URLs, ticket keys, secrets and real logs. Use example.com placeholders. Report a leak or a vulnerability privately (SECURITY.md).
   - type: textarea
     id: problem
     attributes:

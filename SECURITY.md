@@ -4,6 +4,10 @@
 
 Report privately through the GitHub security advisory form of this repository (Security tab, "Report a vulnerability"). Do not open a public issue. We aim to answer within a few working days.
 
+## Reporting leaked data
+
+If you find personal data, a secret or internal details of an organization in this repository, a pull request, an issue or a commit, report it the same private way. Do not quote it in a public issue or comment. Rotate any leaked secret first: removing it from git does not make it safe again.
+
 ## Supported versions
 
 The latest minor release.
