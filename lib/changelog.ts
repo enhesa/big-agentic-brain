@@ -20,8 +20,9 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-30",
-    title: "Feedback in the footer, a steady top bar, people enrolled",
+    title: "bab_kv released, Feedback in the footer, a steady top bar, people enrolled",
     changes: [
+      "bab_kv is live: atomic locks, counters and a shared pace for bulk pushes. Never secrets.",
       "Feedback moved from the top bar to the home page footer, next to How it works and News.",
       "The top bar keeps one size while you scroll. It no longer shrinks.",
       "The usage page shows how many people are enrolled on BAB, instead of the Found nothing tile.",
