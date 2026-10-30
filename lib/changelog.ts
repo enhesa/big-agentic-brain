@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-10-30",
+    title: "bab_kv released",
+    changes: [
+      "bab_kv is live: atomic locks, counters and a shared pace for bulk pushes. Never secrets.",
+    ],
+  },
+  {
     date: "2026-10-29",
     title: "Safer file store",
     changes: [
