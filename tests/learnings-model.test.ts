@@ -91,7 +91,7 @@ describe("normalizeModel", () => {
 
   it("refuses anything that is not a short model id", async () => {
     const { normalizeModel } = await import("../lib/learnings");
-    for (const bad of ["claude opus", "claude_opus", "claude-opus-5-5[1m]", "a@b.com", "<script>", "x".repeat(65), 5, {}]) {
+    for (const bad of ["claude opus", "claude_opus", "claude-opus-5-5[1m]", "a@example.com", "<script>", "x".repeat(65), 5, {}]) {
       expect(() => normalizeModel(bad), String(bad)).toThrow();
     }
     expect(normalizeModel("a".repeat(64))).toBe("a".repeat(64));

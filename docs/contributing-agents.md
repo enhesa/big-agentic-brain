@@ -21,6 +21,8 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Set `CURRENT_VERSION` in `lib/db.ts:13` to the highest migration (`tests/db.test.ts:487`).
 - Add a line to `CHANGELOG` in `lib/changelog.ts` for every change (`lib/changelog.ts:3-10`). Dates are ISO, newest first, one entry per day. Lines have 20 words or fewer and no em-dash (`tests/changelog.test.ts:14`, `:28-36`).
 - Keep vendor, organization and Jira-key strings out of tracked files. The scan is `scripts/check-vendor-names.sh:8`. It covers `app lib content plugins docs tests`, `README.md`, `scripts` and `.github`. Exceptions go in `scripts/vendor-allowlist.txt` as `path:substring`.
+- Keep emails, internal hosts, private IPs, workplace links, ticket keys and token shapes out of tracked files. The scan is `scripts/check-public-content.sh`, run by `pnpm check:public`. It covers every tracked file except `pnpm-lock.yaml`. Use `example.com`, `user@example.com` and `192.0.2.x`. Exceptions go in `scripts/public-allowlist.txt` as `check:path:substring`, with a reason.
+- Expect the `pr-text` workflow (`.github/workflows/pr-text.yml`) to run the same scan on the PR title, body and commit messages. A ticket key is allowed only as a commit subject scope.
 - Person-name checks only run when `VENDOR_EXTRA_PATTERN` is set (`scripts/check-vendor-names.sh:7-9`). A clean scan does not prove a file has no names.
 - Do not use `NEXT_PUBLIC_` in `app` or `lib`. Only CI checks it (`.github/workflows/ci.yml:31`). `runTest.sh` does not.
 - Keep the coverage gates: 85 percent lines and functions, 75 percent branches (`vitest.config.mts:43`). They cover `lib`, `app/api` and `app/instructions`. See [CONTRIBUTING.md](../CONTRIBUTING.md).

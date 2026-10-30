@@ -421,7 +421,7 @@ describe("v23: supersession_links", () => {
   it("backfills a link for every existing supersedes_id and boots again without its migrations row", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     const db = getDb();
-    db.prepare("INSERT INTO users (id, email, name) VALUES ('u','u@x.com','U')").run();
+    db.prepare("INSERT INTO users (id, email, name) VALUES ('u','u@example.com','U')").run();
     db.prepare("INSERT INTO learnings (id, author_id, title, body, tags, status) VALUES ('old','u','t','b','[]','archived')").run();
     db.prepare("INSERT INTO learnings (id, author_id, title, body, tags, status, supersedes_id) VALUES ('new','u','t2','b2','[]','active','old')").run();
     db.prepare("DELETE FROM supersession_links").run();
