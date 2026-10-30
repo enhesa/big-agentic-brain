@@ -32,7 +32,7 @@ This repository is public. Code, tests, fixtures, docs, comments, the changelog,
 
 - Add a line to `lib/changelog.ts`: dated today, plain words, 20 words or fewer. `tests/changelog.test.ts` enforces it.
 - Commit with Conventional Commits; release-please owns versions and `CHANGELOG.md`. Never edit either by hand.
-- Check whether the change must be reflected in README.md, the in-app /docs page (app/docs/) or docs/*.md, and update them in the same PR.
+- Update the docs in the same PR as every change: README.md, the in-app /docs page (app/docs/), docs/*.md and both skill texts. Docs are part of the change, never a follow-up.
 - Add tests with the change. Iterate on single files (`pnpm vitest run tests/x.test.ts`); run `pnpm check` before the pull request.
 - Keep code, docs and tests vendor-neutral: `example.com` people, the `acme` org, no real names. See Public repository above.
 - Settings live in `lib/config-spec.mjs`; run `pnpm docs:config` after a change. Misconfiguration fails at startup.

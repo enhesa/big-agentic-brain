@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
   const results = search(q, { tag, repo, author, status, project, kind, flagged, model, appliesTo, stack }, limit);
   // An agent got these memories: that is a read (lib/learnings.ts touchRead). The web pages never come through here.
   recordSearchRead(results, { status, flagged });
-  // What a search with text found, on its own audit row, for "Found nothing" on /usage.
+  // What a search with text found, on its own audit row, for "Searches that found nothing" on /usage.
   if (q.trim()) recordSearchOutcome(auditId, { results: results.length, query: q });
 
   // verifyHint only when a result is marked verify: true, like bab_search.

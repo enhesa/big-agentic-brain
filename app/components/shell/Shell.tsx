@@ -7,8 +7,8 @@ import { branding } from "@/lib/branding";
  * Pages add their own forms where they need one (feedback, /me/devices, /inbox); agents write
  * through the JSON API (see app/api/**).
  *
- * The bar itself lives in TopNav (a client component: it shrinks on scroll and marks the
- * current page) and is styled to match the landing page's top bar exactly.
+ * The bar itself lives in TopNav (a client component: it marks the current page and
+ * badges the Inbox) and is styled to match the landing page's top bar exactly.
  */
 export default function Shell({ children }: { children: React.ReactNode }) {
   return (

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { NAV_ITEMS } from "../app/components/nav-items";
@@ -63,8 +63,10 @@ function formRequest(url: string, fields: Record<string, string>, headers: Recor
 const goodFields = { kind: "idea", area: "web", title: "Dark mode for the web UI", body: "The pages are very bright at night." };
 
 describe("navigation", () => {
-  it("links Feedback from the top nav", () => {
-    expect(NAV_ITEMS.some((i) => i.href === "/feedback")).toBe(true);
+  it("links Feedback from the homepage footer, not the top nav", () => {
+    expect(NAV_ITEMS.some((i) => (i.href as string) === "/feedback")).toBe(false);
+    const footer = readFileSync(path.join(process.cwd(), "app/components/landing/Footer.tsx"), "utf8");
+    expect(footer).toContain('href="/feedback"');
   });
 });
 

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import styles from "./Shell.module.css";
 import { NAV_ITEMS } from "../nav-items";
 import InboxBadge from "./InboxBadge";
@@ -11,28 +10,18 @@ import { useInboxUnread } from "./useInboxUnread";
 /**
  * The inner-page bar, deliberately identical in style to the landing page's TopBar
  * (app/components/landing/TopBar.tsx): the same light sticky bar, solid white so the page
- * does not show through it, the same navy wordmark, the same shrink on scroll, the same steel links and
- * navy pill. Only the links differ, because a reader who is already inside the memory
- * needs section navigation rather than a sales path. Decided: "the navbar on
- * the inner pages the same as the homepage, just different nav buttons".
+ * does not show through it, the same navy wordmark, the same steel links. The bar keeps one size at every
+ * scroll position: it used to shrink on scroll, which was jumpy, so that is gone. Decided: "the navbar on the inner pages the same as the homepage".
  *
- * A client component for two reasons: the shrink-on-scroll, and marking the page you are
- * on. The Shell around it stays a server component.
+ * A client component for two reasons: marking the page you are on, and the live Inbox
+ * badge. The Shell around it stays a server component.
  */
 export default function TopNav({ orgName }: { orgName: string }) {
-  const [small, setSmall] = useState(false);
   const pathname = usePathname() ?? "";
   const inbox = useInboxUnread();
 
-  useEffect(() => {
-    const onScroll = () => setSmall(window.scrollY > 40);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
-    <header className={`${styles.topbar} ${small ? styles.topbarSmall : ""}`}>
+    <header className={styles.topbar}>
       <div className={`container ${styles.topbarInner}`}>
         <Link href="/" className={styles.brand} aria-label="Big Agentic Brain, home">
           {/* eslint-disable-next-line @next/next/no-img-element */}

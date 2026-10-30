@@ -5,7 +5,7 @@ import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { isMaintainer } from "@/lib/feedback";
 import { parseDbTime } from "@/lib/dates";
-import { activityCountsForUsers, getUsersByIds, learningCountsByAuthor, listUsersPage } from "@/lib/users";
+import { activityCountsForUsers, enrolledByWeek, getUsersByIds, learningCountsByAuthor, listUsersPage } from "@/lib/users";
 import { areasByUser } from "@/lib/area-contacts";
 import { GENERAL_PROJECT_KEY } from "@/lib/project-key";
 import {
@@ -268,6 +268,8 @@ export default async function UsagePage({
     const values = shown.map((w) => (run += w[key]));
     return { values, label: `${what}, running total: ${shown.map((w, i) => `${dayMonth(w.week)} ${values[i]}`).join(", ")}` };
   };
+  // People enrolled: all time, from the users table (the Users directory), not from the audit log.
+  const enrolled = enrolledByWeek(shown.map((w) => w.week));
 
   // Health: Stop nudges and refusals only exist from USAGE_COLLECTING_SINCE.
   const collectWeek = weekStart(new Date(`${USAGE_COLLECTING_SINCE}T00:00:00Z`));
@@ -469,15 +471,17 @@ export default async function UsagePage({
             }}
           />
           <HeroTile
-            label="Found nothing"
-            value={pct(outcomes.zero, outcomes.recorded) ?? "-"}
-            testId="tile-found-nothing"
-            title="The share of searches that returned no memory at all. Counted only since searches started recording how many results they found. Listings without search text are left out."
-            note={{
-              text: outcomes.since ? `${formatCount(outcomes.zero)} of ${formatCount(outcomes.recorded)}, since ${dayMonth(outcomes.since)}` : "No searches recorded yet",
-              title: "Older searches did not record their result count, so they are left out.",
-              testId: "tile-found-nothing-note",
+            label="People enrolled"
+            value={enrolled.total}
+            grew={enrolled.lastWeek}
+            what="new this week"
+            spark={{
+              values: enrolled.running,
+              label: `People enrolled, running total: ${shown.map((w, i) => `${dayMonth(w.week)} ${enrolled.running[i]}`).join(", ")}`,
             }}
+            testId="tile-enrolled"
+            title="Everyone who has ever reached BAB as themselves, through a linked device, the sign-in or their agent, each counted once: the people in the Users directory below."
+            note={{ text: "All time", title: "Counted from the Users directory, not from the last 12 months of activity.", testId: "tile-enrolled-note" }}
           />
         </section>
 

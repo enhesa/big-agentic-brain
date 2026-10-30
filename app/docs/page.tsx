@@ -57,10 +57,10 @@ const SAVING: Flow = {
   title: "Saving something worth keeping",
   lanes: [YOU, AGENT, BRAIN],
   steps: [
-    { at: "agent", note: "a task ends with a lasting fact" },
+    { at: "agent", note: "a task taught a lasting fact" },
     { from: "agent", to: "brain", label: "save it, with aliases" },
-    { from: "brain", to: "agent", label: "stored, everyone can find it", back: true },
-    { from: "agent", to: "you", label: "tells you the title and link", back: true },
+    { from: "brain", to: "agent", label: "stored for everyone", back: true },
+    { from: "agent", to: "you", label: "tells you title and link", back: true },
     { at: "agent", note: "a decision waits for your yes" },
   ],
 };
@@ -70,8 +70,8 @@ const ANSWERING: Flow = {
   lanes: [YOU, AGENT, BRAIN],
   steps: [
     { from: "you", to: "agent", label: "how do we do X?" },
-    { from: "agent", to: "brain", label: "search, up to 3 phrasings" },
-    { from: "brain", to: "agent", label: "what we know, and who wrote it", back: true },
+    { from: "agent", to: "brain", label: "search, 3 phrasings" },
+    { from: "brain", to: "agent", label: "what we know, who wrote it", back: true },
     { at: "agent", note: "stale warning: check first" },
     { from: "agent", to: "you", label: "the answer, or nothing found", back: true },
   ],
@@ -84,7 +84,7 @@ const BEFORE_A_CHANGE: Flow = {
     { from: "you", to: "agent", label: "change this repo" },
     { from: "agent", to: "brain", label: "search rules, repo and company" },
     { from: "brain", to: "agent", label: "rules, with their standing", back: true },
-    { at: "agent", note: "checks them against the code" },
+    { at: "agent", note: "checks them in the code" },
     { from: "agent", to: "you", label: "PR with a short BAB section", back: true },
   ],
 };
@@ -109,9 +109,10 @@ const WHO_YOU_ARE: Flow = {
   steps: [
     { from: "agent", to: "brain", label: "bab_identify: your address, once" },
     { from: "brain", to: "agent", label: "remembers this computer", back: true },
-    { from: "browser", to: "brain", label: "you open BAB, signed in" },
+    { from: "browser", to: "brain", label: "you open BAB" },
     { from: "brain", to: "browser", label: "unsure? one click: Yes, that's me", back: true },
-    { from: "browser", to: "brain", label: "Your devices: forget a computer" },
+    { from: "brain", to: "agent", label: "a new device as you: told once", back: true },
+    { from: "browser", to: "brain", label: "Your devices: forget one" },
   ],
 };
 
@@ -135,7 +136,7 @@ const REVIEW: Flow = {
     { from: "brain", to: "their", label: "request: repo, branch, what for", back: true },
     { from: "their", to: "them", label: "Alice asked for a review" },
     { from: "them", to: "their", label: "go ahead" },
-    { from: "their", to: "brain", label: "opens the folder, replies in the thread" },
+    { from: "their", to: "brain", label: "opens the folder, replies" },
   ],
 };
 
@@ -145,9 +146,9 @@ const NOTE_TO_SELF: Flow = {
   title: "A note to yourself",
   lanes: [YOU, AGENT, BRAIN],
   steps: [
-    { from: "you", to: "agent", label: "note for later: check the deploy" },
+    { from: "you", to: "agent", label: "note: check the deploy" },
     { from: "agent", to: "brain", label: "into your own inbox" },
-    { from: "brain", to: "agent", label: "any session, next prompt: 1 unread", back: true },
+    { from: "brain", to: "agent", label: "any session: 1 unread", back: true },
   ],
 };
 
@@ -160,10 +161,10 @@ const TOLD: Flow = {
     { from: "brain", to: "agent", label: "first prompt: rules, project titles", back: true },
     { from: "brain", to: "agent", label: "each prompt: unread, due, retired", back: true },
     { from: "brain", to: "agent", label: "new task: 3 titles", back: true },
-    { from: "agent", to: "you", label: "BAB: 2 unread messages", back: true },
+    { from: "agent", to: "you", label: "BAB: 2 unread", back: true },
     { from: "brain", to: "agent", label: "Stop: a nudge to record", back: true },
     { from: "brain", to: "agent", label: "after a compaction: re-read rules", back: true },
-    { at: "agent", note: "a command fails: search BAB before you fix it" },
+    { at: "agent", note: "a command fails: search BAB first" },
   ],
 };
 
@@ -171,12 +172,12 @@ const INBOX: Flow = {
   title: "The inbox",
   lanes: [BRAIN, YOU, AGENT],
   steps: [
-    { at: "brain", note: "a colleague's agent wrote to you" },
+    { at: "brain", note: "a colleague wrote to you" },
     { from: "brain", to: "you", label: "unread count at your next prompt", back: true },
     { from: "you", to: "brain", label: "Inbox page: your threads" },
     { from: "you", to: "agent", label: "Continue in Claude" },
     { from: "agent", to: "brain", label: "reads it, you approve a reply" },
-    { at: "you", note: "inside Claude: the /bab panel, Open chat" },
+    { at: "you", note: "or the /bab panel in Claude" },
   ],
 };
 
@@ -186,7 +187,7 @@ const REMINDERS: Flow = {
   steps: [
     { from: "you", to: "agent", label: "remind me on Friday" },
     { from: "agent", to: "brain", label: "private reminder, due Friday" },
-    { at: "brain", note: "only you see it, also on the Reminders page" },
+    { at: "brain", note: "private, also on the Reminders page" },
     { from: "brain", to: "agent", label: "due: told at your next prompt", back: true },
     { from: "agent", to: "you", label: "1 reminder due", back: true },
     { from: "you", to: "agent", label: "done, or snooze a week" },
@@ -200,8 +201,8 @@ const FEEDBACK: Flow = {
   lanes: [POSTER, BRAIN, MAINTAINER],
   steps: [
     { from: "poster", to: "brain", label: "post a bug or an idea" },
-    { at: "brain", note: "colleagues vote: most votes first" },
-    { from: "brain", to: "maintainer", label: "N new items since you looked", back: true },
+    { at: "brain", note: "colleagues vote, top first" },
+    { from: "brain", to: "maintainer", label: "N new since you looked", back: true },
     { from: "maintainer", to: "brain", label: "triage: planned, done, won't fix" },
   ],
 };
@@ -237,6 +238,11 @@ const PIECES = [
   { what: "Thirteen tools", detail: "four with ?tools=lean" },
 ];
 
+/** "25 MB" for a size in bytes. */
+function mb(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
 /** "a year" for 365 days, so the diagram reads like people talk, and a plain count otherwise. */
 function inWords(days: number): string {
   return days === 365 ? "a year" : `${days} days`;
@@ -259,7 +265,7 @@ export default async function DocsPage() {
     <Shell>
       <h1>How it works</h1>
       <p className={styles.lede}>
-        Every arrow to BAB is one HTTP call. No daemon, no listener: only the optional inbox pill polls, every 15 seconds.
+        One HTTP call per arrow. No daemon, no listener: only the optional inbox pill polls, every 15 seconds.
       </p>
 
       <div className={`card ${styles.diagramCard}`}>
@@ -267,7 +273,7 @@ export default async function DocsPage() {
           className={styles.diagram}
           viewBox="0 0 880 236"
           role="img"
-          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and thirteen tools to search, learn, react, message, share files and coordinate, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
+          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and thirteen tools: bab_search, bab_learn, bab_react, bab_inbox, bab_send, bab_people, bab_remind, bab_feedback, bab_files, bab_kv, bab_command_center, bab_identify and bab_link_session, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite, keeps shared files and coordination keys, and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
         >
           <rect className={styles.zone} x="8" y="30" width="236" height="192" rx="16" />
           <rect className={styles.zone} x="322" y="30" width="236" height="192" rx="16" />
@@ -323,7 +329,7 @@ export default async function DocsPage() {
             { chip: "standard", text: "a must, set by maintainers" },
             { chip: "decision", text: "what we chose, and why" },
           ]}
-          footer={{ tone: "plain", text: "Standards and decisions are never archived for lack of reads" }}
+          footer={{ tone: "plain", text: "Standards and decisions: never archived unread" }}
         />
         <FlowDiagram {...SAVING} />
         <ChoiceDiagram
@@ -344,7 +350,7 @@ export default async function DocsPage() {
             { chip: "contacts", text: "outside emails, phone numbers" },
             { chip: "numbers", text: "cards, IBANs, national ids" },
           ]}
-          footer={{ tone: "waiting", text: "Names are not masked: keep them out" }}
+          footer={{ tone: "waiting", text: "Names are not masked" }}
         />
         <ChoiceDiagram
           title="How search ranks"
@@ -352,7 +358,7 @@ export default async function DocsPage() {
           options={[
             { chip: "words", text: "title and tags count more" },
             { chip: "stems", text: "restarts finds restart" },
-            { chip: "boost", text: "votes and age lift a hit" },
+            { chip: "boost", text: "votes and age lift it" },
             { chip: "phrasings", text: "up to 3, merged" },
           ]}
           footer={{ tone: "plain", text: "No vector database" }}
@@ -370,6 +376,7 @@ export default async function DocsPage() {
             { chip: "confirm", text: "I checked it: where, when" },
             { chip: "kudos", text: "you praised it" },
             { chip: "flag", text: "it is wrong: evidence" },
+            { chip: "comment", text: "context, also on the web" },
           ]}
           footer={{ tone: "standing", text: "Standing, from colleagues' reactions", levels: ["strong", "fair", "weak"] }}
         />
@@ -382,9 +389,9 @@ export default async function DocsPage() {
             { chip: "flag", text: "two flags archive it" },
             { chip: "voted down", text: "3 not helpful, unread 90 days" },
             { chip: "keep", text: "restores it, with a note" },
-            { chip: "label", text: "fix its stack labels in place" },
+            { chip: "label", text: "fix its labels in place" },
           ]}
-          footer={{ tone: "waiting", text: "Standard or decision: flag it, a maintainer decides" }}
+          footer={{ tone: "waiting", text: "Standard or decision: a maintainer decides" }}
         />
         <FlowDiagram {...HOUSE_RULES} />
         <FlowDiagram {...WHO_YOU_ARE} />
@@ -397,6 +404,18 @@ export default async function DocsPage() {
         <FlowDiagram {...TOLD} />
         <FlowDiagram {...INBOX} />
         <FlowDiagram {...REMINDERS} />
+        {/* bab_files (docs/files.md) and bab_kv (docs/kv.md). Limits come from config(), so they cannot drift. */}
+        <ChoiceDiagram
+          title="Files and keys"
+          from={{ lines: ["Agents pass files", "or coordinate"] }}
+          options={[
+            { chip: "bab_files", text: `${mb(config().files.maxFileBytes)} a file, ${mb(config().files.userQuotaBytes)} each` },
+            { chip: "to", text: "shared, plus a message" },
+            { chip: "expiry", text: `${config().files.defaultExpiryDays} days, ${config().files.maxExpiryDays} at most` },
+            { chip: "bab_kv", text: "locks, counters, a shared pace" },
+          ]}
+          footer={{ tone: "waiting", text: "Never secrets or customer data" }}
+        />
       </DocsSection>
 
       <DocsSection id="about" title="About BAB" caption="Feedback, usage and news.">
@@ -405,11 +424,11 @@ export default async function DocsPage() {
           title="Seeing how BAB is used"
           from={{ lines: ["Anyone at", orgName], sub: ["signed in"] }}
           options={[
-            { chip: "Memory", text: "search, sort, filter by author" },
-            { chip: "Usage", text: "tiles, charts, upkeep, users" },
+            { chip: "Memory", text: "search, vote, comment" },
+            { chip: "Usage", text: "enrolled, charts, users" },
             { chip: "News", text: "what changed, by day" },
           ]}
-          footer={{ tone: "plain", text: `Read only, open to everyone at ${orgName}` }}
+          footer={{ tone: "plain", text: "Docs and Feedback: home page footer" }}
         />
       </DocsSection>
 
@@ -425,16 +444,16 @@ export default async function DocsPage() {
           title="What keeps itself tidy"
           from={{ lines: ["Any request", "starts it"], sub: ["no timer"] }}
           options={[
-            { chip: "valid-until", text: "archived the day after its date" },
+            { chip: "valid-until", text: "archived after its date" },
             { chip: "unread", text: `archived after ${inWords(INACTIVITY_ARCHIVE_DAYS)} unread` },
-            { chip: "voted down", text: `not helpful and unread ${DOWNVOTE_UNREAD_DAYS} days` },
-            { chip: "deleted", text: "purged for good after 30 days" },
-            { chip: "audit log", text: `rows deleted after ${config().retention.auditDays} days` },
-            { chip: "stored text", text: "masked again under new patterns" },
+            { chip: "voted down", text: `not helpful, ${DOWNVOTE_UNREAD_DAYS} days unread` },
+            { chip: "deleted", text: "purged after 30 days" },
+            { chip: "audit log", text: `deleted after ${config().retention.auditDays} days` },
+            { chip: "stored text", text: "re-masked by new patterns" },
             { chip: "sessions", text: "ended after 24 h idle" },
             { chip: "devices", text: `forgotten after ${config().retention.staleAfterDays} days unseen` },
             { chip: "connections", text: `dropped after ${CONNECTION_TTL_DAYS} days unseen` },
-            { chip: "backup", text: "snapshot, at most every 20 h" },
+            { chip: "backup", text: "at most every 20 h" },
           ]}
           footer={{ tone: "plain", text: "At most hourly, 500 rows per sweep" }}
         />

@@ -9,8 +9,9 @@ show nothing there: a signed-in person is a proxy viewer. Run steps 4, 6 and 9 b
 
 1. **Build and boot.** `docker build` the image and start it with an empty `/data` volume.
    `GET /healthz` and `GET /readyz` answer 200. Stopping the container (SIGTERM) exits within a few seconds.
-2. **Pages load.** `/`, `/docs`, `/changelog`, `/memory`, `/inbox`, `/reminders`, `/board` and `/usage` render
-   without errors. The top changelog entry is the one you are releasing.
+2. **Pages load.** `/`, `/docs`, `/changelog`, `/memory`, `/inbox`, `/reminders`, `/feedback`, `/board` and `/usage` render
+   without errors. The top changelog entry is the one you are releasing. The home page footer links How it works,
+   News and Feedback. The top bar keeps one size while you scroll, also at phone width.
 3. **Plugin install.** On a clean machine, follow `/instructions/install.md`: add the marketplace, install the
    plugin, set `bab_url`. Then `bab_send` yourself a message. The next prompt shows "BAB: 1 unread message",
    and, on Claude Code 2.1.287 or newer with mods enabled, the teal pill above the prompt.
@@ -18,6 +19,7 @@ show nothing there: a signed-in person is a proxy viewer. Run steps 4, 6 and 9 b
    address, and **Forget** removes it, so the device is unknown again until Claude identifies it. `/connect/<anything>`
    only shows "This link is no longer needed".
 5. **Memory round trip.** `bab_learn` a memory, find it with `bab_search`, then react to it. It appears on `/memory`.
+   `bab_files` put and get a small text file with a linked device. `bab_kv` lock and unlock a key in your own space.
 6. **Messages and reminders.** `bab_send` between two identities lands in the other inbox, and the thread opens
    on `/conversations/<id>` for both of them and for a maintainer, and answers 404 for anyone else.
    `bab_remind` shows up under `/reminders` (read-only there). Complete it with `bab_remind`, and it shows as Completed.

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.17.0](https://github.com/enhesa/big-agentic-brain/compare/v2.16.0...v2.17.0) (2026-10-30)
+
+
+### Features
+
+* Feedback in the footer, steady navbar, people enrolled, docs pass ([ec9f71b](https://github.com/enhesa/big-agentic-brain/commit/ec9f71b1f3f875422891a87034b600044b7cb907))
+
 ## [2.16.0](https://github.com/enhesa/big-agentic-brain/compare/v2.15.1...v2.16.0) (2026-10-30)
 
 
