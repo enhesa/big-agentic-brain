@@ -1,0 +1,10 @@
+{
+  "name": "command-center",
+  "description": "Optional skill: your agents keep your private BAB Command Center page true. Install it after you switch Command Center on.",
+  "author": {
+    "name": "BAB maintainers"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/enhesa/big-agentic-brain",
+  "homepage": "https://github.com/enhesa/big-agentic-brain"
+}
