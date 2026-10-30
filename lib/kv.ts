@@ -871,7 +871,8 @@ export function kvList(actor: KvActor, rawPrefix: unknown): { prefix: string; ke
  * different one is refused, so nobody can stretch or shrink the pace for others. One person holds
  * at most KV_THROTTLE_SLOTS_PER_PERSON future slots, and no slot is booked further ahead than
  * KV_THROTTLE_MAX_SECONDS (or the namespace's TTL cap, when shorter). The interval may not exceed
- * that TTL cap, and the key ends at most one TTL cap after it was created.
+ * that TTL cap, and the key ends at most one TTL cap after it was created. No slot is handed out
+ * whose interval would run past that end, so a key never expires before its last slot.
  */
 export function kvThrottle(actor: KvActor, input: { key: unknown; minIntervalSeconds: unknown }, via: AuditVia): { key: string; waitSeconds: number; slotAt: string; minIntervalSeconds: number } {
   const k = resolveKey(actor.id, input.key);
@@ -915,11 +916,20 @@ export function kvThrottle(actor: KvActor, input: { key: unknown; minIntervalSec
     auditWrite(actor.id, "throttle", k.key, "too_far", via, { minIntervalSeconds: interval });
     throw new TooManyRequestsError(`${k.key} is booked more than ${aheadMs / 1000} seconds ahead: try again later`);
   }
-  booked[actor.id] = [...mine, slot].filter((t) => t > now);
-  // Kept until one interval after the last slot, never longer than the namespace's TTL cap from now,
-  // and never longer than that cap from its creation: calls cannot keep a pinned pace alive for ever.
+  // The key ends one TTL cap after its creation, so calls cannot keep a pinned pace alive for ever.
+  // A slot whose interval would run past that end is refused: the key must outlive every slot it
+  // handed out, or the next caller would start a fresh pace while old slots are still pending.
   const createdAt = e?.createdAt ?? now;
-  const expiresAt = Math.min(Math.max(now + 1000, Math.min(slot + intervalMs, now + capMs)), createdAt + capMs);
+  const hardEnd = createdAt + capMs;
+  if (slot + intervalMs > hardEnd) {
+    auditWrite(actor.id, "throttle", k.key, "past_end", via, { minIntervalSeconds: interval });
+    throw new TooManyRequestsError(
+      `${k.key} is booked up to its end at ${new Date(hardEnd).toISOString()} (a throttle key lasts at most ${capSeconds} seconds from its creation): try again after that`,
+    );
+  }
+  booked[actor.id] = [...mine, slot].filter((t) => t > now);
+  // Kept until one interval after the last slot handed out, which never passes the hard end.
+  const expiresAt = Math.max(slot + intervalMs, Math.min(now + 1000, hardEnd));
   commit(s, k.key, sized(k.key, { kind: "throttle", slotAt: slot, intervalMs, booked, createdAt, expiresAt, writer: e?.writer ?? actor.id }), () =>
     auditWrite(actor.id, "throttle", k.key, waitMs > 0 ? "wait" : "now", via, { minIntervalSeconds: interval, waitMs }),
   );

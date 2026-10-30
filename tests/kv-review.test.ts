@@ -190,9 +190,11 @@ describe("N3: throttles honour the TTL cap", () => {
   it("never keeps a throttle or books a slot past BAB_KV_MAX_TTL_SECONDS", async () => {
     await reconfigure({ BAB_KV_MAX_TTL_SECONDS: "60" });
     kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
-    kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp");
-    expect(kv.kvGet(A, "t").ttlSeconds).toBe(60);
-    expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp")).toThrow(/more than 60 seconds ahead/);
+    expect(kv.kvGet(A, "t").ttlSeconds).toBe(40);
+    // The next slot (40 s) plus its interval would run past the key's end at 60 s.
+    expect(() => kv.kvThrottle(A, { key: "t", minIntervalSeconds: 40 }, "mcp")).toThrow(/booked up to its end/);
+    for (let i = 0; i < 4; i += 1) kv.kvThrottle({ id: `p${i}.person@example.com` }, { key: "shared/bitbucket-push/u", minIntervalSeconds: 10 }, "mcp");
+    expect(kv.kvGet(A, "shared/bitbucket-push/u").ttlSeconds).toBe(40);
   });
 
   it("refuses an interval longer than the namespace's TTL cap with 400 (X3)", async () => {
@@ -208,16 +210,82 @@ describe("N3: throttles honour the TTL cap", () => {
   it("ends a throttle one TTL cap after its creation, however often its creator calls it", () => {
     // The creator pins a slow pace and books once per interval, which used to push the expiry on for ever.
     const key = "shared/bitbucket-push/squat";
-    for (const t of [0, 1199, 2399, 3599]) {
+    for (const t of [0, 1199, 2399]) {
       vi.setSystemTime(T0 + t * 1000);
       kv.kvThrottle(A, { key, minIntervalSeconds: 1200 }, "mcp");
       expect(kv.kvGet(B, key).ttlSeconds).toBeLessThanOrEqual(3600 - t);
     }
-    // The old code pushed this to 1200 seconds; the creation cap leaves 1.
+    expect(kv.kvGet(B, key).ttlSeconds).toBe(1201);
+    // A slot at 3600 s would outlive the key: refused, so the key never grows past its creation cap.
+    vi.setSystemTime(T0 + 3599_000);
+    expect(status(() => kv.kvThrottle(A, { key, minIntervalSeconds: 1200 }, "mcp"))).toBe(429);
     expect(kv.kvGet(B, key).ttlSeconds).toBe(1);
     vi.setSystemTime(T0 + 3600_000);
     expect(kv.kvGet(B, key).found).toBe(false);
     expect(kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp")).toMatchObject({ waitSeconds: 0, minIntervalSeconds: 30 });
+  });
+});
+
+describe("throttle rollover: a key never ends before its last slot", () => {
+  const key = "shared/bitbucket-push/pace";
+
+  it("refuses a slot whose interval runs past the key's end, so no old slot is pending when it ends", () => {
+    expect(kv.kvThrottle(A, { key, minIntervalSeconds: 3600 }, "mcp").waitSeconds).toBe(0);
+    // The next slot would be T0 + 3600 s, the key's end: refused instead of left pending.
+    expect(() => kv.kvThrottle(B, { key, minIntervalSeconds: 3600 }, "mcp")).toThrow(/booked up to its end at 2026-10-29T11:00:00.000Z/);
+    vi.setSystemTime(T0 + 3600_000);
+    expect(kv.kvGet(B, key).found).toBe(false);
+    // A 30 s caller at T0 + 3600 s starts afresh, and no slot of the old key is still waiting.
+    expect(kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp")).toMatchObject({ waitSeconds: 0, minIntervalSeconds: 30 });
+  });
+
+  it("keeps a backlog near the end inside the key's life", () => {
+    const granted: number[] = [];
+    const book = (who: string): boolean => {
+      try {
+        granted.push(Date.parse(kv.kvThrottle({ id: who }, { key, minIntervalSeconds: 30 }, "mcp").slotAt));
+        return true;
+      } catch (e) {
+        expect((e as { status: number }).status).toBe(429);
+        return false;
+      }
+    };
+    // Steady use every 29 s keeps the key created at T0 alive (each call lands before the expiry).
+    for (let t = 0; t <= 3480; t += 29) {
+      vi.setSystemTime(T0 + t * 1000);
+      book(`steady${t % 7}.person@example.com`);
+    }
+    // Then 10 agents ask for 4 slots each, 100 s before the key's end.
+    vi.setSystemTime(T0 + 3500_000);
+    let refused = 0;
+    for (let p = 0; p < 10; p += 1) for (let i = 0; i < 4; i += 1) if (!book(`agent${p}.person@example.com`)) refused += 1;
+    expect(refused).toBeGreaterThan(30);
+    const last = Math.max(...granted);
+    // Every slot ends (slot + interval) by the key's end at T0 + 3600 s: nothing is pending past it.
+    expect(last + 30_000).toBeLessThanOrEqual(T0 + 3600_000);
+    expect(kv.kvGet(A, key).ttlSeconds).toBe((last + 30_000 - Date.now()) / 1000);
+    // The key lives until the last slot plus one interval; only then can a new pace start.
+    vi.setSystemTime(last + 29_999);
+    expect(status(() => kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp"))).toBe(429);
+    vi.setSystemTime(last + 30_000);
+    const fresh = Date.parse(kv.kvThrottle(B, { key, minIntervalSeconds: 30 }, "mcp").slotAt);
+    expect(fresh).toBeGreaterThanOrEqual(last + 30_000);
+  });
+
+  it("never hands out a slot closer than one interval to another, across many rollovers", () => {
+    const granted: number[] = [];
+    for (let t = 0; t <= 4 * 3600; t += 7) {
+      vi.setSystemTime(T0 + t * 1000);
+      try {
+        granted.push(Date.parse(kv.kvThrottle({ id: `agent${t % 13}.person@example.com` }, { key, minIntervalSeconds: 30 }, "mcp").slotAt));
+      } catch (e) {
+        expect((e as { status: number }).status).toBe(429);
+      }
+    }
+    expect(granted.length).toBeGreaterThan(400);
+    const sorted = [...granted].sort((a, b) => a - b);
+    expect(sorted).toEqual(granted);
+    for (let i = 1; i < sorted.length; i += 1) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(30_000);
   });
 });
 
