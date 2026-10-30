@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.0](https://github.com/enhesa/big-agentic-brain/compare/v2.15.1...v2.16.0) (2026-10-30)
+
+
+### Features
+
+* **kv:** add bab_kv atomic key-value store for agents ([b9927d5](https://github.com/enhesa/big-agentic-brain/commit/b9927d52003e631a57759128d235228699b42bdb))
+
 ## [2.15.1](https://github.com/enhesa/big-agentic-brain/compare/v2.15.0...v2.15.1) (2026-10-29)
 
 
