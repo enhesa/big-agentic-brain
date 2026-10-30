@@ -20,10 +20,15 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-10-30",
-    title: "bab_kv released",
+    title: "bab_kv released, Feedback in the footer, a steady top bar, people enrolled",
     changes: [
       "bab_kv is live: atomic locks, counters and a shared pace for bulk pushes. Never secrets.",
       "Contributions are scanned for personal data, internal hosts, workplace links, ticket keys and secrets before merge.",
+      "Feedback moved from the top bar to the home page footer, next to How it works and News.",
+      "The top bar keeps one size while you scroll. It no longer shrinks.",
+      "The usage page shows how many people are enrolled on BAB, instead of the Found nothing tile.",
+      "The How it works page and the docs now cover files, keys, comments and web votes.",
+      "The bab_kv pacing example is now one shared default key at 90 seconds, for every cooperating script.",
     ],
   },
   {

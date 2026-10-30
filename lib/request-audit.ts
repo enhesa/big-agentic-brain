@@ -73,7 +73,7 @@ const SEARCH_QUERY_RAW_MAX = 4000;
  * Adds what a search found to its own audit row (written before the search ran): `results`, the
  * number of matches, and `q`, the query text after redact(), cut to SEARCH_QUERY_MAX characters.
  * The query is never stored unredacted. Other details on the row (source, cx) are kept.
- * /usage reads these for "Found nothing". Never throws.
+ * /usage reads these for "Searches that found nothing". Never throws.
  */
 export function recordSearchOutcome(auditId: number | null | undefined, outcome: { results: number; query?: string }): void {
   if (auditId == null) return;

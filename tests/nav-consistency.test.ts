@@ -62,4 +62,23 @@ describe("the navbar is the same everywhere", () => {
     expect(footer).toContain('href="/docs"');
     expect(footer.indexOf('href="/docs"')).toBeLessThan(footer.indexOf('href="/changelog"'));
   });
+
+  it("keeps Feedback out of the top bar and in the homepage footer, after News", () => {
+    expect(NAV_ITEMS.map((item) => item.href as string)).not.toContain("/feedback");
+    const footer = read("app/components/landing/Footer.tsx");
+    expect(footer).toContain('<Link href="/feedback">Feedback</Link>');
+    expect(footer.indexOf('href="/changelog"')).toBeLessThan(footer.indexOf('href="/feedback"'));
+  });
+
+  it("keeps one bar size at every scroll position: no shrink on scroll", () => {
+    for (const file of ["app/components/shell/TopNav.tsx", "app/components/landing/TopBar.tsx"]) {
+      const src = read(file);
+      expect(src).not.toContain("scrollY");
+      expect(src).not.toContain('addEventListener("scroll"');
+      expect(src).not.toContain("topbarSmall");
+    }
+    for (const file of ["app/components/shell/Shell.module.css", "app/landing.module.css"]) {
+      expect(read(file)).not.toContain("topbarSmall");
+    }
+  });
 });

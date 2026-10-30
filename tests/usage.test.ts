@@ -1235,14 +1235,14 @@ describe("/usage page", () => {
       ]);
     });
 
-    it("shows the share to everyone and the queries to maintainers only", async () => {
+    it("shows the queries to maintainers only, and no Found nothing tile to anyone", async () => {
       await people(A, B);
       const { getDb } = await import("../lib/db");
       const now = getDb().prepare("SELECT datetime('now') AS t").get() as { t: string };
       await row(A, "POST", now.t, { path: SEARCH, details: { results: 0, q: "secret project qqvv" } });
       await row(A, "POST", now.t, { path: SEARCH, details: { results: 2, q: "deploy" } });
       const asMember = await render(B);
-      expect(asMember).toMatch(/data-testid="tile-found-nothing"[^>]*>50%</);
+      expect(asMember).not.toContain("tile-found-nothing");
       expect(asMember).not.toContain("qqvv");
       expect(asMember).not.toContain("Searches that found nothing");
       (await import("../lib/db"))._resetDbForTests();
@@ -1368,7 +1368,7 @@ describe("/usage page", () => {
       expect(html).not.toContain("Time saved (estimate)");
       expect(html).not.toContain("An estimate, not a measurement");
       // Outcomes first, then activity, in the owner's order.
-      const order = ["tile-time-saved", "tile-tokens-saved", "tile-search-helped", "tile-found-nothing", "tile-saved", "tile-searches", "tile-helpful", "tile-active-week"];
+      const order = ["tile-time-saved", "tile-tokens-saved", "tile-search-helped", "tile-enrolled", "tile-saved", "tile-searches", "tile-helpful", "tile-active-week"];
       const at = order.map((id) => html.indexOf(`data-testid="${id}"`));
       expect(at.every((x) => x > 0)).toBe(true);
       expect(at).toEqual([...at].sort((x, y) => x - y));
@@ -1377,7 +1377,12 @@ describe("/usage page", () => {
       // A (also active last week), B and the viewer's own page view.
       expect(html).toMatch(/data-testid="tile-active-week"[^>]*>3</);
       expect(html).toMatch(/data-testid="tile-active-week-note"[^>]*>1 returning, 2 new</);
-      expect(html).toMatch(/data-testid="tile-found-nothing-note"[^>]*>No searches recorded yet</);
+      // People enrolled: everyone in the Users directory, all time.
+      const enrolled = (getDb().prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
+      expect(enrolled).toBeGreaterThanOrEqual(2);
+      expect(html).toMatch(new RegExp(`data-testid="tile-enrolled"[^>]*>${enrolled}<`));
+      expect(html).toMatch(/data-testid="tile-enrolled-note"[^>]*>All time</);
+      expect(html).not.toContain("tile-found-nothing");
       expect(html).toContain("Weekly active people");
       expect(html).toContain("Week of ");
       expect(html).toMatch(/3 people, 1 returning, 2 new/);

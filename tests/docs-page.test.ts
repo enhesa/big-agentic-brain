@@ -72,6 +72,7 @@ const DIAGRAMS = [
   "What BAB tells your session",
   "The inbox",
   "Reminders",
+  "Files and keys",
   // About BAB
   "Feedback about BAB",
   "Seeing how BAB is used",
@@ -166,6 +167,28 @@ describe("/docs", () => {
     const html = await render();
     expect(html).toContain("?tools=lean");
     expect(LEAN_TOOL_NAMES).toHaveLength(4);
+  });
+
+  it("names every MCP tool, so the page cannot fall behind lib/mcp.ts (docs drift check)", async () => {
+    const { TOOLS } = await import("../lib/mcp");
+    const html = await render();
+    const missing = TOOLS.map((t) => t.name).filter((name) => !html.includes(name));
+    expect(missing, "name these tools on /docs (the architecture text alternative lists them)").toEqual([]);
+  });
+
+  it("describes the newer features: files, keys, comments, web votes, new-device notices and the footer links", async () => {
+    const html = await render();
+    expect(html).toContain("Files and keys");
+    expect(html).toContain("25 MB a file, 100 MB each");
+    expect(html).toContain("14 days, 30 at most");
+    expect(html).toContain("shared, plus a message");
+    expect(html).toContain("locks, counters, a shared pace");
+    expect(html).toContain("Never secrets or customer data");
+    expect(html).toContain("context, also on the web");
+    expect(html).toContain("search, vote, comment");
+    expect(html).toContain("a new device as you: told once");
+    expect(html).toContain("Docs and Feedback: home page footer");
+    expect(html).toContain("file_shares");
   });
 
   it("counts the tools the way the code does", async () => {

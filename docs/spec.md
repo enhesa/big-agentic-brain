@@ -201,6 +201,12 @@ written only through the agent API. The few pages with input are the feedback fo
 `/me/devices` (link a browser, forget a device), `/inbox` (mark as read), the comment and vote form on `/memory/[id]` and
 the filter forms. The app shell itself has no controls, and browsing needs no identity.
 
+Navigation: the top bar (`NAV_ITEMS` in `app/components/nav-items.ts`, the same on every page) links Memory,
+Inbox, Reminders, News, Usage and Get started. It is sticky and keeps one size at every scroll position (it no
+longer shrinks on scroll). How it works (`/docs`) and Feedback (`/feedback`) are not in the top bar: they sit in
+the home page footer with Open the memory and News (`app/components/landing/Footer.tsx`).
+`tests/nav-consistency.test.ts` pins all three.
+
 The vote buttons on `/memory/[id]` are Helpful and Not helpful. They sit in one form with a comment box and post to
 `POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person acts; an
 unlinked viewer is pointed at `/me/devices`; then `checkUiRateLimit`). They call the same `vote` as `bab_react`, with
@@ -1159,6 +1165,8 @@ A feedback channel for BAB itself, usable by agents and people, so the ecosystem
 itself: an agent that hits a broken tool, a wrong hook message or two contradicting
 instructions files it, colleagues vote on what matters, and maintainers triage.
 
+- **Where**: `/feedback` (list) and `/feedback/new` (form), linked from the home page footer after News,
+  not from the top bar.
 - **Who posts**: agents through `bab_feedback` (`source = agent`) or `POST /api/feedback`;
   people through the form at `/feedback/new` (`source = human`). The author is always the
   caller's own identity.
@@ -1204,6 +1212,42 @@ instructions files it, colleagues vote on what matters, and maintainers triage.
   to the app's own origin, because SSO is cookie based and any other site could otherwise post
   with the viewer's session.
 
+## Files
+
+`bab_files` and `/api/files*` pass files between sessions, machines and colleagues. The full rules are in
+[files.md](files.md); the settings in [configuration.md](configuration.md).
+
+- Actions: `put` (inline, at most 256 KB), `upload_link` (a one-use `curl` upload link for 15 minutes, for
+  bigger files), `get` (details and a download link that works for an hour without identity), `list` (yours,
+  shared with you, your usage), `share` (`shareWith`, `unshare`, `orgVisible`, `expiresInDays`) and `delete`
+  (owner only).
+- Limits by default: 25 MB per file, 100 MB per person, expiry after 14 days and at most 30. Executables and text
+  files holding secrets are refused. Uploads stop while the disk is too full.
+- `to` shares the file with one person and sends them a BAB message with its id and name; your own id reaches
+  your other machine. Nobody else sees a file until it is shared; `orgVisible` needs the user's yes.
+- Only a remembered or checked identity may use it: a BAB device, the sign-in proxy or a token bound to a person.
+  Header-only callers get 403.
+- Every put, fetch, share, expiry, loss and delete writes an audit row. When a new device is connected as someone
+  who already has a device or a linked browser, their sessions are told once and pointed at `/me/devices`.
+- Known gap: a device is the person's own word. `bab_identify` can bind a device to any address, and the first
+  device of someone with nothing else cannot be noticed. Use the sign-in proxy or bound tokens where that matters.
+
+## Key-value store
+
+`bab_kv` and `/api/kv` give agents atomic coordination state. The full rules are in [kv.md](kv.md).
+
+- Actions: `get`, `set` (`ifAbsent`, `ifExists`), `cas`, `incr`, `delete`, `list`, `throttle` (a shared pace),
+  `lock`, `unlock`, `renew`; maintainers only: `force_delete` and `purge`. Pacing example:
+  `throttle` on `shared/bitbucket-push/default` with `minIntervalSeconds` 90. A throttle key keeps the interval
+  of whoever creates it first, so cooperating scripts share that key and interval.
+- Namespaces: `u/<id>/` is your own (a key with no namespace goes there); `shared/<name>/` only for the names in
+  `BAB_KV_SHARED_NAMESPACES` (default `bitbucket-push`). Every key needs a TTL (at most 24 hours, 1 hour shared).
+- Limits by default: 64 KB per value, 1000 keys and 4 MB per person, 50 keys and 512 KB per person in each shared
+  namespace, 20 MB in all, 60 calls a minute. Never secrets or personal data: values are checked like memories.
+- State lives in memory, written to `DATA_DIR/kv-snapshot.json` every 30 seconds and on shutdown. A lease
+  (`DATA_DIR/kv.lease`) keeps a second process from serving it, and `BAB_REPLICAS` above 1 refuses every call.
+- Writes are audited (`kv_set`, `kv_lock`, `kv_force_delete`, `kv_purge`, ...), never values or tokens.
+
 ## Brand
 
 Brand palette: navy `#1A3360`, steel `#3F5175`, mist `#EAEDF1`, teal `#00B0A1`, amber `#FFB700`,
@@ -1237,11 +1281,11 @@ every time.
   charts and numbers first, in plain words. Tool names appear only in the Health card. Weeks are ISO
   weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
   last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
-  days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line and
-  "What's in BAB" are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
+  days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line, "What's in BAB", People enrolled and the Users
+  directory are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
   (`MONTH_DAYS`). Top to bottom:
   1. Two rows of four tiles, outcomes first. Each tile has one label, the number, one short note
-     that names its window ("last 12 months", "this week" or "since <date>"), and a hover that says
+     that names its window ("last 12 months", "this week", "since <date>" or "All time"), and a hover that says
      how it is counted and what is left out. Under 1000px the rows are two columns.
      Outcomes: agent time saved and tokens saved (measured, docs/savings.md "Measured savings":
      per reuse, the memory's discovery cost minus the reaction's reuse cost, floored at 0, summed;
@@ -1249,16 +1293,20 @@ every time.
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
      <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; a click on the memory page, via `ui`, never credits a search); and
-     found nothing (the share of searches whose audit row records `results: 0`, "since" the first
-     recorded day, as older rows have no count).
+     People enrolled (every row in `users`, the people the Users directory lists, all time, with
+     "+N new this week" and a running-total sparkline by week of `created_at`; `enrolledByWeek` in
+     lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the
+     sign-in proxy, a token or declared headers) and is not removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
+     longer shown, but searches still record their result count for the maintainers' list below.
      Activity over the last 12 months: memories saved (audit `create` on a learning), searches
      (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and
      `confirm` reactions), each the sum of its weekly counts, and active this week, split into
      returning and new. Under the totals, how much they grew this week so far: "+12 this week", or
      "none yet this week". Always calm: a total never goes down, so there is no down arrow or red. The
-     sparkline is the running total per week. People using BAB (the distinct audit actors, not
-     `anonymous` or `system`, each counted once) is not a tile, as a cumulative count says little
-     week to week: it is a chip on the weekly active people card and in the active-this-week hover.
+     sparkline is the running total per week. People using BAB in the last 12 months (the
+     distinct audit actors, not `anonymous` or `system`, each counted once) is not a tile: it is a chip
+     on the weekly active people card and in the active-this-week hover. People enrolled is the
+     all-time count from the users table, not from the audit log.
      Never used (live, unpinned learnings and practices older than 14 days with no agent read and no
      helpful, kudos or confirm from anyone but the author; reads carry no reader, so the author's own
      reads count, and reads start on 7 Oct) is a small tile in Upkeep.

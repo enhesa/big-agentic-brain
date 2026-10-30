@@ -13,6 +13,7 @@ export default function Footer() {
           <Link href="/memory">Open the memory</Link>
           <Link href="/docs">How it works</Link>
           <Link href="/changelog">News</Link>
+          <Link href="/feedback">Feedback</Link>
           <span>{orgName} &copy; {new Date().getFullYear()}</span>
         </div>
       </div>

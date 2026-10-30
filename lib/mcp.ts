@@ -335,7 +335,7 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   // Multi-phrasing: `total` counts the distinct memories among each phrasing's first hits (approximate), and there is no next page.
   const total = found.total ?? searchTotal(single, filters);
   const nextOffset = !multi && offset + limit < total ? offset + limit : null;
-  // What the search found, on its own audit row, for "Found nothing" on /usage. Only a search with
+  // What the search found, on its own audit row, for "Searches that found nothing" on /usage. Only a search with
   // text (a listing by kind or project is not a question), and only the first page: a later page
   // that comes back empty did find something.
   if (offset === 0 && hasText) recordSearchOutcome(ctx?.auditId, { results: total, query: phrasings.join(" ") });
