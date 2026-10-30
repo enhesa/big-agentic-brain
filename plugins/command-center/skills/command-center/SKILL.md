@@ -27,7 +27,9 @@ Give the person the page link once, the first time you publish.
 
 ## The record
 
-`publish` takes the whole record. Leave out a field and it is gone; send what is true now.
+`publish` takes the whole record. Leave out a field and it is gone; send what is true now. Two
+exceptions: leaving out `comments` or `health` keeps what is there (send `[]` or `null` to clear
+them). Publishing the same record again changes nothing (`unchanged: true`).
 
 | Field | Rules |
 | --- | --- |
@@ -44,7 +46,7 @@ Give the person the page link once, the first time you publish.
 | `tasks` | At most 50 `{ id, text (120), status }`, status `pending`, `in_progress` or `done`. None for recurring. |
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
 | `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. |
-| `comments` | At most 20 `{ id, text (500) }`. A publish replaces them. |
+| `comments` | At most 20 `{ id, text (500) }`. Sent, they replace the list; left out, the list stays. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
 | `source` | Optional `{ machine (20), session (60) }`, shown as "last pushed by". |
 | `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
@@ -56,7 +58,7 @@ short. The server sets every time itself, so send none except `health.checkedAt`
 ## The other actions
 
 - `clear_question` with `id` and `questionId`: the turn the answer arrives.
-- `comment` with `id` and `text`: adds one note, keeps the last 20.
+- `comment` with `id` and `text`: adds one note. Past 20, the oldest goes and the answer names it in `dropped`.
 - `health` with `id`, `level`, `reason` and `checkedAt`: for recurring upkeep, after each run.
 - `list`: your initiatives with `seq`, open questions and a data-health summary.
 - `remove` with `id`: when an initiative should not be shown any more.
@@ -64,6 +66,8 @@ short. The server sets every time itself, so send none except `health.checkedAt`
 ## Keeping it true
 
 - Publish again after a restart: the record is whole state, so a replay changes nothing.
+- The person can dismiss a question on the page. It stays dismissed while you send the same id
+  and text (the answer lists it in `dismissed`): stop asking it. Reword it only if it is a new ask.
 - A question older than 3 days, on a done or parked initiative, or kept by another session is
   shown as possibly stale. Clear what is answered.
 - An active initiative with no publish for 14 days is shown as silent and goes after 60 days. Done

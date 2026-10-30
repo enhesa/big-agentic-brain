@@ -79,9 +79,10 @@ describe("/api/command-center", () => {
     const first = await put("billing", RECORD);
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({ id: "billing", seq: 1 });
-    expect((await (await put("billing", RECORD)).json()).seq).toBe(2);
+    expect(await (await put("billing", RECORD)).json()).toMatchObject({ seq: 1, unchanged: true });
+    expect((await (await put("billing", { ...RECORD, title: "Billing export 2" })).json()).seq).toBe(2);
     const one = await (await getOne("billing")).json();
-    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export", progress: 0 });
+    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export 2", progress: 0 });
     const all = await (await list()).json();
     expect(all.initiatives).toHaveLength(1);
     expect(all.dataHealth).toEqual({ staleQuestions: 0, silentInitiatives: 0, recurringWithoutHealth: 0, overdueRecurring: 0 });

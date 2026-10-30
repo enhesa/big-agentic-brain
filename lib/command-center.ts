@@ -44,6 +44,8 @@ export const CC_MAX_OPEN_QUESTIONS = 5;
 export const CC_MAX_OPTIONS = 4;
 export const CC_MAX_COMMENTS = 20;
 export const CC_MAX_LINKS = 20;
+/** Cleared questions kept per initiative (newest first), on top of the open ones. */
+export const CC_MAX_CLEARED_QUESTIONS = 20;
 export const CC_SNAPSHOT_INTERVAL_MS = 30_000;
 export const CC_SWEEP_INTERVAL_MS = 60_000;
 
@@ -87,6 +89,7 @@ export const CC_CONTENT_RULE = "Never put secrets, client names or customer data
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 // ---------------------------------------------------------------------------
 // The record
@@ -283,7 +286,7 @@ function checkHealthFields(raw: Record<string, unknown>, field: string): { level
   const level = oneOf(raw.level, CC_HEALTH_LEVELS, `${field}level`);
   const reason = text(raw.reason, `${field}reason`, 200, false) ?? "";
   const checkedAt = raw.checkedAt;
-  if (typeof checkedAt !== "string" || checkedAt.length > 40 || Number.isNaN(Date.parse(checkedAt))) {
+  if (typeof checkedAt !== "string" || !ISO_TIME_RE.test(checkedAt) || Number.isNaN(Date.parse(checkedAt))) {
     throw new ValidationError(`${field}checkedAt must be an ISO date and time, such as 2026-01-31T09:30:00Z`);
   }
   return { level, reason, checkedAt };
@@ -400,6 +403,8 @@ export function ccApiError(err: unknown): { status: number; body: Record<string,
 interface Store {
   owners: Map<string, Map<string, CcRecord>>;
   dirty: boolean;
+  /** Set once this process saw the lease gone: it never serves or saves this map again. */
+  lost?: boolean;
   timers: ReturnType<typeof setInterval>[];
 }
 
@@ -434,7 +439,10 @@ function store(): Store {
     save.unref?.();
     sweep.unref?.();
     s.timers.push(save, sweep);
-  } else if (!holdsKvLease()) {
+  } else if (s.lost || !holdsKvLease()) {
+    // Lost the lease once: never serve this map again, even if this process takes the lease back
+    // later, because the other process may have written a newer snapshot meanwhile.
+    s.lost = true;
     throw leaseRefusal("lost");
   }
   return s;
@@ -553,7 +561,12 @@ interface SnapshotFile {
  */
 export function saveCommandCenterSnapshot(force = false): boolean {
   const s = existingStore();
-  if (!s || (!s.dirty && !force) || !holdsKvLease()) return false;
+  if (!s || s.lost) return false;
+  if (!holdsKvLease()) {
+    s.lost = true;
+    return false;
+  }
+  if (!s.dirty && !force) return false;
   const now = Date.now();
   const owners: Record<string, CcRecord[]> = {};
   for (const [owner, records] of s.owners) if (records.size) owners[owner] = [...records.values()];
@@ -701,6 +714,11 @@ function loadSnapshotInto(s: Store, now: number): void {
       dropped += Array.isArray(records) ? records.length : 1;
       continue;
     }
+    if (!kept(ccSwitch(owner), now)) {
+      // Switched off past the keep window, or never on: these records are due for deletion.
+      dropped += records.length;
+      continue;
+    }
     const map = new Map<string, CcRecord>();
     let bytes = 0;
     for (const item of records) {
@@ -714,7 +732,8 @@ function loadSnapshotInto(s: Store, now: number): void {
     }
     if (map.size) s.owners.set(owner, map);
   }
-  s.dirty = false;
+  // Anything dropped is written back at the next save, so the file forgets it too.
+  s.dirty = dropped > 0;
   if (dropped) console.warn(`bab: dropped ${dropped} Command Center snapshot entries (malformed, duplicated or over a limit).`);
 }
 
@@ -851,7 +870,11 @@ function commit(s: Store, owner: string, next: CcRecord, audited: () => void): v
   const records = s.owners.get(owner) ?? new Map<string, CcRecord>();
   const size = bytesOf(next);
   if (size > CC_MAX_RECORD_BYTES) {
-    throw new CcTooLargeError(`The record is ${Math.ceil(size / 1024)} KB; at most ${CC_MAX_RECORD_BYTES / 1024} KB per initiative. Send fewer or shorter tasks, comments or links.`);
+    const cleared = next.questions.filter((q) => q.clearedAt).length;
+    throw new CcTooLargeError(
+      `The record is ${Math.ceil(size / 1024)} KB; at most ${CC_MAX_RECORD_BYTES / 1024} KB per initiative. Send fewer or shorter tasks, comments or links` +
+        (cleared ? ` (it also keeps ${cleared} cleared questions for 7 days).` : "."),
+    );
   }
   const prev = records.get(next.id);
   if (!prev && records.size >= CC_MAX_INITIATIVES) {
@@ -871,6 +894,15 @@ export interface PublishResult {
   id: string;
   seq: number;
   questions: { id: string; askedAt: string; clearedAt: string | null }[];
+  /** Open questions you sent that the person already dismissed on the page: they stay cleared. */
+  dismissed?: string[];
+  /** True when the record was already exactly this: nothing was written. */
+  unchanged?: true;
+}
+
+/** The record without the fields the server changes on every write, to spot a replay. */
+function contentOf(r: CcRecord): string {
+  return JSON.stringify({ ...r, updatedAt: null, seq: null, publishedBy: null, writers: null });
 }
 
 export function ccPublish(actor: CcActor, owner: string, body: Record<string, unknown>, via: AuditVia, now: number = Date.now()): PublishResult {
@@ -880,34 +912,53 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
   const prev = recordsOf(s, owner, now).get(input.id);
   if (expectSeq !== null && expectSeq !== (prev?.seq ?? 0)) {
     throw new CcConflictError(
-      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record and publish again with expectSeq ${prev?.seq ?? 0}. Current: ${JSON.stringify(prev ?? null)}`,
+      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record (in current) and publish again with expectSeq ${prev?.seq ?? 0}.`,
       prev ?? null,
     );
   }
   const at = iso(now);
   const session = input.source?.session ?? null;
   // Questions: keep askedAt while the id stays; an open id missing from this publish is cleared now.
+  // One the person dismissed stays cleared while its text is the same; reworded, it is asked anew.
   const questions: CcQuestion[] = [];
+  const dismissed: string[] = [];
   const sent = new Set(input.questions.map((q) => q.id));
   for (const q of input.questions) {
-    const old = prev?.questions.find((p) => p.id === q.id && !p.clearedAt);
-    questions.push({ ...q, askedAt: old?.askedAt ?? at, clearedAt: null, session: old ? old.session : session });
+    const old = prev?.questions.find((p) => p.id === q.id);
+    if (old?.clearedAt && old.text === q.text) {
+      questions.push(old);
+      dismissed.push(q.id);
+      continue;
+    }
+    const open = old && !old.clearedAt ? old : undefined;
+    questions.push({ ...q, askedAt: open?.askedAt ?? at, clearedAt: null, session: open ? open.session : session });
   }
+  const cleared: CcQuestion[] = [];
   for (const p of prev?.questions ?? []) {
     if (sent.has(p.id)) continue;
-    questions.push(p.clearedAt ? p : { ...p, clearedAt: at });
+    cleared.push(p.clearedAt ? p : { ...p, clearedAt: at });
   }
+  // Keep the newest cleared ones only, so they cannot fill the record.
+  cleared.sort((x, y) => (y.clearedAt ?? "").localeCompare(x.clearedAt ?? ""));
+  questions.push(...cleared.slice(0, CC_MAX_CLEARED_QUESTIONS));
   const tasks: CcTask[] = input.tasks.map((t) => {
     const old = prev?.tasks.find((p) => p.id === t.id);
     const startedAt = old?.startedAt ?? (t.status !== "pending" ? at : null);
     const finishedAt = t.status === "done" ? (old?.finishedAt ?? at) : null;
     return { ...t, startedAt, finishedAt };
   });
-  const comments: CcComment[] = input.comments.map((c) => ({ ...c, at: prev?.comments.find((p) => p.id === c.id && p.text === c.text)?.at ?? at }));
+  // Comments and health have their own actions too: a publish that leaves the field out keeps
+  // them; only an explicit [] or null clears them.
+  const comments: CcComment[] =
+    body.comments === undefined && prev
+      ? prev.comments
+      : input.comments.map((c) => ({ ...c, at: prev?.comments.find((p) => p.id === c.id && p.text === c.text)?.at ?? at }));
   let health: CcHealth | null = null;
   if (input.health) {
     const same = prev?.health && prev.health.level === input.health.level && prev.health.reason === input.health.reason && prev.health.checkedAt === input.health.checkedAt;
     health = { ...input.health, receivedAt: same ? prev!.health!.receivedAt : at };
+  } else if (body.health === undefined && prev && input.kind === "recurring") {
+    health = prev.health;
   }
   const writers = [...(prev?.writers ?? [])];
   if (session) writers.push({ session, at });
@@ -923,8 +974,16 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
     publishedBy: publisherOf(actor),
     writers: writers.slice(-5),
   };
+  const answer = (r: CcRecord): PublishResult => ({
+    id: r.id,
+    seq: r.seq,
+    questions: r.questions.map((q) => ({ id: q.id, askedAt: q.askedAt, clearedAt: q.clearedAt })),
+    ...(dismissed.length ? { dismissed } : {}),
+  });
+  // A replay of the same record changes nothing: no new seq or time, no audit row.
+  if (prev && contentOf(prev) === contentOf(next)) return { ...answer(prev), unchanged: true };
   commit(s, owner, next, () => auditCc(owner, "publish", input.id, prev ? "updated" : "created", via));
-  return { id: next.id, seq: next.seq, questions: next.questions.map((q) => ({ id: q.id, askedAt: q.askedAt, clearedAt: q.clearedAt })) };
+  return answer(next);
 }
 
 function existing(s: Store, owner: string, id: unknown, now: number): CcRecord {
@@ -941,22 +1000,27 @@ export function ccClearQuestion(owner: string, input: { id: unknown; questionId:
   const r = recordsOf(s, owner, now).get(id);
   const q = r?.questions.find((x) => x.id === questionId && !x.clearedAt);
   if (!r || !q) return { cleared: false, reason: "unknown" };
-  const next: CcRecord = { ...r, questions: r.questions.map((x) => (x === q ? { ...x, clearedAt: iso(now) } : x)), seq: r.seq + 1, updatedAt: iso(now) };
+  // From the page ("ui") neither seq nor updatedAt moves: a dismissal is not the agent's work, so it
+  // must not hide silence or break the agent's next expectSeq.
+  const questions = r.questions.map((x) => (x === q ? { ...x, clearedAt: iso(now) } : x));
+  const next: CcRecord = via === "ui" ? { ...r, questions } : { ...r, questions, seq: r.seq + 1, updatedAt: iso(now) };
   commit(s, owner, next, () => auditCc(owner, "clear", id, "cleared", via));
   return { cleared: true };
 }
 
-export function ccComment(actor: CcActor, owner: string, input: { id: unknown; text: unknown; commentId?: unknown }, via: AuditVia, now: number = Date.now()): { seq: number } {
+export function ccComment(actor: CcActor, owner: string, input: { id: unknown; text: unknown; commentId?: unknown }, via: AuditVia, now: number = Date.now()): { seq: number; dropped?: string } {
   const s = store();
   const r = existing(s, owner, input.id, now);
   const body = text(input.text, "text", 500)!;
   const commentId = input.commentId == null ? `n${r.seq + 1}` : slug(input.commentId, "commentId");
   if (r.comments.some((c) => c.id === commentId)) throw new ValidationError(`commentId '${commentId}' is already on this initiative; use another`);
   // Comments keep the last CC_MAX_COMMENTS: appending to a full list drops the oldest one, by design.
-  const comments = [...r.comments, { id: commentId, text: body, at: iso(now) }].slice(-CC_MAX_COMMENTS);
+  const all = [...r.comments, { id: commentId, text: body, at: iso(now) }];
+  const comments = all.slice(-CC_MAX_COMMENTS);
   const next: CcRecord = { ...r, comments, seq: r.seq + 1, updatedAt: iso(now), publishedBy: publisherOf(actor) };
   commit(s, owner, next, () => auditCc(owner, "comment", r.id, "added", via));
-  return { seq: next.seq };
+  // The answer names the comment that made room, so nothing goes unsaid.
+  return all.length > CC_MAX_COMMENTS ? { seq: next.seq, dropped: all[0].id } : { seq: next.seq };
 }
 
 export function ccHealth(actor: CcActor, owner: string, input: Record<string, unknown>, via: AuditVia, now: number = Date.now()): { seq: number } {
@@ -977,6 +1041,8 @@ export function ccRemove(owner: string, input: { id: unknown }, via: AuditVia, n
   auditCc(owner, "remove", id, "removed", via);
   records.delete(id);
   s.dirty = true;
+  // Written at once, so a crash within the save interval cannot bring it back.
+  saveCommandCenterSnapshot();
   return { removed: true };
 }
 
@@ -1110,7 +1176,7 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
   const lastPush = all.reduce<string | null>((m, r) => (m === null || r.updatedAt > m ? r.updatedAt : m), null);
   const off = ms(sw.disabledAt);
   const keptUntil = !sw.enabledAt && all.length && Number.isFinite(off) ? iso(off + CC_OFF_KEEP_MS).slice(0, 10) : null;
-  const stamp = [sw.enabledAt ?? "", sw.disabledAt ?? "", ...all.map((r) => `${r.id}:${r.seq}`)].join("|");
+  const stamp = [sw.enabledAt ?? "", sw.disabledAt ?? "", ...all.map((r) => `${r.id}:${r.seq}:${r.questions.filter((q) => !q.clearedAt).length}`)].join("|");
   return { enabledAt: sw.enabledAt, disabledAt: sw.disabledAt, keptUntil, records, needsYou, dataHealth: dataHealthOf(all, now), lastPush, stamp };
 }
 
@@ -1132,5 +1198,7 @@ export function ccDeleteAll(ownerId: string): { deleted: number } {
   auditCc(ownerId, "delete_all", ownerId, `deleted ${n}`, "ui");
   s.owners.delete(ownerId);
   s.dirty = true;
+  // Written at once, so a crash within the save interval cannot bring the records back.
+  saveCommandCenterSnapshot();
   return { deleted: n };
 }

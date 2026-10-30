@@ -91,9 +91,11 @@ const auditRows = async (action: string) => {
 };
 
 describe("publish", () => {
-  it("is an upsert: publishing twice is one record with seq 2", () => {
+  it("is an upsert: a replay changes nothing, a change is the same record with seq 2", async () => {
     expect(publish()).toMatchObject({ id: "billing-export", seq: 1 });
-    expect(publish()).toMatchObject({ id: "billing-export", seq: 2 });
+    expect(publish()).toMatchObject({ id: "billing-export", seq: 1, unchanged: true });
+    expect(await auditRows("cc_publish")).toHaveLength(1);
+    expect(publish({ title: "Billing export v2" })).toMatchObject({ id: "billing-export", seq: 2 });
     const list = run({ action: "list" });
     expect(list.initiatives).toHaveLength(1);
     expect((list.initiatives as { seq: number; openQuestions: number }[])[0]).toMatchObject({ seq: 2, openQuestions: 1 });
@@ -164,7 +166,7 @@ describe("publish", () => {
     expect(r.status).toBe(409);
     expect(r.current).toMatchObject({ id: "billing-export", seq: 1 });
     expect(r.message).toMatch(/expectSeq 1/);
-    expect(publish({ expectSeq: 1 })).toMatchObject({ seq: 2 });
+    expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2 });
   });
 
   it("refuses a token in a comment and names the field and the kind", () => {
@@ -200,7 +202,9 @@ describe("the other actions", () => {
 
   it("comment appends with a server time and keeps the last 20", () => {
     publish();
-    for (let i = 0; i < 22; i++) cc.ccComment(ME, OWNER, { id: "billing-export", text: `note ${i}` }, "mcp");
+    for (let i = 0; i < 20; i++) cc.ccComment(ME, OWNER, { id: "billing-export", text: `note ${i}` }, "mcp");
+    expect(cc.ccComment(ME, OWNER, { id: "billing-export", text: "note 20" }, "mcp").dropped).toBe("n2");
+    cc.ccComment(ME, OWNER, { id: "billing-export", text: "note 21" }, "mcp");
     const got = cc.ccGet(OWNER, "billing-export");
     expect(got.comments).toHaveLength(20);
     expect(got.comments[19]).toMatchObject({ text: "note 21", at: new Date(NOW).toISOString() });
@@ -238,6 +242,77 @@ describe("the other actions", () => {
     const rows = [...(await auditRows("cc_publish")), ...(await auditRows("cc_comment"))];
     expect(rows).toHaveLength(2);
     for (const r of rows) expect(r.details).not.toContain("BODY-TEXT-HERE");
+  });
+});
+
+describe("review fixes", () => {
+  it("a question the person dismissed stays dismissed while its text is the same", () => {
+    publish();
+    expect(cc.ccClearQuestion(OWNER, { id: "billing-export", questionId: "q-scope" }, "ui")).toEqual({ cleared: true });
+    const again = publish();
+    expect(again.dismissed).toEqual(["q-scope"]);
+    expect(cc.ccView(OWNER).needsYou).toEqual([]);
+    expect(publish({ questions: [{ id: "q-scope", text: "Which months, now?" }] }).dismissed).toBeUndefined();
+    expect(cc.ccView(OWNER).needsYou).toHaveLength(1);
+  });
+
+  it("a dismissal on the page moves neither seq nor updatedAt", () => {
+    publish();
+    vi.setSystemTime(NOW + DAY);
+    cc.ccClearQuestion(OWNER, { id: "billing-export", questionId: "q-scope" }, "ui");
+    expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, updatedAt: new Date(NOW).toISOString() });
+  });
+
+  it("a publish without comments or health keeps them; an explicit empty value clears them", () => {
+    publish();
+    run({ action: "comment", id: "billing-export", text: "woken 10:30" });
+    publish();
+    expect(cc.ccGet(OWNER, "billing-export").comments.map((c) => c.text)).toEqual(["woken 10:30"]);
+    publish({ comments: [] });
+    expect(cc.ccGet(OWNER, "billing-export").comments).toEqual([]);
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
+    run({ action: "health", id: "upkeep", level: "green", reason: "ok", checkedAt: "2026-03-02T09:00:00Z" });
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], title: "Upkeep" });
+    expect(cc.ccGet(OWNER, "upkeep").health).toMatchObject({ level: "green" });
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], title: "Upkeep", health: null });
+    expect(cc.ccGet(OWNER, "upkeep").health).toBeNull();
+  });
+
+  it("checkedAt must be a strict ISO time", () => {
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
+    expect(refusal(() => run({ action: "health", id: "upkeep", level: "green", reason: "", checkedAt: "March 2" })).message).toMatch(/checkedAt must be an ISO/);
+  });
+
+  it("keeps at most 20 cleared questions", () => {
+    for (let i = 0; i < 25; i++) cc.ccPublish(ME, OWNER, record({ questions: [{ id: `q${i}`, text: `Ask ${i}` }] }), "mcp");
+    const qs = cc.ccGet(OWNER, "billing-export").questions;
+    expect(qs.filter((q) => q.clearedAt)).toHaveLength(20);
+    expect(qs.filter((q) => !q.clearedAt).map((q) => q.id)).toEqual(["q24"]);
+  });
+
+  it("does not load the records of someone switched off past the keep window", () => {
+    publish();
+    cc.saveCommandCenterSnapshot();
+    cc.ccSetSwitch(OWNER, false);
+    cc._resetCommandCenterForTests();
+    vi.setSystemTime(NOW + 31 * DAY);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cc.ccView(OWNER).records).toEqual([]);
+    warn.mockRestore();
+    // The drop is written back, so the file forgets them too.
+    expect(cc.saveCommandCenterSnapshot()).toBe(true);
+    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
+  });
+
+  it("delete now and remove are written to disk at once", () => {
+    publish();
+    cc.saveCommandCenterSnapshot();
+    run({ action: "remove", id: "billing-export" });
+    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
+    publish();
+    cc.saveCommandCenterSnapshot();
+    cc.ccDeleteAll(OWNER);
+    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
   });
 });
 

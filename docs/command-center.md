@@ -55,6 +55,10 @@ In short:
   `askedAt` and `clearedAt`, a task's `startedAt` and `finishedAt`, a comment's `at`, health
   `receivedAt`. Clock skew between machines never shows.
 - `expectSeq` that does not match is 409 with the current record.
+- Publishing the same record again changes nothing (`unchanged: true`): no new `seq`, time or audit row.
+- Leaving out `comments` or `health` keeps them, since they have their own actions; `[]` or `null` clears them.
+- A question the person dismissed on the page stays cleared while the agent sends the same id and text; the answer lists it in `dismissed`. A dismissal moves neither `seq` nor `updatedAt`.
+- Cleared questions are kept 7 days, at most 20 per initiative.
 - 60 calls a minute and 20 at once per person, on top of the general limit.
 
 ## Derived flags
@@ -75,6 +79,8 @@ seconds when something changed and on SIGTERM (temp file, fsync, rename). Only t
 holds the key-value lease (`DATA_DIR/kv.lease`) serves it; a second process answers 503. Every
 entry is checked again at start; broken ones are dropped and counted in the log, and a broken file
 means an empty store. A crash loses at most 30 seconds; agents republish.
+"Delete now" and `remove` are written to disk at once. A process that once lost the lease never
+serves or saves its map again, even if it takes the lease back later.
 
 The opt-in switch is two columns on `users` in SQLite, so a crash never forgets it.
 
