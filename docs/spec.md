@@ -1237,7 +1237,9 @@ instructions files it, colleagues vote on what matters, and maintainers triage.
 `bab_kv` and `/api/kv` give agents atomic coordination state. The full rules are in [kv.md](kv.md).
 
 - Actions: `get`, `set` (`ifAbsent`, `ifExists`), `cas`, `incr`, `delete`, `list`, `throttle` (a shared pace),
-  `lock`, `unlock`, `renew`; maintainers only: `force_delete` and `purge`.
+  `lock`, `unlock`, `renew`; maintainers only: `force_delete` and `purge`. Pacing example:
+  `throttle` on `shared/bitbucket-push/default` with `minIntervalSeconds` 90. A throttle key keeps the interval
+  of whoever creates it first, so cooperating scripts share that key and interval.
 - Namespaces: `u/<id>/` is your own (a key with no namespace goes there); `shared/<name>/` only for the names in
   `BAB_KV_SHARED_NAMESPACES` (default `bitbucket-push`). Every key needs a TTL (at most 24 hours, 1 hour shared).
 - Limits by default: 64 KB per value, 1000 keys and 4 MB per person, 50 keys and 512 KB per person in each shared

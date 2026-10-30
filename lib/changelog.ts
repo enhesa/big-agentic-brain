@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The top bar keeps one size while you scroll. It no longer shrinks.",
       "The usage page shows how many people are enrolled on BAB, instead of the Found nothing tile.",
       "The How it works page and the docs now cover files, keys, comments and web votes.",
+      "The bab_kv pacing example is now one shared default key at 90 seconds, for every cooperating script.",
     ],
   },
   {

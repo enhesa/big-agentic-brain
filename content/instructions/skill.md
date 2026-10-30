@@ -374,7 +374,7 @@ curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for 
 
 # Key-value store: locks, counters and pacing between sessions, machines and colleagues. Never secrets, credentials or personal data.
 # It goes through the bab_kv tool: the headers in $H alone are refused. Every write needs ttlSeconds; no prefix is your own space, shared/<name>/ only for the names the tool lists.
-# Pace bulk pushes or pull requests: bab_kv action=throttle key=shared/<name>/<what> minIntervalSeconds=30, sleep waitSeconds, then act. A 409 names the key's fixed interval: use it.
+# Pace bulk pushes or pull requests: bab_kv action=throttle key=shared/bitbucket-push/default minIntervalSeconds=90, sleep waitSeconds, then act. A key keeps the interval of whoever creates it first, so cooperating scripts share the default key and 90 seconds. A 409 names the key's fixed interval: use it.
 # One at a time: bab_kv action=lock key=... ttlSeconds=600 returns a token; unlock with it when done. acquired:false names the holder: wait, never break it. A stuck shared key: ask a BAB maintainer (force_delete).
 
 # Directory and self-check
