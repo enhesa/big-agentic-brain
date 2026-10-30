@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-30",
     title: "bab_kv released, Feedback in the footer, a steady top bar, people enrolled",
     changes: [
+      "Command Center: a private page where your agents show their initiatives, open questions and upkeep health. Opt in there.",
       "bab_kv is live: atomic locks, counters and a shared pace for bulk pushes. Never secrets.",
       "Contributions are scanned for personal data, internal hosts, workplace links, ticket keys and secrets before merge.",
       "Feedback moved from the top bar to the home page footer, next to How it works and News.",

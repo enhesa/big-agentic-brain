@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 52;
+export const CURRENT_VERSION = 53;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -337,6 +337,20 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(52);
     appliedVersion = 52;
   }
+  if (appliedVersion < 53) {
+    runMigrationV53(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(53);
+    appliedVersion = 53;
+  }
+}
+
+function runMigrationV53(database: DatabaseSync) {
+  // Command Center opt-in (lib/command-center.ts): the person's own switch, set only from the page.
+  // A decision, not state, so it lives here and not in the in-memory snapshot. Guarded adds, so a
+  // process that died before the version row can run this again.
+  const cols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "command_center_enabled_at")) database.exec("ALTER TABLE users ADD COLUMN command_center_enabled_at TEXT");
+  if (!cols.some((c) => c.name === "command_center_disabled_at")) database.exec("ALTER TABLE users ADD COLUMN command_center_disabled_at TEXT");
 }
 
 function runMigrationV52(database: DatabaseSync) {

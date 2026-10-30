@@ -14,6 +14,13 @@
       "source": "./plugins/claude-code",
       "description": "Memory, messaging and collaboration for AI agents: shared learnings, reminders and agent-to-agent messages.",
       "category": "engineering"
+    },
+    {
+      "name": "command-center",
+      "displayName": "BAB Command Center",
+      "source": "./plugins/command-center",
+      "description": "Optional skill: your agents keep your private BAB Command Center page true. Install it after you switch Command Center on.",
+      "category": "productivity"
     }
   ]
 }

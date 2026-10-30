@@ -15,7 +15,7 @@ No git, no pasted tokens, no impersonation.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Landing page (architecture + features, brand palette), app shell, SQLite data layer, web UI for learnings / TODOs / inbox, self-updating install docs, declared identity + audit while SSO is off, tests | shipped |
-| 2 | MCP endpoint over HTTP for agents (`initialize` per-user instructions, twelve tools), the `bab` Claude Code plugin (from a plugin marketplace repository), device identity (`bab_identify`) | shipped (see `lib/changelog.ts`) |
+| 2 | MCP endpoint over HTTP for agents (`initialize` per-user instructions, thirteen tools), the `bab` Claude Code plugin (from a plugin marketplace repository), device identity (`bab_identify`) | shipped (see `lib/changelog.ts`) |
 | 3 | Ranking by relevance, votes and recency, standing, GC sweeps | shipped. Author trust, leaderboard, awards, Slack/Teams digests and markdown export were never built |
 
 ## Architecture
@@ -705,8 +705,8 @@ Plugin-delivery endpoints:
   the legacy hook.
 - `POST /mcp`, JSON-RPC 2.0 over HTTP (Streamable HTTP transport, one response per POST,
   no SSE stream): `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
-  Twelve tools (`TOOLS` in `lib/mcp.ts`): `bab_link_session`, `bab_identify`, `bab_search`, `bab_learn`, `bab_inbox`,
-  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, replacing the skill's curl examples with real
+  Thirteen tools (`TOOLS` in `lib/mcp.ts`): `bab_link_session`, `bab_identify`, `bab_search`, `bab_learn`, `bab_inbox`,
+  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, `bab_command_center`, replacing the skill's curl examples with real
   schemas. Identity resolves the same way as every other agent route,
   `requireActorForApi()` off `X-Bab-Actor-Email` (long-form addresses only, same
   validation as the REST API). `bab_link_session` redeems the token from `POST /api/hook`

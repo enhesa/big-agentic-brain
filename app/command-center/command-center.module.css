@@ -1,0 +1,185 @@
+.h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+.h2 {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--steel);
+  margin: 0 0 10px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header p {
+  margin: 0;
+}
+
+.health {
+  color: var(--steel);
+  font-size: 0.9rem;
+}
+
+.section {
+  margin-bottom: 28px;
+}
+
+.off p {
+  margin: 0 0 12px;
+}
+
+.hint,
+.muted,
+.meta {
+  color: var(--steel);
+  font-size: 0.88rem;
+}
+
+.meta {
+  margin: 6px 0 0;
+}
+
+.question,
+.initiative {
+  margin-bottom: 12px;
+}
+
+.qText {
+  margin: 0;
+  font-weight: 600;
+}
+
+.options {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.question form {
+  margin-top: 8px;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.title {
+  font-weight: 700;
+}
+
+.pill {
+  font-size: 0.75rem;
+  border: 1px solid var(--mist);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--steel);
+}
+
+.percent {
+  font-weight: 700;
+  color: var(--teal);
+}
+
+.tagWarn {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  background: color-mix(in srgb, var(--coral) 18%, white);
+  color: color-mix(in srgb, var(--coral) 75%, black);
+}
+
+.greyed {
+  opacity: 0.55;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--mist);
+}
+
+.green {
+  background: #2e9d6a;
+}
+
+.amber {
+  background: #e0a030;
+}
+
+.red {
+  background: #d04848;
+}
+
+.unknown {
+  background: var(--mist);
+}
+
+.details {
+  margin-top: 8px;
+}
+
+.details summary {
+  cursor: pointer;
+}
+
+.tasks,
+.links {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.done {
+  color: var(--steel);
+}
+
+.in_progress {
+  font-weight: 600;
+}
+
+.pending {
+  color: inherit;
+}
+
+.url {
+  color: var(--steel);
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.ghost,
+.danger {
+  background: none;
+  border: 1px solid var(--mist);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.danger {
+  color: color-mix(in srgb, var(--coral) 75%, black);
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
