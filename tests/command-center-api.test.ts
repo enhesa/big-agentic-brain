@@ -121,9 +121,17 @@ describe("/api/command-center", () => {
   it("answers 409 with the current record on an expectSeq mismatch", async () => {
     headers = asDevice();
     await put("billing", RECORD);
-    const res = await put("billing", { ...RECORD, expectSeq: 0 });
+    const res = await put("billing", { ...RECORD, title: "Someone else's change", expectSeq: 0 });
     expect(res.status).toBe(409);
     expect((await res.json()).current).toMatchObject({ id: "billing", seq: 1 });
+  });
+
+  it("answers a retried PUT with the same record and a stale expectSeq as unchanged, not 409", async () => {
+    headers = asDevice();
+    expect((await put("billing", { ...RECORD, expectSeq: 0 })).status).toBe(200);
+    const retry = await put("billing", { ...RECORD, expectSeq: 0 });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ id: "billing", seq: 1, unchanged: true });
   });
 
   it("refuses a mismatched id, a body action on PUT, and a bad action", async () => {
