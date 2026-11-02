@@ -228,6 +228,21 @@ describe("bab_command_center", () => {
     }
   });
 
+  it("answers an MCP 409 with the current record in its text; REST keeps it as a field", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: { ...RECORD, title: "Someone else's change", expectSeq: 0 } });
+    expect(r.status).toBe(409);
+    const [sentence, current] = r.message.split("\ncurrent: ");
+    expect(sentence.length).toBeGreaterThan(10);
+    expect(JSON.parse(current)).toMatchObject({ id: "billing", seq: 1, title: "Billing export", tasks: [{ id: "t1", text: "Build" }] });
+    headers = asDevice();
+    const res = await put("billing", { ...RECORD, title: "Someone else's change", expectSeq: 0 });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).not.toContain("current:");
+    expect(body.current).toMatchObject({ id: "billing", seq: 1 });
+  });
+
   it("keeps REST strict: a string v or JSON text tasks is refused there", async () => {
     headers = asDevice();
     const v = await put("billing", { ...RECORD, v: "1" });
