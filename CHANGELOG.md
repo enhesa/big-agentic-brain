@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.18.1](https://github.com/enhesa/big-agentic-brain/compare/v2.18.0...v2.18.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* Command Center skill description says when to run ([20b3b1f](https://github.com/enhesa/big-agentic-brain/commit/20b3b1f8ec91ca77eeb6902c660cdfac4d45e1f4))
+* Command Center skill frontmatter is valid YAML ([c02b73a](https://github.com/enhesa/big-agentic-brain/commit/c02b73a1204c204ed7080ae9e495b94f7bdd8d99))
+* **SOFTARCH-71:** make command center skill frontmatter valid YAML ([adbb388](https://github.com/enhesa/big-agentic-brain/commit/adbb388ca9777322c12970c5eaa63d7273d17aa7))
+* **SOFTARCH-71:** say when the command center skill should run ([616907d](https://github.com/enhesa/big-agentic-brain/commit/616907d28aebba209316969dc9a9095f4d506e6e))
+
 ## [2.18.0](https://github.com/enhesa/big-agentic-brain/compare/v2.17.0...v2.18.0) (2026-11-02)
 
 

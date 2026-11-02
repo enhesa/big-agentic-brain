@@ -1,6 +1,6 @@
 {
   "name": "bab",
-  "version": "2.18.0",
+  "version": "2.18.1",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
@@ -37,7 +37,7 @@
     "eval:retrieval": "node evals/retrieval.mjs"
   },
   "dependencies": {
-    "next": "16.4.3",
+    "next": "16.4.2",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
