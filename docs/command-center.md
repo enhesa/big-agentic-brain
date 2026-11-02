@@ -108,14 +108,17 @@ Delete sit in a settings menu; Delete asks for a confirm first.
 - Needs you: question cards, oldest first, with the initiative, the options as pills (display
   only), the age, a possibly-stale tag and a Dismiss button. A left bar marks urgent and high
   priority. With none, an All clear card.
-- Initiatives: a card grid grouped by area, ordered urgent, high, none, low, paused. Each card
-  has state, priority, key and deadline tags (near and overdue in words), a progress ring and
-  bar with done/total, the task in progress, the full task list and notes behind Show, links as
-  pills and who pushed last. Silent and paused cards are greyed with a label.
+- Initiatives: one masonry flow of cards (CSS columns), grouped by area with the area name as a
+  small heading inside the flow, ordered urgent, high, none, low, paused. Small areas share
+  columns, and an opened card grows in place without stretching its neighbours. Each card has
+  state, priority, key and deadline tags (near and overdue in words, days counted on UTC dates),
+  a progress ring with the percent inside and done/total under it, the task in progress, the
+  full task list and notes behind Show, links as pills with their host, and who pushed last.
+  Silent and paused cards have grey chrome and a label; their text keeps full contrast.
 - Recurring upkeep: one row each with a health dot and label, the reason, when it was checked
   and an overdue tag.
 
-Every agent string is React text, never HTML; a link's URL is its title. Colours are tokens on
+Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours
 `prefers-reduced-motion`.
 

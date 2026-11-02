@@ -231,18 +231,21 @@ function OnState({ view }: { view: CcView }) {
             .
           </p>
         ) : null}
-        {[...groups.entries()].map(([area, records]) => (
-          <div key={area} className={styles.area}>
-            <h3 className={styles.areaHead}>
-              {area} <span className={styles.areaCount}>{records.length}</span>
-            </h3>
-            <div className={styles.grid}>
-              {records.map((r) => (
-                <Initiative key={r.id} r={r} />
-              ))}
-            </div>
+        {projects.length ? (
+          // One masonry flow for every area: small areas share columns instead of leaving holes.
+          <div className={styles.flow}>
+            {[...groups.entries()].map(([area, records]) => (
+              <div key={area} className={styles.area}>
+                <h3 className={styles.areaHead}>
+                  {area} <span className={styles.areaCount}>{records.length}</span>
+                </h3>
+                {records.map((r) => (
+                  <Initiative key={r.id} r={r} />
+                ))}
+              </div>
+            ))}
           </div>
-        ))}
+        ) : null}
       </section>
 
       {upkeep.length ? (
@@ -265,8 +268,9 @@ function SectionHead({ id, title, count }: { id: string; title: string; count: n
       <h2 id={id} className={styles.h2}>
         {title}
       </h2>
-      <span className={styles.count} aria-label={`${count} ${count === 1 ? "item" : "items"}`}>
+      <span className={styles.count}>
         {count}
+        <span className={styles.srOnly}> {count === 1 ? "item" : "items"}</span>
       </span>
     </div>
   );
@@ -350,26 +354,34 @@ function PriorityTag({ p }: { p: Rec["priority"] }) {
   return null;
 }
 
-/** Whole days from today (UTC) to a YYYY-MM-DD deadline; negative when past. */
-function daysUntil(deadline: string, now: number = Date.now()): number {
-  const today = Date.parse(new Date(now).toISOString().slice(0, 10) + "T00:00:00Z");
-  return Math.round((Date.parse(deadline + "T00:00:00Z") - today) / DAY_MS);
+/**
+ * Calendar days between two YYYY-MM-DD dates, counted on the dates alone (no clock time), so
+ * the answer never depends on the hour. Negative when `deadline` is before `today`.
+ */
+function calendarDaysBetween(today: string, deadline: string): number {
+  return Math.round((Date.parse(`${deadline}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS);
+}
+
+/** Today's date in UTC, YYYY-MM-DD. Deadlines are dates without a zone; the page reads them in UTC. */
+function utcToday(now: number = Date.now()): string {
+  return new Date(now).toISOString().slice(0, 10);
 }
 
 function Deadline({ r }: { r: Rec }) {
   if (!r.deadline) return null;
   if (r.state === "done") return <span className={styles.tag}>due {r.deadline}</span>;
-  const d = daysUntil(r.deadline);
+  const d = calendarDaysBetween(utcToday(), r.deadline);
+  const title = `${r.deadline} (days counted in UTC)`;
   if (d < 0)
     return (
-      <span className={`${styles.tag} ${styles.tagBad}`} title={r.deadline}>
+      <span className={`${styles.tag} ${styles.tagBad}`} title={title}>
         overdue by {-d} {-d === 1 ? "day" : "days"}
       </span>
     );
   if (d <= NEAR_DAYS)
     return (
-      <span className={`${styles.tag} ${styles.tagWarn}`} title={r.deadline}>
-        {d === 0 ? "due today" : `due in ${d} ${d === 1 ? "day" : "days"}`}
+      <span className={`${styles.tag} ${styles.tagWarn}`} title={title}>
+        {d === 0 ? "due today" : d === 1 ? "due tomorrow" : `due in ${d} days`}
       </span>
     );
   return <span className={styles.tag}>due {r.deadline}</span>;
@@ -379,21 +391,21 @@ function Progress({ r }: { r: Rec }) {
   if (r.progress === null) return null;
   const done = r.tasks.filter((t) => t.status === "done").length;
   const total = r.tasks.length;
-  const c = 2 * Math.PI * 16;
+  const c = 2 * Math.PI * 17;
   return (
     <div className={styles.progress}>
-      <svg className={styles.ring} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-        <circle cx="20" cy="20" r="16" className={styles.ringTrack} />
-        <circle cx="20" cy="20" r="16" className={styles.ringFill} strokeDasharray={c} strokeDashoffset={c * (1 - r.progress / 100)} />
-      </svg>
-      <div className={styles.progressText}>
+      <div className={styles.ringWrap}>
+        <svg className={styles.ring} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+          <circle cx="20" cy="20" r="17" className={styles.ringTrack} />
+          <circle cx="20" cy="20" r="17" className={styles.ringFill} strokeDasharray={c} strokeDashoffset={c * (1 - r.progress / 100)} />
+        </svg>
         <span className={styles.percent}>{r.progress}%</span>
-        {total ? (
-          <span className={styles.muted}>
-            {done}/{total} tasks
-          </span>
-        ) : null}
       </div>
+      {total ? (
+        <span className={styles.progressTasks}>
+          {done}/{total} tasks
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -452,12 +464,6 @@ function Initiative({ r }: { r: Rec }) {
         <Progress r={r} />
       </div>
 
-      {r.progress !== null ? (
-        <div className={styles.bar} aria-hidden="true">
-          <span style={{ width: `${r.progress}%` }} />
-        </div>
-      ) : null}
-
       {next && r.state !== "done" ? (
         <p className={styles.next}>
           <TaskIcon status={next.status} />
@@ -511,16 +517,29 @@ function Initiative({ r }: { r: Rec }) {
 function Links({ links }: { links: Rec["links"] }) {
   return (
     <ul className={styles.links} aria-label="Links">
-      {links.map((l, i) => (
-        <li key={i}>
-          <a className={styles.linkPill} href={l.url} rel="noopener noreferrer" target="_blank" title={l.url}>
-            <LinkIcon />
-            {l.label}
-          </a>
-        </li>
-      ))}
+      {links.map((l, i) => {
+        const host = hostOf(l.url);
+        return (
+          <li key={i}>
+            <a className={styles.linkPill} href={l.url} rel="noopener noreferrer" target="_blank" title={l.url}>
+              <LinkIcon />
+              {l.label}
+              {host ? <span className={styles.linkHost}>{host}</span> : null}
+            </a>
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+/** The link's host name, shown next to its label so the person sees where it goes. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
 }
 
 const HEALTH_LABEL: Record<string, string> = { green: "Healthy", amber: "Needs a look", red: "Failing", unknown: "Unknown" };

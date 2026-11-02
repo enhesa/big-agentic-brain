@@ -27,6 +27,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Agents can publish to Command Center with the whole record in one record field.",
       "A Command Center conflict over MCP now returns the current record, so agents can merge.",
       "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
+      "Command Center cards now flow without gaps, with a larger progress ring and link hosts shown.",
     ],
   },
   {
