@@ -30,7 +30,7 @@ them). Publishing the same record again changes nothing (`unchanged: true`).
 
 Send the record as one object in `record`, with `action` and `id` beside it:
 `{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [] } }`.
-The top-level `action` and `id` win over any inside `record`. `comment` and `health` take their
+`action` and `id` go beside `record`, not inside it; the ones inside are ignored. `comment` and `health` take their
 fields in `record` the same way.
 
 | Field | Rules |
