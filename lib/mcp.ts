@@ -100,7 +100,7 @@ import {
   type CreateFeedbackInput,
 } from "./feedback";
 import { branding } from "./branding";
-import { CC_ACTIONS, CC_CONTENT_RULE, ccMcpArgs, runCommandCenter } from "./command-center";
+import { CC_ACTIONS, CC_CONTENT_RULE, runCommandCenterMcp } from "./command-center";
 import { teamTags } from "./teams";
 import { config, sourceLinkText } from "./config";
 import { ValidationError, NotFoundError, ConflictError } from "./errors";
@@ -1290,7 +1290,7 @@ export const TOOLS: Tool[] = [
       },
       required: ["action"],
     },
-    run: (actor, args, ctx) => JSON.stringify(runCommandCenter(actor, ccMcpArgs(args), "mcp", originOf(ctx))),
+    run: (actor, args, ctx) => JSON.stringify(runCommandCenterMcp(actor, args, originOf(ctx))),
   },
 ];
 

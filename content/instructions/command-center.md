@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: Keeps the person's private BAB Command Center page ({{ORIGIN}}/command-center) true with the bab_command_center tool. Use it in every session once the person has switched Command Center on. Publish each initiative you work on, its tasks and the questions you ask them, and clear a question the turn its answer arrives.
+description: "Publish and keep current the person's private BAB Command Center page ({{ORIGIN}}/command-center) with the bab_command_center tool. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, whenever you are about to ask the person a question and again when their answer arrives, after a recurring check finishes, and in your wrap-up at the end of every turn. Skip it unless the person switched Command Center on."
 ---
 
 # Command Center
@@ -55,7 +55,7 @@ fields in `record` the same way.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
-short. The server sets every time itself, so send none except `health.checkedAt`.
+short. The server sets every time itself, so send none except `health.checkedAt`. A 409 answer includes the current record: merge it and publish again.
 
 ## The other actions
 

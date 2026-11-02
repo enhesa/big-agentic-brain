@@ -1191,6 +1191,22 @@ export function runCommandCenter(actor: CcActor, rawArgs: Record<string, unknown
   }
 }
 
+/**
+ * The MCP tool: string-typed fields read as in ccMcpArgs, and a 409 that carries the current record
+ * in its text, because an MCP error is text only and the tool has no get. REST keeps `current` as a field.
+ */
+export function runCommandCenterMcp(actor: CcActor, args: Record<string, unknown>, origin: string): unknown {
+  try {
+    return runCommandCenter(actor, ccMcpArgs(args), "mcp", origin);
+  } catch (err) {
+    if (err instanceof CcConflictError) {
+      throw new CcConflictError(`${err.message}
+current: ${JSON.stringify(err.current)}`, err.current);
+    }
+    throw err;
+  }
+}
+
 /** GET of one record, for the REST route: the same gates as runCommandCenter. */
 export function runCommandCenterGet(actor: CcActor, id: unknown, origin: string): CcRecord & CcFlags {
   assertCommandCenterEnabled();
