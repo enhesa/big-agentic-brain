@@ -144,7 +144,7 @@
 
 .statusOn .statusDot {
   background: var(--c-ok);
-  box-shadow: 0 0 0 3px rgba(31, 157, 107, 0.18);
+  box-shadow: 0 0 0 3px var(--c-ok-wash);
 }
 
 .statusOff {
@@ -638,19 +638,34 @@
 
 /* --------------------------------------------------------------- initiatives */
 
+.flow {
+  /* CSS-columns masonry: cards keep their own height and areas flow on, so no holes and no
+     stretched neighbours when one card opens. Reading order runs down each column. */
+  columns: 320px 3;
+  column-gap: 14px;
+}
+
 .area {
-  margin-bottom: 24px;
+  display: contents;
 }
 
 .areaHead {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--c-ink-2);
-  margin: 0 0 10px;
+  /* A top margin is dropped at the top of a column, so a heading there lines up with the cards. */
+  margin: 10px 0 0;
+  padding: 0 2px 10px;
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+.area:first-child .areaHead {
+  margin-top: 0;
 }
 
 .areaCount {
@@ -660,18 +675,13 @@
   font-weight: 600;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 14px;
-  align-items: start;
-}
-
 .card {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 18px 18px 14px 20px;
+  margin-bottom: 14px;
+  break-inside: avoid;
 }
 
 .cardHead {
@@ -706,59 +716,56 @@
 
 .progress {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex: none;
+  min-width: 56px;
+}
+
+.ringWrap {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
 }
 
 .ring {
-  width: 44px;
-  height: 44px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   transform: rotate(-90deg);
 }
 
 .ringTrack {
   fill: none;
   stroke: var(--c-line);
-  stroke-width: 4;
+  stroke-width: 3.5;
 }
 
 .ringFill {
   fill: none;
   stroke: var(--c-accent);
-  stroke-width: 4;
+  stroke-width: 3.5;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.6s ease;
 }
 
-.progressText {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.2;
-  font-size: 0.74rem;
-}
-
 .percent {
+  position: relative;
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: 1.1rem;
+  font-size: 0.8rem;
+  letter-spacing: -0.02em;
   color: var(--c-ink);
 }
 
-.bar {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--c-line);
-  overflow: hidden;
-}
-
-.bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--c-accent) 0%, #5cc2b8 100%);
-  transition: width 0.6s ease;
+.progressTasks {
+  font-size: 0.72rem;
+  color: var(--c-muted);
+  white-space: nowrap;
 }
 
 .next {
@@ -816,7 +823,7 @@
 
 .tDone path {
   fill: none;
-  stroke: #fff;
+  stroke: var(--c-surface);
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -942,6 +949,12 @@
   background: var(--c-accent-wash);
 }
 
+.linkHost {
+  font-weight: 400;
+  color: var(--c-muted);
+  margin-left: 2px;
+}
+
 .cardFoot {
   margin: 0;
   padding-top: 10px;
@@ -951,13 +964,46 @@
   overflow-wrap: anywhere;
 }
 
-.greyed {
-  filter: grayscale(0.9);
-  opacity: 0.62;
+/* Silent or paused: grey the chrome (wash, borders, tags, ring), never the text, so it keeps its
+   contrast. Hover or keyboard focus inside brings the colour back. */
+.greyed:not(:hover):not(:focus-within) {
+  background: var(--c-plane);
+  box-shadow: none;
+  border-style: dashed;
+  border-color: var(--c-line-2);
 }
 
-.greyed:hover {
-  opacity: 0.85;
+.greyed:not(:hover):not(:focus-within)::before {
+  opacity: 0;
+}
+
+.greyed:not(:hover):not(:focus-within) .tag,
+.greyed:not(:hover):not(:focus-within) .chip {
+  background: var(--c-surface);
+  border-color: var(--c-line-2);
+  color: var(--c-ink-2);
+}
+
+.greyed:not(:hover):not(:focus-within) .ringFill,
+.greyed:not(:hover):not(:focus-within) .tNow circle,
+.greyed:not(:hover):not(:focus-within) .tTodo circle {
+  stroke: var(--c-grey);
+}
+
+.greyed:not(:hover):not(:focus-within) .tNow path,
+.greyed:not(:hover):not(:focus-within) .tDone circle,
+.greyed:not(:hover):not(:focus-within) .hDot {
+  fill: var(--c-grey);
+  background: var(--c-grey);
+  box-shadow: none;
+}
+
+.greyed:not(:hover):not(:focus-within) .next {
+  background: var(--c-surface);
+}
+
+.greyed:not(:hover):not(:focus-within) .nextLabel {
+  color: var(--c-ink-2);
 }
 
 .isDone .percent {
@@ -1124,8 +1170,7 @@
     font-size: 1.8rem;
   }
 
-  .questions,
-  .grid {
+  .questions {
     grid-template-columns: 1fr;
   }
 
@@ -1168,7 +1213,6 @@
   .qCard,
   .card,
   .ringFill,
-  .bar span,
   .ghost,
   .danger,
   .linkPill,

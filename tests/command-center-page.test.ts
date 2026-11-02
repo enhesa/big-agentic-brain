@@ -192,7 +192,22 @@ describe("/command-center page", () => {
     expect(html).toMatch(/Now<\/span><span[^>]*>Build</);
     expect(html).toContain("Done: </span><span>Design");
     expect(html).toContain("In progress: </span><span>Build");
-    expect(html).toContain('style="width:50%"');
+    expect(html).not.toContain('style="width:50%"');
+  });
+
+  it("shows each link's host next to its label, with the full URL as the tooltip", async () => {
+    await seedAlice();
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toMatch(/title="https:\/\/git\.example\.com\/acme\/x\/pull\/1"[^>]*>.*?<span class="[^"]*linkHost[^"]*">git\.example\.com<\/span><\/a>/);
+  });
+
+  it("flows every area in one masonry container, area names as headings inside it", async () => {
+    await seedAlice();
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html.match(/class="[^"]*flow[^"]*"/g)).toHaveLength(1);
+    expect(html).not.toMatch(/class="[^"]*grid/);
   });
 
   it("tags a deadline as near, overdue or plain, in words", async () => {
@@ -209,6 +224,27 @@ describe("/command-center page", () => {
     expect(html).toContain("overdue by 2 days");
     expect(html).toContain("due 2026-06-30");
     expect(html).toContain("due today");
+    expect(html).toContain("(days counted in UTC)");
+  });
+
+  it("counts deadline days on calendar dates in UTC, so the hour never shifts the label", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    cc.ccPublish(a, ALICE, { v: 1, id: "tmrw", title: "Tomorrow", deadline: "2026-03-03" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "yday", title: "Yesterday", deadline: "2026-03-01" }, "mcp");
+    asViewer(ALICE, "Alice A");
+    // One second before midnight UTC: 2026-03-03 is still tomorrow, 2026-03-01 one day late.
+    vi.setSystemTime(Date.parse("2026-03-02T23:59:59Z"));
+    let html = await render();
+    expect(html).toContain("due tomorrow");
+    expect(html).toContain("overdue by 1 day<");
+    // One second after midnight UTC: the same deadline is today.
+    vi.setSystemTime(Date.parse("2026-03-03T00:00:01Z"));
+    html = await render();
+    expect(html).toContain("due today");
+    expect(html).toContain("overdue by 2 days");
+    expect(html).not.toContain("due tomorrow");
   });
 
   it("lists recurring upkeep as rows with a health label, overdue and no-health states", async () => {
@@ -238,6 +274,15 @@ describe("/command-center page", () => {
     expect(html).toContain('aria-label="Command Center settings"');
     expect(html).toContain('action="/command-center/disable"');
     expect(html.indexOf("It cannot be undone.")).toBeLessThan(html.indexOf('action="/command-center/delete"'));
+    // The delete form sits inside a <details> that starts closed: one more click to confirm.
+    const del = html.indexOf('action="/command-center/delete"');
+    const confirmOpen = html.lastIndexOf("<details", del);
+    expect(confirmOpen).toBeGreaterThan(-1);
+    expect(html.slice(confirmOpen, html.indexOf(">", confirmOpen))).not.toMatch(/open/);
+    expect(html.indexOf("</details>", confirmOpen)).toBeGreaterThan(del);
+    // Section counts read as "0 items" to a screen reader without an aria-label on a plain span.
+    expect(html).not.toMatch(/aria-label="\d+ items?"/);
+    expect(html).toMatch(/>0<span class="[^"]*srOnly[^"]*"> items<\/span>/);
     expect(html).toContain("No initiatives yet");
     expect(html).not.toMatch(/chip(Warn|Bad)/);
   });

@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A Command Center conflict over MCP now returns the current record, so agents can merge.",
       "New Command Center evals: a contract replay on every pull request, plus behaviour and trigger suites for the skill.",
       "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
+      "Command Center cards now flow without gaps, with a larger progress ring and link hosts shown.",
     ],
   },
   {
