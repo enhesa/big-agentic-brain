@@ -234,6 +234,17 @@ describe("GET /api/command-center/export for a report app", () => {
     expect(JSON.stringify(bob)).not.toContain("Bob fixed the build");
   });
 
+  it("switching off withdraws every grant; switching on again does not bring them back", async () => {
+    const cc = await import("../lib/command-center");
+    await seed(ALICE, "Alice wrote the parser");
+    cc.ccGrantExport(ALICE, "reports", "entries");
+    cc.ccSetSwitch(ALICE, false);
+    cc.ccSetSwitch(ALICE, true);
+    expect(cc.ccGrantsOf(ALICE)).toEqual([]);
+    const { GET } = await import("../app/api/command-center/export/route");
+    expect((await (await GET(appGet())).json()).people).toEqual([]);
+  });
+
   it("drops a person at once when they revoke", async () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");

@@ -21,7 +21,8 @@ the link.
   `plugins/command-center` plugin, also served at `/instructions/command-center.md`). The BAB
   plugin's own skill only names the tool.
 - Turning it off keeps the records and the log 30 days (switch on again to restore them), then
-  deletes them. "Delete all my records now" deletes records, log and export grants at once.
+  deletes them. It also withdraws every export grant at once. "Delete all my records now" deletes
+  records, log and export grants at once.
 - `BAB_COMMAND_CENTER=false` switches the feature off for the whole deployment.
 
 ## API
@@ -101,10 +102,13 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
   bearer, only for people who granted that app on their own page and whose switch is on. The
   person grants or revokes each app on the page (same-origin viewer posts, audited
   `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
-- Aggregated by default: counts per initiative and UTC day (entries, `worked` lines, sizes), with
-  no text and no session. `detail=entries` returns the entries only for people who granted the
+- Aggregated by default: counts per initiative and UTC day (entries, `worked` lines, sizes) with the
+  initiative's title and key, but no log lines and no session. `detail=entries` returns the entries only for people who granted the
   `entries` level. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
+- `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
+  is the credential. A sign-in proxy in front of BAB has its own public-path list: add the path
+  there too, or apps cannot reach it.
 
 ## Derived flags
 
@@ -127,8 +131,9 @@ write, so there is no lease, no snapshot and no need to republish after a restar
 Moving from v2: at start, an existing `DATA_DIR/command-center-snapshot.json` is imported once.
 Every record is checked as strictly as a new publish, broken ones are dropped and counted in the
 log, a record already in SQLite is never overwritten, and v2 comments become `note` log entries at
-their own time. The file is then renamed to `command-center-snapshot.imported.json`, never
-deleted. To roll back to v2, rename it back; v2 ignores the new tables.
+their own time. The file is then renamed to `command-center-snapshot.imported.json` and its sha256
+is recorded, so it is never imported twice. The renamed file is kept 30 days, then deleted. To roll
+back to v2 within those days, rename it back; v2 ignores the new tables.
 
 The opt-in switch is two columns on `users`.
 

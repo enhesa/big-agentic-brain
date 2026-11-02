@@ -18,7 +18,7 @@
  * - Writes are audited (person, initiative id, result), never bodies.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 import { getDb, inTransaction, resolveDataDir } from "./db";
 import { config } from "./config";
@@ -102,6 +102,10 @@ export type CcExportLevel = (typeof CC_EXPORT_LEVELS)[number];
 export const CC_CONTENT_RULE = "Never put secrets, client names or customer data in any field.";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/** Ids that are a route of their own (/api/command-center/export). */
+const CC_RESERVED_IDS = ["export"];
+/** Line breaks and control characters (tab allowed): a log line stays one line wherever it is shown. */
+const NOT_ONE_LINE_RE = /[\n\r\u2028\u2029\u0085\v\f\x00-\x08\x0e-\x1f\x7f]/;
 const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
@@ -334,6 +338,7 @@ export function validateRecord(raw: unknown): RecordInput {
   if (raw.v === undefined) throw new ValidationError('v is required: add "v": 1 to the record');
   if (raw.v !== 1) throw new ValidationError("v must be 1; this server reads version 1 records only");
   const id = slug(raw.id, "id");
+  if (CC_RESERVED_IDS.includes(id)) throw new ValidationError(`id '${id}' is reserved; pick another id`);
   const title = text(raw.title, "title", 120)!;
   const area = text(raw.area, "area", 40, false);
   let key: string | null = null;
@@ -377,7 +382,7 @@ export function validateRecord(raw: unknown): RecordInput {
 /** The `worked` line and `size` of a publish: one line, no line breaks. */
 export function validateWorked(raw: Record<string, unknown>): { worked: string | null; size: CcSize | null } {
   const worked = text(raw.worked, "worked", CC_MAX_WORKED, false);
-  if (worked !== null && /[\r\n]/.test(worked)) throw new ValidationError("worked must be one line: what this turn did, without line breaks");
+  if (worked !== null && NOT_ONE_LINE_RE.test(worked)) throw new ValidationError("worked must be one line: what this turn did, without line breaks or control characters");
   let size: CcSize | null = null;
   if (raw.size != null) {
     if (worked === null) throw new ValidationError("size goes with worked: send worked, or leave size out");
@@ -627,6 +632,7 @@ export function sweepCommandCenter(now: number = Date.now()): CcSweepResult {
     out.people += 1;
   }
   out.records += Number(db.prepare("DELETE FROM command_center_initiatives WHERE updated_at < ?").run(iso(now - CC_LIVE_KEEP_MS)).changes);
+  retireImportedSnapshot(now);
   out.entries += Number(db.prepare("DELETE FROM command_center_log WHERE at < ?").run(iso(now - config().commandCenterLogDays * DAY_MS)).changes);
   return out;
 }
@@ -639,15 +645,37 @@ export function ccSnapshotPath(): string {
   return path.join(resolveDataDir(), "command-center-snapshot.json");
 }
 
-/** Where an imported snapshot goes. Kept, so a rollback to v2 can rename it back. */
+/**
+ * The imported snapshot is kept CC_OFF_KEEP_MS after the import, so a rollback to v2 can rename it
+ * back, and then deleted: it holds v2 records that Delete now and retention no longer reach.
+ */
+function retireImportedSnapshot(now: number): void {
+  const file = ccImportedSnapshotPath();
+  if (!existsSync(file)) return;
+  const row = getDb().prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
+  if (!row.at || now - Date.parse(row.at) < CC_OFF_KEEP_MS) return;
+  try {
+    rmSync(file, { force: true });
+  } catch (err) {
+    console.warn("bab: could not delete the imported Command Center snapshot: " + (err instanceof Error ? err.message : String(err)));
+  }
+}
+
+/** Where an imported snapshot goes. Kept 30 days, so a rollback to v2 can rename it back. */
 export function ccImportedSnapshotPath(): string {
   return path.join(resolveDataDir(), "command-center-snapshot.imported.json");
 }
 
 function isoOrNull(raw: unknown): string | null | undefined {
   if (raw === null) return null;
-  if (typeof raw !== "string" || Number.isNaN(Date.parse(raw))) return undefined;
-  return raw;
+  if (typeof raw !== "string" || !ISO_TIME_RE.test(raw) || Number.isNaN(Date.parse(raw))) return undefined;
+  return new Date(raw).toISOString();
+}
+
+/** An imported time as a UTC ISO string, or null when it is not one or lies in the future. */
+function normalTime(raw: unknown, now: number): string | null {
+  const t = isoOrNull(raw);
+  return t && Date.parse(t) <= now + HOUR_MS ? t : null;
 }
 
 /** A v2 comment, kept as a "note" log entry at its own time. */
@@ -714,8 +742,10 @@ function checkedRecord(raw: unknown, now: number): { record: CcRecord; comments:
     for (const c of Array.isArray(raw.comments) ? raw.comments.slice(-20) : []) {
       if (!isObject(c) || typeof c.id !== "string" || !SLUG_RE.test(c.id)) continue;
       try {
-        const body = text(c.text, "comment", 500)!;
-        comments.push({ id: c.id, text: body.replace(/[\r\n]+/g, " "), at: isoOrNull(c.at) ?? updatedAt });
+        const joined = typeof c.text === "string" ? c.text.replace(/[\r\n\u2028\u2029\u0085\v\f]+/g, " ") : c.text;
+        const body = text(joined, "comment", 500)!;
+        if (NOT_ONE_LINE_RE.test(body)) continue;
+        comments.push({ id: c.id, text: body, at: normalTime(c.at, now) ?? updatedAt });
       } catch {
         // A comment that would be refused today is left out; the record still loads.
       }
@@ -746,8 +776,11 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
   if (!existsSync(file)) return null;
   const out: CcImportResult = { imported: 0, skipped: 0, dropped: 0, notes: 0 };
   let parsed: unknown;
+  let sha256: string;
   try {
-    parsed = JSON.parse(readFileSync(file, "utf8"));
+    const raw = readFileSync(file, "utf8");
+    sha256 = createHash("sha256").update(raw).digest("hex");
+    parsed = JSON.parse(raw);
   } catch (err) {
     console.warn("bab: the Command Center snapshot is not readable JSON; it is left in place and not imported: " + (err instanceof Error ? err.message : String(err)));
     return null;
@@ -755,7 +788,15 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
   const owners = isObject(parsed) && isObject(parsed.owners) ? parsed.owners : {};
   try {
     const db = getDb();
+    const done = !!db.prepare("SELECT 1 FROM command_center_imports WHERE sha256 = ?").get(sha256);
+    if (done) {
+      // Imported before, but the rename did not happen: never import it again (a person may have
+      // removed or deleted records since), only retire the file.
+      renameSync(file, ccImportedSnapshotPath());
+      return null;
+    }
     inTransaction(db, () => {
+      db.prepare("INSERT INTO command_center_imports (sha256, imported_at) VALUES (?, ?)").run(sha256, iso(now));
       for (const [owner, records] of Object.entries(owners)) {
         if (!owner || owner.includes("/") || owner.length > 320 || !Array.isArray(records)) {
           out.dropped += Array.isArray(records) ? records.length : 1;
@@ -989,7 +1030,7 @@ function derivedEntries(prev: CcRecord | null, next: CcRecord, base: Omit<CcLogE
   if (next.health && (!prev?.health || prev.health.level !== next.health.level)) {
     add("health", [next.health.level, next.health.receivedAt], next.health.reason ? `${next.health.level}: ${next.health.reason}` : next.health.level, next.health.receivedAt);
   }
-  if (prev && prev.state !== next.state) add("state", [next.state, next.seq], next.state, next.updatedAt);
+  if (prev && prev.state !== next.state) add("state", [next.state, next.seq, next.updatedAt], next.state, next.updatedAt);
   return out;
 }
 
@@ -1097,7 +1138,7 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
     let logged: string | null = null;
     if (worked) {
       // One publish, one seq: the id is fixed by the seq it produced.
-      logged = ccEntryId("worked", input.id, next.seq, session, worked);
+      logged = ccEntryId("worked", input.id, next.seq, session, worked, at);
       entries.push({ ...base, id: logged, kind: "worked", text: worked, size, at });
     }
     writeLog(owner, entries);
@@ -1420,7 +1461,11 @@ export function ccSetSwitch(ownerId: string, on: boolean, now: number = Date.now
   if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(ownerId)) throw new NotFoundError("BAB does not know you yet");
   const at = iso(now);
   if (on) db.prepare("UPDATE users SET command_center_enabled_at = COALESCE(command_center_enabled_at, ?), command_center_disabled_at = NULL WHERE id = ?").run(at, ownerId);
-  else db.prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = COALESCE(command_center_disabled_at, ?) WHERE id = ?").run(at, ownerId);
+  else {
+    db.prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = COALESCE(command_center_disabled_at, ?) WHERE id = ?").run(at, ownerId);
+    // Off withdraws consent: switching on again never resumes sharing by itself.
+    db.prepare("DELETE FROM command_center_export_grants WHERE owner_id = ?").run(ownerId);
+  }
   auditCc(ownerId, on ? "enable" : "disable", ownerId, on ? "on" : "off", "ui");
   return ccSwitch(ownerId);
 }
@@ -1501,7 +1546,7 @@ export interface CcAppExport {
   people: { person: string; level: CcExportLevel; rows?: CcAggregateRow[]; entries?: CcLogEntry[] }[];
 }
 
-/** Counts per initiative and day: no text, no session. */
+/** Counts per initiative and day, with the initiative's title and key: no worked lines, no session. */
 export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
   const rows = new Map<string, CcAggregateRow>();
   for (const e of entries) {

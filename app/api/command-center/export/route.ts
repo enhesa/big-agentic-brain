@@ -1,7 +1,7 @@
 import { bearer, gate, safeEqual } from "@/lib/gate";
 import { config } from "@/lib/config";
 import { ccApiError, ccExportForApp, exportAppFor } from "@/lib/command-center";
-import { checkUiRateLimit } from "@/lib/rate-limit";
+import { checkCommandCenterRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   if (!c.commandCenter || c.commandCenterExportApps.size === 0) return Response.json({ error: "Command Center export is not set up on this BAB" }, { status: 404, headers: NO_STORE });
   const app = exportAppFor(bearer(req.headers), safeEqual);
   if (!app) return Response.json({ error: "export app token required: Authorization: Bearer <token>" }, { status: 401, headers: NO_STORE });
-  if (!checkUiRateLimit(`app:${app}`)) return Response.json({ error: "Too many requests; wait a minute" }, { status: 429, headers: NO_STORE });
+  if (!checkCommandCenterRateLimit(`app:${app}`)) return Response.json({ error: "Too many requests; wait a minute" }, { status: 429, headers: NO_STORE });
   const url = new URL(req.url);
   try {
     const body = ccExportForApp(app, { from: url.searchParams.get("from"), to: url.searchParams.get("to"), detail: url.searchParams.get("detail") });

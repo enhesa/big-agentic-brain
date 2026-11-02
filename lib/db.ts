@@ -355,6 +355,8 @@ function runMigrationV54(database: DatabaseSync) {
   // command-center-snapshot.imported.json, never deleted). The log keeps what was worked on, with
   // the server's time; entry ids are stable per person, so a retried write is a no-op. Export
   // grants are the person's own consent for one export app. Every row is keyed by owner_id.
+  // command_center_imports remembers each imported snapshot by its sha256, so a file is never
+  // imported twice, even when its rename failed.
   database.exec(`
     CREATE TABLE IF NOT EXISTS command_center_initiatives (
       owner_id TEXT NOT NULL,
@@ -391,6 +393,10 @@ function runMigrationV54(database: DatabaseSync) {
       PRIMARY KEY (owner_id, app)
     );
     CREATE INDEX IF NOT EXISTS idx_command_center_export_grants_app ON command_center_export_grants(app);
+    CREATE TABLE IF NOT EXISTS command_center_imports (
+      sha256 TEXT PRIMARY KEY,
+      imported_at TEXT NOT NULL
+    );
   `);
 }
 

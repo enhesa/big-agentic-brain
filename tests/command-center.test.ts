@@ -171,6 +171,9 @@ describe("publish", () => {
     expect(refusal(() => publish({ expectSeq: -1 })).message).toMatch(/expectSeq must be a whole number/);
     expect(refusal(() => publish({ worked: "w".repeat(201) })).message).toMatch(/worked is 201 characters; at most 200/);
     expect(refusal(() => publish({ worked: "line one\nline two" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ worked: "line one\u2028line two" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ worked: "bell\u0007" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ id: "export" })).message).toBe("id 'export' is reserved; pick another id");
     expect(refusal(() => publish({ worked: "x", size: "huge" })).message).toBe("size must be small, medium or large");
     expect(refusal(() => publish({ size: "small" })).message).toMatch(/size goes with worked/);
   });
@@ -278,6 +281,14 @@ describe("the work log", () => {
     publish({ worked: "did it" });
     run({ action: "remove", id: "billing-export" });
     expect(cc.ccLogOf(OWNER).some((e) => e.text === "did it")).toBe(true);
+  });
+
+  it("logs the same line again after an initiative is removed and created anew", () => {
+    publish({ worked: "same line" });
+    run({ action: "remove", id: "billing-export" });
+    vi.setSystemTime(NOW + HOUR);
+    expect(publish({ worked: "same line" })).toMatchObject({ seq: 1 });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.text === "same line")).toHaveLength(2);
   });
 
   it("keeps people's logs apart", () => {
@@ -642,6 +653,56 @@ describe("the one-time import of a v2 snapshot", () => {
     expect(existsSync(cc.ccSnapshotPath())).toBe(true);
   });
 
+  it("never imports one file twice, even when its rename failed: removed records stay removed", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    run({ action: "remove", id: "alpha" });
+    // As if the rename had failed after the commit: the same file is back under its v2 name.
+    renameSync(cc.ccImportedSnapshotPath(), cc.ccSnapshotPath());
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
+    log.mockRestore();
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+  });
+
+  it("deletes the imported file 30 days after the import", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    cc.sweepCommandCenter(NOW + 29 * DAY);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(false);
+  });
+
+  it("normalizes imported times, drops future note times, and checks a joined comment as one line", () => {
+    const at = new Date(NOW - DAY).toISOString();
+    writeSnapshot({
+      [OWNER]: [
+        v2Record("alpha", {
+          comments: [
+            { id: "n1", text: "kept", at: "2026-03-01T10:00:00+02:00" },
+            { id: "n2", text: "from the future", at: new Date(NOW + 5 * DAY).toISOString() },
+            { id: "n3", text: "not a time", at: "Sunday" },
+            { id: "n4", text: "two\nlines", at },
+          ],
+        }),
+      ],
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    const notes = cc.ccLogOf(OWNER).filter((e) => e.kind === "note");
+    expect(notes.map((e) => [e.text, e.at]).sort()).toEqual([
+      ["from the future", at],
+      ["kept", "2026-03-01T08:00:00.000Z"],
+      ["not a time", at],
+      ["two lines", at],
+    ]);
+  });
+
   it("never overwrites a record already in SQLite", () => {
     publish({ id: "alpha", title: "Newer", questions: [] });
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
@@ -663,14 +724,14 @@ describe("migration v54", () => {
     // the imported snapshot renamed back to its v2 name.
     const db = getDb();
     db.prepare("DELETE FROM migrations WHERE version >= 54").run();
-    db.exec("DROP TABLE command_center_initiatives; DROP TABLE command_center_log; DROP TABLE command_center_export_grants;");
+    db.exec("DROP TABLE command_center_initiatives; DROP TABLE command_center_log; DROP TABLE command_center_export_grants; DROP TABLE command_center_imports;");
     renameSync(cc.ccImportedSnapshotPath(), cc.ccSnapshotPath());
     _resetDbForTests();
     cc._resetCommandCenterForTests();
     const again = getDb();
     expect(again.prepare("SELECT 1 FROM migrations WHERE version = 54").get()).toBeTruthy();
     const tables = (again.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'command_center_%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
-    expect(tables).toEqual(["command_center_export_grants", "command_center_initiatives", "command_center_log"]);
+    expect(tables).toEqual(["command_center_export_grants", "command_center_imports", "command_center_initiatives", "command_center_log"]);
     expect(cc.ccSwitch(OWNER).enabledAt).not.toBeNull();
     cc.importCommandCenterSnapshot();
     expect(cc.ccGet(OWNER, "alpha")).toEqual(first.record);

@@ -557,7 +557,7 @@ function YourLog({ view }: { view: CcView }) {
         {view.exportApps.length ? (
           <>
             <p className={styles.muted}>
-              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, not your text, unless you allow entries. You can stop sharing at any
+              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. You can stop sharing at any
               time.
             </p>
             <ul className={styles.apps} aria-label="Report apps">
