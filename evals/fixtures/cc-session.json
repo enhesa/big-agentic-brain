@@ -157,7 +157,7 @@
       "name": "a secret in a comment is refused and names the field",
       "call": { "action": "comment", "id": "billing-export", "record": { "text": "Use the key {{secret}} for the test account." } },
       "expect": {
-        "error": "confidential",
+        "error": "^text holds .+, and Command Center never keeps confidential data\\.",
         "state": { "billing-export": [["seq", "eq", 6], ["comments", "len", 1]] }
       }
     },

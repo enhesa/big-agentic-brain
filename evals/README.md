@@ -139,9 +139,9 @@ ANTHROPIC_API_KEY=... pnpm eval --suite cc-trigger      # Haiku, 4 scenarios, 2 
 ```
 
 - **Contract** (`cc-contract.mjs`, `fixtures/cc-session.json`): replays the MCP calls of a typical session and checks the slim tool schema (`action`, `id`, `record`), each answer and the stored record after each step: the off sentence before opt-in, first publish, task change, question, `clear_question`, comment, a secret refused, recurring health, `list`, a no-op republish, a stale `expectSeq` from a second device (409 with the current record after `current: `), the merged publish, and the 403 after switching off with nothing stored.
-- **Behaviour** (`--suite cc`, `lib/cc-scenarios.mjs`): the skill text as served at `/instructions/command-center.md` is in the system prompt, plus a `work` tool that stands in for real work. Scenarios: `start`, `task-change`, `ask`, `answer`, `recurring`, `off-mid-session`, `secret`, `second-session`. Graded from the stored records and the transcript: publish on the first turn and as the last call of every turn, one initiative with a stable id, the question in the record and cleared first the turn the answer arrives, no call after the off 403 and one line to the person, the generated secret never sent to BAB, a forced 409 merged from the record it carries.
+- **Behaviour** (`--suite cc`, `lib/cc-scenarios.mjs`): the skill text as served at `/instructions/command-center.md` is in the system prompt, plus a `work` tool that stands in for real work. Scenarios: `start`, `task-change`, `ask`, `answer`, `recurring`, `off-mid-session`, `secret`, `second-session`. Graded from the stored records and the transcript: publish on the first turn and as the last call of every turn, one initiative with a stable id, the question in the record and cleared first the turn the answer arrives, no call after the off 403 and one line to the person, the generated secret never sent to BAB, a 409 forced right before the agent's first publish (so listing first does not avoid it), merged from the record it carries.
 - **Trigger** (`--suite cc-trigger`): only the skill's frontmatter description, behind a `skill` tool. Checks that the agent loads it on turn 1 when Command Center is on and not when the person says it is off.
-- `--dry-run` swaps the LLM for each scenario's `ideal` script and then runs careless scripts (`badScripts`); every ideal script must pass and every careless one must fail a check.
+- `--dry-run` swaps the LLM for each scenario's `ideal` script, then runs other careful scripts (`goodScripts`, such as listing before every publish) and careless ones (`badScripts`); every ideal and careful script must pass and every careless one must fail a check.
 
 Output: `summary.md` (pass rate per scenario with a Wilson 95% CI, then per check), `results.json`, and `runs/<scenario>-t<n>/` with `transcript.jsonl` (the test secret is replaced by `[TEST-SECRET]`) and `grade.json`. `--tasks start,answer` picks scenarios; `--trials` and `--budget-usd` work as above.
 
@@ -209,7 +209,7 @@ Agent eval with the same tasks and conditions (core: 12 tasks × A/B/C × 3 tria
 ## CI
 
 `.github/workflows/evals.yml`:
-- **On pull requests** touching `lib/`, `app/api/`, `app/mcp/` or `evals/`: build, then `eval:validate`, `eval:retrieval` with thresholds, `eval:cc-contract` and the two Command Center dry runs. No secrets are needed.
+- **On pull requests** touching `lib/`, `app/api/`, `app/mcp/`, `evals/`, `plugins/command-center/`, `content/instructions/command-center.md` or the workflow itself: build, then `eval:validate`, `eval:retrieval` with thresholds, `eval:cc-contract` and the two Command Center dry runs. No secrets are needed.
 - **On manual dispatch:** the agent eval (`suite` core, tk, cc or cc-trigger; `smoke` or `full` for core and tk; model and budget as inputs, budget 0.50 USD by default; pass 2 for the cc suites), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
 
 

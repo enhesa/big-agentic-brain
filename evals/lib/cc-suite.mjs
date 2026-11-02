@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { assertBuilt } from "./bab-server.mjs";
 import { ccAgent, ccPerson, fakeSecret, otherDevice, setSwitch, skillText, splitSkill, startCcBab } from "./cc.mjs";
-import { badScripts, readState, SCENARIOS, snapshot, triggerChecks } from "./cc-scenarios.mjs";
+import { badScripts, goodScripts, readState, SCENARIOS, snapshot, triggerChecks } from "./cc-scenarios.mjs";
 import { REPO_ROOT, scratchRoot } from "./paths.mjs";
 import { priceFor, PRICES_CHECKED } from "./prices.mjs";
 import { costUsd, makeProvider, redact } from "./providers.mjs";
@@ -110,7 +110,7 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
     log({ ev: "start", scenario: scenario.id, suite, system: sys, tools: [...local.map((t) => t[0]), ...babNames], model: prov.model });
     const messages = [];
     const byTurn = [];
-    let firstCcDone = false;
+    let firstPublishSeen = false;
     for (let turn = 0; turn < scenario.turns.length; turn++) {
       const spec = scenario.turns[turn];
       if (spec.before) await spec.before(x);
@@ -145,6 +145,10 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
             out = /command-center/.test(a.name ?? "") ? skill.body : `No skill named ${a.name}.`;
             isError = !/command-center/.test(a.name ?? "");
           } else if (babNames.has(call.name)) {
+            if (call.name === "bab_command_center" && a.action === "publish" && !firstPublishSeen) {
+              firstPublishSeen = true;
+              if (scenario.beforeFirstPublish) await scenario.beforeFirstPublish(x);
+            }
             ({ text: out, isError } = await mcp.call(call.name, a));
             if (out.length > 12_000) out = `${out.slice(0, 12_000)}\n...[truncated]`;
           } else {
@@ -154,10 +158,6 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
           events.push({ turn, type: "tool", name: call.name, args: a, isError, out });
           log({ ev: "tool", turn, name: call.name, args: a, isError, out: out.slice(0, 20_000) });
           results.push({ id: call.id, text: out, isError });
-          if (call.name === "bab_command_center" && !firstCcDone) {
-            firstCcDone = true;
-            if (scenario.afterFirstCcCall) await scenario.afterFirstCcCall(x);
-          }
         }
         messages.push(...prov.toolResults(results));
       }
@@ -229,10 +229,20 @@ export async function runCcSuite(opt) {
       console.log(`[eval] ${id}: ${pass ? "pass" : "FAIL"}${r.error ? ` error=${r.error}` : ""}${failed.length ? ` (${failed.join("; ")})` : ""} $${cost.toFixed(4)} (spent $${spent.toFixed(3)})`);
     }
   }
-  // Dry run only: bad scripts must fail, so the graders are not vacuous.
+  // Dry run only: other careful scripts must pass and bad scripts must fail, so the graders are
+  // neither tied to the ideal script's order nor vacuous.
   const selfTest = [];
+  const altGood = [];
   if (dryRun) {
     for (const scenario of scenarios) {
+      for (const [name, good] of goodScripts(scenario)) {
+        const id = `${scenario.id}-good-${name}`;
+        const r = await runScenario({ scenario, suite, providerCfg, dir: path.join(outDir, "runs", id), dryRun, script: suite === "cc-trigger" ? [[{ tool: "skill", args: { name: "command-center" } }, ...good[0]], ...good.slice(1)] : good });
+        const failed = r.checks.filter((c) => !c.ok && !c.pending).map((c) => c.name);
+        const pass = !r.error && r.checks.some((c) => !c.pending) && failed.length === 0;
+        altGood.push({ scenario: scenario.id, name, pass, failed, error: r.error });
+        console.log(`[eval] ${id}: ${pass ? "pass" : "FAIL"}${r.error ? ` error=${r.error}` : ""}${failed.length ? ` (${failed.join("; ")})` : ""}`);
+      }
       for (const [name, bad] of badScripts(scenario)) {
         const id = `${scenario.id}-bad-${name}`;
         const r = await runScenario({ scenario, suite, providerCfg, dir: path.join(outDir, "runs", id), dryRun, script: bad });
@@ -244,6 +254,10 @@ export async function runCcSuite(opt) {
     }
   }
   let md = ccSummary(rows, { ...meta, spent, skipped });
+  if (altGood.length) {
+    md += ["", "## Grader self-test (each other careful script must pass)", "", "| Scenario | Careful script | Result |", "|---|---|---|",
+      ...altGood.map((t) => `| ${t.scenario} | ${t.name} | ${t.pass ? "pass" : `FAIL: ${t.failed.join("; ") || t.error}`} |`)].join("\n") + "\n";
+  }
   if (selfTest.length) {
     md += ["", "## Grader self-test (each bad script must fail a check)", "", "| Scenario | Bad script | Caught by |", "|---|---|---|",
       ...selfTest.map((t) => `| ${t.scenario} | ${t.name} | ${t.caught ? t.failed.join("; ") || t.error : "NOT CAUGHT"} |`)].join("\n") + "\n";
@@ -254,8 +268,8 @@ export async function runCcSuite(opt) {
   console.log(`[eval] wrote ${path.join(outDir, "summary.md")} and results.json`);
   const errored = rows.filter((r) => r.error).length;
   if (errored) process.exit(2);
-  // A dry run proves the graders: every ideal script must pass.
-  if (dryRun && (rows.some((r) => !r.pass) || selfTest.some((t) => !t.caught))) process.exit(1);
+  // A dry run proves the graders: every ideal and other careful script must pass, every bad one fail.
+  if (dryRun && (rows.some((r) => !r.pass) || altGood.some((t) => !t.pass) || selfTest.some((t) => !t.caught))) process.exit(1);
 }
 
 export function ccSummary(rows, meta) {

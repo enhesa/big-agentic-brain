@@ -42,8 +42,8 @@ function onlyOneInitiative(state) {
 }
 
 function linkOnce(ev, origin) {
-  const n = texts(ev).filter((t) => t.includes(`${origin}/command-center`) || t.includes("/command-center")).length;
-  return c("gives the page link once", n >= 1 && n <= 2, `${n} replies with the link`);
+  const n = texts(ev).filter((t) => t.includes(`${origin}/command-center`)).length;
+  return c("gives the page link once", n === 1, `${n} replies with the link`);
 }
 
 function noSecret(ev, secret) {
@@ -87,9 +87,11 @@ export const SCENARIOS = [
     turns: [{ user: START }],
     grade: (ev, s, x) => [
       c("turn 1: publishes", okPublishes(ev, 0).length >= 1),
-      c("turn 1: the first call is a publish (before the work)", (() => {
-        const t = ev.filter((e) => e.turn === 0 && e.type === "tool" && e.name !== "skill");
-        return t[0]?.name === "bab_command_center" || (t[0]?.name === "work" && t.some((e) => e.name === "bab_command_center"));
+      c("turn 1: publishes before the first work step", (() => {
+        const t = ev.filter((e) => e.turn === 0 && e.type === "tool");
+        const firstPublish = t.findIndex((e) => e.name === "bab_command_center" && action(e) === "publish" && !e.isError);
+        const firstWork = t.findIndex((e) => e.name === "work");
+        return firstPublish >= 0 && (firstWork < 0 || firstPublish < firstWork);
       })()),
       wrapUp(ev, 0),
       c("the record lists the 3 steps", (s.records[0]?.tasks ?? []).length >= 3, `${(s.records[0]?.tasks ?? []).length} tasks`),
@@ -251,9 +253,9 @@ export const SCENARIOS = [
       });
       if (r.isError) throw new Error(`second-session setup: ${r.text}`);
     },
-    // Right after the agent's first Command Center call, the other session publishes a change, so
-    // a publish with the expectSeq the agent saw first is a 409 it has to resolve.
-    afterFirstCcCall: async (x) => {
+    // Right before the agent's first publish runs, the other session publishes a change, so whatever
+    // seq the agent read before (one list or several), a publish with expectSeq is a 409 it has to resolve.
+    beforeFirstPublish: async (x) => {
       const r = await x.other.call("bab_command_center", {
         action: "publish",
         id: ID,
@@ -277,7 +279,7 @@ export const SCENARIOS = [
         c("sends expectSeq", calls.some((e) => action(e) === "publish" && (e.args?.expectSeq ?? e.args?.record?.expectSeq) !== undefined)),
         c("a 409 is resolved by a later publish", conflict < 0 || resolved, conflict < 0 ? "no 409 met" : resolved ? "resolved" : "not resolved"),
         c("the exporter step is not pending any more", (rec?.tasks ?? []).some((t) => t.id === "write-exporter" && t.status !== "pending") || (rec?.tasks ?? []).some((t) => /exporter/i.test(t.text) && t.status !== "pending")),
-        c("met a 409 (the harness forces one)", conflict >= 0, conflict < 0 ? "the agent never sent a stale expectSeq" : ""),
+        c("met the forced 409 (the other session publishes right before the agent's first publish)", conflict >= 0, conflict < 0 ? "no 409: the first publish sent no expectSeq" : ""),
         c("the 409 carried the current record", conflict >= 0 && currentIn(calls[conflict].out) !== null),
         c("merges from that record: the next publish keeps the other session's change", conflict >= 0 && (() => {
           const next = calls.slice(conflict + 1).find((e) => action(e) === "publish" && !e.isError);
@@ -326,6 +328,27 @@ function otherTasks(exporter, review) {
   };
 }
 /**
+ * Other scripts a careful agent might follow, for the --dry-run grader self-test: each must pass,
+ * so the graders do not depend on the exact order of the ideal script.
+ */
+export function goodScripts(s) {
+  const out = [];
+  // Lists, does the work, lists again for a fresh seq, then publishes: still meets the forced 409.
+  if (s.id === "second-session") out.push(["lists-before-every-publish", [[
+    { tool: "bab_command_center", args: { action: "list" } },
+    work("write the exporter"),
+    { tool: "bab_command_center", args: { action: "list" } },
+    (x) => ({ tool: "bab_command_center", args: { action: "publish", id: ID, record: { ...otherTasks("done", "in_progress"), expectSeq: seqIn(x.last.text) } } }),
+    (x) => {
+      const cur = currentIn(x.last.text);
+      return { tool: "bab_command_center", args: { action: "publish", id: ID, record: { ...otherTasks("done", cur?.tasks?.find((t) => t.id === "review-copy")?.status ?? "in_progress"), expectSeq: cur?.seq ?? 0 } } };
+    },
+    say("Exporter written; merged with the other session. Page: {{origin}}/command-center"),
+  ]]]);
+  return out;
+}
+
+/**
  * Scripts a careless agent would follow, for the --dry-run grader self-test: each must fail a check.
  * Every scenario gets a generic one (never publishes, or publishes although told it is off), plus
  * targeted ones for the rule the scenario is about.
@@ -337,7 +360,9 @@ export function badScripts(s) {
     return out;
   }
   out.push(["never-publishes", s.turns.map(() => [work("the next step"), say("Done.")])]);
-  if (s.id === "start") out.push(["no-wrap-up", [[publish(["in_progress", "pending", "pending"]), work("map the export fields"), say("Mapped. {{origin}}/command-center")]]]);
+  if (s.id === "start") {
+    out.push(["no-wrap-up", [[publish(["in_progress", "pending", "pending"]), work("map the export fields"), say("Mapped. {{origin}}/command-center")]]]);
+    out.push(["publishes-after-work", [[work("map the export fields"), publish(["done", "pending", "pending"]), say("Mapped. {{origin}}/command-center")]]]);  }
   if (s.id === "task-change") out.push(["new-id-each-turn", [s.ideal[0], [{ tool: "bab_command_center", args: { action: "publish", id: "billing-export-2", record: record(["done", "in_progress", "pending"]) } }, work("write the exporter"), { tool: "bab_command_center", args: { action: "publish", id: "billing-export-2", record: record(["done", "done", "pending"]) } }, say("Exporter written.")]]]);
   if (s.id === "ask") out.push(["question-only-in-chat", [[publish(["in_progress", "pending", "pending"]), work("map the export fields"), publish(["done", "pending", "pending"]), say("Which date format? {{origin}}/command-center")]]]);
   if (s.id === "answer") out.push(["clears-late", [s.ideal[0], [publish(["done", "in_progress", "pending"], { questions: [DATE_Q] }), work("write the exporter"), { tool: "bab_command_center", args: { action: "clear_question", id: ID, record: { questionId: "date-format" } } }, publish(["done", "done", "pending"]), say("Done.")]]]);
