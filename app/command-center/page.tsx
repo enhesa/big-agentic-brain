@@ -4,7 +4,7 @@ import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { config } from "@/lib/config";
 import { formatRelativeTime } from "@/lib/relative-time";
-import { ccView, type CcView } from "@/lib/command-center";
+import { CC_OFF_KEEP_MS, ccView, type CcView } from "@/lib/command-center";
 import { ApiError } from "@/lib/errors";
 import CommandCenterPoll from "./CommandCenterPoll";
 import styles from "./command-center.module.css";
@@ -279,7 +279,7 @@ function Settings() {
         <DotsIcon />
       </summary>
       <div className={styles.menuBody}>
-        <p className={styles.menuNote}>Switching off stops agents from publishing. Your records are kept 30 days.</p>
+        <p className={styles.menuNote}>Switching off stops agents from publishing. Your records are kept {CC_OFF_KEEP_MS / DAY_MS} days.</p>
         <form method="post" action="/command-center/disable">
           <button type="submit" className={styles.ghost}>
             Switch off

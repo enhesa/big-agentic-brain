@@ -164,6 +164,92 @@ describe("/command-center page", () => {
     expect(await render()).toContain("switched off on this BAB");
   });
 
+  it("orders cards urgent, high, none, low, paused and greys a paused one with its label", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    for (const [id, priority] of [["p-paused", "paused"], ["p-low", "low"], ["p-none", null], ["p-high", "high"], ["p-urgent", "urgent"]] as const) {
+      cc.ccPublish(a, ALICE, { v: 1, id, title: `T ${id}`, area: "ops", priority, questions: [{ id: "q", text: `Ask ${id}` }] }, "mcp");
+    }
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const at = (id: string) => html.indexOf(`data-initiative="${id}"`);
+    expect([at("p-urgent"), at("p-high"), at("p-none"), at("p-low"), at("p-paused")].every((v, i, all) => v > 0 && (i === 0 || v > all[i - 1]))).toBe(true);
+    const paused = html.slice(html.lastIndexOf("<article", at("p-paused")), html.indexOf("</article>", at("p-paused")));
+    expect(paused).toMatch(/class="[^"]*greyed/);
+    expect(paused).toContain("paused");
+    expect(html).not.toContain("Ask p-paused");
+    expect(html).toContain("urgent");
+    expect(html).toContain("high priority");
+  });
+
+  it("shows progress as percent and done/total, the next task, and the task list with status labels", async () => {
+    await seedAlice();
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("50%");
+    expect(html).toContain("1/2 tasks");
+    expect(html).toMatch(/Now<\/span><span[^>]*>Build</);
+    expect(html).toContain("Done: </span><span>Design");
+    expect(html).toContain("In progress: </span><span>Build");
+    expect(html).toContain('style="width:50%"');
+  });
+
+  it("tags a deadline as near, overdue or plain, in words", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    cc.ccPublish(a, ALICE, { v: 1, id: "near", title: "Near", deadline: "2026-03-05" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "late", title: "Late", deadline: "2026-02-28" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "far", title: "Far", deadline: "2026-06-30" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "today", title: "Today", deadline: "2026-03-02" }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("due in 3 days");
+    expect(html).toContain("overdue by 2 days");
+    expect(html).toContain("due 2026-06-30");
+    expect(html).toContain("due today");
+  });
+
+  it("lists recurring upkeep as rows with a health label, overdue and no-health states", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const checkedAt = new Date(NOW - 3600_000).toISOString();
+    cc.ccPublish(a, ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", health: { level: "amber", reason: "Slow run", checkedAt } }, "mcp", NOW - 3 * DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "certs", title: "Cert renewal", kind: "recurring", cadence: "weekly" }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("Recurring upkeep");
+    expect(html).toContain("Needs a look");
+    expect(html).toContain("Slow run");
+    expect(html).toContain("overdue");
+    expect(html).toContain("No health yet");
+    expect(html).toContain("checked 3 days ago");
+    expect(html).toMatch(/chipBad[^"]*" data-count="1"/);
+  });
+
+  it("shows the All clear state, zero chips as neutral, and the settings menu with a confirm before delete", async () => {
+    (await import("../lib/command-center")).ccSetSwitch(ALICE, true);
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("All clear");
+    expect(html).toContain("Nothing published yet");
+    expect(html).toContain('aria-label="Command Center settings"');
+    expect(html).toContain('action="/command-center/disable"');
+    expect(html.indexOf("It cannot be undone.")).toBeLessThan(html.indexOf('action="/command-center/delete"'));
+    expect(html).toContain("No initiatives yet");
+    expect(html).not.toMatch(/chip(Warn|Bad)/);
+  });
+
+  it("shows the off state with an Off pill and no settings menu", async () => {
+    asViewer(BOB, "Bob B");
+    const html = await render();
+    expect(html).toMatch(/Off<\/span>/);
+    expect(html).not.toContain("Command Center settings");
+    expect(html).not.toContain('action="/command-center/delete"');
+  });
+
   it("is not in the navbar or the footer", async () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
     expect(NAV_ITEMS.map((i) => i.href as string)).not.toContain("/command-center");

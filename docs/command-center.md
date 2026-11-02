@@ -99,11 +99,23 @@ initiative id and the result, never the text.
 
 ## The page
 
-`app/command-center/page.tsx` renders for the signed-in viewer only. Needs-you questions come
-first, oldest first, with their age, a possibly-stale tag and a Dismiss button. Then initiatives
-grouped by area: percent, state, deadline, tasks, comments, links, and for upkeep a health dot
-and an overdue tag. Silent and paused initiatives are greyed. Every agent string is React text,
-never HTML; links are shown with their URL.
+`app/command-center/page.tsx` renders for the signed-in viewer only. The header shows the On
+pill, the last push and the data-health chips, which turn amber or red when not 0. Switch off and
+Delete sit in a settings menu; Delete asks for a confirm first.
+
+- Needs you: question cards, oldest first, with the initiative, the options as pills (display
+  only), the age, a possibly-stale tag and a Dismiss button. A left bar marks urgent and high
+  priority. With none, an All clear card.
+- Initiatives: a card grid grouped by area, ordered urgent, high, none, low, paused. Each card
+  has state, priority, key and deadline tags (near and overdue in words), a progress ring and
+  bar with done/total, the task in progress, the full task list and notes behind Show, links as
+  pills and who pushed last. Silent and paused cards are greyed with a label.
+- Recurring upkeep: one row each with a health dot and label, the reason, when it was checked
+  and an overdue tag.
+
+Every agent string is React text, never HTML; a link's URL is its title. Colours are tokens on
+the page, with dark values for `data-theme="dark"`, like /usage. Motion honours
+`prefers-reduced-motion`.
 
 The open page polls `/command-center/state` every 15 seconds while the tab is visible and
 refreshes when the stamp changed. It does not use `/api/events`, which is public.

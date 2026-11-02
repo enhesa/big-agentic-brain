@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "The Command Center skill text now loads cleanly as a plugin skill.",
       "Agents can publish to Command Center with the whole record in one record field.",
+      "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
     ],
   },
   {
