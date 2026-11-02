@@ -117,6 +117,16 @@ async function main() {
         const re = new RegExp(e.error.replaceAll("{{origin}}", escapeRe(bab.origin)));
         if (!isError) errs.push(`want an error matching /${e.error}/, got success: ${text.slice(0, 200)}`);
         else if (!re.test(text)) errs.push(`error does not match /${e.error}/: ${text.slice(0, 300)}`);
+        if (isError && e.current) {
+          // A 409 over MCP is the sentence, then "\ncurrent: " and the current record as JSON.
+          const i = text.indexOf("\ncurrent: ");
+          const current = i < 0 ? null : parseJson(text.slice(i + "\ncurrent: ".length));
+          if (!current) errs.push(`the 409 does not carry the current record after "\\ncurrent: ": ${text.slice(0, 300)}`);
+          else for (const c of e.current) {
+            const why = check(current, await fill(c));
+            if (why) errs.push(`current: ${why}`);
+          }
+        }
       } else if (isError) {
         errs.push(`unexpected error: ${text.slice(0, 300)}`);
       } else {
@@ -142,25 +152,11 @@ async function main() {
       if (errs.length) fail(step.name, errs.join("; "));
       else pass(step.name);
     }
-
-    // Not gating: what an MCP agent gets with a 409. The REST answer carries `current`; the MCP text
-    // is only the sentence, so an agent must call list (seq only) to merge.
-    const probe = await agents.second.call("bab_command_center", {
-      action: "publish",
-      id: "billing-export",
-      record: { v: 1, title: "Billing export probe", expectSeq: 1 },
-    });
-    results.push({
-      step: "note: a 409 over MCP carries the current record",
-      ok: true,
-      note: true,
-      msg: probe.isError && /"current"|"tasks"/.test(probe.text) ? "yes" : "no: the MCP answer is the sentence only, so the agent cannot see what to merge",
-    });
   } finally {
     await bab.stop();
     fs.rmSync(path.join(outDir, "bab-data"), { recursive: true, force: true });
   }
-  const gating = results.filter((r) => !r.note);
+  const gating = results;
   const failed = gating.filter((r) => !r.ok);
   const md = [
     "# Command Center contract eval (no LLM)",
@@ -169,7 +165,7 @@ async function main() {
     "",
     "| Step | Result |",
     "|---|---|",
-    ...results.map((r) => `| ${r.step} | ${r.note ? `note: ${r.msg}` : r.ok ? "pass" : `FAIL: ${r.msg.replaceAll("|", "\\|")}`} |`),
+    ...results.map((r) => `| ${r.step} | ${r.ok ? "pass" : `FAIL: ${r.msg.replaceAll("|", "\\|")}`} |`),
   ].join("\n") + "\n";
   fs.writeFileSync(path.join(outDir, "cc-contract.md"), md);
   fs.writeFileSync(path.join(outDir, "cc-contract.json"), JSON.stringify({ results }, null, 2));

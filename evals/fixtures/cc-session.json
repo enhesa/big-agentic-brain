@@ -219,6 +219,7 @@
       },
       "expect": {
         "error": "^expectSeq is 5 but 'billing-export' is at seq 6\\. Merge your change into the current record",
+        "current": [["id", "eq", "billing-export"], ["seq", "eq", 6], ["tasks", "len", 3], ["tasks.2.id", "eq", "add-tests"], ["comments", "len", 1], ["source.session", "eq", "session-a"]],
         "state": { "billing-export": [["seq", "eq", 6], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
       }
     },

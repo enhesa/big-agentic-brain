@@ -12,8 +12,13 @@ on:
       - ".github/workflows/evals.yml"
   workflow_dispatch:
     inputs:
+      suite:
+        description: "core or tk (coding tasks), cc (Command Center skill behaviour) or cc-trigger (does the agent load the skill)"
+        type: choice
+        options: [core, tk, cc, cc-trigger]
+        default: core
       mode:
-        description: "smoke (3 tasks, A/B, 1 trial, under $0.50 with Haiku) or full (12 tasks, A/B/C, 3 trials)"
+        description: "core/tk only: smoke (3 tasks, A/B, 1 trial, under $0.50 with Haiku) or full (12 tasks, A/B/C, 3 trials)"
         type: choice
         options: [smoke, full]
         default: smoke
@@ -24,7 +29,7 @@ on:
       budget_usd:
         description: "Hard spend cap in USD"
         type: string
-        default: "0.50"
+        default: "2"
 
 concurrency:
   group: evals-${{ github.ref }}
@@ -56,6 +61,11 @@ jobs:
       - name: Command Center contract (replays a recorded session over MCP, checks the stored state)
         if: always()
         run: pnpm eval:cc-contract --out "$RUNNER_TEMP/cc-contract"
+      - name: Command Center graders (ideal scripts pass, careless ones fail; no LLM)
+        if: always()
+        run: |
+          pnpm eval --suite cc --dry-run --out "$RUNNER_TEMP/cc-dry"
+          pnpm eval --suite cc-trigger --dry-run --out "$RUNNER_TEMP/cc-trigger-dry"
       - if: always()
         run: |
           { echo '## Baseline retrieval'; cat "$RUNNER_TEMP/retrieval/retrieval.md" 2>/dev/null
@@ -93,11 +103,12 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BAB_EVAL_MODEL: ${{ inputs.model }}
           BAB_EVAL_MODE: ${{ inputs.mode }}
+          BAB_EVAL_SUITE: ${{ inputs.suite }}
           BAB_EVAL_BUDGET_USD: ${{ inputs.budget_usd }}
           BAB_EVAL_OUT: ${{ runner.temp }}/agent-out
         run: |
           [ -n "$BAB_EVAL_MODEL" ] || unset BAB_EVAL_MODEL
-          pnpm eval --mode "$BAB_EVAL_MODE" --budget-usd "$BAB_EVAL_BUDGET_USD" --sandbox bwrap --out "$BAB_EVAL_OUT"
+          pnpm eval --suite "$BAB_EVAL_SUITE" --mode "$BAB_EVAL_MODE" --budget-usd "$BAB_EVAL_BUDGET_USD" --sandbox bwrap --out "$BAB_EVAL_OUT"
       - name: Redact artifacts and guard against key leakage
         id: guard
         if: always()
@@ -139,4 +150,5 @@ jobs:
             ${{ runner.temp }}/agent-out/meta.json
             ${{ runner.temp }}/agent-out/runs/*/transcript.jsonl
             ${{ runner.temp }}/agent-out/runs/*/grade.txt
+            ${{ runner.temp }}/agent-out/runs/*/grade.json
             ${{ runner.temp }}/agent-out/runs/*/diff.patch
