@@ -127,7 +127,7 @@ export function splitSkill(md) {
   const meta = {};
   for (const line of m[1].split(/\r?\n/)) {
     const i = line.indexOf(":");
-    if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
   }
   return { meta, body: m[2] };
 }

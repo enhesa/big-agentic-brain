@@ -71,7 +71,17 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
   const t0 = Date.now();
   const secret = fakeSecret();
   const log = (ev) => fs.appendFileSync(logPath, redact(JSON.stringify({ t: (Date.now() - t0) / 1000, ...ev }).split(secret).join("[TEST-SECRET]")) + "\n");
-  const bab = await startCcBab(dir);
+  // A loaded runner can be slow to boot Next: the same 3 tries as run.mjs.
+  let bab;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      bab = await startCcBab(dir);
+      break;
+    } catch (e) {
+      if (attempt >= 3) throw e;
+      await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
+  }
   const events = [];
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let error = "";
