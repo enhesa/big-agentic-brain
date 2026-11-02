@@ -33,8 +33,8 @@ its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the
 after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
 `expectSeq` protects the other session.
 
-After a 403 (Command Center off), tell the person once how to switch it on, with the link. Do not
-mention Command Center again in that session.
+After a 403 (Command Center off), tell the person once how to switch it on, with the link. Then stop
+publishing and do not mention Command Center again in that session.
 
 ## The record
 
