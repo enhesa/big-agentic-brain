@@ -469,10 +469,10 @@ function Initiative({ r }: { r: Rec }) {
       {/* One meta line: tasks and notes behind a toggle, links, then who pushed last. An opened
           toggle takes the full width and pushes the links and footer below its list. */}
       <div className={styles.meta}>
-        {r.tasks.length || r.comments.length ? (
+        {r.tasks.length || r.log.length ? (
           <details className={styles.details}>
             <summary>
-              {[r.tasks.length ? `${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : "", r.comments.length ? `${r.comments.length} ${r.comments.length === 1 ? "note" : "notes"}` : ""]
+              {[r.tasks.length ? `${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : "", r.log.length ? "log" : ""]
                 .filter(Boolean)
                 .join(" · ")}
             </summary>
@@ -487,9 +487,9 @@ function Initiative({ r }: { r: Rec }) {
                 ))}
               </ul>
             ) : null}
-            {r.comments.length ? (
+            {r.log.length ? (
               <ol className={styles.timeline} aria-label="Notes, newest first">
-                {[...r.comments].reverse().map((c) => (
+                {r.log.map((c) => (
                   <li key={c.id}>
                     <span className={styles.when}>{formatRelativeTime(c.at)}</span>
                     <span>{c.text}</span>
