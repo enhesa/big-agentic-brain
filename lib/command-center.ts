@@ -1207,8 +1207,9 @@ export function runCommandCenter(
       pick(["id", "level", "reason", "checkedAt"]);
       return ccHealth(actor, owner, args, via);
     case "list":
-      pick([]);
-      return ccList(owner);
+      // With an id: that one initiative, whole (the same answer as GET /api/command-center/<id>).
+      pick(["id"]);
+      return args.id === undefined ? ccList(owner) : ccGet(owner, args.id);
     case "remove":
       pick(["id"]);
       return ccRemove(owner, { id: args.id }, via);
@@ -1217,7 +1218,7 @@ export function runCommandCenter(
 
 /**
  * The MCP tool: string-typed fields read as in ccMcpArgs, and a 409 that carries the current record
- * in its text, because an MCP error is text only and the tool has no get. REST keeps `current` as a field.
+ * in its text, because an MCP error is text only. REST keeps `current` as a field.
  */
 export function runCommandCenterMcp(actor: CcActor, args: Record<string, unknown>, origin: string): unknown {
   try {

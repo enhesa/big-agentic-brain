@@ -271,6 +271,33 @@ describe("bab_command_center", () => {
     expect(ccGet(OWNER, "billing").id).toBe("billing");
   });
 
+  it("answers list with an id with the full record, the same as REST GET; without an id the list", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    await mcp({ action: "comment", id: "billing", record: { text: "woken" } });
+    const one = await mcp({ action: "list", id: "billing" });
+    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export", tasks: [{ id: "t1", text: "Build" }], questions: [{ id: "q1" }] });
+    expect((one.comments as { text: string }[]).map((c) => c.text)).toEqual(["woken"]);
+    expect(one).not.toHaveProperty("initiatives");
+    headers = asDevice();
+    expect(one).toEqual(await (await getOne("billing")).json());
+    expect((await mcp({ action: "list" })).initiatives).toHaveLength(1);
+  });
+
+  it("answers list with an unknown id, or another person's id, with a 404", async () => {
+    const missing = await mcpRefusal({ action: "list", id: "missing" });
+    expect(missing.status).toBe(404);
+    expect(missing.message).toMatch(/No initiative 'missing' in your Command Center/);
+    const { ccSetSwitch } = await import("../lib/command-center");
+    ccSetSwitch(OTHER, true);
+    const { findTool } = await import("../lib/mcp");
+    const otherActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
+    await findTool("bab_command_center")!.run(otherActor, { action: "publish", id: "theirs", record: RECORD }, { origin: "https://bab.example.com" });
+    const theirs = await mcpRefusal({ action: "list", id: "theirs" });
+    expect(theirs.status).toBe(404);
+    expect(theirs.message).not.toContain("Billing export");
+    expect((await mcpRefusal({ action: "list", id: "billing", text: "x" })).message).toMatch(/unknown field 'text' for list; allowed: id/);
+  });
+
   it("runs health through record", async () => {
     const rec = { v: 1, title: "Upkeep", kind: "recurring" };
     await mcp({ action: "publish", id: "upkeep", record: rec });

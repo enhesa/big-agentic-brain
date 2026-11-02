@@ -16,11 +16,22 @@ Command Center. If this skill is loaded and the person switched Command Center o
 record (same `id` every time, `v: 1`) on your first turn, after every task status change, and in
 your wrap-up at the end of every turn; when you stop to ask the person something, put the same
 question in `questions` with a stable id, and the turn their answer arrives, `clear_question` it
-before anything else. Never put secrets, client names or customer data in any field. A 403 saying
-Command Center is off means: tell the person once, in one line, how to enable it, then stop
-publishing this session. Never enable it, never publish for anyone else.
+before anything else. Never put secrets, client names or customer data in any field. Never enable
+it, never publish for anyone else.
 
-Give the person the page link once, the first time you publish.
+The last call of every turn is a `publish`, made after the work has returned. A `comment`, or a
+publish sent in the same batch as the work, does not count.
+
+Your first reply after your first publish includes the page link {{ORIGIN}}/command-center. Later replies
+do not repeat it.
+
+To see what another session published, call `list` with the `id`: it returns the full record and
+its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
+after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
+`expectSeq` protects the other session.
+
+After a 403 (Command Center off), tell the person once how to switch it on, with the link. Do not
+mention Command Center again in that session.
 
 ## The record
 
@@ -30,8 +41,8 @@ them). Publishing the same record again changes nothing (`unchanged: true`).
 
 Send the record as one object in `record`, with `action` and `id` beside it:
 `{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [] } }`.
-`action` and `id` go beside `record`, not inside it; the ones inside are ignored. `comment` and `health` take their
-fields in `record` the same way.
+Put `action`, `id` and `record` at the top level of the call. Never nest them inside `record`.
+`comment` and `health` take their fields in `record` the same way.
 
 | Field | Rules |
 | --- | --- |
@@ -55,14 +66,15 @@ fields in `record` the same way.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
-short. The server sets every time itself, so send none except `health.checkedAt`. A 409 answer includes the current record: merge it and publish again.
+short. The server sets every time itself, so send none except `health.checkedAt`.
 
 ## The other actions
 
 - `clear_question` with `id` and `questionId`: the turn the answer arrives.
 - `comment` with `id` and `text`: adds one note. Past 20, the oldest goes and the answer names it in `dropped`.
 - `health` with `id`, `level`, `reason` and `checkedAt`: for recurring upkeep, after each run.
-- `list`: your initiatives with `seq`, open questions and a data-health summary.
+- `list`: your initiatives with `seq`, open questions and a data-health summary. With `id`: that
+  initiative's full record, with its `seq`.
 - `remove` with `id`: when an initiative should not be shown any more.
 
 ## Keeping it true
