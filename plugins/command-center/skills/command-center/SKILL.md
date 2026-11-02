@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, whenever you are about to ask the person a question and again when their answer arrives, after a recurring check finishes, and in your wrap-up at the end of every turn. Skip it unless the person switched Command Center on."
+description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. Skip it unless the person switched Command Center on."
 ---
 
 # Command Center
@@ -10,20 +10,22 @@ plugin for the `bab_command_center` tool. The same text is served at `<bab_url>/
 
 Command Center is a private page, <bab_url>/command-center, where the person sees what their own
 agent sessions are doing: initiatives with progress, open questions with their age, the health of
-recurring upkeep, and links. You publish; the page only shows. Nobody else sees it.
+recurring upkeep, links, and a short log of what was worked on. You publish; the page only shows.
+Nobody else sees it.
 
 ## The rule
 
-Command Center. If this skill is loaded and the person switched Command Center on, keep their
-<bab_url>/command-center page true: call `bab_command_center` `publish` with the whole initiative
-record (same `id` every time, `v: 1`) on your first turn, after every task status change, and in
-your wrap-up at the end of every turn; when you stop to ask the person something, put the same
-question in `questions` with a stable id, and the turn their answer arrives, `clear_question` it
-before anything else. Never put secrets, client names or customer data in any field. Never enable
-it, never publish for anyone else.
+The last call of every turn is `publish` with `worked`, even when the turn only answered a question
+or declined a task.
 
-The last call of every turn is a `publish`, made after the work has returned. A `comment`, or a
-publish sent in the same batch as the work, does not count.
+If this skill is loaded and the person switched Command Center on, call `bab_command_center`
+`publish` with the whole initiative record (same `id` every time, `v: 1`) on your first turn, after
+every task status change, and as the last call of every turn, made after the work has returned.
+`worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
+fields were mapped". When you stop to ask the person something, put the same question in
+`questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
+Never put secrets, client names or customer data in any field. Never enable it, never publish for
+anyone else.
 
 Your first reply after your first publish includes the page link <bab_url>/command-center. Later replies
 do not repeat it.
@@ -38,14 +40,13 @@ publishing and do not mention Command Center again in that session.
 
 ## The record
 
-`publish` takes the whole record. Leave out a field and it is gone; send what is true now. Two
-exceptions: leaving out `comments` or `health` keeps what is there (send `[]` or `null` to clear
-them). Publishing the same record again changes nothing (`unchanged: true`).
+`publish` takes the whole record. Leave out a field and it is gone; send what is true now. One
+exception: leaving out `health` keeps it (send `null` to clear it). Publishing the same record
+again changes nothing (`unchanged: true`), but a new `worked` line is still logged.
 
 Send the record as one object in `record`, with `action` and `id` beside it:
-`{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [] } }`.
+`{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [], "worked": "Planned the export" } }`.
 Put `action`, `id` and `record` at the top level of the call. Never nest them inside `record`.
-`comment` and `health` take their fields in `record` the same way.
 
 | Field | Rules |
 | --- | --- |
@@ -61,10 +62,11 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `priority` | `urgent`, `high`, `low`, `paused` or null. Paused hides its questions. |
 | `tasks` | At most 50 `{ id, text (120), status }`, status `pending`, `in_progress` or `done`. None for recurring. |
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
-| `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. |
-| `comments` | At most 20 `{ id, text (500) }`. Sent, they replace the list; left out, the list stays. |
+| `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after each run. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
 | `source` | Optional `{ machine (20), session (60) }`, shown as "last pushed by". |
+| `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
+| `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
@@ -73,21 +75,19 @@ short. The server sets every time itself, so send none except `health.checkedAt`
 
 ## The other actions
 
-- `clear_question` with `id` and `questionId`: the turn the answer arrives.
-- `comment` with `id` and `text`: adds one note. Past 20, the oldest goes and the answer names it in `dropped`.
-- `health` with `id`, `level`, `reason` and `checkedAt`: for recurring upkeep, after each run.
 - `list`: your initiatives with `seq`, open questions and a data-health summary. With `id`: that
   initiative's full record, with its `seq`.
-- `remove` with `id`: when an initiative should not be shown any more.
+- `remove` with `id`: when an initiative should not be shown any more. Its log stays.
 
 ## Keeping it true
 
-- Publish again after a restart: the record is whole state, so a replay changes nothing.
+- The server logs your `worked` lines and what it sees itself: tasks started and done, questions
+  asked and cleared, health and state changes. A retried publish logs nothing twice.
 - The person can dismiss a question on the page. It stays dismissed while you send the same id
   and text (the answer lists it in `dismissed`): stop asking it. Reword it only if it is a new ask.
 - A question older than 3 days, on a done or parked initiative, or kept by another session is
-  shown as possibly stale. Clear what is answered.
-- An active initiative with no publish for 14 days is shown as silent and goes after 60 days. Done
-  and parked ones go 30 days after their last publish.
+  shown as possibly stale. Leave answered ones out of the next publish.
+- The page shows active initiatives. Done, parked and silent ones (no publish for 14 days) leave
+  the page but stay in `list` and in the log. A record goes 30 days after its last publish.
 - Recurring upkeep is overdue when its health is older than 26 hours (daily), 8 days (weekly) or
   2 hours (drain).

@@ -426,7 +426,7 @@ describe("the command-center skill", () => {
     const text = await (await GET(new Request("https://bab.example.com/instructions/command-center.md", { headers: { host: "bab.example.com" } }) as never)).text();
     expect(text).toMatch(/^---\nname: command-center\ndescription: .+\n---/);
     expect(text).not.toContain("{{ORIGIN}}");
-    expect(text).toContain("/command-center page true: call `bab_command_center` `publish`");
+    expect(text.replace(/\s+/g, " ")).toContain("The last call of every turn is `publish` with `worked`, even when the turn only answered a question or declined a task.");
     expect(text).not.toMatch(/node /);
   });
 
