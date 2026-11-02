@@ -535,7 +535,7 @@ describe("migration", () => {
   it("creates the file tables when a database is rewound to v50", async () => {
     const { getDb, closeDb } = await import("../lib/db");
     const db = getDb();
-    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DROP TABLE file_upload_links; DROP TABLE device_bind_notices; DELETE FROM migrations WHERE version IN (51, 52);");
+    db.exec("DROP TABLE files; DROP TABLE file_shares; DROP TABLE file_links; DROP TABLE file_upload_links; DROP TABLE device_bind_notices; DELETE FROM migrations WHERE version >= 51;");
     closeDb();
     vi.resetModules();
     const again = await import("../lib/db");

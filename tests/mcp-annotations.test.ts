@@ -21,6 +21,8 @@ const WRITERS_DESTRUCTIVE: Record<string, boolean> = {
   bab_files: true,
   // delete removes a key; unlock ends a lock.
   bab_kv: true,
+  // remove drops one of the caller's own initiatives.
+  bab_command_center: true,
 };
 
 describe("MCP tool annotations", () => {

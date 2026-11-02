@@ -73,7 +73,7 @@ describe("lib/instructions", () => {
 // like the b in a Windows path into a literal control byte, silently corrupting a path
 // colleagues were told to type. The damage is invisible in a diff and in most editors.
 describe("hosted instruction files contain no control characters", () => {
-  const FILES = ["install.md", "skill.md"];
+  const FILES = ["install.md", "skill.md", "command-center.md"];
 
   for (const name of FILES) {
     it(`${name} has no stray control bytes`, () => {
