@@ -125,6 +125,32 @@ How the report summarises them:
 - Comparisons are paired per task (trials averaged within each task), against A and B vs C. They report the mean difference and ratio of means with BCa and paired-t 95% CIs over task clusters, plus an exact sign-flip permutation p (**uncorrected** for multiplicity). Claims not distinguishable from B at this n are not bolded.
 - Each comparison is shown for all tasks, originals only, and variants only.
 
+## Command Center evals
+
+Three suites check the optional command-center skill (`plugins/command-center`) and the `bab_command_center` tool. Each run starts a fresh BAB with Command Center on, a test person who switches it on through the page (the sign-in proxy headers, trusted only on this throwaway server), and an agent bound to a device with `bab_identify`, like the installed BAB plugin.
+
+```bash
+pnpm build
+pnpm eval:cc-contract                                   # no LLM, about 30 s, runs on PRs
+pnpm eval --suite cc --dry-run                          # no LLM: ideal scripts pass, careless scripts fail
+pnpm eval --suite cc-trigger --dry-run
+ANTHROPIC_API_KEY=... pnpm eval --suite cc              # Haiku, 8 scenarios, 2 trials, cap $2
+ANTHROPIC_API_KEY=... pnpm eval --suite cc-trigger      # Haiku, 4 scenarios, 2 trials, cap $2
+```
+
+- **Contract** (`cc-contract.mjs`, `fixtures/cc-session.json`): replays the MCP calls of a typical session and checks the slim tool schema (`action`, `id`, `record`), each answer and the stored record after each step: the off sentence before opt-in, first publish, task change, question, `clear_question`, comment, a secret refused, recurring health, `list`, a no-op republish, a stale `expectSeq` from a second device (409 with the current record after `current: `), the merged publish, and the 403 after switching off with nothing stored.
+- **Behaviour** (`--suite cc`, `lib/cc-scenarios.mjs`): the skill text as served at `/instructions/command-center.md` is in the system prompt with the harness clock (`Current time (UTC): ...`, so recurring health can fill `checkedAt`), plus a `work` tool that stands in for real work. The tool answers each step with a short fixed result for its kind (map, exporter, tests: what changed, a file or test name, tests pass), read from the step text with negated clauses such as "do not write the exporter yet" removed; a bare "Done" made agents distrust it and stall. Scenarios: `start`, `task-change`, `ask`, `answer`, `recurring`, `off-mid-session`, `secret`, `second-session`. Graded from the stored records and the transcript: publish on the first turn and as the last call of every turn, one initiative with a stable id, the question in the record and asked in the reply (a question mark, or the options listed while the record holds the open question) and cleared first the turn the answer arrives, no work call run as the exporter step and nothing but the mapping after the question is recorded (graded on the work calls, not their wording), no publish or other call after the off 403 and one reply with the switch-on instruction (the link and "switch it on"; a later "still off" without it does not count), the generated secret never sent to BAB, a 409 forced right before the agent's first publish (so listing first does not avoid it), merged from the record it carries (reading the other session's record with `list` and the `id` first is fine).
+- **Trigger** (`--suite cc-trigger`): only the skill's frontmatter description, behind a `skill` tool. Checks that the agent loads it on turn 1 when Command Center is on and not when the person says it is off.
+- `--dry-run` swaps the LLM for each scenario's `ideal` script, then runs other careful scripts (`goodScripts`, such as listing before every publish) and careless ones (`badScripts`); every ideal and careful script must pass and every careless one must fail a check.
+
+Output: `summary.md` (pass rate per scenario with a Wilson 95% CI, then per check), `results.json`, and `runs/<scenario>-t<n>/` with `transcript.jsonl` (the test secret is replaced by `[TEST-SECRET]`) and `grade.json`. `--tasks start,answer` picks scenarios; `--trials` and `--budget-usd` work as above.
+
+The plugin also carries a small `claude plugin eval` spec (`plugins/command-center/evals/`, trigger cases only):
+
+```bash
+claude plugin eval plugins/command-center --runs 3 --max-cost-usd 2 --output-dir "$TMPDIR/cc-plugin-eval"
+```
+
 ## Tasks
 
 `tasks/<id>/` contains:
@@ -183,8 +209,8 @@ Agent eval with the same tasks and conditions (core: 12 tasks × A/B/C × 3 tria
 ## CI
 
 `.github/workflows/evals.yml`:
-- **On pull requests** touching `lib/`, `app/api/`, `app/mcp/` or `evals/`: build, then `eval:validate`, then `eval:retrieval` with thresholds. No secrets are needed.
-- **On manual dispatch:** the agent eval (`smoke` or `full`, model and budget as inputs), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
+- **On pull requests** touching `lib/`, `app/api/`, `app/mcp/`, `evals/`, `plugins/command-center/`, `content/instructions/command-center.md` or the workflow itself: build, then `eval:validate`, `eval:retrieval` with thresholds, `eval:cc-contract` and the two Command Center dry runs. No secrets are needed.
+- **On manual dispatch:** the agent eval (`suite` core, tk, cc or cc-trigger; `smoke` or `full` for core and tk; model and budget as inputs, budget 0.50 USD by default; pass 2 for the cc suites), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
 
 
 ## Caveats

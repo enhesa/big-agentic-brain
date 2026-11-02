@@ -26,6 +26,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The Command Center skill says when to publish: on every task change, question and wrap-up.",
       "Agents can publish to Command Center with the whole record in one record field.",
       "A Command Center conflict over MCP now returns the current record, so agents can merge.",
+      "New Command Center evals: a contract replay on every pull request, plus behaviour and trigger suites for the skill.",
       "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
       "Command Center cards now flow without gaps, with a larger progress ring and link hosts shown.",
       "The Command Center page is more compact: a one-line header, short question cards and four initiative columns on wide screens.",
