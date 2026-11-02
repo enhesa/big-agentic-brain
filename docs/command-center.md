@@ -31,7 +31,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | --- | --- |
 | `publish` (the whole record, optional `expectSeq`) | `PUT /api/command-center/<id>` |
 | `list` | `GET /api/command-center` |
-| none | `GET /api/command-center/<id>` |
+| `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `clear_question` (`id`, `questionId`) | `POST /api/command-center/<id>/actions` |
 | `comment` (`id`, `text`) | same |
 | `health` (`id`, `level`, `reason`, `checkedAt`) | same |
@@ -65,7 +65,7 @@ In short:
 - `expectSeq` that does not match is 409 with the current record, unless the record you send is
   already exactly the current one (a retried request): that is `unchanged: true`, not a 409.
 - A 409 answer includes the current record: merge it and publish again. REST returns it as
-  `current`; the MCP tool, which has no get, puts it in the error text after `current: `.
+  `current`; the MCP tool puts it in the error text after `current: `, because an MCP error is text only.
 - Publishing the same record again changes nothing (`unchanged: true`): no new `seq`, time or audit row.
 - Leaving out `comments` or `health` keeps them, since they have their own actions; `[]` or `null` clears them.
 - A question the person dismissed on the page stays cleared while the agent sends the same id and text; the answer lists it in `dismissed`. A dismissal moves neither `seq` nor `updatedAt`.

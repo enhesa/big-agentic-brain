@@ -30,6 +30,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
       "Command Center cards now flow without gaps, with a larger progress ring and link hosts shown.",
       "The Command Center page is more compact: a one-line header, short question cards and four initiative columns on wide screens.",
+      "Command Center list with an id returns that initiative's full record, so agents can merge another session's work.",
+      "The Command Center skill: publish last every turn, share the link once, stay quiet after a 403.",
     ],
   },
   {
