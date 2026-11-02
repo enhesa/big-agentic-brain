@@ -157,22 +157,20 @@ function OnState({ view }: { view: CcView }) {
   }
   return (
     <>
-      <header className={styles.top}>
-        <div className={styles.titleBlock}>
-          <span className={styles.kicker}>Private to you. Nothing confidential.</span>
-          <div className={styles.titleLine}>
-            <h1 className={styles.h1}>Command Center</h1>
-            <span className={`${styles.status} ${styles.statusOn}`}>
-              <span className={styles.statusDot} aria-hidden="true" />
-              On
-            </span>
-          </div>
+      {/* One line: title, On, last push, data health, then the menu at the right. */}
+      <header className={`${styles.top} ${styles.topOn}`}>
+        <div className={styles.titleLine}>
+          <h1 className={styles.h1}>Command Center</h1>
+          <span className={`${styles.status} ${styles.statusOn}`}>
+            <span className={styles.statusDot} aria-hidden="true" />
+            On
+          </span>
           <p className={styles.subline}>{view.lastPush ? <>Last push {formatRelativeTime(view.lastPush)}</> : <>Nothing published yet</>}</p>
         </div>
+        <DataHealth h={view.dataHealth} />
+        <span className={styles.privacy}>Private to you. Nothing confidential.</span>
         <Settings />
       </header>
-
-      <DataHealth h={view.dataHealth} />
 
       <section className={styles.section} aria-labelledby="cc-needs">
         <SectionHead id="cc-needs" title="Needs you" count={view.needsYou.length} />
@@ -186,26 +184,28 @@ function OnState({ view }: { view: CcView }) {
                 className={`${styles.qCard} ${urgencyClass(initiative.priority)}`}
                 aria-label={`Question from ${initiative.title}`}
               >
+                <p className={styles.qText}>{question.text}</p>
                 <div className={styles.qTop}>
-                  <span className={styles.chip}>{initiative.title}</span>
+                  <span className={styles.chip} title={initiative.title}>
+                    {initiative.title}
+                  </span>
                   <PriorityTag p={initiative.priority} />
                   {question.stale ? <span className={`${styles.tag} ${styles.tagWarn}`}>possibly stale</span> : null}
-                </div>
-                <p className={styles.qText}>{question.text}</p>
-                {question.options.length ? (
-                  <ul className={styles.options} aria-label="Options your agent offered">
-                    {question.options.map((o, i) => (
-                      <li key={i} className={styles.option}>
-                        {o}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <div className={styles.qFoot}>
                   <span className={styles.age}>
                     <ClockIcon />
                     asked {formatRelativeTime(question.askedAt)}
                   </span>
+                </div>
+                <div className={styles.qFoot}>
+                  {question.options.length ? (
+                    <ul className={styles.options} aria-label="Options your agent offered">
+                      {question.options.map((o, i) => (
+                        <li key={i} className={styles.option}>
+                          {o}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <form method="post" action="/command-center/dismiss">
                     <input type="hidden" name="id" value={initiative.id} />
                     <input type="hidden" name="questionId" value={question.id} />
@@ -389,8 +389,6 @@ function Deadline({ r }: { r: Rec }) {
 
 function Progress({ r }: { r: Rec }) {
   if (r.progress === null) return null;
-  const done = r.tasks.filter((t) => t.status === "done").length;
-  const total = r.tasks.length;
   const c = 2 * Math.PI * 17;
   return (
     <div className={styles.progress}>
@@ -401,11 +399,6 @@ function Progress({ r }: { r: Rec }) {
         </svg>
         <span className={styles.percent}>{r.progress}%</span>
       </div>
-      {total ? (
-        <span className={styles.progressTasks}>
-          {done}/{total} tasks
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -438,78 +431,82 @@ function Initiative({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
   const next = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
   const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
+  const done = r.tasks.filter((t) => t.status === "done").length;
   const cls = [styles.card, urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.state === "done" ? styles.isDone : ""].join(" ");
   return (
     <article className={cls} data-initiative={r.id} aria-labelledby={`cc-i-${r.id}`}>
       <div className={styles.cardHead}>
-        <div className={styles.cardTitleBlock}>
-          <h4 id={`cc-i-${r.id}`} className={styles.cardTitle}>
-            {paused ? <PauseIcon /> : null}
-            {r.title}
-          </h4>
-          <div className={styles.chips}>
-            <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
-            <PriorityTag p={r.priority} />
-            {r.key ? <span className={styles.tag}>{r.key}</span> : null}
-            <Deadline r={r} />
-            {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
-            {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
-            {r.openQuestions ? (
-              <span className={`${styles.tag} ${styles.tagInfo}`}>
-                {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
-              </span>
-            ) : null}
-          </div>
-        </div>
+        <h4 id={`cc-i-${r.id}`} className={styles.cardTitle}>
+          {paused ? <PauseIcon /> : null}
+          {r.title}
+        </h4>
         <Progress r={r} />
+      </div>
+      <div className={styles.chips}>
+        <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
+        <PriorityTag p={r.priority} />
+        {r.key ? <span className={styles.tag}>{r.key}</span> : null}
+        <Deadline r={r} />
+        {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
+        {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
+        {r.openQuestions ? (
+          <span className={`${styles.tag} ${styles.tagInfo}`}>
+            {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
+          </span>
+        ) : null}
       </div>
 
       {next && r.state !== "done" ? (
         <p className={styles.next}>
           <TaskIcon status={next.status} />
           <span className={styles.nextLabel}>{next.status === "in_progress" ? "Now" : "Next up"}</span>
-          <span className={styles.nextText}>{next.text}</span>
+          <span className={styles.nextText} title={next.text}>
+            {next.text}
+          </span>
         </p>
       ) : null}
 
-      {r.tasks.length || r.comments.length ? (
-        <details className={styles.details}>
-          <summary>
-            Show{" "}
-            {[r.tasks.length ? `${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : "", r.comments.length ? `${r.comments.length} ${r.comments.length === 1 ? "note" : "notes"}` : ""]
-              .filter(Boolean)
-              .join(" · ")}
-          </summary>
-          {r.tasks.length ? (
-            <ul className={styles.tasks} aria-label="Tasks">
-              {r.tasks.map((t) => (
-                <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
-                  <TaskIcon status={t.status} />
-                  <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
-                  <span>{t.text}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {r.comments.length ? (
-            <ol className={styles.timeline} aria-label="Notes, newest first">
-              {[...r.comments].reverse().map((c) => (
-                <li key={c.id}>
-                  <span className={styles.when}>{formatRelativeTime(c.at)}</span>
-                  <span>{c.text}</span>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-        </details>
-      ) : null}
+      {/* One meta line: tasks and notes behind a toggle, links, then who pushed last. An opened
+          toggle takes the full width and pushes the links and footer below its list. */}
+      <div className={styles.meta}>
+        {r.tasks.length || r.comments.length ? (
+          <details className={styles.details}>
+            <summary>
+              {[r.tasks.length ? `${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : "", r.comments.length ? `${r.comments.length} ${r.comments.length === 1 ? "note" : "notes"}` : ""]
+                .filter(Boolean)
+                .join(" · ")}
+            </summary>
+            {r.tasks.length ? (
+              <ul className={styles.tasks} aria-label="Tasks">
+                {r.tasks.map((t) => (
+                  <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
+                    <TaskIcon status={t.status} />
+                    <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
+                    <span>{t.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {r.comments.length ? (
+              <ol className={styles.timeline} aria-label="Notes, newest first">
+                {[...r.comments].reverse().map((c) => (
+                  <li key={c.id}>
+                    <span className={styles.when}>{formatRelativeTime(c.at)}</span>
+                    <span>{c.text}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </details>
+        ) : null}
 
-      {r.links.length ? <Links links={r.links} /> : null}
+        {r.links.length ? <Links links={r.links} /> : null}
 
-      <p className={styles.cardFoot}>
-        Updated {formatRelativeTime(r.updatedAt)}
-        {who ? <> · last pushed by {who}</> : null}
-      </p>
+        <p className={styles.cardFoot} title={who ? `Last pushed by ${who}` : undefined}>
+          Updated {formatRelativeTime(r.updatedAt)}
+          {who ? <> · {who}</> : null}
+        </p>
+      </div>
     </article>
   );
 }
@@ -551,7 +548,7 @@ function Upkeep({ r }: { r: Rec }) {
     <li className={`${styles.upRow} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id}>
       <span className={`${styles.hDot} ${styles[`h_${level}`] ?? ""}`} aria-hidden="true" />
       <div className={styles.upMain}>
-        <div className={styles.upTitle}>
+        <span className={styles.upTitle}>
           {paused ? <PauseIcon /> : null}
           <span className={styles.upName}>{r.title}</span>
           <span className={`${styles.tag} ${styles[`ht_${level}`] ?? ""}`}>{r.health ? HEALTH_LABEL[level] : "No health yet"}</span>
@@ -560,8 +557,12 @@ function Upkeep({ r }: { r: Rec }) {
           {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent</span> : null}
           <PriorityTag p={r.priority === "paused" ? null : r.priority} />
           {paused ? <span className={`${styles.tag} ${styles.tagPaused}`}>paused</span> : null}
-        </div>
-        {r.health?.reason ? <p className={styles.upReason}>{r.health.reason}</p> : null}
+        </span>
+        {r.health?.reason ? (
+          <p className={styles.upReason} title={r.health.reason}>
+            {r.health.reason}
+          </p>
+        ) : null}
         {r.links.length ? <Links links={r.links} /> : null}
       </div>
       <span className={styles.upWhen} title={r.health ? `Agent time ${r.health.checkedAt}` : undefined}>
