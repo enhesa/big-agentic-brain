@@ -36,7 +36,7 @@ export function stepKind(step) {
   const s = String(step ?? "").toLowerCase().replace(/\b(do not|don't|not yet|without|never|instead of|before)\b[^.;:!?]*/g, " ");
   const hits = [
     ["tests", s.search(/\b(add|write|run)\w* (the |some |unit |integration )?tests?\b|\btests? (for|of|that)\b|^\s*tests?\b/)],
-    ["exporter", s.search(/\b(write|implement|build|create|code)\w*\b[^.;]*\bexporter\b/)],
+    ["exporter", s.search(/\bexporter\b/)],
     ["map", s.search(/\bmap(s|ped|ping)?\b/)],
   ].filter(([, i]) => i >= 0);
   if (!hits.length) return "other";
