@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { assertBuilt } from "./bab-server.mjs";
 import { ccAgent, ccPerson, fakeSecret, otherDevice, setSwitch, skillText, splitSkill, startCcBab } from "./cc.mjs";
-import { badScripts, goodScripts, readState, SCENARIOS, snapshot, triggerChecks } from "./cc-scenarios.mjs";
+import { badScripts, goodScripts, readState, SCENARIOS, snapshot, stepKind, triggerChecks, workResult } from "./cc-scenarios.mjs";
 import { REPO_ROOT, scratchRoot } from "./paths.mjs";
 import { priceFor, PRICES_CHECKED } from "./prices.mjs";
 import { costUsd, makeProvider, redact } from "./providers.mjs";
@@ -100,7 +100,8 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
       : scenario.ideal);
     const prov = dryRun ? new Scripted(ideal, vars) : makeProvider(providerCfg);
     const skill = splitSkill(await skillText(bab.origin));
-    let sys = `${CC_SYSTEM}\n\nCommand Center: ${scenario.context === "off" ? "the person switched it off" : "the person switched it on"}.`;
+    // The harness clock, so the agent can fill health.checkedAt (a real session knows the date).
+    let sys = `${CC_SYSTEM}\n\nCurrent time (UTC): ${x.now}.\n\nCommand Center:${scenario.context === "off" ? "the person switched it off" : "the person switched it on"}.`;
     if (mcp.instructions) sys += `\n\n# MCP server instructions\n## bab (Big Agentic Brain)\n${mcp.instructions}`;
     if (suite === "cc") sys += `\n\n# Skill: command-center (loaded)\n${skill.body}`;
     const babTools = await mcp.listTools();
@@ -140,7 +141,11 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
           const a = call.args ?? {};
           let out = "";
           let isError = false;
-          if (call.name === "work") out = scenario.work ? scenario.work(a) : `Done: ${a.step ?? "the step"}.`;
+          let kind;
+          if (call.name === "work") {
+            kind = stepKind(a.step);
+            out = workResult(scenario, a);
+          }
           else if (call.name === "skill") {
             out = /command-center/.test(a.name ?? "") ? skill.body : `No skill named ${a.name}.`;
             isError = !/command-center/.test(a.name ?? "");
@@ -155,8 +160,8 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
             out = `unknown tool ${call.name}`;
             isError = true;
           }
-          events.push({ turn, type: "tool", name: call.name, args: a, isError, out });
-          log({ ev: "tool", turn, name: call.name, args: a, isError, out: out.slice(0, 20_000) });
+          events.push({ turn, type: "tool", name: call.name, args: a, isError, out, kind });
+          log({ ev: "tool", turn, name: call.name, args: a, isError, out: out.slice(0, 20_000), ...(kind ? { kind } : {}) });
           results.push({ id: call.id, text: out, isError });
         }
         messages.push(...prov.toolResults(results));
