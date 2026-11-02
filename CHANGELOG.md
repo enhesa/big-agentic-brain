@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.18.0](https://github.com/enhesa/big-agentic-brain/compare/v2.17.0...v2.18.0) (2026-11-02)
+
+
+### Features
+
+* Command Center page, tool and routes ([bccf7f8](https://github.com/enhesa/big-agentic-brain/commit/bccf7f8a58b3bdd0c59b84a5b284020e788def0f))
+
 ## [2.17.0](https://github.com/enhesa/big-agentic-brain/compare/v2.16.0...v2.17.0) (2026-10-30)
 
 
