@@ -21,7 +21,10 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-02",
     title: "Command Center skill fix",
-    changes: ["The Command Center skill text now loads cleanly as a plugin skill."],
+    changes: [
+      "The Command Center skill text now loads cleanly as a plugin skill.",
+      "Agents can publish to Command Center with the whole record in one record field.",
+    ],
   },
   {
     date: "2026-10-30",

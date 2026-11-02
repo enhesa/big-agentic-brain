@@ -169,6 +169,73 @@ describe("bab_command_center", () => {
     expect(out).toMatchObject({ id: "billing", seq: 1 });
     expect(JSON.parse(await tool.run(actor, { action: "list" })).initiatives).toHaveLength(1);
   });
+
+  const mcpActor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };
+  async function mcp(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { findTool } = await import("../lib/mcp");
+    return JSON.parse(await findTool("bab_command_center")!.run(mcpActor, args, { origin: "https://bab.example.com" }));
+  }
+  async function mcpRefusal(args: Record<string, unknown>): Promise<{ status: number; message: string }> {
+    try {
+      await mcp(args);
+    } catch (err) {
+      const e = err as { status?: number; message: string };
+      return { status: e.status ?? 0, message: e.message };
+    }
+    throw new Error("expected a refusal");
+  }
+
+  it("declares record as an object and merges it under the top-level action and id", async () => {
+    const { findTool } = await import("../lib/mcp");
+    const props = findTool("bab_command_center")!.inputSchema.properties as Record<string, { type: string }>;
+    expect(props.record.type).toBe("object");
+    expect(await mcp({ action: "publish", id: "billing", record: { ...RECORD, id: "ignored" } })).toMatchObject({ id: "billing", seq: 1 });
+    expect(await mcp({ action: "comment", id: "billing", record: { text: "from record", action: "remove" } })).toEqual({ seq: 2 });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "billing").comments.map((c) => c.text)).toEqual(["from record"]);
+  });
+
+  it("reads a string-typed v, expectSeq and JSON text fields on the MCP path", async () => {
+    const out = await mcp({
+      action: "publish",
+      id: "billing",
+      v: "1",
+      expectSeq: "0",
+      tasks: JSON.stringify(RECORD.tasks),
+      questions: JSON.stringify([{ id: "q1", text: "Which months?", options: '["Last 3","All"]' }]),
+      links: '[{"label":"PR","url":"https://git.example.com/acme/x/pull/1"}]',
+      title: "Billing export",
+    });
+    expect(out).toMatchObject({ id: "billing", seq: 1 });
+    const { ccGet } = await import("../lib/command-center");
+    const rec = ccGet(OWNER, "billing");
+    expect(rec.tasks).toHaveLength(1);
+    expect(rec.questions[0].options).toEqual(["Last 3", "All"]);
+    expect(rec.links).toHaveLength(1);
+    expect(await mcp({ action: "publish", id: "billing", record: JSON.stringify({ ...RECORD, title: "Billing export 2", v: "1" }) })).toMatchObject({ seq: 2 });
+    expect(ccGet(OWNER, "billing").title).toBe("Billing export 2");
+  });
+
+  it("answers 400 naming the fix for JSON text that does not parse, and for a record that is not an object", async () => {
+    const bad = await mcpRefusal({ action: "publish", id: "billing", ...RECORD, tasks: "[{oops" });
+    expect(bad.status).toBe(400);
+    expect(bad.message).toMatch(/^tasks came as text that is not a JSON array or object/);
+    expect((await mcpRefusal({ action: "publish", id: "billing", ...RECORD, links: "plain words" })).status).toBe(400);
+    for (const record of [[RECORD], 7, "[1]"]) {
+      const r = await mcpRefusal({ action: "publish", id: "billing", record });
+      expect(r.status).toBe(400);
+      expect(r.message).toMatch(/record must be a JSON object/);
+    }
+  });
+
+  it("keeps REST strict: a string v or JSON text tasks is refused there", async () => {
+    headers = asDevice();
+    const v = await put("billing", { ...RECORD, v: "1" });
+    expect(v.status).toBe(400);
+    expect((await v.json()).error).toMatch(/v must be 1/);
+    expect((await put("billing", { ...RECORD, tasks: JSON.stringify(RECORD.tasks) })).status).toBe(400);
+    expect((await mcp({ action: "publish", id: "billing", ...RECORD, v: "1" })).seq).toBe(1);
+  });
 });
 
 describe("POST /api/me", () => {

@@ -28,6 +28,11 @@ Give the person the page link once, the first time you publish.
 exceptions: leaving out `comments` or `health` keeps what is there (send `[]` or `null` to clear
 them). Publishing the same record again changes nothing (`unchanged: true`).
 
+Send the record as one object in `record`, with `action` and `id` beside it:
+`{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [] } }`.
+The top-level `action` and `id` win over any inside `record`. `comment` and `health` take their
+fields in `record` the same way.
+
 | Field | Rules |
 | --- | --- |
 | `v` | `1`. Required. |

@@ -1096,7 +1096,63 @@ export function ccList(owner: string, now: number = Date.now()): { initiatives: 
  * The one entry point for the REST routes and the MCP tool: switch, identity, pace, opt-in, then
  * the action. The owner is always the caller's resolved identity.
  */
-export function runCommandCenter(actor: CcActor, args: Record<string, unknown>, via: AuditVia, origin: string): unknown {
+/**
+ * Merges a `record` argument over the other fields, so a client can send the whole record as one
+ * declared object. The top-level `action` and `id` win over the ones inside it.
+ */
+function mergeRecordArg(args: Record<string, unknown>): Record<string, unknown> {
+  if (!("record" in args) || args.record === undefined) return args;
+  const { record, ...top } = args;
+  if (!isObject(record)) {
+    throw new ValidationError('record must be a JSON object, such as "record": { "v": 1, "id": "billing-export", "title": "Billing export" }; send it as an object, not text or a list');
+  }
+  const merged: Record<string, unknown> = { ...top, ...record };
+  if (top.action !== undefined) merged.action = top.action;
+  if (top.id !== undefined) merged.id = top.id;
+  return merged;
+}
+
+const CC_MCP_NUMBERS = ["v", "expectSeq"];
+const CC_MCP_JSON = ["record", "tasks", "questions", "links", "comments", "options", "health", "source"];
+
+function parseJsonArg(value: string, field: string): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    throw new ValidationError(`${field} came as text that is not a JSON array or object; send it as an array or object, or put the whole record in "record"`);
+  }
+  return parsed;
+}
+
+/**
+ * The MCP path only: some clients send fields the slim tool schema does not declare as strings.
+ * Reads a numeric string for v and expectSeq, and JSON text for the array and object fields. REST stays strict.
+ */
+export function ccMcpArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const k of CC_MCP_NUMBERS) {
+    const v = out[k];
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) out[k] = Number(v.trim());
+  }
+  for (const k of CC_MCP_JSON) {
+    if (typeof out[k] === "string") out[k] = parseJsonArg(out[k] as string, k);
+  }
+  if (Array.isArray(out.questions)) {
+    out.questions = out.questions.map((q, i) =>
+      isObject(q) && typeof q.options === "string" ? { ...q, options: parseJsonArg(q.options, `questions[${i}].options`) } : q,
+    );
+  }
+  // A record sent as JSON text can carry the same string-typed fields.
+  if (isObject(out.record)) out.record = ccMcpArgs(out.record);
+  return out;
+}
+
+export function runCommandCenter(actor: CcActor, rawArgs: Record<string, unknown>, via: AuditVia, origin: string): unknown {
+  const args = mergeRecordArg(rawArgs);
   const action = typeof args.action === "string" ? args.action : "";
   if (!CC_ACTIONS.includes(action as CcAction)) {
     throw new ValidationError(`action must be one of ${CC_ACTIONS.join(", ")}; required, has no default`);
