@@ -43,8 +43,8 @@ The MCP tool declares only `action`, `id` and `record`. Agents send the record, 
 `comment` and `health`, as one object in `record`; the top-level `action` and `id` win. A `record`
 that is not an object is a 400. Some clients send undeclared fields as strings, so on the MCP path
 only a numeric string `v` or `expectSeq` and JSON text for `tasks`, `questions`, `options`, `links`,
-`comments`, `health` and `source` are read; text that does not parse is a 400 naming the field.
-REST stays strict.
+`comments`, `health` and `source` are read (`null` clears `health` and `comments`); text that does not
+parse is a 400 naming the field. REST stays strict and refuses a `record` field.
 
 Only a bound identity is served: the BAB plugin's device, the sign-in proxy, or an API token bound
 to the person. An identity sent only in headers is refused. The owner of every record is the

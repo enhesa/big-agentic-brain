@@ -250,6 +250,19 @@ describe("bab_command_center", () => {
     expect((await v.json()).error).toMatch(/v must be 1/);
     expect((await put("billing", { ...RECORD, tasks: JSON.stringify(RECORD.tasks) })).status).toBe(400);
     expect((await mcp({ action: "publish", id: "billing", ...RECORD, v: "1" })).seq).toBe(1);
+    const wrapped = await put("billing", { record: RECORD });
+    expect(wrapped.status).toBe(400);
+    expect((await wrapped.json()).error).toMatch(/unknown field 'record'/);
+    expect((await action("billing", { action: "comment", record: { text: "x" } })).status).toBe(400);
+  });
+
+  it("reads JSON text null as clearing health and comments on the MCP path", async () => {
+    const rec = { v: 1, title: "Upkeep", kind: "recurring", health: { level: "green", reason: "ok", checkedAt: "2026-01-31T09:30:00Z" } };
+    await mcp({ action: "publish", id: "upkeep", record: rec });
+    await mcp({ action: "publish", id: "upkeep", ...rec, health: "null", comments: "null" });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "upkeep").health).toBeNull();
+    expect((await mcpRefusal({ action: "publish", id: "upkeep", ...rec, links: "null" })).status).toBe(400);
   });
 });
 
