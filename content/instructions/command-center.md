@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: Keeps the person's private BAB Command Center page ({{ORIGIN}}/command-center) true with the bab_command_center tool. Use it in every session once the person has switched Command Center on: publish each initiative you work on, its tasks and the questions you ask them, and clear a question the turn its answer arrives.
+description: Keeps the person's private BAB Command Center page ({{ORIGIN}}/command-center) true with the bab_command_center tool. Use it in every session once the person has switched Command Center on. Publish each initiative you work on, its tasks and the questions you ask them, and clear a question the turn its answer arrives.
 ---
 
 # Command Center

@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-02",
+    title: "Command Center skill fix",
+    changes: ["The Command Center skill text now loads cleanly as a plugin skill."],
+  },
+  {
     date: "2026-10-30",
     title: "bab_kv released, Feedback in the footer, a steady top bar, people enrolled",
     changes: [
