@@ -121,3 +121,10 @@ the page, with dark values for `data-theme="dark"`, like /usage. Motion honours
 
 The open page polls `/command-center/state` every 15 seconds while the tab is visible and
 refreshes when the stamp changed. It does not use `/api/events`, which is public.
+
+## Evals
+
+`pnpm eval:cc-contract` replays a recorded agent session over MCP against a fresh BAB and checks
+every answer and the stored state; it runs on pull requests. `pnpm eval --suite cc` and
+`--suite cc-trigger` run an LLM agent through multi-turn scenarios with the skill text or only its
+description, and report a pass rate per scenario. See [evals/README.md](../evals/README.md).
