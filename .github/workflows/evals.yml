@@ -53,11 +53,15 @@ jobs:
         run: pnpm eval:retrieval --out "$RUNNER_TEMP/retrieval" --min-recall5 0.85 --min-mrr 0.80
       - name: Hard retrieval (vendor-overlap distractors + blind queries)
         run: pnpm eval:retrieval --corpus tk --hard-distractors --queries hard --out "$RUNNER_TEMP/retrieval-hard" --min-recall5 0 --min-mrr 0
+      - name: Command Center contract (replays a recorded session over MCP, checks the stored state)
+        if: always()
+        run: pnpm eval:cc-contract --out "$RUNNER_TEMP/cc-contract"
       - if: always()
         run: |
           { echo '## Baseline retrieval'; cat "$RUNNER_TEMP/retrieval/retrieval.md" 2>/dev/null
             echo '## Hard retrieval (vendor-overlap + blind)'
             cat "$RUNNER_TEMP/retrieval-hard/retrieval.md" 2>/dev/null
+            cat "$RUNNER_TEMP/cc-contract/cc-contract.md" 2>/dev/null
           } >> "$GITHUB_STEP_SUMMARY" || true
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -66,6 +70,7 @@ jobs:
           path: |
             ${{ runner.temp }}/retrieval/
             ${{ runner.temp }}/retrieval-hard/
+            ${{ runner.temp }}/cc-contract/
 
   agent:
     if: github.event_name == 'workflow_dispatch'

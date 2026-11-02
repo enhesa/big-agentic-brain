@@ -34,7 +34,8 @@
     "eval:smoke": "node evals/run.mjs --mode smoke",
     "eval:full": "node evals/run.mjs --mode full",
     "eval:validate": "node evals/run.mjs --validate",
-    "eval:retrieval": "node evals/retrieval.mjs"
+    "eval:retrieval": "node evals/retrieval.mjs",
+    "eval:cc-contract": "node evals/cc-contract.mjs"
   },
   "dependencies": {
     "next": "16.4.2",

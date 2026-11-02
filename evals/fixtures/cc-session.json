@@ -1,0 +1,272 @@
+{
+  "_about": "A typical Command Center session, as the MCP calls an agent sends with the slim tool schema (action, id, record). evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step). Checks: [path, op, value], ops eq, len, set, unset, match.",
+  "steps": [
+    {
+      "name": "publish before the person switched it on is a 403 that stores nothing",
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export" } },
+      "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
+    },
+    { "name": "the person switches it on (the page, never the agent)", "switch": "on" },
+    {
+      "name": "first publish on the first turn",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "in_progress" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "pending" },
+            { "id": "add-tests", "text": "Add tests", "status": "pending" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" }
+        }
+      },
+      "expect": {
+        "answer": { "id": "billing-export", "seq": 1 },
+        "state": {
+          "billing-export": [
+            ["seq", "eq", 1],
+            ["title", "eq", "Billing export"],
+            ["state", "eq", "active"],
+            ["kind", "eq", "project"],
+            ["tasks", "len", 3],
+            ["tasks.0.startedAt", "set"],
+            ["tasks.1.startedAt", "unset"],
+            ["links.0.url", "eq", "https://example.com/spec"],
+            ["source.session", "eq", "session-a"],
+            ["updatedAt", "set"]
+          ]
+        }
+      }
+    },
+    {
+      "name": "task status change publishes the whole record again",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "in_progress" },
+            { "id": "add-tests", "text": "Add tests", "status": "pending" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" }
+        }
+      },
+      "expect": {
+        "answer": { "seq": 2 },
+        "state": {
+          "billing-export": [
+            ["seq", "eq", 2],
+            ["tasks.0.status", "eq", "done"],
+            ["tasks.0.finishedAt", "set"],
+            ["tasks.1.status", "eq", "in_progress"],
+            ["tasks.1.startedAt", "set"]
+          ]
+        }
+      }
+    },
+    {
+      "name": "the agent stops to ask: the question goes into the record",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "in_progress" },
+            { "id": "add-tests", "text": "Add tests", "status": "pending" }
+          ],
+          "questions": [{ "id": "date-format", "text": "Which date format should the export use?", "options": ["ISO 8601", "DD/MM/YYYY"] }],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" }
+        }
+      },
+      "expect": {
+        "answer": { "seq": 3, "questions": [{ "id": "date-format" }] },
+        "state": {
+          "billing-export": [
+            ["questions", "len", 1],
+            ["questions.0.askedAt", "set"],
+            ["questions.0.clearedAt", "unset"],
+            ["questions.0.options", "len", 2]
+          ]
+        }
+      }
+    },
+    {
+      "name": "the answer arrives: clear_question before anything else",
+      "call": { "action": "clear_question", "id": "billing-export", "record": { "questionId": "date-format" } },
+      "expect": {
+        "answer": { "cleared": true },
+        "state": { "billing-export": [["seq", "eq", 4], ["questions.0.clearedAt", "set"]] }
+      }
+    },
+    {
+      "name": "clearing it again is a no-op",
+      "call": { "action": "clear_question", "id": "billing-export", "record": { "questionId": "date-format" } },
+      "expect": { "answer": { "cleared": false }, "state": { "billing-export": [["seq", "eq", 4]] } }
+    },
+    {
+      "name": "publish after the answer, without the question",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "done" },
+            { "id": "add-tests", "text": "Add tests", "status": "in_progress" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" }
+        }
+      },
+      "expect": {
+        "answer": { "seq": 5 },
+        "state": { "billing-export": [["tasks.1.status", "eq", "done"], ["questions.0.clearedAt", "set"]] }
+      }
+    },
+    {
+      "name": "a comment",
+      "call": { "action": "comment", "id": "billing-export", "record": { "text": "The exporter writes UTF-8 with a byte order mark for spreadsheet apps." } },
+      "expect": {
+        "answer": { "seq": 6 },
+        "state": { "billing-export": [["comments", "len", 1], ["comments.0.at", "set"], ["comments.0.text", "match", "byte order mark"]] }
+      }
+    },
+    {
+      "name": "a secret in a comment is refused and names the field",
+      "call": { "action": "comment", "id": "billing-export", "record": { "text": "Use the key {{secret}} for the test account." } },
+      "expect": {
+        "error": "confidential",
+        "state": { "billing-export": [["seq", "eq", 6], ["comments", "len", 1]] }
+      }
+    },
+    {
+      "name": "a recurring upkeep initiative",
+      "call": { "action": "publish", "id": "nightly-sync", "record": { "v": 1, "title": "Nightly sync check", "kind": "recurring", "cadence": "daily" } },
+      "expect": { "answer": { "seq": 1 }, "state": { "nightly-sync": [["kind", "eq", "recurring"], ["cadence", "eq", "daily"], ["health", "unset"]] } }
+    },
+    {
+      "name": "health after the recurring run",
+      "call": { "action": "health", "id": "nightly-sync", "record": { "level": "green", "reason": "Last run finished without errors", "checkedAt": "{{now}}" } },
+      "expect": {
+        "answer": { "seq": 2 },
+        "state": { "nightly-sync": [["health.level", "eq", "green"], ["health.checkedAt", "eq", "{{now}}"], ["health.receivedAt", "set"]] }
+      }
+    },
+    {
+      "name": "list shows both, with seq and the data-health summary",
+      "call": { "action": "list" },
+      "expect": {
+        "answer": { "initiatives": [{ "id": "billing-export", "seq": 6, "openQuestions": 0 }, { "id": "nightly-sync", "seq": 2 }] },
+        "answerChecks": [["initiatives", "len", 2], ["dataHealth", "set"]]
+      }
+    },
+    {
+      "name": "wrap-up republish of the same record is a no-op",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "done" },
+            { "id": "add-tests", "text": "Add tests", "status": "in_progress" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" }
+        }
+      },
+      "expect": { "answer": { "seq": 6, "unchanged": true }, "state": { "billing-export": [["seq", "eq", 6], ["comments", "len", 1]] } }
+    },
+    {
+      "name": "a stale expectSeq from a second session is a 409 and changes nothing",
+      "as": "second",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "tasks": [{ "id": "map-fields", "text": "Map the export fields", "status": "done" }],
+          "source": { "machine": "vm", "session": "session-b" },
+          "expectSeq": "{{seq-1:billing-export}}"
+        }
+      },
+      "expect": {
+        "error": "^expectSeq is 5 but 'billing-export' is at seq 6\\. Merge your change into the current record",
+        "state": { "billing-export": [["seq", "eq", 6], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
+      }
+    },
+    {
+      "name": "the merged record with the current expectSeq is accepted",
+      "as": "second",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "done" },
+            { "id": "add-tests", "text": "Add tests", "status": "done" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "vm", "session": "session-b" },
+          "expectSeq": "{{seq:billing-export}}"
+        }
+      },
+      "expect": {
+        "answer": { "seq": 7 },
+        "state": { "billing-export": [["seq", "eq", 7], ["tasks.2.status", "eq", "done"], ["comments", "len", 1], ["source.session", "eq", "session-b"], ["writers", "set"]] }
+      }
+    },
+    { "name": "the person switches it off", "switch": "off" },
+    {
+      "name": "publish while off: the 403 sentence, nothing stored",
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export after off", "state": "done" } },
+      "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
+    },
+    {
+      "name": "list while off is the same 403",
+      "call": { "action": "list" },
+      "expect": { "error": "^Command Center is off for [^.]+\\." }
+    },
+    { "name": "the person switches it on again", "switch": "on" },
+    {
+      "name": "the records came back unchanged by the refused publish",
+      "call": { "action": "list" },
+      "expect": {
+        "answer": { "initiatives": [{ "id": "billing-export", "seq": 7 }] },
+        "state": { "billing-export": [["title", "eq", "Billing export"], ["state", "eq", "active"]] }
+      }
+    }
+  ]
+}
