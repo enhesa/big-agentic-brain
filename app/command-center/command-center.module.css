@@ -26,10 +26,20 @@
   --c-ok-ink: #11704a;
   --c-ok-wash: rgba(31, 157, 107, 0.12);
   --c-grey: #b7c0cd;
-  --c-radius: 16px;
+  --c-radius: 10px;
 
   color: var(--c-ink);
-  padding-bottom: 48px;
+  font-size: 0.875rem;
+  padding-bottom: 24px;
+}
+
+/* A dense dashboard: on wide screens the page uses more of the width than the 1112 px app
+   column, centred on it, so four initiative columns stay readable. */
+@media (min-width: 1200px) {
+  .page {
+    width: min(1400px, calc(100vw - 48px));
+    margin-left: calc(50% - min(700px, 50vw - 24px));
+  }
 }
 
 :root[data-theme="dark"] .page {
@@ -76,10 +86,10 @@
 
 .top {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: -8px 0 16px;
 }
 
 .titleBlock {
@@ -92,7 +102,7 @@
 .kicker {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--c-accent-ink);
@@ -102,37 +112,46 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 6px 10px;
+  min-width: 0;
 }
 
 .h1 {
-  font-size: 2.2rem;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
   margin: 0;
   color: var(--c-ink);
 }
 
 .subline {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--c-muted);
-  font-size: 0.92rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.privacy {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+  white-space: nowrap;
 }
 
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.8rem;
-  padding: 4px 11px 4px 9px;
+  font-size: 0.75rem;
+  padding: 2px 9px 2px 8px;
   border-radius: 999px;
 }
 
 .statusDot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -159,13 +178,18 @@
   flex: none;
 }
 
+.top:not(.topOn) .menu,
+.top:not(.topOn) .privacy {
+  margin-left: auto;
+}
+
 .menuButton {
   list-style: none;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   border: 1px solid var(--c-line);
   background: var(--c-surface);
   color: var(--c-ink-2);
@@ -184,23 +208,23 @@
 .menuBody {
   position: absolute;
   right: 0;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   z-index: 10;
   width: 300px;
   max-width: calc(100vw - 48px);
   background: var(--c-surface);
   border: 1px solid var(--c-line);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: var(--c-shadow-hover);
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .menuNote {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.8125rem;
   color: var(--c-muted);
 }
 
@@ -215,37 +239,37 @@
 .dangerLink {
   display: inline-block;
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: 0.8125rem;
   color: var(--c-bad-ink);
   text-decoration: underline;
   text-underline-offset: 3px;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .confirmBody {
-  margin-top: 8px;
-  padding: 12px;
-  border-radius: 12px;
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 10px;
   background: var(--c-bad-wash);
 }
 
 .confirmBody p {
-  margin: 0 0 10px;
-  font-size: 0.86rem;
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
 }
 
 /* ------------------------------------------------------------------- buttons */
 
 .ghost,
 .danger {
-  min-height: 36px;
+  min-height: 28px;
   border-radius: 999px;
-  padding: 6px 16px;
+  padding: 3px 12px;
   cursor: pointer;
   font: inherit;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.84rem;
+  font-size: 0.8125rem;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -276,18 +300,20 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 32px;
+  gap: 6px;
+  margin: 0;
   padding: 0;
 }
 
 .healthChip {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
+  line-height: 18px;
   color: var(--c-muted);
   background: var(--c-plane);
   border: 1px solid var(--c-line);
   border-radius: 999px;
-  padding: 5px 12px;
+  padding: 1px 9px;
+  white-space: nowrap;
 }
 
 .healthChip strong {
@@ -315,19 +341,20 @@
 /* ------------------------------------------------------------------ sections */
 
 .section {
-  margin-bottom: 40px;
+  margin-bottom: 20px;
 }
 
 .sectionHead {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .h2 {
-  font-size: 1.3rem;
-  letter-spacing: -0.01em;
+  font-size: 1rem;
+  letter-spacing: 0;
+  line-height: 1.3;
   margin: 0;
   color: var(--c-ink);
 }
@@ -335,10 +362,11 @@
 .count {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.78rem;
-  min-width: 24px;
+  font-size: 0.75rem;
+  line-height: 16px;
+  min-width: 20px;
   text-align: center;
-  padding: 2px 8px;
+  padding: 0 6px;
   border-radius: 999px;
   background: var(--c-plane);
   border: 1px solid var(--c-line);
@@ -353,8 +381,8 @@
 
 .notice,
 .empty {
-  padding: 20px;
-  margin: 16px 0 0;
+  padding: 14px 16px;
+  margin: 12px 0 0;
   color: var(--c-ink-2);
 }
 
@@ -370,7 +398,7 @@
 
 .hint {
   color: var(--c-muted);
-  font-size: 0.88rem;
+  font-size: 0.8125rem;
 }
 
 .inlineLink {
@@ -380,15 +408,15 @@
 }
 
 .icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex: none;
   vertical-align: -2px;
 }
 
 .iconLg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 /* ---------------------------------------------------------------------- tags */
@@ -397,11 +425,11 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.74rem;
+  gap: 3px;
+  font-size: 0.75rem;
   font-weight: 500;
-  line-height: 1.5;
-  padding: 1px 9px;
+  line-height: 16px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: var(--c-plane);
   color: var(--c-ink-2);
@@ -410,7 +438,9 @@
 }
 
 .chip {
+  display: inline-block;
   max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   background: var(--c-accent-wash);
@@ -461,8 +491,8 @@
 
 .questions {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
 }
 
 .qCard,
@@ -473,14 +503,14 @@
   border-radius: var(--c-radius);
   box-shadow: var(--c-shadow);
   overflow: hidden;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease;
 }
 
 .qCard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 18px 14px 22px;
+  gap: 6px;
+  padding: 10px 12px 10px 14px;
   background: var(--c-wash);
 }
 
@@ -491,7 +521,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   background: var(--c-accent);
   opacity: 0.55;
 }
@@ -512,14 +542,13 @@
 
 .qCard:hover,
 .card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--c-shadow-hover);
 }
 
 .qTop {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 5px;
   align-items: center;
   min-width: 0;
 }
@@ -528,8 +557,8 @@
   margin: 0;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 1.18rem;
-  line-height: 1.35;
+  font-size: 0.9375rem;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
@@ -537,15 +566,17 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
   margin: 0;
   padding: 0;
+  min-width: 0;
 }
 
 .option {
-  font-size: 0.86rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  padding: 5px 13px;
+  line-height: 18px;
+  padding: 2px 9px;
   border-radius: 999px;
   border: 1px dashed var(--c-line-2);
   background: var(--c-plane);
@@ -557,45 +588,49 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   margin-top: auto;
 }
 
 .qFoot form {
-  margin: 0;
+  margin: 0 0 0 auto;
+  flex: none;
 }
 
 .age {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.84rem;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 0.75rem;
   color: var(--c-muted);
+  white-space: nowrap;
 }
 
 .allClear {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 18px 22px;
+  gap: 12px;
+  padding: 10px 14px;
   background: var(--c-wash);
 }
 
 .allClearArt {
-  width: 72px;
-  height: 72px;
+  width: 40px;
+  height: 40px;
   flex: none;
 }
 
 .allClearTitle {
-  margin: 0 0 2px;
+  margin: 0;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: 0.9375rem;
 }
 
 .allClear .muted {
   margin: 0;
+  font-size: 0.8125rem;
 }
 
 .artBg {
@@ -641,8 +676,26 @@
 .flow {
   /* CSS-columns masonry: cards keep their own height and areas flow on, so no holes and no
      stretched neighbours when one card opens. Reading order runs down each column. */
-  columns: 320px 3;
-  column-gap: 14px;
+  columns: 1;
+  column-gap: 10px;
+}
+
+@media (min-width: 700px) {
+  .flow {
+    columns: 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .flow {
+    columns: 3;
+  }
+}
+
+@media (min-width: 1280px) {
+  .flow {
+    columns: 4;
+  }
 }
 
 .area {
@@ -652,14 +705,15 @@
 .areaHead {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.74rem;
+  gap: 6px;
+  font-size: 0.75rem;
+  line-height: 16px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--c-ink-2);
   /* A top margin is dropped at the top of a column, so a heading there lines up with the cards. */
-  margin: 10px 0 0;
-  padding: 0 2px 10px;
+  margin: 4px 0 0;
+  padding: 0 2px 4px;
   break-after: avoid;
   break-inside: avoid;
 }
@@ -669,7 +723,7 @@
 }
 
 .areaCount {
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   letter-spacing: 0;
   color: var(--c-muted);
   font-weight: 600;
@@ -678,55 +732,46 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 18px 14px 20px;
-  margin-bottom: 14px;
+  gap: 6px;
+  padding: 10px 12px 8px 12px;
+  margin-bottom: 10px;
   break-inside: avoid;
 }
 
 .cardHead {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.cardTitleBlock {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
+  min-height: 40px;
 }
 
 .cardTitle {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.9375rem;
   line-height: 1.3;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
   flex: none;
-  min-width: 56px;
 }
 
 .ringWrap {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
 }
@@ -757,48 +802,45 @@
   position: relative;
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: 0.8rem;
-  letter-spacing: -0.02em;
+  font-size: 0.75rem;
+  letter-spacing: -0.04em;
   color: var(--c-ink);
-}
-
-.progressTasks {
-  font-size: 0.72rem;
-  color: var(--c-muted);
-  white-space: nowrap;
 }
 
 .next {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   margin: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
   background: var(--c-plane);
-  font-size: 0.9rem;
+  font-size: 0.8125rem;
+  line-height: 20px;
+  min-width: 0;
 }
 
 .nextLabel {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--c-accent-ink);
-  padding-top: 2px;
   flex: none;
 }
 
 .nextText {
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskIcon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex: none;
-  margin-top: 2px;
 }
 
 .tTodo circle {
@@ -829,17 +871,36 @@
   stroke-linejoin: round;
 }
 
+/* The meta line: tasks toggle, links and footer share one wrapping row. An open toggle takes the
+   full width, so its list sits right under it and the links and footer move below the list. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
+.details {
+  flex: none;
+}
+
+.details[open] {
+  flex: 1 1 100%;
+}
+
 .details summary {
   list-style: none;
   cursor: pointer;
-  font-size: 0.84rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--c-accent-ink);
-  padding: 4px 0;
-  min-height: 32px;
-  display: flex;
+  min-height: 24px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .details summary::-webkit-details-marker {
@@ -848,10 +909,10 @@
 
 .details summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
   transform: rotate(-45deg);
   transition: transform 0.18s ease;
 }
@@ -862,19 +923,24 @@
 
 .tasks {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 0.88rem;
+  font-size: 0.8125rem;
+  line-height: 18px;
 }
 
 .tasks li {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-start;
+  padding: 1px 0;
   overflow-wrap: anywhere;
+}
+
+.tasks .taskIcon {
+  margin-top: 2px;
 }
 
 .task_done {
@@ -887,61 +953,63 @@
 
 .timeline {
   list-style: none;
-  margin: 12px 0 0;
-  padding: 0 0 0 14px;
+  margin: 6px 0 2px 6px;
+  padding: 0 0 0 10px;
   border-left: 2px solid var(--c-line);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  font-size: 0.86rem;
+  gap: 4px;
+  font-size: 0.8125rem;
+  line-height: 18px;
 }
 
 .timeline li {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   overflow-wrap: anywhere;
 }
 
 .timeline li::before {
   content: "";
   position: absolute;
-  left: -19px;
+  left: -15px;
   top: 5px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--c-surface);
   border: 2px solid var(--c-accent);
+  box-sizing: border-box;
 }
 
 .when {
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   color: var(--c-muted);
+  margin-right: 6px;
 }
 
 .links {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   margin: 0;
   padding: 0;
+  min-width: 0;
 }
 
 .linkPill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  font-size: 0.8rem;
+  gap: 4px;
+  min-height: 22px;
+  font-size: 0.75rem;
   font-weight: 500;
-  padding: 3px 11px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid var(--c-line-2);
   color: var(--c-accent-ink);
   background: var(--c-surface);
+  white-space: nowrap;
   transition: background-color 0.15s ease;
 }
 
@@ -952,16 +1020,18 @@
 .linkHost {
   font-weight: 400;
   color: var(--c-muted);
-  margin-left: 2px;
+  margin-left: 1px;
 }
 
 .cardFoot {
-  margin: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--c-line);
-  font-size: 0.78rem;
+  margin: 0 0 0 auto;
+  font-size: 0.75rem;
+  line-height: 24px;
   color: var(--c-muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Silent or paused: grey the chrome (wash, borders, tags, ring), never the text, so it keeps its
@@ -1015,14 +1085,17 @@
 .upkeep {
   list-style: none;
   margin: 0;
-  padding: 4px 0;
+  padding: 0;
+  border-radius: 12px;
 }
 
+/* One line per item; the reason truncates and carries the full text in its title. */
 .upRow {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 12px 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 4px 12px;
 }
 
 .upRow + .upRow {
@@ -1030,27 +1103,26 @@
 }
 
 .hDot {
-  width: 12px;
-  height: 12px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-top: 5px;
   flex: none;
   background: var(--c-grey);
 }
 
 .h_green {
   background: var(--c-ok);
-  box-shadow: 0 0 0 4px var(--c-ok-wash);
+  box-shadow: 0 0 0 3px var(--c-ok-wash);
 }
 
 .h_amber {
   background: var(--c-warn);
-  box-shadow: 0 0 0 4px var(--c-warn-wash);
+  box-shadow: 0 0 0 3px var(--c-warn-wash);
 }
 
 .h_red {
   background: var(--c-bad);
-  box-shadow: 0 0 0 4px var(--c-bad-wash);
+  box-shadow: 0 0 0 3px var(--c-bad-wash);
 }
 
 .h_unknown {
@@ -1079,35 +1151,49 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 10px;
 }
 
 .upTitle {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  max-width: 60%;
+  min-width: 0;
 }
 
 .upName {
   font-weight: 600;
   margin-right: 2px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .upReason {
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  font-size: 0.86rem;
+  font-size: 0.8125rem;
   color: var(--c-ink-2);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upMain .links {
+  flex: none;
+  flex-wrap: nowrap;
+  margin-left: auto;
 }
 
 .upWhen {
   flex: none;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--c-muted);
-  padding-top: 2px;
   white-space: nowrap;
 }
 
@@ -1115,10 +1201,10 @@
 
 .offHero {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 28px;
+  grid-template-columns: 160px 1fr;
+  gap: 24px;
   align-items: center;
-  padding: 32px;
+  padding: 22px 24px;
   background: var(--c-wash);
 }
 
@@ -1128,24 +1214,24 @@
 }
 
 .offBody p {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: var(--c-ink-2);
 }
 
 .offTitle {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   letter-spacing: -0.01em;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .offPoints {
-  margin: 0 0 20px;
+  margin: 0 0 14px;
   padding-left: 20px;
   color: var(--c-ink-2);
-  font-size: 0.92rem;
+  font-size: 0.875rem;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .offPoints li::marker {
@@ -1153,21 +1239,47 @@
 }
 
 .enable {
-  min-height: 44px;
-  margin-bottom: 16px;
+  min-height: 40px;
+  margin-bottom: 12px;
 }
 
 .kept {
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--c-line);
 }
 
 /* ------------------------------------------------------------------- mobile */
 
 @media (max-width: 640px) {
+  .top {
+    margin-top: -4px;
+  }
+
+  /* Title line and menu share the first row; health chips and the privacy note wrap below. */
+  .topOn .titleLine {
+    order: -2;
+    flex: 1 1 0;
+  }
+
+  .topOn .menu {
+    order: -1;
+    margin-left: auto;
+  }
+
+  .privacy {
+    margin-left: 0;
+    width: 100%;
+    order: 5;
+  }
+
   .h1 {
-    font-size: 1.8rem;
+    font-size: 1.25rem;
+  }
+
+  .menuButton {
+    width: 36px;
+    height: 36px;
   }
 
   .questions {
@@ -1178,34 +1290,63 @@
     flex-wrap: wrap;
   }
 
+  /* Tap targets stay at least 32 px on touch screens. */
   .ghost,
   .danger,
-  .option {
-    min-height: 44px;
-  }
-
+  .option,
   .linkPill,
   .details summary {
-    min-height: 44px;
+    min-height: 32px;
+  }
+
+  .option {
+    display: inline-flex;
+    align-items: center;
   }
 
   .upRow {
     flex-wrap: wrap;
-    padding: 12px 14px;
+    align-items: flex-start;
+    padding: 6px 12px;
+  }
+
+  .hDot {
+    margin-top: 5px;
+  }
+
+  .upMain {
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+
+  .upTitle {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .upReason {
+    flex-basis: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .upMain .links {
+    margin-left: 0;
+    flex-wrap: wrap;
   }
 
   .upWhen {
     width: 100%;
-    padding-left: 26px;
+    padding-left: 19px;
   }
 
   .offHero {
     grid-template-columns: 1fr;
-    padding: 22px;
+    padding: 18px;
   }
 
   .offArt {
-    max-width: 180px;
+    max-width: 140px;
   }
 }
 
@@ -1218,10 +1359,5 @@
   .linkPill,
   .details summary::before {
     transition: none;
-  }
-
-  .qCard:hover,
-  .card:hover {
-    transform: none;
   }
 }

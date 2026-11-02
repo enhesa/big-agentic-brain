@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "New Command Center evals: a contract replay on every pull request, plus behaviour and trigger suites for the skill.",
       "The Command Center page is a calmer dashboard: question cards, progress rings, deadline tags and upkeep health.",
       "Command Center cards now flow without gaps, with a larger progress ring and link hosts shown.",
+      "The Command Center page is more compact: a one-line header, short question cards and four initiative columns on wide screens.",
     ],
   },
   {

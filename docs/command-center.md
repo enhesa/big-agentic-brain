@@ -102,22 +102,25 @@ initiative id and the result, never the text.
 
 ## The page
 
-`app/command-center/page.tsx` renders for the signed-in viewer only. The header shows the On
-pill, the last push and the data-health chips, which turn amber or red when not 0. Switch off and
-Delete sit in a settings menu; Delete asks for a confirm first.
+`app/command-center/page.tsx` renders for the signed-in viewer only, as a dense dashboard that
+uses up to 1400 px on wide screens. The header is one line: title, the On pill, the last push and
+the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
+settings menu; Delete asks for a confirm first.
 
-- Needs you: question cards, oldest first, with the initiative, the options as pills (display
-  only), the age, a possibly-stale tag and a Dismiss button. A left bar marks urgent and high
-  priority. With none, an All clear card.
-- Initiatives: one masonry flow of cards (CSS columns), grouped by area with the area name as a
-  small heading inside the flow, ordered urgent, high, none, low, paused. Small areas share
+- Needs you: short question cards, oldest first, about four per row on a 1440 px screen: the
+  question, one meta line with the initiative, a possibly-stale tag and the age, then the options
+  as small pills (display only) beside Dismiss. A left bar marks urgent and high priority. With
+  none, an All clear card.
+- Initiatives: one masonry flow of compact cards (CSS columns: four at 1280 px and up, three at
+  1024, one on phones), grouped by area with the area name as a small heading inside the flow, ordered urgent, high, none, low, paused. Small areas share
   columns, and an opened card grows in place without stretching its neighbours. Each card has
   state, priority, key and deadline tags (near and overdue in words, days counted on UTC dates),
-  a progress ring with the percent inside and done/total under it, the task in progress, the
-  full task list and notes behind Show, links as pills with their host, and who pushed last.
-  Silent and paused cards have grey chrome and a label; their text keeps full contrast.
-- Recurring upkeep: one row each with a health dot and label, the reason, when it was checked
-  and an overdue tag.
+  a progress ring with the percent inside beside the title, the task in progress on one line,
+  and one meta line with a done/total toggle that opens the task list and notes, links as pills
+  with their host, and who pushed last. Silent and paused cards have grey chrome and
+  a label; their text keeps full contrast.
+- Recurring upkeep: one line each with a health dot and label, the reason (cut short, full text in
+  its tooltip; wrapped on phones), when it was checked and an overdue tag.
 
 Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours
