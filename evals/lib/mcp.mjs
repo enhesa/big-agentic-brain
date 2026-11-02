@@ -1,8 +1,9 @@
 // Minimal MCP Streamable-HTTP client for BAB's /mcp endpoint (JSON-RPC over POST).
 export class McpClient {
-  constructor(origin, email, name) {
+  /** `headers` replaces the X-Bab-Actor-* pair, e.g. an X-Bab-Device for a bound identity. */
+  constructor(origin, email, name, headers = null) {
     this.url = `${origin.replace(/\/$/, "")}/mcp`;
-    this.headers = { "x-bab-actor-email": email, "x-bab-actor-name": name };
+    this.headers = headers ?? { "x-bab-actor-email": email, "x-bab-actor-name": name };
     this.sessionId = null;
     this.nextId = 0;
   }

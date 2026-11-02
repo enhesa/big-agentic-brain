@@ -27,8 +27,14 @@ function freePort() {
   });
 }
 
-/** Start BAB on a fresh port. `seedFrom` is a data dir snapshot to copy first. Returns { origin, stop() }. */
-export async function startBab({ dataDir, seedFrom, logFile }) {
+/**
+ * Start BAB on a fresh port. `seedFrom` is a data dir snapshot to copy first. `env` adds settings
+ * (BAB_* names only, never a key). Returns { origin, stop() }.
+ */
+export async function startBab({ dataDir, seedFrom, logFile, env: extraEnv = {} }) {
+  for (const k of Object.keys(extraEnv)) {
+    if (!k.startsWith("BAB_") || /^BAB_(API_TOKENS(_FILE)?|PROXY_SECRET)$|KEY/.test(k)) throw new Error(`startBab env: only BAB_* settings without keys or tokens (got ${k})`);
+  }
   fs.rmSync(dataDir, { recursive: true, force: true });
   if (seedFrom) fs.cpSync(seedFrom, dataDir, { recursive: true });
   else fs.mkdirSync(dataDir, { recursive: true });
@@ -44,6 +50,7 @@ export async function startBab({ dataDir, seedFrom, logFile }) {
     HOSTNAME: "127.0.0.1",
     DATA_DIR: dataDir,
     BAB_PUBLIC_ORIGIN: origin,
+    ...extraEnv,
   };
   if (process.env.BAB_EVAL_NODE) env.BAB_EVAL_NODE = process.env.BAB_EVAL_NODE;
   const out = fs.openSync(logFile ?? path.join(dataDir, "..", `bab-${port}.log`), "w");
