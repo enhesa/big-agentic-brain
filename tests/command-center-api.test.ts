@@ -256,6 +256,99 @@ describe("bab_command_center", () => {
     expect((await action("billing", { action: "comment", record: { text: "x" } })).status).toBe(400);
   });
 
+  it("ignores action and id inside record: only the top-level ones count", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    expect(await mcp({ action: "publish", id: "billing", record: { ...RECORD, action: "remove", id: "x" } })).toMatchObject({ id: "billing", seq: 1, unchanged: true });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "billing").seq).toBe(1);
+    expect(ccGet(OWNER, "billing").title).toBe("Billing export");
+    const noTopId = await mcpRefusal({ action: "publish", record: { ...RECORD, id: "billing-2" } });
+    expect(noTopId.status).toBe(400);
+    expect((await mcp({ action: "list" })).initiatives).toHaveLength(1);
+    const noTopAction = await mcpRefusal({ id: "billing", record: { action: "remove" } });
+    expect(noTopAction.status).toBe(400);
+    expect(noTopAction.message).toMatch(/^action must be one of/);
+    expect(ccGet(OWNER, "billing").id).toBe("billing");
+  });
+
+  it("runs health through record", async () => {
+    const rec = { v: 1, title: "Upkeep", kind: "recurring" };
+    await mcp({ action: "publish", id: "upkeep", record: rec });
+    expect(await mcp({ action: "health", id: "upkeep", record: { level: "amber", reason: "slow", checkedAt: "2026-01-31T09:30:00Z" } })).toMatchObject({ seq: 2 });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "upkeep").health).toMatchObject({ level: "amber", reason: "slow" });
+  });
+
+  it("refuses an unknown field inside record and names it", async () => {
+    const pub = await mcpRefusal({ action: "publish", id: "billing", record: { ...RECORD, owner: OTHER } });
+    expect(pub.status).toBe(400);
+    expect(pub.message).toMatch(/unknown field 'owner'/);
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    const com = await mcpRefusal({ action: "comment", id: "billing", record: { text: "hi", mood: "glad" } });
+    expect(com.status).toBe(400);
+    expect(com.message).toMatch(/unknown field 'mood' for comment/);
+  });
+
+  it("refuses a record over 32 KB sent in record with 413 and stores nothing", async () => {
+    const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `t${i}`, text: "x".repeat(120), status: "pending" }));
+    const comments = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, text: "y".repeat(500) }));
+    const links = Array.from({ length: 20 }, (_, i) => ({ label: "z".repeat(60), url: "https://example.com/" + "p".repeat(470) + i }));
+    const questions = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, text: "w".repeat(500), options: ["o".repeat(60), "o".repeat(60), "o".repeat(60), "o".repeat(60)] }));
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: { v: 1, title: "Big", tasks, comments, links, questions } });
+    expect(r.status).toBe(413);
+    expect(r.message).toMatch(/at most 32 KB per initiative/);
+    expect((await mcp({ action: "list" })).initiatives).toEqual([]);
+  });
+
+  it("answers the gates before reading MCP args: off on the server, off for the person, rate", async () => {
+    const offActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
+    const { findTool } = await import("../lib/mcp");
+    const tool = findTool("bab_command_center")!;
+    const refuse = async (actor: typeof mcpActor, args: Record<string, unknown>) => {
+      try {
+        await tool.run(actor, args, { origin: "https://bab.example.com" });
+      } catch (err) {
+        const e = err as { status?: number; message: string };
+        return { status: e.status ?? 0, message: e.message };
+      }
+      throw new Error("expected a refusal");
+    };
+    const badText = { action: "publish", id: "billing", record: "[{oops" };
+    // Off for the person: the opt-in sentence, not a JSON 400, with record and with bad JSON text.
+    const off = await refuse(offActor, badText);
+    expect(off.status).toBe(403);
+    expect(off.message).toMatch(/^Command Center is off for Other Two/);
+    expect((await refuse(offActor, { action: "publish", id: "billing", record: RECORD })).status).toBe(403);
+    expect((await refuse(offActor, { action: "publish", id: "billing", record: [RECORD] })).status).toBe(403);
+    // Off on the server wins over the person being off and over bad JSON text.
+    process.env.BAB_COMMAND_CENTER = "0";
+    (await import("../lib/config"))._resetConfigForTests();
+    try {
+      expect((await refuse(offActor, badText)).status).toBe(404);
+      expect((await refuse(mcpActor, badText)).status).toBe(404);
+      expect((await refuse(mcpActor, { action: "publish", id: "billing", record: RECORD })).status).toBe(404);
+    } finally {
+      delete process.env.BAB_COMMAND_CENTER;
+      (await import("../lib/config"))._resetConfigForTests();
+    }
+    // A declared identity is refused before the args are read.
+    const declaredActor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "header" as const };
+    const anon = await refuse(declaredActor as unknown as typeof mcpActor, badText);
+    expect(anon.status).toBe(403);
+    expect(anon.message).toMatch(/needs an identity BAB remembers/);
+    // Rate before the args: once the burst is spent, bad JSON text gets 429.
+    for (let i = 0; i < 20; i++) await mcp({ action: "list" });
+    expect((await refuse(mcpActor, badText)).status).toBe(429);
+  });
+
+  it("bounds how deep record can nest with a clear 400", async () => {
+    let nested: Record<string, unknown> = { ...RECORD };
+    for (let i = 0; i < 10; i++) nested = { record: nested };
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: nested });
+    expect(r.status).toBe(400);
+    expect(r.message).toMatch(/record is nested too deep/);
+  });
+
   it("reads JSON text null as clearing health and comments on the MCP path", async () => {
     const rec = { v: 1, title: "Upkeep", kind: "recurring", health: { level: "green", reason: "ok", checkedAt: "2026-01-31T09:30:00Z" } };
     await mcp({ action: "publish", id: "upkeep", record: rec });

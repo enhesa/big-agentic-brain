@@ -384,6 +384,21 @@ describe("identity and opt-in", () => {
     expect(r.message).toMatch(/at most 60 a minute, 20 at once/);
   });
 
+  it("runs prepare only after every gate passes", async () => {
+    const prepare = vi.fn((a: Record<string, unknown>) => a);
+    const go = (actor: Parameters<Cc["runCommandCenter"]>[0] = ME) => refusal(() => cc.runCommandCenter(actor, { action: "list" }, "mcp", ORIGIN, prepare));
+    expect(go(device(OTHER, "dev-2")).status).toBe(403);
+    expect(go({ id: OWNER, email: OWNER, name: "Owner One", source: "header" } as never).status).toBe(403);
+    process.env.BAB_COMMAND_CENTER = "0";
+    (await import("../lib/config"))._resetConfigForTests();
+    expect(go().status).toBe(404);
+    expect(prepare).not.toHaveBeenCalled();
+    delete process.env.BAB_COMMAND_CENTER;
+    (await import("../lib/config"))._resetConfigForTests();
+    expect(cc.runCommandCenter(ME, { action: "list" }, "mcp", ORIGIN, prepare)).toMatchObject({ initiatives: [] });
+    expect(prepare).toHaveBeenCalledTimes(1);
+  });
+
   it("is 404 when switched off on the server, 503 with replicas", async () => {
     process.env.BAB_COMMAND_CENTER = "0";
     (await import("../lib/config"))._resetConfigForTests();
