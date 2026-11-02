@@ -210,7 +210,7 @@ Agent eval with the same tasks and conditions (core: 12 tasks × A/B/C × 3 tria
 
 `.github/workflows/evals.yml`:
 - **On pull requests** touching `lib/`, `app/api/`, `app/mcp/` or `evals/`: build, then `eval:validate`, `eval:retrieval` with thresholds, `eval:cc-contract` and the two Command Center dry runs. No secrets are needed.
-- **On manual dispatch:** the agent eval (`suite` core, tk, cc or cc-trigger; `smoke` or `full` for core and tk; model and budget as inputs, budget 2 USD by default), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
+- **On manual dispatch:** the agent eval (`suite` core, tk, cc or cc-trigger; `smoke` or `full` for core and tk; model and budget as inputs, budget 0.50 USD by default; pass 2 for the cc suites), with `ANTHROPIC_API_KEY` from repo secrets. The summary goes to the job summary, and results and transcripts are uploaded as artifacts.
 
 
 ## Caveats

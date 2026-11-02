@@ -31,7 +31,7 @@ on:
       budget_usd:
         description: "Hard spend cap in USD"
         type: string
-        default: "2"
+        default: "0.50"
 
 concurrency:
   group: evals-${{ github.ref }}
