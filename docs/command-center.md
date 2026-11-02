@@ -40,7 +40,8 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 `POST .../actions` takes an `Idempotency-Key`. A `PUT` is idempotent by nature.
 
 The MCP tool declares only `action`, `id` and `record`. Agents send the record, or the fields of
-`comment` and `health`, as one object in `record`; the top-level `action` and `id` win. A `record`
+`comment` and `health`, as one object in `record`. `action` and `id` go beside `record`, not inside it; the ones inside are
+ignored, and a publish without a top-level `id` is a 400. A `record`
 that is not an object is a 400. Some clients send undeclared fields as strings, so on the MCP path
 only a numeric string `v` or `expectSeq` and JSON text for `tasks`, `questions`, `options`, `links`,
 `comments`, `health` and `source` are read (`null` clears `health` and `comments`); text that does not
