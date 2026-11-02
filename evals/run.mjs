@@ -33,8 +33,12 @@ const MODES = {
 
 const HELP = `Usage: node evals/run.mjs [options]
   --mode smoke|full        presets (default smoke). Flags below override the preset.
-  --suite core|tk          core: bugs the repo itself reveals (evals/tasks); tk: team knowledge, the fix needs a
-                           fact that is only in a colleague's memory (evals/tasks-tk; eval tasks are its variants)
+  --suite core|tk|cc|cc-trigger
+                           core: bugs the repo itself reveals (evals/tasks); tk: team knowledge, the fix needs a
+                           fact that is only in a colleague's memory (evals/tasks-tk; eval tasks are its variants);
+                           cc: Command Center skill behaviour over multi-turn scenarios (Haiku, $2 cap, 2 trials);
+                           cc-trigger: the same with only the skill description, does the agent load it
+  --dry-run                cc suites only: replay each scenario's ideal script instead of an LLM (no key, free)
   --conditions A,B,...     A no BAB; B BAB + colleague memory; C BAB + distractors only; H BAB + hand-written notes;
                            ablations on B's memory: L lean toolset, F old kind-filter search advice, N search-first nudge,
                            R auto-retrieval (top 3 injected); AR auto-recorded memory; hazards: ST stale memory,
@@ -69,6 +73,7 @@ const { values: opt } = parseArgs({
     out: { type: "string" },
     validate: { type: "boolean", default: false },
     resume: { type: "boolean", default: false },
+    "dry-run": { type: "boolean", default: false },
     help: { type: "boolean", default: false },
   },
 });
@@ -132,6 +137,11 @@ async function pool(items, n, fn) {
 }
 
 async function main() {
+  // Command Center suites: their own scenario loop (evals/lib/cc-suite.mjs), Haiku and a $2 cap by default.
+  if (opt.suite === "cc" || opt.suite === "cc-trigger") {
+    const { runCcSuite } = await import("./lib/cc-suite.mjs");
+    return runCcSuite(opt);
+  }
   useSuite(opt.suite);
   if (opt.validate) process.exit((await validate()) ? 0 : 1);
   const preset = MODES[opt.mode];
