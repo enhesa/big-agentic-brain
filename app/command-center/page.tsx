@@ -436,7 +436,7 @@ function Initiative({ r }: { r: Rec }) {
             {r.title}
           </h4>
           <div className={styles.chips}>
-            <span className={`${styles.tag} ${styles[`state_${r.state}`]}`}>{r.state}</span>
+            <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
             <PriorityTag p={r.priority} />
             {r.key ? <span className={styles.tag}>{r.key}</span> : null}
             <Deadline r={r} />
@@ -477,7 +477,7 @@ function Initiative({ r }: { r: Rec }) {
           {r.tasks.length ? (
             <ul className={styles.tasks} aria-label="Tasks">
               {r.tasks.map((t) => (
-                <li key={t.id} className={styles[`task_${t.status}`]}>
+                <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
                   <TaskIcon status={t.status} />
                   <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
                   <span>{t.text}</span>
@@ -530,12 +530,12 @@ function Upkeep({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
   return (
     <li className={`${styles.upRow} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id}>
-      <span className={`${styles.hDot} ${styles[`h_${level}`]}`} aria-hidden="true" />
+      <span className={`${styles.hDot} ${styles[`h_${level}`] ?? ""}`} aria-hidden="true" />
       <div className={styles.upMain}>
         <div className={styles.upTitle}>
           {paused ? <PauseIcon /> : null}
           <span className={styles.upName}>{r.title}</span>
-          <span className={`${styles.tag} ${styles[`ht_${level}`]}`}>{r.health ? HEALTH_LABEL[level] : "No health yet"}</span>
+          <span className={`${styles.tag} ${styles[`ht_${level}`] ?? ""}`}>{r.health ? HEALTH_LABEL[level] : "No health yet"}</span>
           {r.cadence ? <span className={styles.tag}>{r.cadence}</span> : null}
           {r.overdue ? <span className={`${styles.tag} ${styles.tagBad}`}>overdue</span> : null}
           {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent</span> : null}

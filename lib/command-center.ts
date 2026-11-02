@@ -1097,8 +1097,8 @@ export function ccList(owner: string, now: number = Date.now()): { initiatives: 
  * the action. The owner is always the caller's resolved identity.
  */
 /**
- * Merges a `record` argument over the other fields, so a client can send the whole record as one
- * declared object. The top-level `action` and `id` win over the ones inside it.
+ * The MCP path only: merges a `record` argument over the other fields, so a client can send the
+ * whole record as one declared object. The top-level `action` and `id` win over the ones inside it.
  */
 function mergeRecordArg(args: Record<string, unknown>): Record<string, unknown> {
   if (!("record" in args) || args.record === undefined) return args;
@@ -1115,6 +1115,9 @@ function mergeRecordArg(args: Record<string, unknown>): Record<string, unknown> 
 const CC_MCP_NUMBERS = ["v", "expectSeq"];
 const CC_MCP_JSON = ["record", "tasks", "questions", "links", "comments", "options", "health", "source"];
 
+/** Fields where JSON null is a real value: it clears them. */
+const CC_MCP_NULLABLE = ["health", "comments"];
+
 function parseJsonArg(value: string, field: string): unknown {
   let parsed: unknown;
   try {
@@ -1122,6 +1125,7 @@ function parseJsonArg(value: string, field: string): unknown {
   } catch {
     parsed = undefined;
   }
+  if (parsed === null && CC_MCP_NULLABLE.includes(field)) return null;
   if (parsed === null || typeof parsed !== "object") {
     throw new ValidationError(`${field} came as text that is not a JSON array or object; send it as an array or object, or put the whole record in "record"`);
   }
@@ -1151,8 +1155,7 @@ export function ccMcpArgs(args: Record<string, unknown>): Record<string, unknown
   return out;
 }
 
-export function runCommandCenter(actor: CcActor, rawArgs: Record<string, unknown>, via: AuditVia, origin: string): unknown {
-  const args = mergeRecordArg(rawArgs);
+export function runCommandCenter(actor: CcActor, args: Record<string, unknown>, via: AuditVia, origin: string): unknown {
   const action = typeof args.action === "string" ? args.action : "";
   if (!CC_ACTIONS.includes(action as CcAction)) {
     throw new ValidationError(`action must be one of ${CC_ACTIONS.join(", ")}; required, has no default`);
@@ -1197,11 +1200,10 @@ export function runCommandCenter(actor: CcActor, rawArgs: Record<string, unknown
  */
 export function runCommandCenterMcp(actor: CcActor, args: Record<string, unknown>, origin: string): unknown {
   try {
-    return runCommandCenter(actor, ccMcpArgs(args), "mcp", origin);
+    return runCommandCenter(actor, mergeRecordArg(ccMcpArgs(args)), "mcp", origin);
   } catch (err) {
     if (err instanceof CcConflictError) {
-      throw new CcConflictError(`${err.message}
-current: ${JSON.stringify(err.current)}`, err.current);
+      throw new CcConflictError(`${err.message}\ncurrent: ${JSON.stringify(err.current)}`, err.current);
     }
     throw err;
   }
