@@ -100,7 +100,7 @@ import {
   type CreateFeedbackInput,
 } from "./feedback";
 import { branding } from "./branding";
-import { CC_ACTIONS, CC_CONTENT_RULE, runCommandCenter } from "./command-center";
+import { CC_ACTIONS, CC_CONTENT_RULE, runCommandCenterMcp } from "./command-center";
 import { teamTags } from "./teams";
 import { config, sourceLinkText } from "./config";
 import { ValidationError, NotFoundError, ConflictError } from "./errors";
@@ -1279,17 +1279,18 @@ export const TOOLS: Tool[] = [
     // Kept short on purpose: every session pays for it. The field rules live in the command-center
     // skill (content/instructions/command-center.md) and in the 400 answers, which name the fix.
     description:
-      "Use only when the command-center skill is loaded; it has the record format. publish (the whole record), clear_question, comment, health, list, remove. " +
+      "Use only when the command-center skill is loaded; it has the format. " +
       CC_CONTENT_RULE,
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: [...CC_ACTIONS], description: "Required, has no default." },
-        id: { type: "string", description: "The initiative's slug." },
+        id: { type: "string" },
+        record: { type: "object", additionalProperties: true, description: "The record (publish) or fields (health, comment)." },
       },
       required: ["action"],
     },
-    run: (actor, args, ctx) => JSON.stringify(runCommandCenter(actor, args, "mcp", originOf(ctx))),
+    run: (actor, args, ctx) => JSON.stringify(runCommandCenterMcp(actor, args, originOf(ctx))),
   },
 ];
 

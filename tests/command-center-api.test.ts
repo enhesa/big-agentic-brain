@@ -169,6 +169,221 @@ describe("bab_command_center", () => {
     expect(out).toMatchObject({ id: "billing", seq: 1 });
     expect(JSON.parse(await tool.run(actor, { action: "list" })).initiatives).toHaveLength(1);
   });
+
+  const mcpActor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };
+  async function mcp(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { findTool } = await import("../lib/mcp");
+    return JSON.parse(await findTool("bab_command_center")!.run(mcpActor, args, { origin: "https://bab.example.com" }));
+  }
+  async function mcpRefusal(args: Record<string, unknown>): Promise<{ status: number; message: string }> {
+    try {
+      await mcp(args);
+    } catch (err) {
+      const e = err as { status?: number; message: string };
+      return { status: e.status ?? 0, message: e.message };
+    }
+    throw new Error("expected a refusal");
+  }
+
+  it("declares record as an object and merges it under the top-level action and id", async () => {
+    const { findTool } = await import("../lib/mcp");
+    const props = findTool("bab_command_center")!.inputSchema.properties as Record<string, { type: string }>;
+    expect(props.record.type).toBe("object");
+    expect(await mcp({ action: "publish", id: "billing", record: { ...RECORD, id: "ignored" } })).toMatchObject({ id: "billing", seq: 1 });
+    expect(await mcp({ action: "comment", id: "billing", record: { text: "from record", action: "remove" } })).toEqual({ seq: 2 });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "billing").comments.map((c) => c.text)).toEqual(["from record"]);
+  });
+
+  it("reads a string-typed v, expectSeq and JSON text fields on the MCP path", async () => {
+    const out = await mcp({
+      action: "publish",
+      id: "billing",
+      v: "1",
+      expectSeq: "0",
+      tasks: JSON.stringify(RECORD.tasks),
+      questions: JSON.stringify([{ id: "q1", text: "Which months?", options: '["Last 3","All"]' }]),
+      links: '[{"label":"PR","url":"https://git.example.com/acme/x/pull/1"}]',
+      title: "Billing export",
+    });
+    expect(out).toMatchObject({ id: "billing", seq: 1 });
+    const { ccGet } = await import("../lib/command-center");
+    const rec = ccGet(OWNER, "billing");
+    expect(rec.tasks).toHaveLength(1);
+    expect(rec.questions[0].options).toEqual(["Last 3", "All"]);
+    expect(rec.links).toHaveLength(1);
+    expect(await mcp({ action: "publish", id: "billing", record: JSON.stringify({ ...RECORD, title: "Billing export 2", v: "1" }) })).toMatchObject({ seq: 2 });
+    expect(ccGet(OWNER, "billing").title).toBe("Billing export 2");
+  });
+
+  it("answers 400 naming the fix for JSON text that does not parse, and for a record that is not an object", async () => {
+    const bad = await mcpRefusal({ action: "publish", id: "billing", ...RECORD, tasks: "[{oops" });
+    expect(bad.status).toBe(400);
+    expect(bad.message).toMatch(/^tasks came as text that is not a JSON array or object/);
+    expect((await mcpRefusal({ action: "publish", id: "billing", ...RECORD, links: "plain words" })).status).toBe(400);
+    for (const record of [[RECORD], 7, "[1]"]) {
+      const r = await mcpRefusal({ action: "publish", id: "billing", record });
+      expect(r.status).toBe(400);
+      expect(r.message).toMatch(/record must be a JSON object/);
+    }
+  });
+
+  it("answers an MCP 409 with the current record in its text; REST keeps it as a field", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: { ...RECORD, title: "Someone else's change", expectSeq: 0 } });
+    expect(r.status).toBe(409);
+    const [sentence, current] = r.message.split("\ncurrent: ");
+    expect(sentence.length).toBeGreaterThan(10);
+    expect(JSON.parse(current)).toMatchObject({ id: "billing", seq: 1, title: "Billing export", tasks: [{ id: "t1", text: "Build" }] });
+    headers = asDevice();
+    const res = await put("billing", { ...RECORD, title: "Someone else's change", expectSeq: 0 });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).not.toContain("current:");
+    expect(body.current).toMatchObject({ id: "billing", seq: 1 });
+  });
+
+  it("keeps REST strict: a string v or JSON text tasks is refused there", async () => {
+    headers = asDevice();
+    const v = await put("billing", { ...RECORD, v: "1" });
+    expect(v.status).toBe(400);
+    expect((await v.json()).error).toMatch(/v must be 1/);
+    expect((await put("billing", { ...RECORD, tasks: JSON.stringify(RECORD.tasks) })).status).toBe(400);
+    expect((await mcp({ action: "publish", id: "billing", ...RECORD, v: "1" })).seq).toBe(1);
+    const wrapped = await put("billing", { record: RECORD });
+    expect(wrapped.status).toBe(400);
+    expect((await wrapped.json()).error).toMatch(/unknown field 'record'/);
+    expect((await action("billing", { action: "comment", record: { text: "x" } })).status).toBe(400);
+  });
+
+  it("ignores action and id inside record: only the top-level ones count", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    expect(await mcp({ action: "publish", id: "billing", record: { ...RECORD, action: "remove", id: "x" } })).toMatchObject({ id: "billing", seq: 1, unchanged: true });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "billing").seq).toBe(1);
+    expect(ccGet(OWNER, "billing").title).toBe("Billing export");
+    const noTopId = await mcpRefusal({ action: "publish", record: { ...RECORD, id: "billing-2" } });
+    expect(noTopId.status).toBe(400);
+    expect((await mcp({ action: "list" })).initiatives).toHaveLength(1);
+    const noTopAction = await mcpRefusal({ id: "billing", record: { action: "remove" } });
+    expect(noTopAction.status).toBe(400);
+    expect(noTopAction.message).toMatch(/^action must be one of/);
+    expect(ccGet(OWNER, "billing").id).toBe("billing");
+  });
+
+  it("answers list with an id with the full record, the same as REST GET; without an id the list", async () => {
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    await mcp({ action: "comment", id: "billing", record: { text: "woken" } });
+    const one = await mcp({ action: "list", id: "billing" });
+    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export", tasks: [{ id: "t1", text: "Build" }], questions: [{ id: "q1" }] });
+    expect((one.comments as { text: string }[]).map((c) => c.text)).toEqual(["woken"]);
+    expect(one).not.toHaveProperty("initiatives");
+    headers = asDevice();
+    expect(one).toEqual(await (await getOne("billing")).json());
+    expect((await mcp({ action: "list" })).initiatives).toHaveLength(1);
+  });
+
+  it("answers list with an unknown id, or another person's id, with a 404", async () => {
+    const missing = await mcpRefusal({ action: "list", id: "missing" });
+    expect(missing.status).toBe(404);
+    expect(missing.message).toMatch(/No initiative 'missing' in your Command Center/);
+    const { ccSetSwitch } = await import("../lib/command-center");
+    ccSetSwitch(OTHER, true);
+    const { findTool } = await import("../lib/mcp");
+    const otherActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
+    await findTool("bab_command_center")!.run(otherActor, { action: "publish", id: "theirs", record: RECORD }, { origin: "https://bab.example.com" });
+    const theirs = await mcpRefusal({ action: "list", id: "theirs" });
+    expect(theirs.status).toBe(404);
+    expect(theirs.message).not.toContain("Billing export");
+    expect((await mcpRefusal({ action: "list", id: "billing", text: "x" })).message).toMatch(/unknown field 'text' for list; allowed: id/);
+  });
+
+  it("runs health through record", async () => {
+    const rec = { v: 1, title: "Upkeep", kind: "recurring" };
+    await mcp({ action: "publish", id: "upkeep", record: rec });
+    expect(await mcp({ action: "health", id: "upkeep", record: { level: "amber", reason: "slow", checkedAt: "2026-01-31T09:30:00Z" } })).toMatchObject({ seq: 2 });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "upkeep").health).toMatchObject({ level: "amber", reason: "slow" });
+  });
+
+  it("refuses an unknown field inside record and names it", async () => {
+    const pub = await mcpRefusal({ action: "publish", id: "billing", record: { ...RECORD, owner: OTHER } });
+    expect(pub.status).toBe(400);
+    expect(pub.message).toMatch(/unknown field 'owner'/);
+    await mcp({ action: "publish", id: "billing", record: RECORD });
+    const com = await mcpRefusal({ action: "comment", id: "billing", record: { text: "hi", mood: "glad" } });
+    expect(com.status).toBe(400);
+    expect(com.message).toMatch(/unknown field 'mood' for comment/);
+  });
+
+  it("refuses a record over 32 KB sent in record with 413 and stores nothing", async () => {
+    const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `t${i}`, text: "x".repeat(120), status: "pending" }));
+    const comments = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, text: "y".repeat(500) }));
+    const links = Array.from({ length: 20 }, (_, i) => ({ label: "z".repeat(60), url: "https://example.com/" + "p".repeat(470) + i }));
+    const questions = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, text: "w".repeat(500), options: ["o".repeat(60), "o".repeat(60), "o".repeat(60), "o".repeat(60)] }));
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: { v: 1, title: "Big", tasks, comments, links, questions } });
+    expect(r.status).toBe(413);
+    expect(r.message).toMatch(/at most 32 KB per initiative/);
+    expect((await mcp({ action: "list" })).initiatives).toEqual([]);
+  });
+
+  it("answers the gates before reading MCP args: off on the server, off for the person, rate", async () => {
+    const offActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
+    const { findTool } = await import("../lib/mcp");
+    const tool = findTool("bab_command_center")!;
+    const refuse = async (actor: typeof mcpActor, args: Record<string, unknown>) => {
+      try {
+        await tool.run(actor, args, { origin: "https://bab.example.com" });
+      } catch (err) {
+        const e = err as { status?: number; message: string };
+        return { status: e.status ?? 0, message: e.message };
+      }
+      throw new Error("expected a refusal");
+    };
+    const badText = { action: "publish", id: "billing", record: "[{oops" };
+    // Off for the person: the opt-in sentence, not a JSON 400, with record and with bad JSON text.
+    const off = await refuse(offActor, badText);
+    expect(off.status).toBe(403);
+    expect(off.message).toMatch(/^Command Center is off for Other Two/);
+    expect((await refuse(offActor, { action: "publish", id: "billing", record: RECORD })).status).toBe(403);
+    expect((await refuse(offActor, { action: "publish", id: "billing", record: [RECORD] })).status).toBe(403);
+    // Off on the server wins over the person being off and over bad JSON text.
+    process.env.BAB_COMMAND_CENTER = "0";
+    (await import("../lib/config"))._resetConfigForTests();
+    try {
+      expect((await refuse(offActor, badText)).status).toBe(404);
+      expect((await refuse(mcpActor, badText)).status).toBe(404);
+      expect((await refuse(mcpActor, { action: "publish", id: "billing", record: RECORD })).status).toBe(404);
+    } finally {
+      delete process.env.BAB_COMMAND_CENTER;
+      (await import("../lib/config"))._resetConfigForTests();
+    }
+    // A declared identity is refused before the args are read.
+    const declaredActor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "header" as const };
+    const anon = await refuse(declaredActor as unknown as typeof mcpActor, badText);
+    expect(anon.status).toBe(403);
+    expect(anon.message).toMatch(/needs an identity BAB remembers/);
+    // Rate before the args: once the burst is spent, bad JSON text gets 429.
+    for (let i = 0; i < 20; i++) await mcp({ action: "list" });
+    expect((await refuse(mcpActor, badText)).status).toBe(429);
+  });
+
+  it("bounds how deep record can nest with a clear 400", async () => {
+    let nested: Record<string, unknown> = { ...RECORD };
+    for (let i = 0; i < 10; i++) nested = { record: nested };
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: nested });
+    expect(r.status).toBe(400);
+    expect(r.message).toMatch(/record is nested too deep/);
+  });
+
+  it("reads JSON text null as clearing health and comments on the MCP path", async () => {
+    const rec = { v: 1, title: "Upkeep", kind: "recurring", health: { level: "green", reason: "ok", checkedAt: "2026-01-31T09:30:00Z" } };
+    await mcp({ action: "publish", id: "upkeep", record: rec });
+    await mcp({ action: "publish", id: "upkeep", ...rec, health: "null", comments: "null" });
+    const { ccGet } = await import("../lib/command-center");
+    expect(ccGet(OWNER, "upkeep").health).toBeNull();
+    expect((await mcpRefusal({ action: "publish", id: "upkeep", ...rec, links: "null" })).status).toBe(400);
+  });
 });
 
 describe("POST /api/me", () => {

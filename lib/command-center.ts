@@ -1093,19 +1093,99 @@ export function ccList(owner: string, now: number = Date.now()): { initiatives: 
 }
 
 /**
- * The one entry point for the REST routes and the MCP tool: switch, identity, pace, opt-in, then
- * the action. The owner is always the caller's resolved identity.
+ * The MCP path only: merges a `record` argument over the other fields, so a client can send the
+ * whole record as one declared object. `action` and `id` count only at the top level; the ones
+ * inside `record` are ignored.
  */
-export function runCommandCenter(actor: CcActor, args: Record<string, unknown>, via: AuditVia, origin: string): unknown {
-  const action = typeof args.action === "string" ? args.action : "";
-  if (!CC_ACTIONS.includes(action as CcAction)) {
-    throw new ValidationError(`action must be one of ${CC_ACTIONS.join(", ")}; required, has no default`);
+function mergeRecordArg(args: Record<string, unknown>): Record<string, unknown> {
+  if (!("record" in args) || args.record === undefined) return args;
+  const { record, ...top } = args;
+  if (!isObject(record)) {
+    throw new ValidationError('record must be a JSON object, such as "record": { "v": 1, "title": "Billing export" }, with action and id beside it; send it as an object, not text or a list');
   }
+  const { action: _action, id: _id, ...fields } = record;
+  void _action;
+  void _id;
+  return { ...top, ...fields };
+}
+
+const CC_MCP_NUMBERS = ["v", "expectSeq"];
+const CC_MCP_JSON = ["record", "tasks", "questions", "links", "comments", "options", "health", "source"];
+
+/** Fields where JSON null is a real value: it clears them. */
+const CC_MCP_NULLABLE = ["health", "comments"];
+
+function parseJsonArg(value: string, field: string): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed === null && CC_MCP_NULLABLE.includes(field)) return null;
+  if (parsed === null || typeof parsed !== "object") {
+    throw new ValidationError(`${field} came as text that is not a JSON array or object; send it as an array or object, or put the whole record in "record"`);
+  }
+  return parsed;
+}
+
+/** How deep `record` may nest inside `record` on the MCP path. */
+const CC_MCP_MAX_DEPTH = 4;
+
+/**
+ * The MCP path only: some clients send fields the slim tool schema does not declare as strings.
+ * Reads a numeric string for v and expectSeq, and JSON text for the array and object fields. REST stays strict.
+ */
+export function ccMcpArgs(args: Record<string, unknown>, depth: number = 0): Record<string, unknown> {
+  if (depth > CC_MCP_MAX_DEPTH) {
+    throw new ValidationError('record is nested too deep: send one record object, such as "record": { "v": 1, "title": "Billing export" }, not a record inside a record');
+  }
+  const out: Record<string, unknown> = { ...args };
+  for (const k of CC_MCP_NUMBERS) {
+    const v = out[k];
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) out[k] = Number(v.trim());
+  }
+  for (const k of CC_MCP_JSON) {
+    if (typeof out[k] === "string") out[k] = parseJsonArg(out[k] as string, k);
+  }
+  if (Array.isArray(out.questions)) {
+    out.questions = out.questions.map((q, i) =>
+      isObject(q) && typeof q.options === "string" ? { ...q, options: parseJsonArg(q.options, `questions[${i}].options`) } : q,
+    );
+  }
+  // A record sent as JSON text can carry the same string-typed fields.
+  if (isObject(out.record)) out.record = ccMcpArgs(out.record, depth + 1);
+  return out;
+}
+
+/** The gates every call passes, in order: switch, identity, pace, opt-in. Returns the owner. */
+function passGates(actor: CcActor, origin: string): string {
   assertCommandCenterEnabled();
   assertCommandCenterIdentity(actor);
   const owner = ownerOf(actor);
   assertRate(owner);
   assertOptedIn(owner, origin);
+  return owner;
+}
+
+/**
+ * The one entry point for the REST routes and the MCP tool: switch, identity, pace, opt-in, then
+ * the action. The owner is always the caller's resolved identity. `prepare` reshapes the args after
+ * the gates (the MCP path), so a caller who is off gets the gate answer, not a 400 about the args.
+ */
+export function runCommandCenter(
+  actor: CcActor,
+  rawArgs: Record<string, unknown>,
+  via: AuditVia,
+  origin: string,
+  prepare?: (args: Record<string, unknown>) => Record<string, unknown>,
+): unknown {
+  const action = typeof rawArgs.action === "string" ? rawArgs.action : "";
+  if (!CC_ACTIONS.includes(action as CcAction)) {
+    throw new ValidationError(`action must be one of ${CC_ACTIONS.join(", ")}; required, has no default`);
+  }
+  const owner = passGates(actor, origin);
+  const args = prepare ? prepare(rawArgs) : rawArgs;
   const pick = (allowed: string[]) => {
     for (const k of Object.keys(args)) {
       if (k !== "action" && !allowed.includes(k)) throw new ValidationError(`unknown field '${k}' for ${action}; allowed: ${allowed.join(", ")}`);
@@ -1127,22 +1207,33 @@ export function runCommandCenter(actor: CcActor, args: Record<string, unknown>, 
       pick(["id", "level", "reason", "checkedAt"]);
       return ccHealth(actor, owner, args, via);
     case "list":
-      pick([]);
-      return ccList(owner);
+      // With an id: that one initiative, whole (the same answer as GET /api/command-center/<id>).
+      pick(["id"]);
+      return args.id === undefined ? ccList(owner) : ccGet(owner, args.id);
     case "remove":
       pick(["id"]);
       return ccRemove(owner, { id: args.id }, via);
   }
 }
 
+/**
+ * The MCP tool: string-typed fields read as in ccMcpArgs, and a 409 that carries the current record
+ * in its text, because an MCP error is text only. REST keeps `current` as a field.
+ */
+export function runCommandCenterMcp(actor: CcActor, args: Record<string, unknown>, origin: string): unknown {
+  try {
+    return runCommandCenter(actor, args, "mcp", origin, (a) => mergeRecordArg(ccMcpArgs(a)));
+  } catch (err) {
+    if (err instanceof CcConflictError) {
+      throw new CcConflictError(`${err.message}\ncurrent: ${JSON.stringify(err.current)}`, err.current);
+    }
+    throw err;
+  }
+}
+
 /** GET of one record, for the REST route: the same gates as runCommandCenter. */
 export function runCommandCenterGet(actor: CcActor, id: unknown, origin: string): CcRecord & CcFlags {
-  assertCommandCenterEnabled();
-  assertCommandCenterIdentity(actor);
-  const owner = ownerOf(actor);
-  assertRate(owner);
-  assertOptedIn(owner, origin);
-  return ccGet(owner, id);
+  return ccGet(passGates(actor, origin), id);
 }
 
 // ---------------------------------------------------------------------------
