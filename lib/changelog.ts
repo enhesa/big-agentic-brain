@@ -22,6 +22,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-02",
     title: "Command Center skill fix",
     changes: [
+      "Command Center keeps a work log: agents end every turn with one worked line, and you can download it.",
+      "Command Center now stores everything in the database; comment, health and clear_question became publish fields.",
       "The Command Center skill text now loads cleanly as a plugin skill.",
       "The Command Center skill says when to publish: on every task change, question and wrap-up.",
       "Agents can publish to Command Center with the whole record in one record field.",

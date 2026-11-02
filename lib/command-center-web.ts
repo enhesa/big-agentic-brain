@@ -7,7 +7,8 @@ import { config } from "./config";
 import { ccApiError } from "./command-center";
 
 /**
- * The page's own write routes (/command-center/enable, disable, delete, dismiss). They sit
+ * The page's own write routes (/command-center/enable, disable, delete, dismiss, export/grant,
+ * export/revoke). They sit
  * outside /api so the sign-in proxy attaches the viewer; agent headers, devices and connections
  * are not viewers (getViewer), so no agent can flip the switch. The cookie makes a cross-site
  * post possible, so sameOrigin comes first. A plain form post gets a 303 back to the page.

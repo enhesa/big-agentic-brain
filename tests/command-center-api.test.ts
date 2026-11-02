@@ -74,7 +74,7 @@ describe("/api/command-center", () => {
     expect((await put("x", RECORD)).status).toBe(403);
   });
 
-  it("serves a bound device: put, get, list, actions", async () => {
+  it("serves a bound device: put, get, list, remove", async () => {
     headers = asDevice();
     const first = await put("billing", RECORD);
     expect(first.status).toBe(200);
@@ -86,8 +86,14 @@ describe("/api/command-center", () => {
     const all = await (await list()).json();
     expect(all.initiatives).toHaveLength(1);
     expect(all.dataHealth).toEqual({ staleQuestions: 0, silentInitiatives: 0, recurringWithoutHealth: 0, overdueRecurring: 0 });
-    expect(await (await action("billing", { action: "clear_question", questionId: "q1" })).json()).toEqual({ cleared: true });
-    expect(await (await action("billing", { action: "comment", text: "woken" })).json()).toEqual({ seq: 4 });
+    const worked = await (await put("billing", { ...RECORD, title: "Billing export 2", worked: "Checked the numbers", size: "small" })).json();
+    expect(worked).toMatchObject({ seq: 2, unchanged: true });
+    expect(worked.logged).toMatch(/^[0-9a-f]{32}$/);
+    for (const old of ["clear_question", "comment", "health"]) {
+      const res = await action("billing", { action: old });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/is gone/);
+    }
     expect((await getOne("missing")).status).toBe(404);
     expect(await (await action("billing", { action: "remove" })).json()).toEqual({ removed: true });
   });
@@ -147,12 +153,12 @@ describe("/api/command-center", () => {
     headers = asDevice();
     await put("billing", RECORD);
     const key = { "idempotency-key": "k-1" };
-    const a = await action("billing", { action: "comment", text: "once" }, key);
-    const b = await action("billing", { action: "comment", text: "once" }, key);
+    const a = await action("billing", { action: "remove" }, key);
+    const b = await action("billing", { action: "remove" }, key);
     expect(b.headers.get("Idempotent-Replayed")).toBe("true");
-    expect(await b.json()).toEqual(await a.json());
-    const { ccGet } = await import("../lib/command-center");
-    expect(ccGet(OWNER, "billing").comments).toHaveLength(1);
+    const first = await a.json();
+    expect(await b.json()).toEqual(first);
+    expect(first).toEqual({ removed: true });
   });
 });
 
@@ -161,7 +167,8 @@ describe("bab_command_center", () => {
     const { findTool, LEAN_TOOL_NAMES } = await import("../lib/mcp");
     expect(LEAN_TOOL_NAMES).not.toContain("bab_command_center");
     const tool = findTool("bab_command_center")!;
-    expect(tool.description).toMatch(/^Use only when the command-center skill is loaded/);
+    expect(tool.description).toMatch(/^Needs the command-center skill/);
+    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove"]);
     expect(tool.description).not.toContain("<origin>");
     expect(tool.inputSchema.required).toEqual(["action"]);
     const actor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };
@@ -190,9 +197,10 @@ describe("bab_command_center", () => {
     const props = findTool("bab_command_center")!.inputSchema.properties as Record<string, { type: string }>;
     expect(props.record.type).toBe("object");
     expect(await mcp({ action: "publish", id: "billing", record: { ...RECORD, id: "ignored" } })).toMatchObject({ id: "billing", seq: 1 });
-    expect(await mcp({ action: "comment", id: "billing", record: { text: "from record", action: "remove" } })).toEqual({ seq: 2 });
-    const { ccGet } = await import("../lib/command-center");
-    expect(ccGet(OWNER, "billing").comments.map((c) => c.text)).toEqual(["from record"]);
+    const res = await mcp({ action: "publish", id: "billing", record: { ...RECORD, worked: "from record", action: "remove" } });
+    expect(res).toMatchObject({ seq: 1, unchanged: true });
+    const { ccLogOf } = await import("../lib/command-center");
+    expect(ccLogOf(OWNER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["from record"]);
   });
 
   it("reads a string-typed v, expectSeq and JSON text fields on the MCP path", async () => {
@@ -273,10 +281,10 @@ describe("bab_command_center", () => {
 
   it("answers list with an id with the full record, the same as REST GET; without an id the list", async () => {
     await mcp({ action: "publish", id: "billing", record: RECORD });
-    await mcp({ action: "comment", id: "billing", record: { text: "woken" } });
+    await mcp({ action: "publish", id: "billing", record: { ...RECORD, area: "money" } });
     const one = await mcp({ action: "list", id: "billing" });
-    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export", tasks: [{ id: "t1", text: "Build" }], questions: [{ id: "q1" }] });
-    expect((one.comments as { text: string }[]).map((c) => c.text)).toEqual(["woken"]);
+    expect(one).toMatchObject({ id: "billing", seq: 2, title: "Billing export", area: "money", tasks: [{ id: "t1", text: "Build" }], questions: [{ id: "q1" }] });
+    expect(one).not.toHaveProperty("comments");
     expect(one).not.toHaveProperty("initiatives");
     headers = asDevice();
     expect(one).toEqual(await (await getOne("billing")).json());
@@ -298,10 +306,11 @@ describe("bab_command_center", () => {
     expect((await mcpRefusal({ action: "list", id: "billing", text: "x" })).message).toMatch(/unknown field 'text' for list; allowed: id/);
   });
 
-  it("runs health through record", async () => {
+  it("takes health as a field of the record, and refuses the old health action", async () => {
     const rec = { v: 1, title: "Upkeep", kind: "recurring" };
     await mcp({ action: "publish", id: "upkeep", record: rec });
-    expect(await mcp({ action: "health", id: "upkeep", record: { level: "amber", reason: "slow", checkedAt: "2026-01-31T09:30:00Z" } })).toMatchObject({ seq: 2 });
+    expect(await mcp({ action: "publish", id: "upkeep", record: { ...rec, health: { level: "amber", reason: "slow", checkedAt: "2026-01-31T09:30:00Z" } } })).toMatchObject({ seq: 2 });
+    expect((await mcpRefusal({ action: "health", id: "upkeep", record: { level: "green" } })).message).toMatch(/health is gone as an action/);
     const { ccGet } = await import("../lib/command-center");
     expect(ccGet(OWNER, "upkeep").health).toMatchObject({ level: "amber", reason: "slow" });
   });
@@ -311,20 +320,23 @@ describe("bab_command_center", () => {
     expect(pub.status).toBe(400);
     expect(pub.message).toMatch(/unknown field 'owner'/);
     await mcp({ action: "publish", id: "billing", record: RECORD });
-    const com = await mcpRefusal({ action: "comment", id: "billing", record: { text: "hi", mood: "glad" } });
+    const com = await mcpRefusal({ action: "remove", id: "billing", record: { mood: "glad" } });
     expect(com.status).toBe(400);
-    expect(com.message).toMatch(/unknown field 'mood' for comment/);
+    expect(com.message).toMatch(/unknown field 'mood' for remove/);
+    expect((await mcpRefusal({ action: "publish", id: "billing", record: { ...RECORD, comments: [] } })).message).toMatch(/comments is gone/);
   });
 
   it("refuses a record over 32 KB sent in record with 413 and stores nothing", async () => {
     const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `t${i}`, text: "x".repeat(120), status: "pending" }));
-    const comments = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, text: "y".repeat(500) }));
     const links = Array.from({ length: 20 }, (_, i) => ({ label: "z".repeat(60), url: "https://example.com/" + "p".repeat(470) + i }));
     const questions = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, text: "w".repeat(500), options: ["o".repeat(60), "o".repeat(60), "o".repeat(60), "o".repeat(60)] }));
-    const r = await mcpRefusal({ action: "publish", id: "billing", record: { v: 1, title: "Big", tasks, comments, links, questions } });
+    for (let round = 0; round < 5; round++) {
+      await mcp({ action: "publish", id: "billing", record: { v: 1, title: "Big", questions: Array.from({ length: 5 }, (_, i) => ({ id: `old${round}-${i}`, text: "v".repeat(500) })) } });
+    }
+    const r = await mcpRefusal({ action: "publish", id: "billing", record: { v: 1, title: "Big", tasks, links, questions } });
     expect(r.status).toBe(413);
     expect(r.message).toMatch(/at most 32 KB per initiative/);
-    expect((await mcp({ action: "list" })).initiatives).toEqual([]);
+    expect(((await mcp({ action: "list", id: "billing" })).tasks as unknown[]).length).toBe(0);
   });
 
   it("answers the gates before reading MCP args: off on the server, off for the person, rate", async () => {
@@ -376,10 +388,10 @@ describe("bab_command_center", () => {
     expect(r.message).toMatch(/record is nested too deep/);
   });
 
-  it("reads JSON text null as clearing health and comments on the MCP path", async () => {
+  it("reads JSON text null as clearing health on the MCP path", async () => {
     const rec = { v: 1, title: "Upkeep", kind: "recurring", health: { level: "green", reason: "ok", checkedAt: "2026-01-31T09:30:00Z" } };
     await mcp({ action: "publish", id: "upkeep", record: rec });
-    await mcp({ action: "publish", id: "upkeep", ...rec, health: "null", comments: "null" });
+    await mcp({ action: "publish", id: "upkeep", ...rec, health: "null" });
     const { ccGet } = await import("../lib/command-center");
     expect(ccGet(OWNER, "upkeep").health).toBeNull();
     expect((await mcpRefusal({ action: "publish", id: "upkeep", ...rec, links: "null" })).status).toBe(400);

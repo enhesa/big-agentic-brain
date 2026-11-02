@@ -40,6 +40,7 @@ afterEach(async () => {
   delete process.env.DATA_DIR;
   delete process.env.BAB_TRUST_PROXY_IDENTITY;
   delete process.env.BAB_COMMAND_CENTER;
+  delete process.env.BAB_COMMAND_CENTER_EXPORT_APPS;
   (await import("../lib/config"))._resetConfigForTests();
   vi.doUnmock("next/headers");
   vi.resetModules();
@@ -299,6 +300,86 @@ describe("/command-center page", () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
     expect(NAV_ITEMS.map((i) => i.href as string)).not.toContain("/command-center");
     expect(readFileSync(path.join(process.cwd(), "app/components/landing/Footer.tsx"), "utf8")).not.toContain("/command-center");
+  });
+  it("shows a Log per initiative, newest first, with kind labels and size, as text", async () => {
+    await seedAlice({ worked: "Wrote the <i>parser</i>", size: "medium" });
+    const cc = await import("../lib/command-center");
+    vi.setSystemTime(NOW + 60_000);
+    // The same record again with a new line: one more worked entry, nothing else.
+    cc.ccPublish(
+      agent(ALICE),
+      ALICE,
+      {
+        v: 1,
+        id: "billing-export",
+        title: "Billing <b>export</b>",
+        area: "finance",
+        tasks: [
+          { id: "a", text: "Design", status: "done" },
+          { id: "b", text: "Build", status: "in_progress" },
+        ],
+        questions: [{ id: "q1", text: "<script>alert(1)</script> Which months?", options: ["All"] }],
+        links: [{ label: "PR", url: "https://git.example.com/acme/x/pull/1" }],
+        source: { machine: "laptop-1", session: "s-1" },
+        worked: "Finished the build",
+      },
+      "mcp",
+    );
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain('aria-label="Log, newest first"');
+    expect(html.indexOf("Finished the build")).toBeLessThan(html.indexOf("Wrote the"));
+    expect(html).toContain("task done");
+    expect(html).toContain("asked");
+    expect(html).toContain("Wrote the &lt;i&gt;parser&lt;/i&gt;");
+    expect(html).not.toContain("<i>parser</i>");
+    expect(html).toMatch(/logSize[^"]*">medium</);
+    expect(html).not.toContain("notes");
+  });
+
+  it("keeps done, parked and silent initiatives off the page and says how many", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    cc.ccPublish(a, ALICE, { v: 1, id: "old", title: "Old silent one" }, "mcp", NOW - 15 * DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "fin", title: "Finished one", state: "done" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "park", title: "Parked one", state: "parked" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "live", title: "Live one" }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("Live one");
+    expect(html).not.toContain("Old silent one");
+    expect(html).not.toContain("Finished one");
+    expect(html).not.toContain("Parked one");
+    expect(html).toContain("3 done, parked or silent initiatives are off this page. They stay in your log.");
+  });
+
+  it("offers the person's own log download and no report apps when none are set up", async () => {
+    (await import("../lib/command-center")).ccSetSwitch(ALICE, true);
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain('href="/command-center/export"');
+    expect(html).toContain("Download my log");
+    expect(html).not.toContain('action="/command-center/export/grant"');
+  });
+
+  it("lists configured report apps with share and stop-sharing forms", async () => {
+    process.env.BAB_COMMAND_CENTER_EXPORT_APPS = `reports=${"r".repeat(40)}`;
+    (await import("../lib/config"))._resetConfigForTests();
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    asViewer(ALICE, "Alice A");
+    let html = await render();
+    expect(html).toContain('data-app="reports"');
+    expect(html).toContain("not shared");
+    expect(html).toContain('action="/command-center/export/grant"');
+    expect(html).not.toContain('action="/command-center/export/revoke"');
+    expect(html).toContain("counts per initiative and day");
+    expect(html).not.toContain("r".repeat(40));
+    cc.ccGrantExport(ALICE, "reports", "entries");
+    html = await render();
+    expect(html).toContain("shares entries");
+    expect(html).toContain('action="/command-center/export/revoke"');
   });
 });
 

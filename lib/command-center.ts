@@ -1379,7 +1379,8 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
     ...r,
     ...flagsOf(r, now),
     questionViews: r.questions.map((q) => ({ ...q, stale: questionStale(r, q, now) })),
-    log: ccRecentLog(ownerId, r.id),
+    // Paused hides its questions, in the log too.
+    log: ccRecentLog(ownerId, r.id).filter((e) => r.priority !== "paused" || !e.kind.startsWith("question")),
   }));
   const needsYou = records
     .filter((r) => r.priority !== "paused")

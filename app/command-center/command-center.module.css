@@ -1350,6 +1350,74 @@
   }
 }
 
+/* v3: the per-initiative log, the off-page line and the person's own log section. */
+.log {
+  margin-top: 8px;
+}
+
+.logHead {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-muted);
+}
+
+.logKind {
+  font-size: 0.75rem;
+  color: var(--c-ink-2);
+  margin-right: 6px;
+}
+
+.logSize {
+  margin-left: 6px;
+}
+
+.offPage {
+  margin: 10px 0 0;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+
+.logPanel {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logPanel p {
+  margin: 0;
+}
+
+.apps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.appRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.appName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.appForm {
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .qCard,
   .card,

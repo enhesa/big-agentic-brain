@@ -132,7 +132,7 @@ function DeleteNow() {
     <details className={styles.confirm}>
       <summary className={styles.dangerLink}>Delete all my records now</summary>
       <div className={styles.confirmBody}>
-        <p>This deletes every initiative, question and note on this page at once. It cannot be undone.</p>
+        <p>This deletes every initiative, question and log entry, and stops all sharing, at once. It cannot be undone.</p>
         <form method="post" action="/command-center/delete">
           <button type="submit" className={styles.danger}>
             Yes, delete all my records
@@ -246,6 +246,11 @@ function OnState({ view }: { view: CcView }) {
             ))}
           </div>
         ) : null}
+        {view.offPage ? (
+          <p className={styles.offPage}>
+            {view.offPage} done, parked or silent {view.offPage === 1 ? "initiative is" : "initiatives are"} off this page. They stay in your log.
+          </p>
+        ) : null}
       </section>
 
       {upkeep.length ? (
@@ -258,6 +263,8 @@ function OnState({ view }: { view: CcView }) {
           </ul>
         </section>
       ) : null}
+
+      <YourLog view={view} />
     </>
   );
 }
@@ -432,6 +439,7 @@ function Initiative({ r }: { r: Rec }) {
   const next = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
   const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
   const done = r.tasks.filter((t) => t.status === "done").length;
+  const log = paused ? r.log.filter((e) => e.kind !== "question_asked" && e.kind !== "question_cleared") : r.log;
   const cls = [styles.card, urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.state === "done" ? styles.isDone : ""].join(" ");
   return (
     <article className={cls} data-initiative={r.id} aria-labelledby={`cc-i-${r.id}`}>
@@ -466,37 +474,24 @@ function Initiative({ r }: { r: Rec }) {
         </p>
       ) : null}
 
-      {/* One meta line: tasks and notes behind a toggle, links, then who pushed last. An opened
-          toggle takes the full width and pushes the links and footer below its list. */}
+      {/* A paused initiative hides its questions, in the log too. */}
+      {log.length ? <LogList log={log} /> : null}
+
+      {/* One meta line: tasks behind a toggle, links, then who pushed last. An opened toggle
+          takes the full width and pushes the links and footer below its list. */}
       <div className={styles.meta}>
-        {r.tasks.length || r.log.length ? (
+        {r.tasks.length ? (
           <details className={styles.details}>
-            <summary>
-              {[r.tasks.length ? `${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : "", r.log.length ? "log" : ""]
-                .filter(Boolean)
-                .join(" · ")}
-            </summary>
-            {r.tasks.length ? (
-              <ul className={styles.tasks} aria-label="Tasks">
-                {r.tasks.map((t) => (
-                  <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
-                    <TaskIcon status={t.status} />
-                    <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
-                    <span>{t.text}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {r.log.length ? (
-              <ol className={styles.timeline} aria-label="Notes, newest first">
-                {r.log.map((c) => (
-                  <li key={c.id}>
-                    <span className={styles.when}>{formatRelativeTime(c.at)}</span>
-                    <span>{c.text}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : null}
+            <summary>{`${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}`}</summary>
+            <ul className={styles.tasks} aria-label="Tasks">
+              {r.tasks.map((t) => (
+                <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
+                  <TaskIcon status={t.status} />
+                  <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
+                  <span>{t.text}</span>
+                </li>
+              ))}
+            </ul>
           </details>
         ) : null}
 
@@ -508,6 +503,92 @@ function Initiative({ r }: { r: Rec }) {
         </p>
       </div>
     </article>
+  );
+}
+
+/** Short labels for the entries the server writes itself; a `worked` line needs none. */
+const LOG_KIND_LABEL: Record<string, string> = {
+  note: "note",
+  task_started: "task started",
+  task_done: "task done",
+  question_asked: "asked",
+  question_cleared: "cleared",
+  health: "health",
+  state: "state",
+};
+
+/** The newest log entries of one initiative, newest first. Every string is React text. */
+function LogList({ log }: { log: Rec["log"] }) {
+  return (
+    <div className={styles.log}>
+      <h5 className={styles.logHead}>Log</h5>
+      <ol className={styles.timeline} aria-label="Log, newest first">
+        {log.map((e) => (
+          <li key={e.id} data-kind={e.kind}>
+            <span className={styles.when}>{formatRelativeTime(e.at)}</span>
+            <span>
+              {LOG_KIND_LABEL[e.kind] ? <span className={styles.logKind}>{LOG_KIND_LABEL[e.kind]}</span> : null}
+              {e.text ?? ""}
+              {e.size ? <span className={`${styles.tag} ${styles.logSize}`}>{e.size}</span> : null}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** The person's own log download and the export apps they may share it with. */
+function YourLog({ view }: { view: CcView }) {
+  return (
+    <section className={styles.section} aria-labelledby="cc-log">
+      <div className={styles.sectionHead}>
+        <h2 id="cc-log" className={styles.h2}>
+          Your log
+        </h2>
+      </div>
+      <div className={`${styles.panel} ${styles.logPanel}`}>
+        <p>
+          Every publish adds a line on what was worked on. The log is kept for reporting after initiatives leave this page.{" "}
+          <a className={styles.inlineLink} href="/command-center/export" download>
+            Download my log
+          </a>
+        </p>
+        {view.exportApps.length ? (
+          <>
+            <p className={styles.muted}>
+              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, not your text, unless you allow entries. You can stop sharing at any
+              time.
+            </p>
+            <ul className={styles.apps} aria-label="Report apps">
+              {view.exportApps.map(({ app, grant }) => (
+                <li key={app} className={styles.appRow} data-app={app}>
+                  <span className={styles.appName}>{app}</span>
+                  <span className={styles.tag}>{grant ? (grant.level === "entries" ? "shares entries" : "shares counts") : "not shared"}</span>
+                  <form method="post" action="/command-center/export/grant" className={styles.appForm}>
+                    <input type="hidden" name="app" value={app} />
+                    <button type="submit" name="level" value="aggregate" className={styles.ghost}>
+                      Share counts
+                    </button>
+                    <button type="submit" name="level" value="entries" className={styles.ghost}>
+                      Share entries
+                    </button>
+                  </form>
+                  {grant ? (
+                    <form method="post" action="/command-center/export/revoke" className={styles.appForm}>
+                      <input type="hidden" name="app" value={app} />
+                      <button type="submit" className={styles.ghost}>
+                        Stop sharing
+                      </button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

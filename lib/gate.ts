@@ -3,13 +3,13 @@ import { config } from "./config";
 import { isPublicPath } from "./public-paths";
 
 /** Constant-time string compare: a length check first (lengths are not secret), then timingSafeEqual. */
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-function bearer(h: Headers): string | null {
+export function bearer(h: Headers): string | null {
   const m = /^Bearer\s+(\S+)\s*$/i.exec(h.get("authorization") ?? "");
   return m ? m[1] : null;
 }
