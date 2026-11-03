@@ -35,6 +35,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `list` | `GET /api/command-center` |
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
+| `backfill_link` (a single-use upload link, see Backfill) | `POST /api/command-center/backfill/<token>` takes the upload |
 
 `POST .../actions` takes an `Idempotency-Key`. A `PUT` is idempotent by nature.
 
@@ -92,6 +93,64 @@ Entry ids are stable, so a retry is a no-op. The `worked` entry of a publish is 
 it produced. On an unchanged record, a line that repeats the session's newest line for that
 initiative is not logged again, and the answer gives the same `logged` id. Derived entries are
 fixed by their task, question or health and its server time. A 409 logs nothing.
+
+## Backfill from old sessions
+
+A person can fill their log with work done before they used Command Center, from the agent
+session transcripts on their own machines. Only one-line summaries leave the machine, never
+transcript text.
+
+1. Keep history. Claude Code deletes transcripts after `cleanupPeriodDays` (default 30). Raise it
+   in its settings (for example to 400) now, so there is history to backfill later.
+2. Draft, on each machine: `node scripts/cc-backfill.mjs draft --out backfill.json --map map.json`
+   from a checkout of this repository. It reads `~/.claude/projects/*/*.jsonl` (timestamps, working
+   folder, git branch and the user and assistant text), splits each session into work blocks at
+   gaps of more than 30 minutes, and leaves out blocks that ended less than 2 hours ago. It asks
+   your own model endpoint for one `worked` line per block: set `BAB_BACKFILL_BASE_URL` (an
+   Anthropic Messages compatible endpoint), `BAB_BACKFILL_MODEL`, and `BAB_BACKFILL_API_KEY_ENV`,
+   the name of the variable that holds the key. The key is read from that variable only and never
+   printed or written. `--no-llm` writes a plain line from the folder name and branch instead.
+   Nothing is uploaded in this step.
+3. Map. Each block goes to an initiative by the rules in the map file you edit: a working folder
+   (substring), a repository folder name, a branch pattern or a ticket-style key such as `KEY-1`
+   in the branch or the text. The first rule that matches wins. A block no rule matches goes to
+   `unassigned`; nothing is guessed. The draft also writes `<out>.map-template.json` with the
+   folders, branches and keys of unmapped blocks, so you can add rules and draft again.
+4. Review `backfill.json` and the readable `backfill.json.md`. Set `include` to false for a line
+   you do not want, or edit it. Lines that look like a secret are already set to false with the
+   reason in `flagged`.
+5. Upload: ask your agent for a backfill link (`bab_command_center` action `backfill_link`), then
+   run `node scripts/cc-backfill.mjs upload --draft backfill.json --url "<link>"`. `--dry-run` shows
+   what would be sent. Only `id`, `initiative`, `title`, `key`, `worked`, `size`, `at`, `session`
+   and `machine` of included lines are sent.
+
+The link:
+
+- is made only for a bound identity whose switch is on, and only the sha256 of its token is
+  stored. Entries always land in the log of the person who made it; the upload carries no identity.
+- works once, within 15 minutes. It is spent before the body is read, so a refused upload needs a
+  new link. At most 20 unused links per person.
+- takes at most 2000 entries and 1 MB. The tool sends the first batch and says how many are left;
+  make a new link for the rest.
+- is a public path for BAB's API token gate (the token in the path is the credential). A sign-in
+  proxy in front of BAB needs `/api/command-center/backfill/` on its own public-path list too. A
+  reverse proxy may log the path, so the link is short-lived and single use.
+
+The import:
+
+- Each entry is checked like a `worked` line on publish: one line, at most 200 characters, and
+  text that looks like a secret or personal data is refused, naming the field. `at` needs a time
+  zone, may be at most 5 minutes in the future and no older than `BAB_COMMAND_CENTER_LOG_DAYS`.
+- The server sets `source: "backfill"` and kind `worked`; an entry that sends `source`, `kind` or
+  any other field is refused.
+- It is idempotent: the stored entry id comes from the entry's own `id` (the tool uses the session
+  id and the block start), so uploading the same draft again adds nothing.
+- An entry for an initiative you do not have creates a minimal parked record with the entry's
+  `title`, within the usual 100 initiative limit; without a title, or over the limit, the entry
+  goes to `unassigned`. The answer lists accepted, duplicate, refused (with the reason) and
+  created ids. A refused entry does not stop the others.
+- At most 20000 backfill entries per person. Every upload is audited (`cc_backfill_link`,
+  `cc_backfill`) with counts only.
 
 ## Export
 

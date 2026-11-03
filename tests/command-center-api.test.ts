@@ -168,7 +168,7 @@ describe("bab_command_center", () => {
     expect(LEAN_TOOL_NAMES).not.toContain("bab_command_center");
     const tool = findTool("bab_command_center")!;
     expect(tool.description).toMatch(/^Needs the command-center skill/);
-    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove"]);
+    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove", "backfill_link"]);
     expect(tool.description).not.toContain("<origin>");
     expect(tool.inputSchema.required).toEqual(["action"]);
     const actor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };

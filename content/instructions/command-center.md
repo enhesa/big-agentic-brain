@@ -78,6 +78,9 @@ short. The server sets every time itself, so send none except `health.checkedAt`
 - `list`: your initiatives with `seq`, open questions and a data-health summary. With `id`: that
   initiative's full record, with its `seq`.
 - `remove` with `id`: when an initiative should not be shown any more. Its log stays.
+- `backfill_link`: only when the person asks to backfill their log from old sessions. It returns
+  a link for one upload within 15 minutes. Give it to the person for the backfill tool's upload
+  step; never upload yourself and never read their transcripts.
 
 ## Keeping it true
 

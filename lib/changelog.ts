@@ -25,6 +25,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Command Center keeps a work log: agents add one worked line per turn; you can download it.",
       "Command Center stores everything in the database; comment, health and clear_question became publish fields.",
       "You choose which report apps may read your Command Center log: counts only, or entries.",
+      "Backfill your Command Center log from old sessions: a local tool drafts lines, you review, then upload.",
     ],
   },
   {

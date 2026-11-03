@@ -80,7 +80,7 @@ async function main() {
     const tool = (await agents.agent.listTools()).find((t) => t.name === "bab_command_center");
     const props = Object.keys(tool?.inputSchema?.properties ?? {}).sort();
     const actions = tool?.inputSchema?.properties?.action?.enum ?? [];
-    const wantActions = ["publish", "list", "remove"];
+    const wantActions = ["publish", "list", "remove", "backfill_link"];
     if (!tool) fail("tool schema", "bab_command_center is not in tools/list");
     else if (props.join(",") !== "action,id,record") fail("tool schema", `properties are ${props.join(",")}, want action,id,record`);
     else if ([...actions].sort().join(",") !== [...wantActions].sort().join(",")) fail("tool schema", `action enum is ${actions.join(",")}, want exactly ${wantActions.join(",")}`);
