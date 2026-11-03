@@ -460,13 +460,13 @@ export default async function UsagePage({
             }}
           />
           <HeroTile
-            label="Searches that helped"
-            value={pct(totals.helpedSearches, totals.searches) ?? "-"}
+            label="Searches with a helpful reaction"
+            value={pct(totals.helpedSearches, totals.identifiedSearches) ?? "-"}
             testId="tile-search-helped"
-            title={`A search counts as helped when the same person marks a memory helpful (or gives kudos) within ${HELPED_WINDOW_MINUTES} minutes after it. Clicks on the memory page do not count here. A sign, not proof: agents do not always react, and the memory need not come from that search.`}
+            title={`The share of searches the same person followed with a helpful or kudos reaction within ${HELPED_WINDOW_MINUTES} minutes. Each reaction credits only the last search before it, so several searches before one reaction count once. A search with no reaction counts as not helped, so help an agent did not react to is missed, and the reaction need not be for a memory from that search: a sign, not proof. Anonymous searches and clicks on the memory page do not count.`}
             note={{
-              text: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.searches)}, last 12 months`,
-              title: "Searches by agents, with the search tool or the REST search, over the last 12 months.",
+              text: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.identifiedSearches)}, last 12 months`,
+              title: "Searches by identified people, with the search tool or the REST search, over the last 12 months. The Searches tile also counts anonymous ones.",
               testId: "tile-helped-note",
             }}
           />

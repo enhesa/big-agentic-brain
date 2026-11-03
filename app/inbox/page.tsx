@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import Shell from "@/app/components/shell/Shell";
 import Avatar from "@/app/components/shell/Avatar";
+import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import ThreadTimeline from "@/app/conversations/ThreadTimeline";
 import { auditRequest } from "@/lib/request-audit";
 import { getViewer, type Viewer } from "@/lib/notify-auth";
@@ -106,9 +107,7 @@ async function SignedOut() {
       <h1 className={styles.h1}>Inbox</h1>
       <div className={`card ${styles.notice}`}>
         {pending ? (
-          <p>
-            Confirm who you are on <a href="/me/devices">/me/devices</a> to see your inbox here.
-          </p>
+          <LinkBrowserNotice then="you can see your inbox here" />
         ) : (
           <p>
             Sign in with your {branding().orgName} account in a browser to see your inbox. This page is for a signed-in browser; an

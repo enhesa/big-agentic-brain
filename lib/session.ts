@@ -15,6 +15,7 @@ import {
   isValidIdentityEmail,
 } from "./identity";
 import { getLinkedUserId } from "./proxy-links";
+import { noteUnlinkedViewer } from "./unlinked-viewer-log";
 import { devicesEnabled, hashSecret, lookupDevice, DEVICE_HEADER } from "./devices";
 import { lookupConnection, MCP_SESSION_HEADER, isSessionId } from "./mcp-connections";
 
@@ -245,9 +246,8 @@ function fromProxy(user: ProxyUser | null): SessionUser | null {
   const email = user.email?.trim().toLowerCase() ?? "";
   if (!isValidIdentityEmail(email)) {
     // Shape only, never the address itself: says why a signed-in viewer got no identity.
-    console.warn(
-      `bab: signed-in viewer has no long-form email (${email ? (email.includes("@") ? "short alias or other domain" : "not an email") : "empty"})`,
-    );
+    // Once per viewer per hour (lib/unlinked-viewer-log.ts): every render resolves the viewer.
+    noteUnlinkedViewer(user.id, email ? (email.includes("@") ? "short alias or other domain" : "not an email") : "empty");
     return null;
   }
   return { ...user, id: email, email, source: "proxy", proxyUserId: user.id };

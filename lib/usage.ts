@@ -189,6 +189,12 @@ export interface ActivityCounts {
    * does not count twice. A lower bound: agents do not always react.
    */
   helpedSearches: number;
+  /**
+   * The searches a reaction could credit: those by an identified person (not anonymous or system).
+   * The base of "Searches with a helpful reaction": an anonymous search can never be followed by a
+   * reaction from the same person, so counting it would only lower the share.
+   */
+  identifiedSearches: number;
   /** Distinct people (audit actors, not anonymous or system) who used any BAB tool or page. */
   people: number;
 }
@@ -366,7 +372,7 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
   const slot = (week: string) => {
     let c = out.get(week);
     if (!c) {
-      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 };
+      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 };
       out.set(week, c);
     }
     return c;
@@ -383,13 +389,14 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
   for (const r of writes) Object.assign(slot(r.week), { saves: num(r.saves), reactions: num(r.reactions) });
   const searches = db
     .prepare(
-      `SELECT ${weekSql("at")} AS week, COUNT(*) AS n
+      `SELECT ${weekSql("at")} AS week, COUNT(*) AS n,
+              SUM(CASE WHEN actor_id NOT IN ${NOT_PEOPLE} THEN 1 ELSE 0 END) AS identified
        FROM audit_log
        WHERE path IN (?, ?) AND at >= ? AND at < ? AND (path = ? OR action = 'GET')
        GROUP BY week`,
     )
-    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number }>;
-  for (const r of searches) slot(r.week).searches = num(r.n);
+    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number; identified: number }>;
+  for (const r of searches) Object.assign(slot(r.week), { searches: num(r.n), identifiedSearches: num(r.identified) });
   // For each helpful or kudos reaction, the same person's last search in the window before it
   // (idx_audit_actor_at), counted once per search, in the week of the search. Not a click on the
   // memory page (via 'ui'): it follows no search in an agent session, so it says nothing about
@@ -437,18 +444,19 @@ export function activityByWeek(weeks: string[]): ActivityWeek[] {
   return weeks.map((week) => ({
     week,
     label: isoWeekLabel(week),
-    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 }),
+    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 }),
   }));
 }
 
 /** The window's totals for the hero tiles: the weekly counts added up, and the distinct people (each counted once). */
 export function activityTotals(activity: ActivityWeek[]): ActivityCounts {
-  const sum = (key: "saves" | "searches" | "reactions" | "helpedSearches" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
+  const sum = (key: "saves" | "searches" | "reactions" | "helpedSearches" | "identifiedSearches" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
   return {
     saves: sum("saves"),
     searches: sum("searches"),
     reactions: sum("reactions"),
     helpedSearches: sum("helpedSearches"),
+    identifiedSearches: sum("identifiedSearches"),
     people: sum("newPeople"),
   };
 }

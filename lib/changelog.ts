@@ -19,6 +19,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-03",
+    title: "Clearer link notice, honest search share",
+    changes: [
+      "Pages now say why BAB does not know you yet and the one step on Your devices that fixes it.",
+      "The usage tile is now Searches with a helpful reaction, and its hover explains how it is counted.",
+      "Anonymous searches no longer lower the helpful reaction share: no reaction can follow them.",
+      "The server log notes a signed-in viewer without a full email once an hour, not on every page.",
+    ],
+  },
+  {
     date: "2026-11-02",
     title: "Command Center skill fix",
     changes: [

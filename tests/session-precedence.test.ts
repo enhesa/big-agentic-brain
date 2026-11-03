@@ -51,6 +51,23 @@ describe("getSessionUser precedence: proxy > agent headers", () => {
     await expect(getSessionUser()).resolves.toBeNull();
   });
 
+  it("notes a short-alias viewer in the log once, not on every page render, and never the address", async () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    mockRequest({ "x-auth-request-user": "proxy-oid", "x-auth-request-email": "fuser@example.com" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { getSessionUser } = await import("../lib/session");
+      for (let i = 0; i < 5; i++) await expect(getSessionUser()).resolves.toBeNull();
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("no long-form email"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("short alias or other domain");
+      expect(lines[0]).not.toContain("fuser");
+      expect(lines[0]).not.toContain("proxy-oid");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("falls back to agent headers when proxy is untrusted (or absent)", async () => {
     mockRequest({ "x-bab-actor-email": "agent.t@example.com", "x-bab-actor-name": "Agent User" });
     const { getSessionUser } = await import("../lib/session");

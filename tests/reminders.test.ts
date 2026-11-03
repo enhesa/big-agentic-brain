@@ -238,9 +238,11 @@ describe("RemindersPage (render)", () => {
     });
 
     const html = await renderReminders();
-    expect(html).toContain(
-      'Confirm who you are on <a href="/me/devices">/me/devices</a> to see your reminders here.',
-    );
+    // The shared notice: what is missing, the one step, and what it unlocks.
+    expect(html).toContain('data-testid="link-browser-notice"');
+    expect(html).toContain("your sign-in did not pass your full email address");
+    expect(html).toContain('<a href="/me/devices">Your devices</a>');
+    expect(html).toContain("you can see your reminders here");
     expect(html).not.toContain("link my BAB browser");
     expect(html).toContain("Reminders are private");
   });
@@ -255,7 +257,8 @@ describe("RemindersPage (render)", () => {
     const html = await renderReminders();
     expect(html).not.toContain("<form");
     expect(html).not.toContain("<button");
-    expect(html).not.toContain("Your devices");
+    // The one link is the notice's "Your devices"; no device list or Forget button here.
+    expect(html).not.toContain("Forget");
     expect(html.match(/href="\/me\/devices"/g)).toHaveLength(1);
   });
 
@@ -272,7 +275,7 @@ describe("RemindersPage (render)", () => {
     expect(html).not.toContain("alice.example@example.com");
     expect(html).not.toContain("that&#x27;s me");
     expect(html).not.toContain("<button");
-    expect(html).toContain("Confirm who you are on");
+    expect(html).toContain("Confirm it once on");
     expect(html).toContain('href="/me/devices"');
     expect(html).not.toContain("link my BAB browser");
   });
@@ -287,7 +290,7 @@ describe("RemindersPage (render)", () => {
 
     const html = await renderReminders();
     expect(html).not.toContain("that&#x27;s me");
-    expect(html).toContain("Confirm who you are on");
+    expect(html).toContain("Confirm it once on");
     expect(html).toContain("/me/devices");
     expect(html).not.toContain("link my BAB browser");
   });
@@ -304,7 +307,7 @@ describe("RemindersPage (render)", () => {
     create({ ownerId: "someone.else@example.com", title: "Not this viewer's reminder" });
 
     const html = await renderReminders();
-    expect(html).toContain("Confirm who you are on");
+    expect(html).toContain("Confirm it once on");
     expect(html).toContain("/me/devices");
     expect(html).not.toContain("link my BAB browser");
     expect(html).not.toContain("Not this viewer's reminder");
@@ -315,7 +318,7 @@ describe("RemindersPage (render)", () => {
     await seedUser("alice.smith@example.com");
 
     const html = await renderReminders();
-    expect(html).not.toContain("Confirm who you are on");
+    expect(html).not.toContain("Confirm it once on");
   });
 
   it("shows no /me/devices line for an untrusted proxy session (BAB_TRUST_PROXY_IDENTITY unset)", async () => {
@@ -326,7 +329,7 @@ describe("RemindersPage (render)", () => {
     });
 
     const html = await renderReminders();
-    expect(html).not.toContain("Confirm who you are on");
+    expect(html).not.toContain("Confirm it once on");
     expect(html).toContain("Reminders are private");
   });
 
@@ -346,7 +349,7 @@ describe("RemindersPage (render)", () => {
 
     const html = await renderReminders();
     expect(html).toContain("Renew the VPN cert");
-    expect(html).not.toContain("Confirm who you are on");
+    expect(html).not.toContain("Confirm it once on");
   });
 
   // Decision: devices handle identity now, so the reminders page shows no
