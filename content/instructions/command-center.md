@@ -16,24 +16,27 @@ The last call of every turn is `publish` with `worked`, even when the turn only 
 or declined a task.
 
 If this skill is loaded and the person switched Command Center on, call `bab_command_center`
-`publish` with the whole initiative record (same `id` every time, `v: 1`) on your first turn, after
-every task status change, and as the last call of every turn, made after the work has returned.
+`publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
+of your first turn, with that step `in_progress`. Publish again after every task status change, and
+as the last call of every turn, after the work has returned.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
 Never put secrets, client names or customer data in any field. Never enable it, never publish for
 anyone else.
 
-Your first reply after your first publish includes the page link {{ORIGIN}}/command-center. Later replies
-do not repeat it.
+Your first reply after your first publish includes the full page link {{ORIGIN}}/command-center.
+Always paste the URL itself, never only say that Command Center is tracking the work. Later replies do
+not repeat it.
 
 To see what another session published, call `list` with the `id`: it returns the full record and
 its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
 after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
 `expectSeq` protects the other session.
 
-After a 403 (Command Center off), tell the person once how to switch it on, with the link. Then stop
-publishing and do not mention Command Center again in that session.
+After a 403 (Command Center off), tell the person how to switch it on, with the link, in that one
+reply only. Then stop publishing. In every later reply say nothing about Command Center, not even
+that it is off or that you skipped a publish.
 
 ## The record
 
