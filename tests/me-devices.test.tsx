@@ -93,7 +93,7 @@ describe("/me/devices page", () => {
     asAliasViewer();
     const html = await render();
     // Says what is missing, then the step.
-    expect(html).toContain("your sign-in did not pass your full email address");
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
     expect(html).toContain("This browser stays linked after that.");
     expect(html).toContain("Are you");
     expect(html).toContain(ALICE);

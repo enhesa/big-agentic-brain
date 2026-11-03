@@ -1018,9 +1018,9 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
 - **Suggest**: "Are you Alice Example (alice.example@example.com)?" with "Yes, that's me"
   (`app/me/devices/SuggestLink.tsx`, on `/me/devices` only; posts `POST /notify/identity/claim`).
 - **Typed claim**: `/me/devices` takes the viewer's long-form address (`claimTypedIdentity`, see
-  "Identity"). `/inbox`, `/reminders`, the comment form on `/memory/[id]` and `/feedback/new` show one
+  "Identity"). `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
   notice for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`): what is
-  missing (the sign-in did not pass a full email address, with the `BAB_IDENTITY_HINT` example), the one
+  missing (the sign-in did not pass a full email address BAB accepts, with the `BAB_IDENTITY_HINT` example), the one
   step (confirm it once on Your devices) and what it unlocks; the browser stays linked after that.
   The server notes such a viewer in its log at most once per viewer per hour per server process, keyed in memory on a hash of
   the sign-in id and never logging the address or the hash (`lib/unlinked-viewer-log.ts`). `GET /notify/identity` reports where the viewer stands:

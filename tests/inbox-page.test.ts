@@ -103,7 +103,7 @@ describe("/inbox who sees it", () => {
     expect(html).toContain('href="/me/devices"');
     // What is missing, the one step, and what it unlocks.
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass your full email address");
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
     expect(html).toContain("you can see your inbox here");
     expect(html).not.toContain("Review my PR");
   });

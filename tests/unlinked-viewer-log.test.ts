@@ -28,6 +28,15 @@ describe("noteUnlinkedViewer", () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a returning viewer's count when other viewers were logged in between", () => {
+    noteUnlinkedViewer("proxy-id-1", REASON, T0);
+    noteUnlinkedViewer("proxy-id-1", REASON, T0 + 1000);
+    noteUnlinkedViewer("proxy-id-2", REASON, T0 + UNLINKED_VIEWER_LOG_WINDOW_MS + 1000);
+    const back = noteUnlinkedViewer("proxy-id-1", REASON, T0 + UNLINKED_VIEWER_LOG_WINDOW_MS + 2000);
+    expect(back).toContain("this viewer was seen 2 times since their last note");
+    expect(back).toContain("2 such viewers in the last hour");
+  });
+
   it("logs each distinct viewer, with a running count of such viewers in the last hour", () => {
     noteUnlinkedViewer("proxy-id-1", REASON, T0);
     const second = noteUnlinkedViewer("proxy-id-2", REASON, T0 + 1000);

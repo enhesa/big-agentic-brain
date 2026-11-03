@@ -13,6 +13,8 @@ import { createHash } from "node:crypto";
  */
 
 export const UNLINKED_VIEWER_LOG_WINDOW_MS = 60 * 60 * 1000;
+/** How long a viewer is remembered, so one who comes back after an hour still gets their count. */
+export const UNLINKED_VIEWER_LOG_KEEP_MS = 24 * UNLINKED_VIEWER_LOG_WINDOW_MS;
 /** Past this many tracked viewers the oldest are dropped, so the map cannot grow without bound. */
 export const UNLINKED_VIEWER_LOG_MAX_KEYS = 5000;
 
@@ -25,7 +27,7 @@ function keyFor(identity: string): string {
 
 function prune(now: number): void {
   for (const [k, v] of seen) {
-    if (now - v.loggedAt >= UNLINKED_VIEWER_LOG_WINDOW_MS) seen.delete(k);
+    if (now - v.loggedAt >= UNLINKED_VIEWER_LOG_KEEP_MS) seen.delete(k);
   }
   // Map keeps insertion order, and a re-noted viewer is re-inserted, so the first keys are the oldest.
   while (seen.size > UNLINKED_VIEWER_LOG_MAX_KEYS) {
@@ -51,9 +53,11 @@ export function noteUnlinkedViewer(identity: string, reason: string, now: number
   seen.set(key, { loggedAt: now, since: 0 });
   prune(now);
   const repeats = prev ? `; this viewer was seen ${prev.since + 1} times since their last note` : "";
+  let lastHour = 0;
+  for (const v of seen.values()) if (now - v.loggedAt < UNLINKED_VIEWER_LOG_WINDOW_MS) lastHour += 1;
   const line =
     `bab: signed-in viewer has no long-form email (${reason})${repeats}; ` +
-    `${seen.size} such viewer${seen.size === 1 ? "" : "s"} in the last hour. Logged once per viewer per hour.`;
+    `${lastHour} such viewer${lastHour === 1 ? "" : "s"} in the last hour. Logged once per viewer per hour.`;
   console.warn(line);
   return line;
 }

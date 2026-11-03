@@ -156,7 +156,7 @@ describe("/feedback/new", () => {
     asViewer("aalice@example.com");
     const html = await render("../app/feedback/new/page", { searchParams: Promise.resolve({}) });
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass your full email address (like first.last@example.com)");
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts (like first.last@example.com)");
     expect(html).toContain('<a href="/me/devices">Your devices</a>');
     expect(html).toContain("you can post feedback here");
   });

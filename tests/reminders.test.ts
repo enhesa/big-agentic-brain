@@ -240,7 +240,7 @@ describe("RemindersPage (render)", () => {
     const html = await renderReminders();
     // The shared notice: what is missing, the one step, and what it unlocks.
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass your full email address");
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
     expect(html).toContain('<a href="/me/devices">Your devices</a>');
     expect(html).toContain("you can see your reminders here");
     expect(html).not.toContain("link my BAB browser");
