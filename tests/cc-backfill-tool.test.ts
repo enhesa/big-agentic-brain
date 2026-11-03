@@ -32,7 +32,11 @@ import {
   groupSessions,
   buildSyncDraft,
   maskField,
+  maskFieldInfo,
   flagField,
+  writePrivate,
+  syncMarkdown,
+  draftMarkdown,
   syncSlug,
   uploadCurrent,
   uploadBody,
@@ -112,6 +116,50 @@ function allFilesText(root: string): string {
 }
 
 type Entry = Record<string, unknown>;
+
+/**
+ * Spies on how writePrivate writes: every file must be written to a new temp file in the same
+ * folder, opened exclusively ("wx") with mode 0600, then renamed into place. Nothing else may write.
+ */
+function spyPrivateWrites() {
+  const opens: Array<{ file: string; flags: unknown; mode: unknown }> = [];
+  const renames: Array<{ from: string; to: string }> = [];
+  const writeFiles: string[] = [];
+  const realOpen = fs.openSync;
+  const realRename = fs.renameSync;
+  const realWriteFile = fs.writeFileSync;
+  const spyOpen = vi.spyOn(fs, "openSync").mockImplementation(((file: string, flags: unknown, mode: unknown) => {
+    // Only opens for writing: a read that goes through openSync is not a write.
+    if (flags !== undefined && flags !== "r") opens.push({ file: String(file), flags, mode });
+    return realOpen(file, flags as string, mode as number);
+  }) as typeof fs.openSync);
+  const spyRename = vi.spyOn(fs, "renameSync").mockImplementation(((from: string, to: string) => {
+    renames.push({ from: String(from), to: String(to) });
+    return realRename(from, to);
+  }) as typeof fs.renameSync);
+  const spyWriteFile = vi.spyOn(fs, "writeFileSync").mockImplementation(((file: string, data: string, opts?: unknown) => {
+    writeFiles.push(String(file));
+    return realWriteFile(file, data, opts as fs.WriteFileOptions);
+  }) as typeof fs.writeFileSync);
+  return {
+    restore() {
+      spyOpen.mockRestore();
+      spyRename.mockRestore();
+      spyWriteFile.mockRestore();
+    },
+    expectPrivate(files: string[]) {
+      expect(writeFiles).toEqual([]);
+      expect(renames.map((r) => r.to)).toEqual(files);
+      expect(opens).toHaveLength(files.length);
+      opens.forEach((o, i) => {
+        expect(o).toMatchObject({ flags: "wx", mode: 0o600 });
+        expect(o.file).toBe(renames[i].from);
+        expect(path.dirname(o.file)).toBe(path.dirname(path.resolve(files[i])));
+        expect(existsSync(o.file)).toBe(false); // renamed away, no temp file left
+      });
+    },
+  };
+}
 
 describe("parsing", () => {
   it("skips bad lines, sidechains, tool results, command wrappers and non-text blocks", () => {
@@ -274,14 +322,9 @@ describe("mapping", () => {
     mkdirSync(path.dirname(out));
     // An older draft with wider permissions is tightened too.
     writeFileSync(out, "{}", { mode: 0o644 });
-    const writes: Array<{ file: string; mode: unknown }> = [];
-    const realWrite = fs.writeFileSync;
-    const realChmod = fs.chmodSync;
-    const spyWrite = vi.spyOn(fs, "writeFileSync").mockImplementation(((file: string, data: string, opts?: { mode?: number }) => {
-      writes.push({ file: String(file), mode: opts?.mode });
-      return realWrite(file, data, opts);
-    }) as typeof fs.writeFileSync);
+    const spies = spyPrivateWrites();
     const chmods: Array<{ file: string; mode: unknown }> = [];
+    const realChmod = fs.chmodSync;
     const spyChmod = vi.spyOn(fs, "chmodSync").mockImplementation(((file: string, mode: number) => {
       chmods.push({ file: String(file), mode });
       return realChmod(file, mode);
@@ -289,12 +332,13 @@ describe("mapping", () => {
     try {
       expect(await run(["draft", "--projects-dir", projects, "--out", out, "--no-llm"], capture().deps)).toBe(0);
     } finally {
-      spyWrite.mockRestore();
+      spies.restore();
       spyChmod.mockRestore();
     }
     const files = [out, path.join(dir, "out", "draft.md"), path.join(dir, "out", "draft.map-template.json")];
-    expect(writes).toEqual(files.map((file) => ({ file, mode: 0o600 })));
+    spies.expectPrivate(files);
     expect(chmods).toEqual(files.map((file) => ({ file, mode: 0o600 })));
+    expect(JSON.parse(readFileSync(out, "utf8")).entries).toHaveLength(1);
     if (process.platform !== "win32") for (const f of files) expect(statSync(f).mode & 0o777).toBe(0o600);
   });
 });
@@ -893,6 +937,10 @@ describe("sync: grouping, window and ids", () => {
     expect(ids.some((id: string) => id.startsWith("backfill-"))).toBe(true);
     expect(syncSlug("export")).not.toBe("export");
     expect(syncSlug("backfill")).toMatch(/^backfill-[0-9a-f]{6}$/);
+    // The server's own initiative for unmapped work is reserved too, and stays the same across runs.
+    expect(syncSlug("unassigned")).toMatch(/^unassigned-[0-9a-f]{6}$/);
+    expect(syncSlug("unassigned")).toBe(syncSlug("unassigned"));
+    expect(syncSlug("Unassigned!")).toMatch(/^unassigned-[0-9a-f]{6}$/);
     expect(syncSlug("x".repeat(60))).toHaveLength(40);
     expect(syncSlug("KEY-12")).toBe("key-12");
   });
@@ -940,20 +988,15 @@ describe("sync: draft output and masking", () => {
     const out = path.join(dir, "out", "sync.json");
     mkdirSync(path.dirname(out));
     writeFileSync(out, "{}", { mode: 0o644 });
-    const writes: Array<{ file: string; mode: unknown }> = [];
-    const realWrite = fs.writeFileSync;
-    const spy = vi.spyOn(fs, "writeFileSync").mockImplementation(((file: string, data: string, opts?: { mode?: number }) => {
-      writes.push({ file: String(file), mode: opts?.mode });
-      return realWrite(file, data, opts);
-    }) as typeof fs.writeFileSync);
+    const spies = spyPrivateWrites();
     const c = capture();
     try {
       expect(await run(["sync", "--projects-dir", projects, "--out", out], c.deps)).toBe(0);
     } finally {
-      spy.mockRestore();
+      spies.restore();
     }
     const md = path.join(dir, "out", "sync.md");
-    expect(writes).toEqual([out, md].map((file) => ({ file, mode: 0o600 })));
+    spies.expectPrivate([out, md]);
     if (process.platform !== "win32") for (const f of [out, md]) expect(statSync(f).mode & 0o777).toBe(0o600);
     const draft = JSON.parse(readFileSync(out, "utf8"));
     expect(draft).toMatchObject({ v: 1, kind: "bab-cc-backfill-draft", entries: [] });
@@ -1051,6 +1094,171 @@ describe("sync: draft output and masking", () => {
   });
 });
 
+describe("sync and draft: masking review fixes", () => {
+  const t0 = NOW - HOUR;
+  const one = (o: Partial<SyncOpts> & { session: string }, title?: string) =>
+    stateOf([sline({ at: t0, content: "go", ...o }), ...(title ? [titleLine(o.session, "custom-title", title)] : [])]);
+
+  it("checks the repo and branch an id is made from, and leaves the record out when they flag; ids stay the same across runs", () => {
+    const pat = ["ghp", randomBytes(18).toString("hex")].join("_");
+    const states = [one({ session: "a", branch: "feature/token-rotation" }, "Rotate things"), one({ session: "b", branch: `fix/${pat}` }, "Other thing")];
+    const first = buildSyncDraft(states, { now: NOW }).draft.current;
+    const byTitle = new Map<string, Entry>(first.map((r: Entry) => [String(r.title), r]));
+    expect(byTitle.get("Rotate things")).toMatchObject({ id: "acme-api-feature-token-rotation", include: false, flagged: "id: token" });
+    expect(byTitle.get("Other thing")).toMatchObject({ include: false, flagged: "id: masked token" });
+    expect(buildSyncDraft(states, { now: NOW }).draft.current.map((r: Entry) => r.id)).toEqual(first.map((r: Entry) => r.id));
+    // A plain repo and branch do not flag.
+    expect(buildSyncDraft([one({ session: "c", branch: "fix/cache" }, "Cache")], { now: NOW }).draft.current[0]).toMatchObject({ include: true });
+    expect(uploadCurrent(buildSyncDraft(states, { now: NOW }).draft).records).toEqual([]);
+  });
+
+  it("flags the fallback title made from the repo and branch like any title", () => {
+    const email = `person.${randomUUID().slice(0, 6)}@example.com`;
+    const [r] = buildSyncDraft([one({ session: "d", cwd: `/home/user/${email}` })], { now: NOW }).draft.current;
+    expect(r).toMatchObject({ title: "[redacted:email] main", include: false, flagged: "title: masked email" });
+    expect(r.area).toBeUndefined();
+    expect(JSON.stringify(r.title)).not.toContain(email);
+  });
+
+  it("normalises (NFKC, no format characters) before masking and flagging, in sync fields and the draft prompt", () => {
+    const tail = randomBytes(12).toString("hex").toUpperCase();
+    const fullwidth = [..."ghp_" + tail].map((ch) => String.fromCodePoint(ch.codePointAt(0)! + 0xfee0)).join("");
+    expect(maskField(`push ${fullwidth}`, 120)).toBe("push [redacted:token]");
+    const email = "per\u200Bson@exa\u200Dmple.com";
+    expect(maskField(`mail ${email}`, 120)).toBe("mail [redacted:email]");
+    expect(maskField("a\u202Eb\uFEFFc", 120)).toBe("abc");
+    const p = buildPrompt({ repo: "r", branch: "b", text: `use ${fullwidth} and mail ${email}` });
+    expect(p).toContain("use [redacted:token] and mail [redacted:email]");
+    expect(p).not.toContain(tail);
+    expect(flagLine(`Mailed per\u200Bson@exa\u200Dmple.com`)).toBe("email");
+  });
+
+  it("flags non-ASCII letters next to @ or :, split tokens and 'pw is X' prose, and masks the prose value", () => {
+    expect(flagLine("mailed pérson@example.com")).not.toBeNull();
+    expect(flagLine("mailed bob@éxample.com")).toBe("non-ASCII next to @ or :");
+    expect(flagLine("set ключ: x")).toBe("non-ASCII next to @ or :");
+    expect(flagLine("Fixed the menu of the café: done")).toBe("non-ASCII next to @ or :");
+    expect(flagLine(["ghp", "ABCDEFGHIJ KLMNOPQRSTUVWXYZ0123"].join("_"))).toBe("split token");
+    expect(flagLine("the pw is hunter2")).toBe("password");
+    expect(flagLine("passphrase was correct-horse")).toBe("password");
+    expect(maskField("the pw is hunter2 ok", 120)).toBe("the pw is [redacted:assignment] ok");
+    expect(maskField("password was 'hunter 2' then", 120)).toBe("password was [redacted:assignment] then");
+    expect(maskExcerpt("my pw is hunter2")).toBe("my pw is [redacted:assignment]");
+    expect(flagLine("Fixed the login page for KEY-1")).toBeNull();
+  });
+
+  it("masks links of any scheme, host names of 3+ labels with a host suffix, and more absolute paths", () => {
+    expect(maskField("clone ssh://git:pw@git.example.org/r.git and ftp://u:p@files.example.com/x", 200)).toBe("clone [redacted:link] and [redacted:link]");
+    expect(maskField("call api.dev.internal.example.com and kafka.kafka.svc now", 120)).toBe("call [redacted:host] and [redacted:host] now");
+    // Repo names, namespaces, file names and versions are not host names.
+    expect(maskField("edit cc-backfill-tool.test.ts in acme.tools.matrix, System.Text.Json v1.2.3", 120)).toBe("edit cc-backfill-tool.test.ts in acme.tools.matrix, System.Text.Json v1.2.3");
+    expect(maskField("open /d/work/x.txt and /Volumes/Data/y and /c/Users/z", 120)).toBe("open [redacted:path] and [redacted:path] and [redacted:path]");
+    expect(maskField(String.raw`run C:\Program Files (x86)\Acme\x.exe now`, 120)).toBe("run [redacted:path] now");
+    expect(maskField(String.raw`run C:\Program Files\Acme App\x.exe now`, 120)).toBe("run [redacted:path] now");
+    expect(maskField(String.raw`read \\fileserver\share\Some Dir\x.txt`, 120)).toBe("read [redacted:path]");
+    expect(maskField("and/or the a.b split", 120)).toBe("and/or the a.b split");
+  });
+
+  it("masks adversarial input in linear time, in sync fields and draft prompts alike", () => {
+    const inputs = [
+      "a".repeat(80000),
+      "a-".repeat(40000),
+      "a.".repeat(40000),
+      "eyJ-".repeat(20000),
+      "sk-".repeat(27000),
+      `key="${"a".repeat(80000)}`,
+      "a@".repeat(40000),
+      `a@${"b.".repeat(40000)}1`,
+      String.raw`C:\x ` + "w ".repeat(40000),
+      "a+".repeat(40000),
+      "a.b".repeat(26000),
+    ];
+    for (const s of inputs) {
+      for (const f of [() => maskExcerpt(s), () => maskField(s, 500), () => flagLine(s), () => flagField(s), () => buildPrompt({ repo: "r", branch: "b", text: s })]) {
+        const t = performance.now();
+        f();
+        expect(performance.now() - t).toBeLessThan(1000);
+      }
+    }
+  });
+
+  it("cuts raw field text to 4x the limit before masking, dropping a partial last word, and flags the cut", () => {
+    expect(maskFieldInfo("word ".repeat(100), 120)).toMatchObject({ cut: true });
+    expect(maskFieldInfo("word ".repeat(10), 120)).toMatchObject({ cut: false });
+    // The partial word at the 4x cut is dropped: no fragment of what follows.
+    // (A long hex run masks short, so text after the 4x cut would show within the field limit.)
+    const info = maskFieldInfo(`${"a".repeat(470)} XYZsecretvalue`, 120);
+    expect(info).toEqual({ text: "[redacted:long hex run]", cut: true });
+    const long = one({ session: "e", branch: "main" }, "Long ".repeat(200));
+    const [r] = buildSyncDraft([long], { now: NOW }).draft.current;
+    expect(r).toMatchObject({ include: false, flagged: "title: cut (over 480 characters)" });
+    expect(String(r.title).length).toBeLessThanOrEqual(120);
+  });
+
+  it("flags a masked marker cut in half by the field limit", () => {
+    const hex = randomBytes(16).toString("hex");
+    const v = maskField(`${"a ".repeat(50)}${hex}`, 120);
+    expect(v.endsWith("[redacted:long hex r")).toBe(true);
+    expect(flagField(v)).toBe("masked long hex r");
+    expect(flagField("x [redacted:")).toBe("masked text");
+  });
+
+  it("escapes Markdown and HTML in the readable files", () => {
+    const bt = "`";
+    const evil = `<img src=x onerror=alert(1)> [a](https://x) ${bt}c${bt} *d* |e| \\f`;
+    const escaped = `\\<img src=x onerror=alert(1)\\> \\[a\\](https://x) \\${bt}c\\${bt} \\*d\\* \\|e\\| \\\\f`;
+    const md = syncMarkdown({
+      generatedAt: new Date(NOW).toISOString(),
+      current: [{ id: "x", title: evil, include: true, lastActiveAt: new Date(NOW).toISOString(), tasks: [{ id: "step-1", text: evil, status: "pending" }], questions: [{ id: "q", text: evil, options: [evil] }] }],
+    });
+    expect(md).toContain(`## ${escaped}`);
+    expect(md).toContain(`- [ ] ${escaped}`);
+    expect(md).toContain(`- Question: ${escaped} (options: ${escaped})`);
+    expect(md).not.toMatch(/(^|[^\\])<img/m);
+    const dm = draftMarkdown({ generatedAt: new Date(NOW).toISOString(), entries: [{ at: new Date(NOW).toISOString(), initiative: "x", worked: evil, size: "small", include: true }] });
+    expect(dm).toContain(`| ${escaped} |`);
+  });
+});
+
+describe("writePrivate", () => {
+  it("replaces the file through an exclusive 0600 temp file, leaving no temp file", () => {
+    const f = path.join(dir, "w.json");
+    writeFileSync(f, "old", { mode: 0o644 });
+    const spies = spyPrivateWrites();
+    try {
+      writePrivate(f, "new content");
+    } finally {
+      spies.restore();
+    }
+    spies.expectPrivate([f]);
+    expect(readFileSync(f, "utf8")).toBe("new content");
+    expect(readdirSync(dir).filter((n) => n.endsWith(".tmp"))).toEqual([]);
+    if (process.platform !== "win32") expect(statSync(f).mode & 0o777).toBe(0o600);
+  });
+
+  it("refuses to write through a symbolic link, and leaves its target alone", () => {
+    const target = path.join(dir, "target.txt");
+    writeFileSync(target, "keep");
+    const link = path.join(dir, "link.json");
+    let real = true;
+    try {
+      fs.symlinkSync(target, link, "file");
+    } catch {
+      real = false; // no symlink privilege (Windows): fake the link
+    }
+    const spy = real
+      ? null
+      : vi.spyOn(fs, "lstatSync").mockImplementation(((p: string) => ({ isSymbolicLink: () => String(p) === link, isFile: () => false })) as unknown as typeof fs.lstatSync);
+    try {
+      expect(() => writePrivate(link, "x")).toThrow(/symbolic link/);
+    } finally {
+      spy?.mockRestore();
+    }
+    expect(readFileSync(target, "utf8")).toBe("keep");
+    expect(readdirSync(dir).filter((n) => n.endsWith(".tmp"))).toEqual([]);
+  });
+});
+
 describe("sync: upload of current records", () => {
   const rec = (i: number, extra: Entry = {}): Entry => ({
     id: `init-${i}`,
@@ -1085,7 +1293,8 @@ describe("sync: upload of current records", () => {
   }
   const okFetch = (sent: Array<Record<string, unknown>>) => async (_u: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body));
-    return new Response(JSON.stringify({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], current: { published: 2, refused: [] } }), { status: 200 });
+    // The server's real answer shape for current records.
+    return new Response(JSON.stringify({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 2, syncSkipped: 0, syncRefused: [] }), { status: 200 });
   };
   const URL1 = "https://bab.example.com/api/command-center/backfill/abcdef0123";
 
@@ -1115,7 +1324,36 @@ describe("sync: upload of current records", () => {
       ],
     });
     expect(c.out.join("\n")).toContain("Uploading 0 entries and 2 current records");
-    expect(c.out.join("\n")).toContain("current: published 2, refused 0");
+    expect(c.out.join("\n")).toContain("current: created 2, skipped 0, refused 0");
+  });
+
+  it("prints the server's sync answer: created, skipped, and each refused id with its reason", async () => {
+    const p = syncDraft([rec(1), rec(2), rec(3)]);
+    const fetch = async () =>
+      new Response(
+        JSON.stringify({
+          accepted: 0,
+          duplicate: 0,
+          refused: [],
+          created: [],
+          reassigned: [],
+          syncCreated: 1,
+          syncSkipped: 1,
+          syncRefused: [{ index: 2, id: "init-3", reason: "title holds a link\u001b[2J" }],
+        }),
+        { status: 200 },
+      );
+    const c = capture();
+    expect(await run(["upload", "--draft", p, "--url", URL1], { ...c.deps, fetch })).toBe(0);
+    const text = c.out.join("\n");
+    expect(text).toContain("current: created 1, skipped 1, refused 1");
+    expect(text).toContain("  current refused #2 init-3: title holds a link [2J");
+    expect(text).not.toContain("\u001b");
+    // No sync fields in the answer (a log-only upload): no current line.
+    const c2 = capture();
+    const logOnly = async () => new Response(JSON.stringify({ accepted: 1, duplicate: 0, refused: [], created: [], reassigned: [] }), { status: 200 });
+    expect(await run(["upload", "--draft", syncDraft([], [logEntry(1)]), "--url", URL1], { ...c2.deps, fetch: logOnly })).toBe(0);
+    expect(c2.out.join("\n")).not.toContain("current:");
   });
 
   it("sends log entries and current records together in the first body, current only there, and not with --from", async () => {
@@ -1165,10 +1403,12 @@ describe("sync: upload of current records", () => {
         rec(9, { state: "done" }),
         rec(10),
         rec(10),
+        rec(11, { id: "unassigned" }),
       ],
     });
     expect(records.map((r: Entry) => r.id)).toEqual(["init-10"]);
-    expect(skipped.map((s: { id: string }) => s.id)).toEqual(["backfill", "export", "init-3", "init-4", "init-5", "init-6", "init-7", "init-8", "init-9", "init-10"]);
+    expect(skipped.map((s: { id: string }) => s.id)).toEqual(["backfill", "export", "init-3", "init-4", "init-5", "init-6", "init-7", "init-8", "init-9", "init-10", "unassigned"]);
+    expect(skipped[10].reason).toMatch(/not export, backfill, unassigned/);
     expect(skipped[2].reason).toMatch(/title/);
     expect(skipped[3].reason).toMatch(/status/);
     expect(() => uploadCurrent({ current: Array.from({ length: 101 }, (_, i) => rec(i)) })).toThrow(/at most 100/);

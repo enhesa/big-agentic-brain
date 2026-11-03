@@ -19,7 +19,7 @@
 // Node built-ins only. The pure functions are exported for tests; main() runs only when this
 // file is invoked directly.
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -84,7 +84,8 @@ export const QUESTION_TEXT_MAX = 500;
 export const CC_MAX_OPTIONS = 4;
 export const OPTION_MAX = 60;
 const TASK_STATUSES = ["pending", "in_progress", "done"];
-const RESERVED_IDS = ["export", "backfill"];
+// Routes, and the server's own initiative for unmapped work: never a derived initiative id.
+const RESERVED_IDS = ["export", "backfill", "unassigned"];
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
@@ -380,8 +381,10 @@ export function mapTemplate(unmapped) {
 
 /** The prompt for one block: a masked, capped excerpt plus repo and branch. */
 export function buildPrompt(block) {
-  // Masked first, then cut: a secret across the cut is still masked whole.
-  const excerpt = maskExcerpt(block.text).slice(0, EXCERPT_CHARS);
+  // The raw text is cut to 4x the excerpt first (bounds the masking time; a partial word at that
+  // cut is dropped), then masked, then cut to the excerpt: a secret across the second cut is still
+  // masked whole.
+  const excerpt = maskExcerpt(cutRaw(String(block.text ?? ""), 4 * EXCERPT_CHARS).text).slice(0, EXCERPT_CHARS);
   return [
     "Summarise the work done in this agent session excerpt as one plain line for a work log.",
     `At most ${WORKED_MAX} characters. No secrets, tokens, names of people, hostnames, URLs or customer data.`,
@@ -406,44 +409,84 @@ export function templateLine(block) {
   return postProcess(`Worked in ${block.repo || "unknown repo"} on ${block.branch || "unknown branch"} (${block.turns} turns)`);
 }
 
+// Every pattern here and in MASKS runs in linear time on any input: a run of a class is only tried
+// from its start (a negative lookbehind on the class) or with a bounded length, so a long run
+// without a match (e.g. "a".repeat(80000), "a-".repeat(40000)) is scanned once, not once per position.
+// The email local part: only from the start of a run of its class.
+const EMAIL_SRC = String.raw`(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,20}\.[A-Za-z]{2,24}`;
+// Not a letter A-Z a-z, but a letter: a lookalike or accented letter next to @ or : can hide an
+// email address or a key: value from the ASCII patterns.
+const NON_ASCII_LETTER = String.raw`[^\P{L}\x00-\x7F]`;
+
 const SECRET_CHECKS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY/, "private key"],
-  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/, "email"],
+  [new RegExp(EMAIL_SRC), "email"],
   [/\b[0-9a-f]{32,}\b/i, "long hex run"],
   // No - or _ in the class: long dashed branch names are not secrets.
   [/[A-Za-z0-9+/]{40,}={0,2}/, "long base64 run"],
-  [/\b[\w-]*key\s*[=:]/i, "key="],
+  // Any "key" with = or : after it (the old `\b[\w-]*key` matched the same lines, in quadratic time).
+  [/key\s*[=:]/i, "key="],
   [/token/i, "token"],
   [/pass(word|wd)?\s*[=:]|password/i, "password"],
+  // A well-known token prefix with its value split by a space, e.g. ghp_ABCDEFGHIJ KLMNOPQRSTUV.
+  [/(?<![A-Za-z0-9_-])(?:gh[pousr]_|github_pat_|xox[abprs]-|sk-|AKIA|npm_)[A-Za-z0-9_-]{6,}\s+[A-Za-z0-9_-]{6,}/, "split token"],
+  [/\b(?:pw|pwd|pass(?:code|phrase)?|secret)\s+(?:is|was)\s+\S/i, "password"],
+  [new RegExp(`${NON_ASCII_LETTER}[@:]|[@:]${NON_ASCII_LETTER}`, "u"), "non-ASCII next to @ or :"],
 ];
+
+// A quoted value: at most 500 characters, closing quote optional, so an unclosed quote is still
+// masked and never scanned to the end of a long line.
+const VALUE_SRC = String.raw`("[^"\n]{0,500}"?|'[^'\n]{0,500}'?|[^\s,;"']+)`;
 
 /**
  * What maskExcerpt replaces, in order, each with [redacted:<kind>]. Broader than SECRET_CHECKS:
  * whole private key blocks, backfill links, bearer tokens, well-known token prefixes, and the value
- * (not the name) of key, token, secret and password assignments. The bare words "token" and
- * "password" stay, since prose needs them.
+ * (not the name) of key, token, secret and password assignments, and of "password is X" prose.
+ * The bare words "token" and "password" stay, since prose needs them.
  */
 const MASKS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-{5}[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-{5}|$)/g, "private key"],
   [/(?:https?:\/\/[^\s/]+)?\/api\/command-center\/backfill\/[0-9a-f]{64}/gi, "backfill link"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "bearer token"],
-  [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+)/g, "token"],
-  [/\b([\w-]*(?:key|token|secret|passw(?:or)?d|pwd))(["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;"']+)/gi, "assignment", "$1$2"],
-  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, "email"],
+  [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{36})|(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, "token"],
+  [new RegExp(String.raw`(?<![\w-])([\w-]*(?:key|token|secret|passw(?:or)?d|pwd))(["']?\s*[=:]\s*)${VALUE_SRC}`, "gi"), "assignment", "$1$2"],
+  [new RegExp(String.raw`\b(pw|pwd|pass(?:word|wd|code|phrase)?|secret)(\s+(?:is|was)\s+)${VALUE_SRC}`, "gi"), "assignment", "$1$2"],
+  [new RegExp(EMAIL_SRC, "g"), "email"],
   [/\b[0-9a-f]{32,}\b/gi, "long hex run"],
   [/[A-Za-z0-9+/]{40,}={0,2}/g, "long base64 run"],
 ];
 
-/** The block text with secret-shaped strings, email addresses and backfill links masked. */
+/** NFKC (fullwidth and other compatibility forms become ASCII) and no format characters (zero-width, bidi). */
+function normalizeText(text) {
+  return String(text ?? "").normalize("NFKC").replace(/\p{Cf}/gu, "");
+}
+
+/**
+ * The first `max` characters of raw text, with a partial last word dropped (it may be the start of
+ * a secret, too short to be recognised), and whether it was cut. Linear.
+ */
+function cutRaw(text, max) {
+  if (text.length <= max) return { text, cut: false };
+  let s = text.slice(0, max);
+  if (!/\s/.test(text[max])) {
+    let i = s.length - 1;
+    while (i >= 0 && !/\s/.test(s[i])) i--;
+    if (i >= 0) s = s.slice(0, i);
+  }
+  return { text: s, cut: true };
+}
+
+/** The block text, normalised, with secret-shaped strings, email addresses and backfill links masked. */
 export function maskExcerpt(text) {
-  let s = String(text ?? "");
+  let s = normalizeText(text);
   for (const [re, kind, keep = ""] of MASKS) s = s.replace(re, `${keep}[redacted:${kind}]`);
   return s;
 }
 
-/** A reason when a line looks like it holds a secret, else null. */
+/** A reason when a line looks like it holds a secret, else null. The line is normalised first. */
 export function flagLine(line) {
-  for (const [re, reason] of SECRET_CHECKS) if (re.test(line)) return reason;
+  const s = normalizeText(line);
+  for (const [re, reason] of SECRET_CHECKS) if (re.test(s)) return reason;
   return null;
 }
 
@@ -576,8 +619,9 @@ export async function buildDraft(blocks, { rules = [], provider = null, machine,
   };
 }
 
+/** Text for a table cell or list item: Markdown syntax and HTML escaped, so it shows as written. */
 function cell(s) {
-  return String(s ?? "").replace(/\|/g, "\\|").replace(CONTROL_RE, " ");
+  return String(s ?? "").replace(/[\\|<>[\]`*]/g, "\\$&").replace(CONTROL_RE, " ");
 }
 
 /** A readable table of the draft. */
@@ -797,26 +841,48 @@ export function collectSessionStates(sessions, { now, days = 14 }) {
   return out.sort((a, b) => b.lastMs - a.lastMs || a.session.localeCompare(b.session));
 }
 
+// Host names end in one of these (a public suffix or a private network one). Dotted names with
+// another last label stay: repo names like org.service.api, .NET namespaces, file.test.ts.
+const HOST_TLDS = "com|net|org|io|dev|app|cloud|ai|co|info|biz|eu|be|nl|de|fr|uk|ch|lu|es|pl|se|dk|fi|ie|pt|cz|jp|cn|au|nz|br|sg|hk|ca|us|local|localdomain|internal|intranet|lan|corp|home|svc|arpa";
+const PATH_CHARS = "[^\\s\"'`<>|]";
 // Absolute paths and links: only the repo name and branch may say where work happened.
 const SYNC_MASKS = [
-  [/\bhttps?:\/\/[^\s"'<>`]+/gi, "link"],
-  [/(?:\b[A-Za-z]:[\\/]|\\\\[^\s\\]+\\|~[\\/]|(?<![\w.~-])\/(?:home|Users|root|tmp|var|etc|opt|mnt|srv|private|workspace|workspaces|c)\/)[^\s"'`<>|]*/g, "path"],
+  // Any scheme, credentials included (ssh://u:p@host, ftp://...). The scheme is bounded, not
+  // anchored by \b: linear on "a.".repeat(n).
+  [/[a-z][a-z0-9+.-]{0,30}:\/\/\S+/gi, "link"],
+  // A Windows path (drive or UNC), also across up to 4 spaces when a later word has a backslash
+  // again (C:\Program Files (x86)\App\x.exe).
+  [new RegExp(String.raw`(?:\b[A-Za-z]:[\\/]|\\\\[^\s\\]+\\)${PATH_CHARS}*(?:(?: [^\s"'${"`"}<>|\\]{1,60}){0,4} [^\s"'${"`"}<>|\\]{0,60}\\${PATH_CHARS}*)*`, "g"), "path"],
+  [new RegExp(String.raw`(?:~[\\/]|(?<![\w.~-])\/(?:[A-Za-z]|home|Users|Volumes|root|tmp|var|etc|opt|mnt|srv|private|workspace|workspaces)\/)${PATH_CHARS}*`, "g"), "path"],
+  // A bare host name of 3 or more labels, e.g. api.dev.internal.example.com.
+  [new RegExp(String.raw`(?<![a-z0-9.-])(?:[a-z0-9-]{1,63}\.){2,}(?:${HOST_TLDS})(?![a-z0-9-])`, "gi"), "host"],
 ];
 // Long digit runs (phone, card, account numbers) the server refuses; stricter than its checks.
 const LONG_NUMBER_RE = /\d(?:[\s().+-]*\d){8,}/;
-const MARKER_RE = /\[redacted:([^\]]+)\]/;
+// Also a marker cut short by the field limit, which has lost its closing bracket.
+const MARKER_RE = /\[redacted:([^\]]*)/;
 
-/** One line of text for a record field: masked like an excerpt, plus links and paths, control characters and runs of space folded, cut to max. */
-export function maskField(text, max) {
-  let s = maskExcerpt(String(text ?? ""));
+/**
+ * One line of text for a record field, and whether the raw text was cut: the raw text is cut to 4x
+ * max first (bounds the masking time), then normalised and masked like an excerpt, plus links,
+ * paths and host names; control characters and runs of space are folded; then it is cut to max.
+ */
+export function maskFieldInfo(text, max) {
+  const raw = cutRaw(String(text ?? ""), 4 * max);
+  let s = maskExcerpt(raw.text);
   for (const [re, kind] of SYNC_MASKS) s = s.replace(re, `[redacted:${kind}]`);
-  return s.replace(CONTROL_RE, " ").replace(/\s+/g, " ").trim().slice(0, max).trim();
+  return { text: s.replace(CONTROL_RE, " ").replace(/\s+/g, " ").trim().slice(0, max).trim(), cut: raw.cut };
+}
+
+/** maskFieldInfo's text only. */
+export function maskField(text, max) {
+  return maskFieldInfo(text, max).text;
 }
 
 /** A reason when masked field text must be reviewed before upload, else null. */
 export function flagField(masked) {
   const m = masked.match(MARKER_RE);
-  if (m) return `masked ${m[1]}`;
+  if (m) return `masked ${m[1] || "text"}`;
   if (LONG_NUMBER_RE.test(masked)) return "long number";
   return flagLine(masked);
 }
@@ -895,29 +961,31 @@ export function groupSessions(states, rules = []) {
     const keys = [...new Set(idx.flatMap((i) => keysOfState[i]))].sort();
     const first = states[idx[0]];
     let label;
-    let base;
+    let source;
     let mappedBy;
     if (keys.length) {
       label = `key:${keys[0]}`;
-      base = syncSlug(keys[0]);
+      source = keys[0];
       mappedBy = `key ${keys[0]}`;
     } else if (idx.length > 1 || (first.repo && first.branch && !TRUNK_BRANCHES.has(first.branch.toLowerCase()))) {
       label = `rb:${first.repo}\n${first.branch}`;
-      base = syncSlug(`${first.repo}-${first.branch}`);
+      source = `${first.repo}-${first.branch}`;
       mappedBy = "repo+branch";
     } else {
       label = `session:${first.session}`;
-      base = syncSlug(`session-${first.session.slice(0, 12)}`);
+      source = `session-${first.session.slice(0, 12)}`;
       mappedBy = "session";
     }
-    free_groups.push({ label, base, mappedBy, keys, states: idx.map((i) => states[i]) });
+    // The id is sent too. A repo and branch can hold anything, so buildSyncRecord checks them
+    // (`idSource`); a key is KEY-1 shaped and a session id is the agent's own.
+    free_groups.push({ label, base: syncSlug(source), idSource: mappedBy === "repo+branch" ? `${first.repo} ${first.branch}` : undefined, mappedBy, keys, states: idx.map((i) => states[i]) });
   }
   free_groups.sort((a, b) => a.label.localeCompare(b.label));
   for (const g of free_groups) {
     let id = g.base;
     if (used.has(id)) id = `${id.slice(0, 33).replace(/-+$/, "")}-${shortHash(g.label)}`;
     used.add(id);
-    groups.push({ id, label: g.label, mappedBy: g.mappedBy, keys: g.keys, states: g.states });
+    groups.push({ id, label: g.label, idSource: g.idSource, mappedBy: g.mappedBy, keys: g.keys, states: g.states });
   }
   return { groups, left };
 }
@@ -928,18 +996,21 @@ export function buildSyncRecord(group) {
   const latest = states[0];
   const flags = [];
   const field = (raw, max, where) => {
-    const v = maskField(raw, max);
+    const { text: v, cut } = maskFieldInfo(raw, max);
     const f = v ? flagField(v) : null;
     if (f) flags.push(`${where}: ${f}`);
+    else if (cut) flags.push(`${where}: cut (over ${4 * max} characters)`);
     return v;
   };
+  // The id is derived from the repo and branch for these groups: check that source like a field.
+  if (group.idSource) field(group.idSource, 200, "id");
   const key = group.rule?.key ?? group.keys.find((k) => KEY_RE.test(k));
   let title = group.rule?.title ?? "";
   if (!title) {
     const titled = states.find((s) => s.rawTitle.trim());
     if (titled) title = field(titled.rawTitle, TITLE_MAX, "title");
   }
-  if (!title) title = maskField([key, latest.repo, latest.branch].filter(Boolean).join(" "), TITLE_MAX);
+  if (!title) title = field([key, latest.repo, latest.branch].filter(Boolean).join(" "), TITLE_MAX, "title");
   if (!title) title = `Session ${latest.session.slice(0, 8)}`;
   const planned = states.find((s) => s.plan?.length);
   const tasks = [];
@@ -965,8 +1036,8 @@ export function buildSyncRecord(group) {
   }
   /** @type {Record<string, any>} */
   const record = { id: group.id, title };
-  const area = latest.repo ? maskField(latest.repo, AREA_MAX) : "";
-  if (area && !flagField(area)) record.area = area;
+  const area = latest.repo ? maskFieldInfo(latest.repo, AREA_MAX) : { text: "", cut: false };
+  if (area.text && !area.cut && !flagField(area.text)) record.area = area.text;
   if (key) record.key = key;
   record.state = "active";
   if (tasks.length) record.tasks = tasks;
@@ -1040,7 +1111,7 @@ function plainText(v, max) {
 
 /** Why a reviewed `current` record cannot be sent, or null. Mirrors the server's publish limits. */
 function currentProblem(r) {
-  if (typeof r.id !== "string" || !SLUG_RE.test(r.id) || RESERVED_IDS.includes(r.id)) return "id must be a slug (a-z, 0-9, -), not export or backfill";
+  if (typeof r.id !== "string" || !SLUG_RE.test(r.id) || RESERVED_IDS.includes(r.id)) return `id must be a slug (a-z, 0-9, -), not ${RESERVED_IDS.join(", ")}`;
   if (!plainText(r.title, TITLE_MAX)) return `title must be text of 1 to ${TITLE_MAX} characters`;
   if (r.area != null && r.area !== "" && !plainText(r.area, AREA_MAX)) return `area must be text of at most ${AREA_MAX} characters`;
   if (r.key != null && r.key !== "" && (typeof r.key !== "string" || !KEY_RE.test(r.key))) return "key must look like KEY-1";
@@ -1186,10 +1257,40 @@ function intFlag(value, flag, min, max, dflt) {
   return n;
 }
 
-/** Writes a file readable and writable by its owner only (0600), also when it already existed. */
+/**
+ * Writes a file readable and writable by its owner only (0600). Refuses a symbolic link at the
+ * target (it could point anywhere). The content goes to a new temp file in the same folder, created
+ * exclusively (O_EXCL) with mode 0600, which is then renamed over the target: no content is ever
+ * written under a looser mode, and an older draft's mode does not carry over.
+ */
 export function writePrivate(file, content) {
-  fs.writeFileSync(file, content, { mode: 0o600 });
-  // `mode` applies only when the file is created; an older draft keeps its mode without this.
+  let st = null;
+  try {
+    st = fs.lstatSync(file);
+  } catch (e) {
+    if (/** @type {NodeJS.ErrnoException} */ (e).code !== "ENOENT") throw e;
+  }
+  if (st?.isSymbolicLink()) throw new CliError(`refusing to write through a symbolic link: ${file}`);
+  if (st && !st.isFile()) throw new CliError(`not a regular file: ${file}`);
+  const tmp = path.join(path.dirname(path.resolve(file)), `.${path.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
+  const fd = fs.openSync(tmp, "wx", 0o600);
+  try {
+    try {
+      const buf = Buffer.from(content, "utf8");
+      for (let off = 0; off < buf.length; ) off += fs.writeSync(fd, buf, off, buf.length - off);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // already gone
+    }
+    throw e;
+  }
+  // A no-op on Windows; elsewhere the file is 0600 already (a umask only removes bits).
   fs.chmodSync(file, 0o600);
 }
 
@@ -1277,16 +1378,19 @@ function printAnswer(stdout, body) {
   const created = Array.isArray(body?.created) ? body.created : [];
   const reassigned = Array.isArray(body?.reassigned) ? body.reassigned : [];
   stdout(`accepted ${n(body?.accepted)}, duplicate ${n(body?.duplicate)}, refused ${refused.length}, created ${created.length}, reassigned to unassigned ${reassigned.length}`);
-  for (const r of refused) stdout(`  refused #${r?.index} ${r?.id}: ${r?.reason}`);
-  if (created.length) stdout(`  created initiatives: ${created.join(", ")}`);
-  // The server's answer for current records: printed as counts per field, whatever its shape.
-  const cur = body?.current;
-  if (cur && typeof cur === "object" && !Array.isArray(cur)) {
-    const parts = Object.entries(cur)
-      .filter(([k, v]) => /^[A-Za-z_]{1,30}$/.test(k) && (typeof v === "number" || Array.isArray(v)))
-      .map(([k, v]) => `${k} ${Array.isArray(v) ? v.length : v}`);
-    if (parts.length) stdout(`current: ${parts.join(", ")}`);
+  for (const r of refused) stdout(`  refused #${plain(r?.index)} ${plain(r?.id)}: ${plain(r?.reason)}`);
+  if (created.length) stdout(`  created initiatives: ${created.map(plain).join(", ")}`);
+  // The server's answer for current records: syncCreated and syncSkipped counts, syncRefused [{ index, id, reason }].
+  if (body?.syncCreated !== undefined || body?.syncSkipped !== undefined || body?.syncRefused !== undefined) {
+    const syncRefused = Array.isArray(body.syncRefused) ? body.syncRefused : [];
+    stdout(`current: created ${n(body.syncCreated)}, skipped ${n(body.syncSkipped)}, refused ${syncRefused.length}`);
+    for (const r of syncRefused) stdout(`  current refused #${plain(r?.index)} ${plain(r?.id)}: ${plain(r?.reason)}`);
   }
+}
+
+/** A value from the server's answer as one short line: no control characters, at most 200 characters. */
+function plain(v) {
+  return String(v ?? "").replace(CONTROL_RE, " ").slice(0, 200);
 }
 
 async function runUpload(flags, deps) {
