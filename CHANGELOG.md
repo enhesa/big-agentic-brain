@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.2](https://github.com/enhesa/big-agentic-brain/compare/v2.20.1...v2.20.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* drop the area headings on the Command Center page ([#117](https://github.com/enhesa/big-agentic-brain/issues/117)) ([d869b36](https://github.com/enhesa/big-agentic-brain/commit/d869b36448272f039b0669b38de1b074d0d959d9))
+
 ## [2.20.1](https://github.com/enhesa/big-agentic-brain/compare/v2.20.0...v2.20.1) (2026-11-03)
 
 
