@@ -22,6 +22,8 @@ export const PUBLIC_PATHS = [
   "/api/files/dl/",
   // Single-use upload links: the 256-bit token in the path is the credential (lib/files.ts createUploadLink).
   "/api/files/up/",
+  // Command Center export for report apps: the app's own export token is the credential (lib/command-center.ts exportAppFor), and it reads only people who granted that app.
+  "/api/command-center/export",
 ];
 
 /** Exact match, or prefix match for entries that end with "/". */

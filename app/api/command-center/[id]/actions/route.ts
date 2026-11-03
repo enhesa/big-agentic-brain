@@ -1,14 +1,14 @@
 import { auditRequest } from "@/lib/request-audit";
-import { ccApiError, runCommandCenter } from "@/lib/command-center";
+import { CC_RETIRED_ACTIONS, ccApiError, runCommandCenter } from "@/lib/command-center";
 import { readJsonObject, requireCommandCenterActor } from "@/lib/command-center-route";
 import { withIdempotency } from "@/lib/idempotency";
 import { publicOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
-const ACTIONS = ["clear_question", "comment", "health", "remove"];
+const ACTIONS = ["remove"];
 
-/** POST /api/command-center/:id/actions { action: clear_question | comment | health | remove, ... } */
+/** POST /api/command-center/:id/actions { action: "remove" }. comment, health and clear_question are gone: publish instead. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireCommandCenterActor(req);
   if (user instanceof Response) return user;
@@ -17,6 +17,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return withIdempotency(req, user.id, async () => {
     const body = await readJsonObject(req);
     if (body instanceof Response) return { status: body.status, body: await body.json() };
+    if (typeof body.action === "string" && Object.hasOwn(CC_RETIRED_ACTIONS, body.action)) {
+      return { status: 400, body: { error: CC_RETIRED_ACTIONS[body.action] } };
+    }
     if (typeof body.action !== "string" || !ACTIONS.includes(body.action)) {
       return { status: 400, body: { error: `action must be one of ${ACTIONS.join(", ")}; required, has no default` } };
     }

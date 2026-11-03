@@ -13,21 +13,17 @@ export async function registerNode(): Promise<void> {
   let beginShutdown: () => void;
   let closeDb: () => void;
   let flushKvSnapshot: () => void;
-  let flushCommandCenterSnapshot: () => void;
   try {
     ({ beginShutdown } = await import("./lib/shutdown"));
     ({ closeDb } = await import("./lib/db"));
     ({ flushKvSnapshot } = await import("./lib/kv"));
-    ({ flushCommandCenterSnapshot } = await import("./lib/command-center"));
   } catch (err) {
     console.error(err);
     process.exit(1);
   }
   // After the drain: write the key-value snapshot (lib/kv.ts) and flush the WAL so the volume holds
   // one clean file. Neither may block exit; the snapshot write never throws and is skipped when unchanged.
-  // Command Center first: it saves only while this process holds the lease, which the key-value flush gives up.
   const closeQuietly = () => {
-    flushCommandCenterSnapshot();
     flushKvSnapshot();
     try {
       closeDb();
@@ -56,5 +52,13 @@ export async function registerNode(): Promise<void> {
     // A bad configuration must stop the process, not serve 500s.
     console.error(err);
     process.exit(1);
+  }
+  try {
+    // Command Center v3: move a v2 snapshot into SQLite once. It never throws and never blocks start.
+    const { importCommandCenterSnapshot } = await import("./lib/command-center");
+    importCommandCenterSnapshot();
+  } catch (err) {
+    // The import is retried on first use; a failure here only logs.
+    console.warn(err);
   }
 }

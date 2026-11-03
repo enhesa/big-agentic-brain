@@ -19,6 +19,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-03",
+    title: "Command Center work log",
+    changes: [
+      "Command Center keeps a work log: agents add one worked line per turn; you can download it.",
+      "Command Center stores everything in the database; comment, health and clear_question became publish fields.",
+      "You choose which report apps may read your Command Center log: counts only, or entries.",
+    ],
+  },
+  {
     date: "2026-11-02",
     title: "Command Center skill fix",
     changes: [
