@@ -1,7 +1,8 @@
 import { bearer, gate, safeEqual } from "@/lib/gate";
 import { config } from "@/lib/config";
 import { ccApiError, ccExportForApp, exportAppFor } from "@/lib/command-center";
-import { checkCommandCenterRateLimit } from "@/lib/rate-limit";
+import { clientIp, clientIpVerified } from "@/lib/client-ip";
+import { ANON_GLOBAL_LIMIT_PER_MINUTE, ANON_RATE_LIMIT_PER_MINUTE, checkCommandCenterRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,20 @@ export async function GET(req: Request) {
   // A public path: the gate lets it through in token mode, but its body-size cap still applies.
   const refused = gate(req);
   if (refused) return refused;
+  // Per address before the token is checked, the same buckets as the other public paths, so
+  // guessing tokens costs a caller its address's budget.
+  const ip = clientIpVerified() ? clientIp(req.headers) : null;
+  if (!checkRateLimit("anon-global", ANON_GLOBAL_LIMIT_PER_MINUTE) || (ip && !checkRateLimit(`anon:${ip}`, ANON_RATE_LIMIT_PER_MINUTE))) {
+    return Response.json(
+      { error: `Too many requests: at most ${ANON_RATE_LIMIT_PER_MINUTE} a minute from one address; wait a minute and try again` },
+      { status: 429, headers: { ...NO_STORE, "Retry-After": "60" } },
+    );
+  }
   const c = config();
   if (!c.commandCenter || c.commandCenterExportApps.size === 0) return Response.json({ error: "Command Center export is not set up on this BAB" }, { status: 404, headers: NO_STORE });
   const app = exportAppFor(bearer(req.headers), safeEqual);
   if (!app) return Response.json({ error: "export app token required: Authorization: Bearer <token>" }, { status: 401, headers: NO_STORE });
-  if (!checkCommandCenterRateLimit(`app:${app}`)) return Response.json({ error: "Too many requests; wait a minute" }, { status: 429, headers: NO_STORE });
+  if (!checkCommandCenterRateLimit(`app:${app}`)) return Response.json({ error: "Too many requests; wait a minute" }, { status: 429, headers: { ...NO_STORE, "Retry-After": "60" } });
   const url = new URL(req.url);
   try {
     const body = ccExportForApp(app, { from: url.searchParams.get("from"), to: url.searchParams.get("to"), detail: url.searchParams.get("detail") });

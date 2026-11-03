@@ -12,7 +12,7 @@
  *   never shows.
  * - One store: SQLite (migration v54). Live records in command_center_initiatives, the work log
  *   in command_center_log, export consent in command_center_export_grants. Every query is keyed
- *   by owner_id. A v2 snapshot file is imported once and renamed, never deleted.
+ *   by owner_id. A v2 snapshot file is imported once and renamed, then deleted after 30 days.
  * - The log: a publish may carry `worked` (one line) and `size`; the server adds entries for
  *   task, question, health and state changes it sees. Entry ids are stable, so a retry is a no-op.
  * - Writes are audited (person, initiative id, result), never bodies.
@@ -446,6 +446,8 @@ export function ccEntryId(...parts: (string | number | null)[]): string {
 interface ProcessState {
   imported: boolean;
   lastSweep: number;
+  /** Set once the missing command_center_imports table was logged, so it is logged once. */
+  warnedNoImports?: boolean;
 }
 const STATE_KEY = "__babCommandCenterState";
 type Holder = { [STATE_KEY]?: ProcessState };
@@ -652,7 +654,18 @@ export function ccSnapshotPath(): string {
 function retireImportedSnapshot(now: number): void {
   const file = ccImportedSnapshotPath();
   if (!existsSync(file)) return;
-  const row = getDb().prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
+  let row: { at: string | null };
+  try {
+    row = getDb().prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
+  } catch (err) {
+    // A database that ran an early v54 without command_center_imports: keep the file, never fail
+    // a Command Center call over it.
+    if (!processState().warnedNoImports) {
+      processState().warnedNoImports = true;
+      console.warn("bab: cannot read command_center_imports, so the imported Command Center snapshot is kept: " + (err instanceof Error ? err.message : String(err)));
+    }
+    return;
+  }
   if (!row.at || now - Date.parse(row.at) < CC_OFF_KEEP_MS) return;
   try {
     rmSync(file, { force: true });
@@ -792,11 +805,13 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
     if (done) {
       // Imported before, but the rename did not happen: never import it again (a person may have
       // removed or deleted records since), only retire the file.
-      renameSync(file, ccImportedSnapshotPath());
+      retireSnapshotFile(file);
       return null;
     }
-    inTransaction(db, () => {
-      db.prepare("INSERT INTO command_center_imports (sha256, imported_at) VALUES (?, ?)").run(sha256, iso(now));
+    const won = inTransaction(db, () => {
+      // Another replica may have imported the same file since the check above: then it owns the
+      // import and the rename, and this one does nothing.
+      if (!Number(db.prepare("INSERT OR IGNORE INTO command_center_imports (sha256, imported_at) VALUES (?, ?)").run(sha256, iso(now)).changes)) return false;
       for (const [owner, records] of Object.entries(owners)) {
         if (!owner || owner.includes("/") || owner.length > 320 || !Array.isArray(records)) {
           out.dropped += Array.isArray(records) ? records.length : 1;
@@ -843,14 +858,28 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
           );
         }
       }
+      return true;
     });
-    renameSync(file, ccImportedSnapshotPath());
+    if (!won) {
+      console.log("bab: the Command Center snapshot was imported by another process; not imported again.");
+      return null;
+    }
+    retireSnapshotFile(file);
   } catch (err) {
     console.warn("bab: could not import the Command Center snapshot; it is left in place and tried again at the next start: " + (err instanceof Error ? err.message : String(err)));
     return null;
   }
   console.log(`bab: imported the Command Center snapshot: ${out.imported} records, ${out.notes} notes; ${out.skipped} already there, ${out.dropped} dropped. Renamed it to command-center-snapshot.imported.json.`);
   return out;
+}
+
+/** Renames an imported snapshot out of the way. Already gone (another replica renamed it) is fine. */
+function retireSnapshotFile(file: string): void {
+  try {
+    renameSync(file, ccImportedSnapshotPath());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1460,13 +1489,16 @@ export function ccSetSwitch(ownerId: string, on: boolean, now: number = Date.now
   const db = getDb();
   if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(ownerId)) throw new NotFoundError("BAB does not know you yet");
   const at = iso(now);
-  if (on) db.prepare("UPDATE users SET command_center_enabled_at = COALESCE(command_center_enabled_at, ?), command_center_disabled_at = NULL WHERE id = ?").run(at, ownerId);
-  else {
-    db.prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = COALESCE(command_center_disabled_at, ?) WHERE id = ?").run(at, ownerId);
-    // Off withdraws consent: switching on again never resumes sharing by itself.
-    db.prepare("DELETE FROM command_center_export_grants WHERE owner_id = ?").run(ownerId);
-  }
-  auditCc(ownerId, on ? "enable" : "disable", ownerId, on ? "on" : "off", "ui");
+  inTransaction(db, () => {
+    if (on) db.prepare("UPDATE users SET command_center_enabled_at = COALESCE(command_center_enabled_at, ?), command_center_disabled_at = NULL WHERE id = ?").run(at, ownerId);
+    else {
+      db.prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = COALESCE(command_center_disabled_at, ?) WHERE id = ?").run(at, ownerId);
+      // Off withdraws consent, in the same transaction: never off with a grant left behind.
+      // Switching on again never resumes sharing by itself.
+      db.prepare("DELETE FROM command_center_export_grants WHERE owner_id = ?").run(ownerId);
+    }
+    auditCc(ownerId, on ? "enable" : "disable", ownerId, on ? "on" : "off", "ui");
+  });
   return ccSwitch(ownerId);
 }
 
@@ -1546,7 +1578,10 @@ export interface CcAppExport {
   people: { person: string; level: CcExportLevel; rows?: CcAggregateRow[]; entries?: CcLogEntry[] }[];
 }
 
-/** Counts per initiative and day, with the initiative's title and key: no worked lines, no session. */
+/**
+ * Counts per initiative and day, with the initiative's title and key: no worked lines, no session.
+ * `entries` counts every log entry; `worked` only the agents' worked lines (not imported notes).
+ */
 export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
   const rows = new Map<string, CcAggregateRow>();
   for (const e of entries) {
@@ -1558,7 +1593,7 @@ export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
       rows.set(k, row);
     }
     row.entries += 1;
-    if (e.kind === "worked" || e.kind === "note") row.worked += 1;
+    if (e.kind === "worked") row.worked += 1;
     if (e.size) row.sizes[e.size] += 1;
     if (e.title) row.title = e.title;
     if (e.key) row.key = e.key;
@@ -1595,6 +1630,7 @@ export function ccExportForApp(app: string, query: { from?: string | null; to?: 
     if (detail === "entries" && g.level === "entries") return { person: g.owner, level: g.level, entries };
     return { person: g.owner, level: g.level, rows: aggregate(entries) };
   });
+  // "mcp" is the via every non-browser REST route records (AuditVia has only "ui" and "mcp").
   audit(getDb(), `app:${app}`, "cc_export_app", "command_center", app, "mcp", { details: { people: people.length, detail, from, to } });
   return { app, from, to, exportedAt: iso(now), people };
 }

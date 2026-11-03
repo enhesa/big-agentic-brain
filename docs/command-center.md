@@ -102,13 +102,19 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
   bearer, only for people who granted that app on their own page and whose switch is on. The
   person grants or revokes each app on the page (same-origin viewer posts, audited
   `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
-- Aggregated by default: counts per initiative and UTC day (entries, `worked` lines, sizes) with the
-  initiative's title and key, but no log lines and no session. `detail=entries` returns the entries only for people who granted the
+- Aggregated by default: counts per initiative and UTC day (`entries`: all log entries; `worked`:
+  worked lines only, not imported notes; sizes) with the initiative's title and key, but no log
+  lines and no session. `detail=entries` returns the entries only for people who granted the
   `entries` level. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
   is the credential. A sign-in proxy in front of BAB has its own public-path list: add the path
   there too, or apps cannot reach it.
+- Rate limits: before the token is checked, each client address gets the anonymous budget of the
+  other public paths (`ANON_RATE_LIMIT_PER_MINUTE` in lib/rate-limit.ts, counted only when
+  `BAB_CLIENT_IP_HEADER` is set) and all callers share `ANON_GLOBAL_LIMIT_PER_MINUTE`; then each app
+  gets the Command Center token bucket. Over a limit the answer is 429 with `Retry-After: 60`.
+- `detail=entries` also shares the session and machine name on each entry; the page says so.
 
 ## Derived flags
 

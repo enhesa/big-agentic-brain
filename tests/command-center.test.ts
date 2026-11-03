@@ -703,6 +703,27 @@ describe("the one-time import of a v2 snapshot", () => {
     ]);
   });
 
+  it("the replica that loses the import race imports nothing and says another process did it", async () => {
+    const { getDb } = await import("../lib/db");
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    // Another replica commits the same sha256 between this one's check and its insert.
+    getDb().exec(
+      "CREATE TEMP TRIGGER cc_race BEFORE INSERT ON command_center_imports BEGIN INSERT OR IGNORE INTO command_center_imports (sha256, imported_at) VALUES (NEW.sha256, NEW.imported_at); END;",
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
+    expect(log.mock.calls.some((c) => String(c[0]).includes("imported by another process"))).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    log.mockRestore();
+    warn.mockRestore();
+    getDb().exec("DROP TRIGGER cc_race");
+    // Left in place for the replica that imported it, and never imported here.
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+  });
+
   it("never overwrites a record already in SQLite", () => {
     publish({ id: "alpha", title: "Newer", questions: [] });
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
@@ -743,6 +764,22 @@ describe("migration v54", () => {
     cc.importCommandCenterSnapshot();
     expect(cc.ccLogOf(OWNER)).toEqual(first.log);
     log.mockRestore();
+  });
+
+  it("a database at v54 without command_center_imports still serves publish and list, and logs it once", async () => {
+    const { getDb } = await import("../lib/db");
+    // An early v54 build created no command_center_imports; the imported file is still there.
+    getDb().exec("DROP TABLE command_center_imports");
+    writeFileSync(cc.ccImportedSnapshotPath(), "{}");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(publish()).toMatchObject({ seq: 1 });
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    cc.sweepCommandCenter(NOW + 32 * DAY);
+    const missing = warn.mock.calls.filter((c) => String(c[0]).includes("command_center_imports"));
+    warn.mockRestore();
+    expect(missing).toHaveLength(1);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
   });
 
   it("keeps the v53 opt-in columns across a rewind", async () => {

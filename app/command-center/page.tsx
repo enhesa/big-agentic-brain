@@ -557,8 +557,8 @@ function YourLog({ view }: { view: CcView }) {
         {view.exportApps.length ? (
           <>
             <p className={styles.muted}>
-              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. You can stop sharing at any
-              time.
+              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. Sharing entries also shares the session and machine names on each line. You
+              can stop sharing at any time.
             </p>
             <ul className={styles.apps} aria-label="Report apps">
               {view.exportApps.map(({ app, grant }) => (

@@ -245,6 +245,50 @@ describe("GET /api/command-center/export for a report app", () => {
     expect((await (await GET(appGet())).json()).people).toEqual([]);
   });
 
+  it("switching off is one transaction: when the grants cannot be deleted, the switch stays on", async () => {
+    const cc = await import("../lib/command-center");
+    const { getDb } = await import("../lib/db");
+    cc.ccSetSwitch(ALICE, true);
+    getDb().exec("DROP TABLE command_center_export_grants");
+    expect(() => cc.ccSetSwitch(ALICE, false)).toThrow();
+    expect(cc.ccSwitch(ALICE)).toMatchObject({ disabledAt: null });
+    expect(cc.ccSwitch(ALICE).enabledAt).not.toBeNull();
+  });
+
+  it("limits each address before the token is checked, with a 429 that says how long to wait", async () => {
+    process.env.BAB_CLIENT_IP_HEADER = "x-real-ip";
+    try {
+      (await import("../lib/config"))._resetConfigForTests();
+      const { checkRateLimit, ANON_RATE_LIMIT_PER_MINUTE } = await import("../lib/rate-limit");
+      for (let i = 0; i < ANON_RATE_LIMIT_PER_MINUTE; i++) checkRateLimit("anon:203.0.113.7", ANON_RATE_LIMIT_PER_MINUTE);
+      const { GET } = await import("../app/api/command-center/export/route");
+      const from = (ip: string, token: string | null) =>
+        new Request(`${ORIGIN}/api/command-center/export`, { headers: { "x-real-ip": ip, ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+      const limited = await GET(from("203.0.113.7", APP_TOKEN));
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("60");
+      expect((await limited.json()).error).toContain("wait a minute");
+      // Wrong tokens from that address are refused the same way, so it cannot keep guessing.
+      expect((await GET(from("203.0.113.7", OTHER_TOKEN + "x"))).status).toBe(429);
+      // Another address is not affected.
+      expect((await GET(from("203.0.113.8", APP_TOKEN))).status).toBe(200);
+    } finally {
+      delete process.env.BAB_CLIENT_IP_HEADER;
+    }
+  });
+
+  it("counts only worked lines as worked, not imported notes", async () => {
+    const cc = await import("../lib/command-center");
+    const at = "2026-03-02T09:00:00.000Z";
+    const base = { initiative: "a", title: "A", key: null, text: "x", size: null, session: null, machine: null, at };
+    const rows = cc.aggregate([
+      { ...base, id: "1", kind: "worked", source: "live" },
+      { ...base, id: "2", kind: "note", source: "import" },
+      { ...base, id: "3", kind: "task_done", source: "live" },
+    ]);
+    expect(rows).toEqual([{ initiative: "a", title: "A", key: null, day: "2026-03-02", entries: 3, worked: 1, sizes: { small: 0, medium: 0, large: 0 } }]);
+  });
+
   it("drops a person at once when they revoke", async () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");
