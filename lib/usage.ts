@@ -191,8 +191,8 @@ export interface ActivityCounts {
   helpedSearches: number;
   /**
    * The searches a reaction could credit: those by an identified person (not anonymous or system).
-   * The base of "Searches with a helpful reaction": an anonymous search can never be followed by a
-   * reaction from the same person, so counting it would only lower the share.
+   * The base of "Searches with a helpful reaction". An anonymous bab_search row is a call BAB refused
+   * (app/mcp/route.ts asks the caller to identify first), so it found nothing a reaction could credit.
    */
   identifiedSearches: number;
   /** Distinct people (audit actors, not anonymous or system) who used any BAB tool or page. */

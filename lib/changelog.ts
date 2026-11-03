@@ -24,7 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "Pages now say why BAB does not know you yet and the one step on Your devices that fixes it.",
       "The usage tile is now Searches with a helpful reaction, and its hover explains how it is counted.",
-      "Anonymous searches no longer lower the helpful reaction share: no reaction can follow them.",
+      "Search calls refused before the caller identified no longer lower the helpful reaction share.",
       "The server log notes a signed-in viewer without a full email once an hour, not on every page.",
     ],
   },

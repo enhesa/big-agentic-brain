@@ -463,10 +463,10 @@ export default async function UsagePage({
             label="Searches with a helpful reaction"
             value={pct(totals.helpedSearches, totals.identifiedSearches) ?? "-"}
             testId="tile-search-helped"
-            title={`The share of searches the same person followed with a helpful or kudos reaction within ${HELPED_WINDOW_MINUTES} minutes. Each reaction credits only the last search before it, so several searches before one reaction count once. A search with no reaction counts as not helped, so help an agent did not react to is missed, and the reaction need not be for a memory from that search: a sign, not proof. Anonymous searches and clicks on the memory page do not count.`}
+            title={`The share of searches the same person followed with a helpful or kudos reaction within ${HELPED_WINDOW_MINUTES} minutes. Each reaction credits only the last search before it, so several searches before one reaction count once. A search with no reaction counts as not helped, so help an agent did not react to is missed, and the reaction need not be for a memory from that search: a sign, not proof. Searches BAB refused because it did not know the caller yet, and clicks on the memory page, do not count.`}
             note={{
               text: `${formatCount(totals.helpedSearches)} of ${formatCount(totals.identifiedSearches)}, last 12 months`,
-              title: "Searches by identified people, with the search tool or the REST search, over the last 12 months. The Searches tile also counts anonymous ones.",
+              title: "Searches by identified people, with the search tool or the REST search, over the last 12 months. The Searches tile also counts search calls BAB refused because it did not know the caller yet.",
               testId: "tile-helped-note",
             }}
           />

@@ -1022,7 +1022,7 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
   notice for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`): what is
   missing (the sign-in did not pass a full email address, with the `BAB_IDENTITY_HINT` example), the one
   step (confirm it once on Your devices) and what it unlocks; the browser stays linked after that.
-  The server notes such a viewer in its log at most once per viewer per hour, keyed in memory on a hash of
+  The server notes such a viewer in its log at most once per viewer per hour per server process, keyed in memory on a hash of
   the sign-in id and never logging the address or the hash (`lib/unlinked-viewer-log.ts`). `GET /notify/identity` reports where the viewer stands:
   `linked`, `suggest` (with the email and name), or `claim` (`{ state: "claim", url: "/me/devices" }`).
   It never returns a code.
@@ -1296,7 +1296,7 @@ every time.
      only reuses measured on both sides count; one reuse per person and memory with a `helpful` or
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
-     <date>", not 0); searches with a helpful reaction (helped searches over `identifiedSearches`, the searches by identified people, `n of d` in the note; a search is helped when the same person gives a `helpful` or `kudos` reaction within `HELPED_WINDOW_MINUTES` after it, and each reaction credits only the last search before it; anonymous searches are left out of the base because no reaction can follow them; a search with no reaction counts as not helped and the reaction need not be for a memory from that search, so the hover calls the share a sign, not proof; a click on the memory page, via `ui`, never credits a search); and
+     <date>", not 0); searches with a helpful reaction (helped searches over `identifiedSearches`, the searches by identified people, `n of d` in the note; a search is helped when the same person gives a `helpful` or `kudos` reaction within `HELPED_WINDOW_MINUTES` after it, and each reaction credits only the last search before it; anonymous search rows are left out of the base: they are calls `/mcp` refused because the caller had not identified yet, so nothing a reaction could credit was found; a search with no reaction counts as not helped and the reaction need not be for a memory from that search, so the hover calls the share a sign, not proof; a click on the memory page, via `ui`, never credits a search); and
      People enrolled (every row in `users`, the people the Users directory lists, all time, with
      "+N new this week" and a running-total sparkline by week of `created_at`; `enrolledByWeek` in
      lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the

@@ -444,8 +444,8 @@ describe("activity per week and the hero tiles", () => {
     expect(r.totals.reactions).toBe(2);
   });
 
-  it("leaves anonymous searches out of the base of the helpful reaction share, not out of Searches", async () => {
-    // No reaction can follow an anonymous search, so it would only lower the share.
+  it("leaves refused anonymous search calls out of the base of the helpful reaction share, not out of Searches", async () => {
+    // An anonymous search row is a call BAB refused until the caller identified: it found nothing to credit.
     await row(A, "POST", "2026-10-06 09:00:00", { path: "/mcp#tools/call:bab_search" });
     await row(A, "helpful", "2026-10-06 09:05:00", { entity: "learning" });
     for (const m of ["10", "11", "12"]) await row("anonymous", "POST", `2026-10-06 09:${m}:00`, { path: "/mcp#tools/call:bab_search" });
