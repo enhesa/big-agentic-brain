@@ -110,10 +110,9 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
   is the credential. A sign-in proxy in front of BAB has its own public-path list: add the path
   there too, or apps cannot reach it.
-- Rate limits: before the token is checked, each client address gets the anonymous budget of the
-  other public paths (`ANON_RATE_LIMIT_PER_MINUTE` in lib/rate-limit.ts, counted only when
-  `BAB_CLIENT_IP_HEADER` is set) and all callers share `ANON_GLOBAL_LIMIT_PER_MINUTE`; then each app
-  gets the Command Center token bucket. Over a limit the answer is 429 with `Retry-After: 60`.
+- Rate limits: before the token is checked, each client address gets `ANON_RATE_LIMIT_PER_MINUTE`
+  (lib/rate-limit.ts) in a bucket of its own, counted only when `BAB_CLIENT_IP_HEADER` is set; then
+  each app gets the Command Center token bucket. Over a limit the answer is 429 with `Retry-After: 60`.
 - `detail=entries` also shares the session and machine name on each entry; the page says so.
 
 ## Derived flags

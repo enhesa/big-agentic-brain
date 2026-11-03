@@ -260,7 +260,7 @@ describe("GET /api/command-center/export for a report app", () => {
     try {
       (await import("../lib/config"))._resetConfigForTests();
       const { checkRateLimit, ANON_RATE_LIMIT_PER_MINUTE } = await import("../lib/rate-limit");
-      for (let i = 0; i < ANON_RATE_LIMIT_PER_MINUTE; i++) checkRateLimit("anon:203.0.113.7", ANON_RATE_LIMIT_PER_MINUTE);
+      for (let i = 0; i < ANON_RATE_LIMIT_PER_MINUTE; i++) checkRateLimit("cc-export-anon:203.0.113.7", ANON_RATE_LIMIT_PER_MINUTE);
       const { GET } = await import("../app/api/command-center/export/route");
       const from = (ip: string, token: string | null) =>
         new Request(`${ORIGIN}/api/command-center/export`, { headers: { "x-real-ip": ip, ...(token ? { authorization: `Bearer ${token}` } : {}) } });
@@ -270,7 +270,9 @@ describe("GET /api/command-center/export for a report app", () => {
       expect((await limited.json()).error).toContain("wait a minute");
       // Wrong tokens from that address are refused the same way, so it cannot keep guessing.
       expect((await GET(from("203.0.113.7", OTHER_TOKEN + "x"))).status).toBe(429);
-      // Another address is not affected.
+      // Another address is not affected, nor is an address that spent the other public paths' budget.
+      for (let i = 0; i < ANON_RATE_LIMIT_PER_MINUTE; i++) checkRateLimit("anon:203.0.113.8", ANON_RATE_LIMIT_PER_MINUTE);
+      for (let i = 0; i < 3000; i++) checkRateLimit("anon-global", 3000);
       expect((await GET(from("203.0.113.8", APP_TOKEN))).status).toBe(200);
     } finally {
       delete process.env.BAB_CLIENT_IP_HEADER;

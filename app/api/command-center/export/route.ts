@@ -2,7 +2,7 @@ import { bearer, gate, safeEqual } from "@/lib/gate";
 import { config } from "@/lib/config";
 import { ccApiError, ccExportForApp, exportAppFor } from "@/lib/command-center";
 import { clientIp, clientIpVerified } from "@/lib/client-ip";
-import { ANON_GLOBAL_LIMIT_PER_MINUTE, ANON_RATE_LIMIT_PER_MINUTE, checkCommandCenterRateLimit, checkRateLimit } from "@/lib/rate-limit";
+import { ANON_RATE_LIMIT_PER_MINUTE, checkCommandCenterRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +19,11 @@ export async function GET(req: Request) {
   // A public path: the gate lets it through in token mode, but its body-size cap still applies.
   const refused = gate(req);
   if (refused) return refused;
-  // Per address before the token is checked, the same buckets as the other public paths, so
-  // guessing tokens costs a caller its address's budget.
+  // Per verified address before the token is checked, so guessing tokens costs a caller its
+  // address's budget. A bucket of its own: export never spends, or is starved by, the anonymous
+  // budget of the other public paths.
   const ip = clientIpVerified() ? clientIp(req.headers) : null;
-  if (!checkRateLimit("anon-global", ANON_GLOBAL_LIMIT_PER_MINUTE) || (ip && !checkRateLimit(`anon:${ip}`, ANON_RATE_LIMIT_PER_MINUTE))) {
+  if (ip && !checkRateLimit(`cc-export-anon:${ip}`, ANON_RATE_LIMIT_PER_MINUTE)) {
     return Response.json(
       { error: `Too many requests: at most ${ANON_RATE_LIMIT_PER_MINUTE} a minute from one address; wait a minute and try again` },
       { status: 429, headers: { ...NO_STORE, "Retry-After": "60" } },

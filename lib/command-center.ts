@@ -659,7 +659,8 @@ function retireImportedSnapshot(now: number): void {
     row = getDb().prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
   } catch (err) {
     // A database that ran an early v54 without command_center_imports: keep the file, never fail
-    // a Command Center call over it.
+    // a Command Center call over it. Any other error is a real one.
+    if (!/no such table/i.test(err instanceof Error ? err.message : String(err))) throw err;
     if (!processState().warnedNoImports) {
       processState().warnedNoImports = true;
       console.warn("bab: cannot read command_center_imports, so the imported Command Center snapshot is kept: " + (err instanceof Error ? err.message : String(err)));
