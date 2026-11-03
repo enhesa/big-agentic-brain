@@ -108,11 +108,11 @@ describe("/command-center page", () => {
     expect(html).toContain("/instructions/command-center.md");
   });
 
-  it("shows the on-state: needs-you first, the initiative grouped by area, percent and links", async () => {
+  it("shows the on-state: needs-you first, then the initiative, percent and links", async () => {
     await seedAlice();
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html.indexOf("Needs you")).toBeLessThan(html.indexOf("finance"));
+    expect(html.indexOf("Needs you")).toBeLessThan(html.indexOf('data-initiative="billing-export"'));
     expect(html).toContain("50%");
     expect(html).toContain('href="https://git.example.com/acme/x/pull/1"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -203,12 +203,27 @@ describe("/command-center page", () => {
     expect(html).toMatch(/title="https:\/\/git\.example\.com\/acme\/x\/pull\/1"[^>]*>.*?<span class="[^"]*linkHost[^"]*">git\.example\.com<\/span><\/a>/);
   });
 
-  it("flows every area in one masonry container, area names as headings inside it", async () => {
-    await seedAlice();
+  it("flows every initiative in one flat masonry container, with no area headings or area text", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    cc.ccPublish(a, ALICE, { v: 1, id: "fin-low", title: "Fin low", area: "finance-zone", priority: "low" }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "ops-high", title: "Ops high", area: "ops-zone", priority: "high" }, "mcp");
+    vi.setSystemTime(NOW + 60_000);
+    cc.ccPublish(a, ALICE, { v: 1, id: "fin-high", title: "Fin high", area: "finance-zone", priority: "high" }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
     expect(html.match(/class="[^"]*flow[^"]*"/g)).toHaveLength(1);
-    expect(html).not.toMatch(/class="[^"]*grid/);
+    expect(html).not.toMatch(/class="[^"]*\bgrid\b/);
+    expect(html).not.toMatch(/class="[^"]*\barea/);
+    expect(html).not.toContain("finance-zone");
+    expect(html).not.toContain("ops-zone");
+    // Priority first, then most recently updated, across areas.
+    const at = (id: string) => html.indexOf(`data-initiative="${id}"`);
+    expect(at("fin-high")).toBeGreaterThan(0);
+    expect(at("fin-high")).toBeLessThan(at("ops-high"));
+    expect(at("ops-high")).toBeLessThan(at("fin-low"));
+    expect(html).toContain('<h3 id="cc-i-fin-high"');
   });
 
   it("tags a deadline as near, overdue or plain, in words", async () => {
