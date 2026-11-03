@@ -53,7 +53,7 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `v` | `1`. Required. |
 | `id` | Slug: a-z, 0-9 and `-`, at most 40. Stable: a new id is a new initiative. |
 | `title` | 1 to 120 characters. |
-| `area` | Optional, at most 40. The page groups by it. |
+| `area` | Optional, at most 40. Stored with the record; the page does not show it. |
 | `key` | Optional ticket key, such as `KEY-1`. |
 | `state` | `active` (default), `done` or `parked`. |
 | `kind` | `project` (default) or `recurring`. |

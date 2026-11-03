@@ -30,6 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Search calls refused before the caller identified no longer lower the helpful reaction share.",
       "The server log notes a signed-in viewer without a full email once an hour, not on every page.",
       "The usage page shows memories saved next to how many are in BAB now and how many left.",
+      "Command Center shows initiatives as one list by priority, without area headings above the cards.",
     ],
   },
   {

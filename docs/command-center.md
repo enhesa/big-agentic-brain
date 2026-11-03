@@ -170,9 +170,8 @@ settings menu; Delete asks for a confirm first.
   as small pills (display only) beside Dismiss. A left bar marks urgent and high priority. With
   none, an All clear card.
 - Initiatives: one masonry flow of compact cards (CSS columns: four at 1280 px and up, three at
-  1024, one on phones), grouped by area with the area name as a small heading inside the flow,
-  ordered urgent, high, none, low, paused. Small areas share columns, and an opened card grows in
-  place without stretching its neighbours. Each card has state, priority, key and deadline tags
+  1024, one on phones), with no area headings, ordered urgent, high, none, low, paused, then
+  most recently updated. An opened card grows in place without stretching its neighbours. Each card has state, priority, key and deadline tags
   (near and overdue in words, days counted on UTC dates), a progress ring with the percent inside
   beside the title, the task in progress on one line, and one meta line with a toggle that opens
   the task list and a small Log of the latest entries, links as pills with their host, and who

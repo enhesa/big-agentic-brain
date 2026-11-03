@@ -150,11 +150,6 @@ function DeleteNow() {
 function OnState({ view }: { view: CcView }) {
   const projects = view.records.filter((r) => r.kind !== "recurring");
   const upkeep = view.records.filter((r) => r.kind === "recurring");
-  const groups = new Map<string, Rec[]>();
-  for (const r of projects) {
-    const area = r.area ?? "Other";
-    groups.set(area, [...(groups.get(area) ?? []), r]);
-  }
   return (
     <>
       {/* One line: title, On, last push, data health, then the menu at the right. */}
@@ -232,17 +227,10 @@ function OnState({ view }: { view: CcView }) {
           </p>
         ) : null}
         {projects.length ? (
-          // One masonry flow for every area: small areas share columns instead of leaving holes.
+          // One flat masonry flow, already in page order (priority, then most recently updated).
           <div className={styles.flow}>
-            {[...groups.entries()].map(([area, records]) => (
-              <div key={area} className={styles.area}>
-                <h3 className={styles.areaHead}>
-                  {area} <span className={styles.areaCount}>{records.length}</span>
-                </h3>
-                {records.map((r) => (
-                  <Initiative key={r.id} r={r} />
-                ))}
-              </div>
+            {projects.map((r) => (
+              <Initiative key={r.id} r={r} />
             ))}
           </div>
         ) : null}
@@ -444,10 +432,10 @@ function Initiative({ r }: { r: Rec }) {
   return (
     <article className={cls} data-initiative={r.id} aria-labelledby={`cc-i-${r.id}`}>
       <div className={styles.cardHead}>
-        <h4 id={`cc-i-${r.id}`} className={styles.cardTitle}>
+        <h3 id={`cc-i-${r.id}`} className={styles.cardTitle}>
           {paused ? <PauseIcon /> : null}
           {r.title}
-        </h4>
+        </h3>
         <Progress r={r} />
       </div>
       <div className={styles.chips}>

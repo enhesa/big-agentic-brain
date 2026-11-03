@@ -674,7 +674,7 @@
 /* --------------------------------------------------------------- initiatives */
 
 .flow {
-  /* CSS-columns masonry: cards keep their own height and areas flow on, so no holes and no
+  /* CSS-columns masonry: cards keep their own height and flow on, so no holes and no
      stretched neighbours when one card opens. Reading order runs down each column. */
   columns: 1;
   column-gap: 10px;
@@ -696,37 +696,6 @@
   .flow {
     columns: 4;
   }
-}
-
-.area {
-  display: contents;
-}
-
-.areaHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  line-height: 16px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-ink-2);
-  /* A top margin is dropped at the top of a column, so a heading there lines up with the cards. */
-  margin: 4px 0 0;
-  padding: 0 2px 4px;
-  break-after: avoid;
-  break-inside: avoid;
-}
-
-.area:first-child .areaHead {
-  margin-top: 0;
-}
-
-.areaCount {
-  font-size: 0.75rem;
-  letter-spacing: 0;
-  color: var(--c-muted);
-  font-weight: 600;
 }
 
 .card {
