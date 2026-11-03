@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.20.0](https://github.com/enhesa/big-agentic-brain/compare/v2.19.0...v2.20.0) (2026-11-03)
+
+
+### Features
+
+* Command Center evals ([#111](https://github.com/enhesa/big-agentic-brain/issues/111)) ([8b33c6d](https://github.com/enhesa/big-agentic-brain/commit/8b33c6dcc6ce800b59417be83b6c4c3fd1c3371a))
+* Command Center v3 effort log, one store, three actions ([#113](https://github.com/enhesa/big-agentic-brain/issues/113)) ([171d5ea](https://github.com/enhesa/big-agentic-brain/commit/171d5ea0af4edfc608cfc28df982b8f50e7e1403))
+
 ## [2.19.0](https://github.com/enhesa/big-agentic-brain/compare/v2.18.0...v2.19.0) (2026-11-02)
 
 
