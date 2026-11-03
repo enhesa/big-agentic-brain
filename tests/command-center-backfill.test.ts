@@ -329,6 +329,40 @@ describe("POST /api/command-center/backfill/:token", () => {
     expect(backfilled().map((e) => e.initiative).sort()).toEqual(["new-thing", "new-thing", "unassigned"]);
   });
 
+  it("creates at most 20 initiatives per upload: further unknown ones go under unassigned with a reason", async () => {
+    const extra = 3;
+    const entries = Array.from({ length: cc.CC_BACKFILL_MAX_CREATED + extra }, (_, i) => entry(i, { initiative: `new-${i}`, title: `New ${i}` }));
+    const res = await post(mint().url, upload(entries));
+    expect(res.status).toBe(200);
+    expect(res.json.accepted).toBe(cc.CC_BACKFILL_MAX_CREATED + extra);
+    expect(res.json.created).toHaveLength(cc.CC_BACKFILL_MAX_CREATED);
+    const reassigned = res.json.reassigned as { index: number; reason: string }[];
+    const max = cc.CC_BACKFILL_MAX_CREATED;
+    expect(reassigned.map((r) => r.index)).toEqual([max, max + 1, max + 2]);
+    expect(reassigned.every((r) => r.reason.includes(`one upload creates at most ${max} initiatives`))).toBe(true);
+    expect(cc.ccList(OWNER).usage.initiatives).toBe(cc.CC_BACKFILL_MAX_CREATED);
+    expect(backfilled().filter((e) => e.initiative === "unassigned")).toHaveLength(extra);
+  });
+
+  it("audits the spent link with the verified client address before reading the body, also when the upload then fails", async () => {
+    process.env.BAB_CLIENT_IP_HEADER = "x-real-ip";
+    try {
+      (await import("../lib/config"))._resetConfigForTests();
+      const link = mint();
+      const res = await post(link.url, "{not json", { "x-real-ip": "203.0.113.9" });
+      expect(res.status).toBe(400);
+      const { getDb } = await import("../lib/db");
+      const rows = getDb().prepare("SELECT actor_id, ip, details FROM audit_log WHERE action = 'cc_backfill_link_used'").all() as { actor_id: string; ip: string | null; details: string | null }[];
+      expect(rows).toEqual([{ actor_id: OWNER, ip: "203.0.113.9", details: null }]);
+      expect(await auditRows("cc_backfill")).toEqual([]);
+      // A refused (unknown) link writes no such row.
+      await post(link.url, upload([entry(1)]), { "x-real-ip": "203.0.113.9" });
+      expect(await auditRows("cc_backfill_link_used")).toHaveLength(1);
+    } finally {
+      delete process.env.BAB_CLIENT_IP_HEADER;
+    }
+  });
+
   it("puts an unknown initiative without a title under unassigned", async () => {
     const res = await post(mint().url, upload([entry(1, { initiative: "nobody-knows" })]));
     expect(res.json).toMatchObject({ accepted: 1, created: [], reassigned: [{ index: 0, id: entry(1).id }] });
@@ -385,6 +419,6 @@ describe("log entries without a record (unassigned)", () => {
     const app = cc.ccExportForApp("reports", {});
     const rows = app.people[0].rows!;
     expect(rows).toHaveLength(2);
-    expect(rows.every((r) => r.initiative === "unassigned" && r.title === "Unassigned" && r.worked === 1)).toBe(true);
+    expect(rows.every((r) => r.initiative === "unassigned" && r.title === "Unassigned" && r.worked === 1 && r.backfilled === 1)).toBe(true);
   });
 });

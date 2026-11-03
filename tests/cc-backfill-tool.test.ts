@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import fs, { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { randomUUID, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -14,6 +14,7 @@ import {
   matchRule,
   buildDraft,
   buildPrompt,
+  maskExcerpt,
   postProcess,
   flagLine,
   reduceMachine,
@@ -249,8 +250,40 @@ describe("mapping", () => {
     expect(byId.get("u")).toMatchObject({ initiative: "unassigned", mappedBy: "none" });
     const tplText = readFileSync(path.join(dir, "out", "draft.map-template.json"), "utf8");
     const tpl = JSON.parse(tplText);
-    expect(tpl).toMatchObject({ repos: ["acme-web"], branches: ["feature/KEY-2-login"], keys: ["ACME-3", "KEY-2"], rules: [] });
+    // Keys come from branch names only: ACME-3 is in the transcript text, so it stays out.
+    expect(tpl).toMatchObject({ repos: ["acme-web"], branches: ["feature/KEY-2-login"], keys: ["KEY-2"], rules: [] });
     expect(tplText).not.toContain(sentinel);
+    expect(tplText).not.toContain("ACME-3");
+  });
+
+  it("writes the draft, the table and the template for the owner only (0600)", async () => {
+    writeTranscript(pair(NOW - 10 * HOUR, 5));
+    const out = path.join(dir, "out", "draft.json");
+    mkdirSync(path.dirname(out));
+    // An older draft with wider permissions is tightened too.
+    writeFileSync(out, "{}", { mode: 0o644 });
+    const writes: Array<{ file: string; mode: unknown }> = [];
+    const realWrite = fs.writeFileSync;
+    const realChmod = fs.chmodSync;
+    const spyWrite = vi.spyOn(fs, "writeFileSync").mockImplementation(((file: string, data: string, opts?: { mode?: number }) => {
+      writes.push({ file: String(file), mode: opts?.mode });
+      return realWrite(file, data, opts);
+    }) as typeof fs.writeFileSync);
+    const chmods: Array<{ file: string; mode: unknown }> = [];
+    const spyChmod = vi.spyOn(fs, "chmodSync").mockImplementation(((file: string, mode: number) => {
+      chmods.push({ file: String(file), mode });
+      return realChmod(file, mode);
+    }) as typeof fs.chmodSync);
+    try {
+      expect(await run(["draft", "--projects-dir", projects, "--out", out, "--no-llm"], capture().deps)).toBe(0);
+    } finally {
+      spyWrite.mockRestore();
+      spyChmod.mockRestore();
+    }
+    const files = [out, path.join(dir, "out", "draft.md"), path.join(dir, "out", "draft.map-template.json")];
+    expect(writes).toEqual(files.map((file) => ({ file, mode: 0o600 })));
+    expect(chmods).toEqual(files.map((file) => ({ file, mode: 0o600 })));
+    if (process.platform !== "win32") for (const f of files) expect(statSync(f).mode & 0o777).toBe(0o600);
   });
 });
 
@@ -360,8 +393,8 @@ describe("drafting", () => {
     writeTranscript(pair(NOW - 10 * HOUR, 5));
     const key = `k-${randomBytes(12).toString("hex")}`;
     const env = { BAB_BACKFILL_BASE_URL: "https://llm.example.com/", BAB_BACKFILL_MODEL: "acme-model", BAB_BACKFILL_API_KEY_ENV: "ACME_LLM_KEY", ACME_LLM_KEY: key };
-    const calls: Array<{ url: string; init: { headers: Record<string, string>; body: string; method: string } }> = [];
-    const fetch = async (url: string, init: { headers: Record<string, string>; body: string; method: string }) => {
+    const calls: Array<{ url: string; init: { headers: Record<string, string>; body: string; method: string; redirect?: string } }> = [];
+    const fetch = async (url: string, init: { headers: Record<string, string>; body: string; method: string; redirect?: string }) => {
       calls.push({ url, init });
       return new Response(JSON.stringify({ content: [{ type: "text", text: "Fixed the build" }] }), { status: 200 });
     };
@@ -371,6 +404,7 @@ describe("drafting", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("https://llm.example.com/v1/messages");
     expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.redirect).toBe("error");
     expect(calls[0].init.headers).toEqual({ "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" });
     const body = JSON.parse(calls[0].init.body);
     expect(body).toMatchObject({ model: "acme-model", max_tokens: 100, messages: [{ role: "user" }] });
@@ -392,8 +426,52 @@ describe("drafting", () => {
   });
 
   it("buildPrompt caps the excerpt", () => {
-    const p = buildPrompt({ repo: "r", branch: "b", text: "z".repeat(10000) });
-    expect(p.match(/z/g)!.length).toBe(4000);
+    const p = buildPrompt({ repo: "r", branch: "b", text: "z ".repeat(5000) });
+    expect(p.match(/z/g)!.length).toBe(2000);
+  });
+
+  it("masks secret-shaped strings, email addresses and backfill links before the excerpt goes to the model", async () => {
+    // Every secret is built at runtime: no token-shaped literal in the source.
+    const hex = randomBytes(24).toString("hex");
+    const b64 = randomBytes(45).toString("base64").replace(/[^A-Za-z0-9]/g, "A");
+    const pkBody = randomBytes(30).toString("base64");
+    const pk = [["-----BEGIN", "RSA PRIVATE KEY-----"].join(" "), pkBody, ["-----END", "RSA PRIVATE KEY-----"].join(" ")].join("\n");
+    const bearer = `tok${randomBytes(9).toString("hex")}`;
+    const pat = ["ghp", randomBytes(18).toString("hex")].join("_");
+    const keyValue = `kv${randomUUID().slice(0, 8)}`;
+    const tokenValue = `tv${randomUUID().slice(0, 8)}`;
+    const pwValue = `pw${randomUUID().slice(0, 8)}`;
+    const quotedPw = `qp${randomUUID().slice(0, 8)}`;
+    const email = `person.${randomUUID().slice(0, 6)}@example.com`;
+    const linkToken = randomBytes(32).toString("hex");
+    const link = `https://bab.example.com/api/command-center/backfill/${linkToken}`;
+    const secrets = [hex, b64, pkBody, bearer, pat, keyValue, tokenValue, pwValue, quotedPw, email, linkToken, link];
+    const ask = [
+      `use hash ${hex} and blob ${b64}`,
+      pk,
+      `curl -H "Authorization: Bearer ${bearer}"`,
+      `export GH=${pat}`,
+      `api_key=${keyValue} and access_token: ${tokenValue}, password = ${pwValue}`,
+      `{"db_password": "${quotedPw}"}`,
+      `mail ${email} please`,
+      `upload to ${link}`,
+    ].join("\n");
+    writeTranscript(pair(NOW - 10 * HOUR, 5, {}, `please fix the login token flow\n${ask}`, "done"));
+    const prompts: string[] = [];
+    const provider = async (p: string) => {
+      prompts.push(p);
+      return "Fixed the login flow";
+    };
+    expect(await run(["draft", "--projects-dir", projects, "--out", path.join(dir, "d.json")], { ...capture().deps, provider })).toBe(0);
+    expect(prompts).toHaveLength(1);
+    for (const s of secrets) expect(prompts[0]).not.toContain(s);
+    // The ordinary words stay, so the model can still summarise.
+    expect(prompts[0]).toContain("please fix the login token flow");
+    for (const kind of ["long hex run", "long base64 run", "private key", "bearer token", "token", "assignment", "email", "backfill link"]) {
+      expect(prompts[0]).toContain(`[redacted:${kind}]`);
+    }
+    expect(prompts[0]).toContain("api_key=[redacted:assignment]");
+    expect(maskExcerpt("Fixed the login page for KEY-1 on feature/KEY-1-login")).toBe("Fixed the login page for KEY-1 on feature/KEY-1-login");
   });
 });
 
@@ -500,8 +578,9 @@ describe("upload", () => {
     const token = "abcdef" + randomBytes(32).toString("hex").slice(6);
     const url = `https://bab.example.com/api/command-center/backfill/${token}`;
     const sent: Array<{ url: string; body: { v: number; entries: Entry[] } }> = [];
-    const fetch = async (u: string, init: { body: string; method: string; headers: Record<string, string> }) => {
+    const fetch = async (u: string, init: { body: string; method: string; headers: Record<string, string>; redirect?: string }) => {
       expect(init.method).toBe("POST");
+      expect(init.redirect).toBe("error");
       expect(init.headers["content-type"]).toBe("application/json");
       const body = JSON.parse(init.body);
       sent.push({ url: u, body });
@@ -534,6 +613,32 @@ describe("upload", () => {
     sent.length = 0;
     expect(await run(["upload", "--draft", p, "--url", url, "--url", url], { ...capture().deps, fetch })).toBe(0);
     expect(sent.map((s) => s.body.entries.length)).toEqual([2000, 500]);
+  });
+
+  it("takes the link from BAB_BACKFILL_LINK when no --url is given, refusing redirects; --url wins", async () => {
+    const p = draftWith([entry(1)]);
+    const token = randomBytes(32).toString("hex");
+    const envUrl = `https://bab.example.com/api/command-center/backfill/${token}`;
+    const flagUrl = `https://bab.example.com/api/command-center/backfill/${randomBytes(32).toString("hex")}`;
+    const sent: Array<{ url: string; redirect?: string }> = [];
+    const fetch = async (u: string, init: { redirect?: string }) => {
+      sent.push({ url: u, redirect: init.redirect });
+      return new Response(JSON.stringify({ accepted: 1, duplicate: 0, refused: [], created: [], reassigned: [] }), { status: 200 });
+    };
+    const c = capture();
+    expect(await run(["upload", "--draft", p], { ...c.deps, env: { BAB_BACKFILL_LINK: envUrl }, fetch })).toBe(0);
+    expect(sent).toEqual([{ url: envUrl, redirect: "error" }]);
+    expect(c.out.join("\n") + c.err.join("\n")).not.toContain(token);
+    sent.length = 0;
+    expect(await run(["upload", "--draft", p, "--url", flagUrl], { ...capture().deps, env: { BAB_BACKFILL_LINK: envUrl }, fetch })).toBe(0);
+    expect(sent.map((s) => s.url)).toEqual([flagUrl]);
+    // Neither: a usage error naming both ways.
+    const c2 = capture();
+    expect(await run(["upload", "--draft", p], { ...c2.deps, env: {}, fetch })).toBe(2);
+    expect(c2.err.join("\n")).toContain("BAB_BACKFILL_LINK");
+    // The environment link is checked like --url.
+    expect(await run(["upload", "--draft", p], { ...capture().deps, env: { BAB_BACKFILL_LINK: "http://bab.example.com/x" }, fetch })).toBe(2);
+    expect(USAGE).toContain("BAB_BACKFILL_LINK");
   });
 
   it("batches by bytes too", () => {

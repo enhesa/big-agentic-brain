@@ -97,8 +97,10 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
 ## Backfill from old sessions
 
 A person can fill their log with work done before they used Command Center, from the agent
-session transcripts on their own machines. Only one-line summaries leave the machine, never
-transcript text.
+session transcripts on their own machines. To draft the lines, a masked excerpt of each work block
+(at most 4000 characters, with secret-shaped strings, email addresses and backfill links replaced
+by `[redacted:<kind>]`) goes to the model endpoint the person configures. Only the one-line
+summaries go to BAB, never transcript text. `--no-llm` sends nothing to any model.
 
 1. Keep history. Claude Code deletes transcripts after `cleanupPeriodDays` (default 30). Raise it
    in its settings (for example to 400) now, so there is history to backfill later.
@@ -115,13 +117,17 @@ transcript text.
    (substring), a repository folder name, a branch pattern or a ticket-style key such as `KEY-1`
    in the branch or the text. The first rule that matches wins. A block no rule matches goes to
    `unassigned`; nothing is guessed. The draft also writes `backfill.map-template.json` with the
-   folders, branches and keys of unmapped blocks, so you can add rules and draft again.
+   folders and branches of unmapped blocks and the keys in those branch names (never keys from
+   transcript text), so you can add rules and draft again. The draft, the table and the template
+   are written for you only (mode 0600, where the file system has modes).
 4. Review `backfill.json` and the readable `backfill.md`. Set `include` to false for a line
    you do not want, or edit it. Lines that look like a secret are already set to false with the
    reason in `flagged`.
 5. Upload: ask your agent for a backfill link (`bab_command_center` action `backfill_link`), then
-   run `node scripts/cc-backfill.mjs upload --draft backfill.json --url "<link>"`. `--dry-run` shows
-   what would be sent. Only `id`, `initiative`, `title`, `key`, `worked`, `size`, `at`, `session`
+   run `node scripts/cc-backfill.mjs upload --draft backfill.json --url "<link>"`, or set the link
+   in `BAB_BACKFILL_LINK` and leave out `--url`, which keeps it off the command line and out of
+   shell history. `--dry-run` shows what would be sent. The tool refuses redirects on every
+   request. Only `id`, `initiative`, `title`, `key`, `worked`, `size`, `at`, `session`
    and `machine` of included lines are sent.
 
 The link:
@@ -146,11 +152,14 @@ The import:
 - It is idempotent: the stored entry id comes from the entry's own `id` (the tool uses the session
   id and the block start), so uploading the same draft again adds nothing.
 - An entry for an initiative you do not have creates a minimal parked record with the entry's
-  `title`, within the usual 100 initiative limit; without a title, or over the limit, the entry
-  goes to `unassigned`. The answer lists accepted, duplicate, refused (with the reason) and
-  created ids. A refused entry does not stop the others.
-- At most 20000 backfill entries per person. Every upload is audited (`cc_backfill_link`,
-  `cc_backfill`) with counts only.
+  `title`, within the usual 100 initiative limit. One upload creates at most 20 initiatives.
+  Without a title, or over either limit, the entry goes to `unassigned` with the reason in
+  `reassigned`. The answer lists accepted, duplicate, refused (with the reason) and created ids.
+  A refused entry does not stop the others.
+- At most 20000 backfill entries per person. Minting a link is audited (`cc_backfill_link`), and
+  so is spending one, with the verified client address, before the body is read
+  (`cc_backfill_link_used`), so a spent link whose upload then fails still shows. The import
+  itself is audited (`cc_backfill`) with counts only.
 
 ## Export
 
@@ -162,9 +171,11 @@ The import:
   person grants or revokes each app on the page (same-origin viewer posts, audited
   `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
 - Aggregated by default: counts per initiative and UTC day (`entries`: all log entries; `worked`:
-  worked lines only, not imported notes; sizes) with the initiative's title and key, but no log
-  lines and no session. `detail=entries` returns the entries only for people who granted the
-  `entries` level. `from` and `to` are dates, at most 400 days apart; the default is the last 92
+  worked lines only, not imported notes; `backfilled`: entries from a backfill upload; sizes) with
+  the initiative's title and key, but no log lines and no session. `detail=entries` returns the
+  entries only for people who granted the `entries` level. Every entry, in that export and in the
+  person's own download, carries its `source` (`live`, `import` or `backfill`); the page tags
+  backfilled lines in each initiative's log. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
   is the credential. A sign-in proxy in front of BAB has its own public-path list: add the path

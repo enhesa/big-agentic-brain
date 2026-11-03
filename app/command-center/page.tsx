@@ -530,6 +530,7 @@ function LogList({ log }: { log: Rec["log"] }) {
               {LOG_KIND_LABEL[e.kind] ? <span className={styles.logKind}>{LOG_KIND_LABEL[e.kind]}</span> : null}
               {e.text ?? ""}
               {e.size ? <span className={`${styles.tag} ${styles.logSize}`}>{e.size}</span> : null}
+              {e.source === "backfill" ? <span className={`${styles.tag} ${styles.logSize}`} data-source="backfill">backfill</span> : null}
             </span>
           </li>
         ))}

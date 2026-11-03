@@ -1,4 +1,6 @@
 import { gate } from "@/lib/gate";
+import { audit } from "@/lib/audit";
+import { getDb } from "@/lib/db";
 import { config } from "@/lib/config";
 import { publicOrigin } from "@/lib/origin";
 import { CC_BACKFILL_MAX_BYTES, ccApiError, ccBackfill, consumeBackfillLink } from "@/lib/command-center";
@@ -52,6 +54,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const now = Date.now();
   const link = consumeBackfillLink(token, now);
   if (!link) return Response.json({ error: NOT_FOUND }, { status: 404 });
+  // Written before the body is read, so a spent link whose upload then fails is still visible.
+  audit(getDb(), link.ownerId, "cc_backfill_link_used", "command_center", "-", "mcp", { ip });
   const raw = await readCapped(req, CC_BACKFILL_MAX_BYTES).catch(() => "");
   if (raw === null) return Response.json({ error: TOO_LARGE }, { status: 413 });
   let body: unknown;

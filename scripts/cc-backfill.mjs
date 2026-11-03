@@ -8,8 +8,10 @@
 //           person's agent minted with bab_command_center action=backfill_link.
 //
 // Transcript text never leaves this machine except as the prompt to the drafting model (when one
-// is configured), and never lands in the draft files, the console or the upload. Only the drafted
-// line does. Lines that look like secrets are flagged and left out until the person reviews them.
+// is configured), and then only as a capped excerpt with secret-shaped strings, email addresses
+// and backfill links masked (maskExcerpt). It never lands in the draft files, the console or the
+// upload. Only the drafted line does. Lines that look like secrets are flagged and left out until
+// the person reviews them.
 //
 // Node built-ins only. The pure functions are exported for tests; main() runs only when this
 // file is invoked directly.
@@ -21,7 +23,7 @@ import { pathToFileURL } from "node:url";
 
 export const USAGE = `Usage:
   node scripts/cc-backfill.mjs draft --out <draft.json> [options]
-  node scripts/cc-backfill.mjs upload --draft <draft.json> --url <link> [--url <link> ...] [--from <n>] [--dry-run]
+  node scripts/cc-backfill.mjs upload --draft <draft.json> [--url <link> ...] [--from <n>] [--dry-run]
 
 draft options:
   --out <file.json>       draft to write; also writes <file>.md and <file>.map-template.json
@@ -41,7 +43,8 @@ draft options:
 upload options:
   --draft <file.json>     the reviewed draft; only entries with include: true and a worked line are sent
   --url <link>            a backfill link (https, or http on loopback). One upload per link; repeat
-                          --url to send more batches
+                          --url to send more batches. Without --url, the link is read from
+                          BAB_BACKFILL_LINK, which keeps it off the command line
   --from <n>              skip the first n sendable entries (to continue after an earlier upload)
   --dry-run               print counts and the first 3 lines, send nothing`;
 
@@ -311,7 +314,10 @@ export function matchRule(block, rules) {
   return null;
 }
 
-/** Distinct repos, branches and keys among unmapped blocks, so the person can write rules. No text. */
+/**
+ * Distinct repos, branches and branch keys among unmapped blocks, so the person can write rules.
+ * Keys come from branch names only, never from transcript text: the template is a file on disk.
+ */
 export function mapTemplate(unmapped) {
   const repos = new Set();
   const branches = new Set();
@@ -319,10 +325,10 @@ export function mapTemplate(unmapped) {
   for (const b of unmapped) {
     if (b.repo) repos.add(b.repo);
     if (b.branch) branches.add(b.branch);
-    for (const k of keysOf(b)) keys.add(k);
+    for (const k of b.branch.match(KEY_FIND_RE) ?? []) keys.add(k);
   }
   return {
-    note: "Distinct repos, branches and keys of unmapped blocks. Add rules, then pass this file as --map.",
+    note: "Distinct repos, branches and the keys in those branch names, of unmapped blocks. Add rules, then pass this file as --map.",
     repos: [...repos].sort(),
     branches: [...branches].sort(),
     keys: [...keys].sort(),
@@ -333,9 +339,10 @@ export function mapTemplate(unmapped) {
 // ---------------------------------------------------------------------------------------------
 // Drafting
 
-/** The prompt for one block: a capped excerpt plus repo and branch. */
+/** The prompt for one block: a masked, capped excerpt plus repo and branch. */
 export function buildPrompt(block) {
-  const excerpt = block.text.slice(0, EXCERPT_CHARS);
+  // Masked first, then cut: a secret across the cut is still masked whole.
+  const excerpt = maskExcerpt(block.text).slice(0, EXCERPT_CHARS);
   return [
     "Summarise the work done in this agent session excerpt as one plain line for a work log.",
     `At most ${WORKED_MAX} characters. No secrets, tokens, names of people, hostnames, URLs or customer data.`,
@@ -370,6 +377,30 @@ const SECRET_CHECKS = [
   [/token/i, "token"],
   [/pass(word|wd)?\s*[=:]|password/i, "password"],
 ];
+
+/**
+ * What maskExcerpt replaces, in order, each with [redacted:<kind>]. Broader than SECRET_CHECKS:
+ * whole private key blocks, backfill links, bearer tokens, well-known token prefixes, and the value
+ * (not the name) of key, token, secret and password assignments. The bare words "token" and
+ * "password" stay, since prose needs them.
+ */
+const MASKS = [
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-{5}[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-{5}|$)/g, "private key"],
+  [/(?:https?:\/\/[^\s/]+)?\/api\/command-center\/backfill\/[0-9a-f]{64}/gi, "backfill link"],
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "bearer token"],
+  [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+)/g, "token"],
+  [/\b([\w-]*(?:key|token|secret|passw(?:or)?d|pwd))(["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;"']+)/gi, "assignment", "$1$2"],
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, "email"],
+  [/\b[0-9a-f]{32,}\b/gi, "long hex run"],
+  [/[A-Za-z0-9+/]{40,}={0,2}/g, "long base64 run"],
+];
+
+/** The block text with secret-shaped strings, email addresses and backfill links masked. */
+export function maskExcerpt(text) {
+  let s = String(text ?? "");
+  for (const [re, kind, keep = ""] of MASKS) s = s.replace(re, `${keep}[redacted:${kind}]`);
+  return s;
+}
 
 /** A reason when a line looks like it holds a secret, else null. */
 export function flagLine(line) {
@@ -416,6 +447,8 @@ export function buildLlmRequest(prompt, settings, env) {
     url: settings.url,
     init: {
       method: "POST",
+      // A redirect could carry the key and the excerpt to another host: refuse it.
+      redirect: "error",
       headers: { "x-api-key": env[settings.keyVar], "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({ model: settings.model, max_tokens: 100, messages: [{ role: "user", content: prompt }] }),
     },
@@ -620,6 +653,13 @@ function intFlag(value, flag, min, max, dflt) {
   return n;
 }
 
+/** Writes a file readable and writable by its owner only (0600), also when it already existed. */
+export function writePrivate(file, content) {
+  fs.writeFileSync(file, content, { mode: 0o600 });
+  // `mode` applies only when the file is created; an older draft keeps its mode without this.
+  fs.chmodSync(file, 0o600);
+}
+
 async function runDraft(flags, deps) {
   const { stdout } = deps;
   if (!flags.out) throw new CliError("draft needs --out <file.json>");
@@ -651,9 +691,9 @@ async function runDraft(flags, deps) {
   const { draft, template } = await buildDraft(blocks, { rules, provider, machine, now: deps.now(), concurrency });
   const p = outputPaths(flags.out);
   fs.mkdirSync(path.dirname(path.resolve(p.json)), { recursive: true });
-  fs.writeFileSync(p.json, `${JSON.stringify(draft, null, 2)}\n`);
-  fs.writeFileSync(p.md, draftMarkdown(draft));
-  fs.writeFileSync(p.template, `${JSON.stringify(template, null, 2)}\n`);
+  writePrivate(p.json, `${JSON.stringify(draft, null, 2)}\n`);
+  writePrivate(p.md, draftMarkdown(draft));
+  writePrivate(p.template, `${JSON.stringify(template, null, 2)}\n`);
   const included = draft.entries.filter((e) => e.include).length;
   const flagged = draft.entries.filter((e) => e.flagged).length;
   const errors = draft.entries.filter((e) => e.error).length;
@@ -681,7 +721,9 @@ async function runUpload(flags, deps) {
   const { stdout, stderr } = deps;
   if (!flags.draft) throw new CliError("upload needs --draft <file.json>");
   if (flags.out || flags.map || flags["no-llm"]) throw new CliError("--out, --map and --no-llm are for draft");
-  if (!flags["dry-run"] && !flags.url.length) throw new CliError("upload needs --url <link> (or --dry-run)");
+  // The link from the environment keeps it off the command line (shell history, process lists).
+  if (!flags.url.length && deps.env.BAB_BACKFILL_LINK) flags.url.push(deps.env.BAB_BACKFILL_LINK);
+  if (!flags["dry-run"] && !flags.url.length) throw new CliError("upload needs --url <link> or BAB_BACKFILL_LINK (or --dry-run)");
   for (const u of flags.url) checkUploadUrl(u);
   let draft;
   try {
@@ -712,7 +754,8 @@ async function runUpload(flags, deps) {
     stdout(`Uploading ${batches[i].length} entries to ${masked}`);
     let res;
     try {
-      res = await deps.fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+      // A redirect could carry the entries to another host: refuse it.
+      res = await deps.fetch(url, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body });
     } catch {
       stderr(`upload to ${masked} failed (network). The link may be spent; mint a new one and rerun with --from ${from + sent}.`);
       failed = true;

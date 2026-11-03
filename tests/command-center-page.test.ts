@@ -337,6 +337,25 @@ describe("/command-center page", () => {
     expect(html).not.toContain("notes");
   });
 
+  it("tags backfilled log entries, and only those", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "billing-export", title: "Billing export", worked: "Live line" }, "mcp");
+    cc.ccBackfill(
+      ALICE,
+      { v: 1, entries: [{ id: "s1:1", initiative: "billing-export", worked: "Old <b>line</b>", at: new Date(NOW - 3_600_000).toISOString() }] },
+      "mcp",
+      ORIGIN,
+      NOW,
+    );
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).toContain("Old &lt;b&gt;line&lt;/b&gt;");
+    expect(html.match(/data-source="backfill">backfill</g)).toHaveLength(1);
+    const backfilledLi = html.slice(html.indexOf("Old &lt;b&gt;"), html.indexOf("</li>", html.indexOf("Old &lt;b&gt;")));
+    expect(backfilledLi).toContain('data-source="backfill"');
+  });
+
   it("keeps done, parked and silent initiatives off the page and says how many", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);

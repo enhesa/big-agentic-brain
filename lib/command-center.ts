@@ -60,6 +60,8 @@ export const CC_BACKFILL_MAX_BYTES = 1024 * 1024;
 export const CC_BACKFILL_LINK_TTL_MINUTES = 15;
 export const CC_BACKFILL_LINKS_PER_OWNER = 20;
 export const CC_BACKFILL_MAX_PER_PERSON = 20000;
+/** Initiatives one backfill upload may create; entries for further unknown initiatives go under "unassigned". */
+export const CC_BACKFILL_MAX_CREATED = 20;
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -1519,9 +1521,9 @@ export function consumeBackfillLink(token: string, now: number = Date.now()): { 
   const db = getDb();
   const hash = hashBackfillToken(token);
   const at = iso(now);
-  const res = db.prepare("UPDATE command_center_backfill_links SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?").run(at, hash, at);
-  if (Number(res.changes ?? 0) !== 1) return null;
-  const row = db.prepare("SELECT owner_id FROM command_center_backfill_links WHERE token_hash = ?").get(hash) as { owner_id: string } | undefined;
+  const row = db
+    .prepare("UPDATE command_center_backfill_links SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING owner_id")
+    .get(at, hash, at) as { owner_id: string } | undefined;
   return row ? { ownerId: row.owner_id } : null;
 }
 
@@ -1636,6 +1638,11 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
       } else if (CC_RESERVED_IDS.includes(initiative)) {
         out.refused.push({ index: e.index, id: e.id, reason: `entries[${e.index}].initiative '${initiative}' is reserved; pick another id` });
         continue;
+      } else if (e.title && out.created.length >= CC_BACKFILL_MAX_CREATED) {
+        out.reassigned.push({ index: e.index, id: e.id, reason: `initiative '${initiative}' was not created: one upload creates at most ${CC_BACKFILL_MAX_CREATED} initiatives` });
+        initiative = UNASSIGNED;
+        title = "Unassigned";
+        key = e.key;
       } else if (e.title) {
         const rec: CcRecord = {
           v: 1,
@@ -1855,6 +1862,8 @@ export interface CcAggregateRow {
   day: string;
   entries: number;
   worked: number;
+  /** Entries that came from a backfill upload (source "backfill"), not from a live publish. */
+  backfilled: number;
   sizes: Record<CcSize, number>;
 }
 
@@ -1868,7 +1877,8 @@ export interface CcAppExport {
 
 /**
  * Counts per initiative and day, with the initiative's title and key: no worked lines, no session.
- * `entries` counts every log entry; `worked` only the agents' worked lines (not imported notes).
+ * `entries` counts every log entry; `worked` only the agents' worked lines (not imported notes);
+ * `backfilled` the entries that came from a backfill upload.
  */
 export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
   const rows = new Map<string, CcAggregateRow>();
@@ -1877,11 +1887,12 @@ export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
     const k = `${e.initiative}\u0000${day}`;
     let row = rows.get(k);
     if (!row) {
-      row = { initiative: e.initiative, title: e.title, key: e.key, day, entries: 0, worked: 0, sizes: { small: 0, medium: 0, large: 0 } };
+      row = { initiative: e.initiative, title: e.title, key: e.key, day, entries: 0, worked: 0, backfilled: 0, sizes: { small: 0, medium: 0, large: 0 } };
       rows.set(k, row);
     }
     row.entries += 1;
     if (e.kind === "worked") row.worked += 1;
+    if (e.source === "backfill") row.backfilled += 1;
     if (e.size) row.sizes[e.size] += 1;
     if (e.title) row.title = e.title;
     if (e.key) row.key = e.key;

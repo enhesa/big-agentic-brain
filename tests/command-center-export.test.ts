@@ -94,6 +94,7 @@ describe("the person's own download", () => {
     const body = await res.json();
     expect(body.person).toBe(ALICE);
     expect(body.entries.map((e: { text: string }) => e.text)).toContain("Alice wrote the parser");
+    expect(body.entries.every((e: { source?: string }) => e.source === "live")).toBe(true);
     expect(JSON.stringify(body)).not.toContain("Bob fixed the build");
     expect((await auditActions()).some((a) => a.action === "cc_export_own" && a.actor_id === ALICE)).toBe(true);
   });
@@ -208,7 +209,7 @@ describe("GET /api/command-center/export for a report app", () => {
     expect(body.app).toBe("reports");
     expect(body.people.map((p: { person: string }) => p.person)).toEqual([ALICE]);
     const rows = body.people[0].rows;
-    expect(rows).toEqual([{ initiative: "billing-export", title: "Billing export", key: "KEY-1", day: "2026-03-02", entries: 1, worked: 1, sizes: { small: 1, medium: 0, large: 0 } }]);
+    expect(rows).toEqual([{ initiative: "billing-export", title: "Billing export", key: "KEY-1", day: "2026-03-02", entries: 1, worked: 1, backfilled: 0, sizes: { small: 1, medium: 0, large: 0 } }]);
     expect(raw).not.toContain("Alice wrote the parser");
     expect(raw).not.toContain("sess-1");
     expect(body.people[0].entries).toBeUndefined();
@@ -230,6 +231,7 @@ describe("GET /api/command-center/export for a report app", () => {
     const alice = detailed.people.find((p: { person: string }) => p.person === ALICE);
     const bob = detailed.people.find((p: { person: string }) => p.person === BOB);
     expect(alice.entries.map((e: { text: string }) => e.text)).toEqual(["Alice wrote the parser"]);
+    expect(alice.entries.map((e: { source: string }) => e.source)).toEqual(["live"]);
     expect(bob.entries).toBeUndefined();
     expect(JSON.stringify(bob)).not.toContain("Bob fixed the build");
   });
@@ -288,7 +290,19 @@ describe("GET /api/command-center/export for a report app", () => {
       { ...base, id: "2", kind: "note", source: "import" },
       { ...base, id: "3", kind: "task_done", source: "live" },
     ]);
-    expect(rows).toEqual([{ initiative: "a", title: "A", key: null, day: "2026-03-02", entries: 3, worked: 1, sizes: { small: 0, medium: 0, large: 0 } }]);
+    expect(rows).toEqual([{ initiative: "a", title: "A", key: null, day: "2026-03-02", entries: 3, worked: 1, backfilled: 0, sizes: { small: 0, medium: 0, large: 0 } }]);
+  });
+
+  it("counts backfilled entries per row, so reports can tell them from live work", async () => {
+    const cc = await import("../lib/command-center");
+    const at = "2026-03-02T09:00:00.000Z";
+    const base = { initiative: "a", title: "A", key: null, text: "x", size: null, session: null, machine: null, at };
+    const rows = cc.aggregate([
+      { ...base, id: "1", kind: "worked", source: "live" },
+      { ...base, id: "2", kind: "worked", source: "backfill" },
+      { ...base, id: "3", kind: "worked", source: "backfill" },
+    ]);
+    expect(rows).toEqual([{ initiative: "a", title: "A", key: null, day: "2026-03-02", entries: 3, worked: 3, backfilled: 2, sizes: { small: 0, medium: 0, large: 0 } }]);
   });
 
   it("drops a person at once when they revoke", async () => {
