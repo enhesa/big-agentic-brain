@@ -133,12 +133,21 @@ SQLite is the one store (migration 54): `command_center_initiatives` holds the l
 query is keyed by the owner. Each write runs in one transaction from its first read to its last
 write, so there is no lease, no snapshot and no need to republish after a restart.
 
-Moving from v2: at start, an existing `DATA_DIR/command-center-snapshot.json` is imported once.
+Moving from v2: at start, an existing `DATA_DIR/command-center-snapshot.json` is imported.
 Every record is checked as strictly as a new publish, broken ones are dropped and counted in the
 log, a record already in SQLite is never overwritten, and v2 comments become `note` log entries at
-their own time. The file is then renamed to `command-center-snapshot.imported.json` and its sha256
-is recorded, so it is never imported twice. The renamed file is kept 30 days, then deleted. To roll
-back to v2 within those days, rename it back; v2 ignores the new tables.
+their own time. The file is never renamed or rewritten. Its sha256 is recorded, so a later start
+skips it quietly and it is never imported twice.
+
+Rolling back to v2.19: v2.19 ignores the v54 database and reads the untouched snapshot, so it shows
+the state at the v3 release. Everything written in v3 stays in SQLite and is back when v3 returns.
+If v2.19 rewrote the snapshot, the next v3 start imports it again: changes made on v2.19 to an
+initiative that also exists in SQLite are not imported (agents republish); new initiatives are.
+
+30 days after an import the snapshot is deleted, but only while its sha256 is still the imported
+one, so a file rewritten by a rolled-back v2.19 is never deleted before v3 has imported it. A
+rollback after that starts empty. A `command-center-snapshot.imported.json` left by an earlier v3
+build is deleted after the same 30 days.
 
 The opt-in switch is two columns on `users`.
 

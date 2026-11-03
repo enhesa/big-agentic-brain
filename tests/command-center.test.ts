@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -610,13 +610,15 @@ function writeSnapshot(owners: Record<string, unknown[]>): void {
 }
 
 describe("the one-time import of a v2 snapshot", () => {
-  it("moves records into SQLite, turns comments into notes, keeps seq and renames the file", () => {
+  it("moves records into SQLite, turns comments into notes, keeps seq and leaves the file byte-identical", () => {
     writeSnapshot({ [OWNER]: [v2Record("alpha"), v2Record("beta")] });
+    const before = readFileSync(cc.ccSnapshotPath());
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(cc.importCommandCenterSnapshot()).toEqual({ imported: 2, skipped: 0, dropped: 0, notes: 4 });
     log.mockRestore();
-    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
-    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
+    // Untouched, so a rollback to v2.19 still reads it; nothing is renamed.
+    expect(readFileSync(cc.ccSnapshotPath()).equals(before)).toBe(true);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(false);
     expect(cc.ccGet(OWNER, "alpha")).toMatchObject({ seq: 4, title: "Title alpha", key: "KEY-1", questions: [{ id: "q1" }] });
     expect((cc.ccGet(OWNER, "alpha") as unknown as Record<string, unknown>).comments).toBeUndefined();
     const notes = cc.ccLogOf(OWNER).filter((e) => e.initiative === "alpha");
@@ -653,24 +655,85 @@ describe("the one-time import of a v2 snapshot", () => {
     expect(existsSync(cc.ccSnapshotPath())).toBe(true);
   });
 
-  it("never imports one file twice, even when its rename failed: removed records stay removed", () => {
+  it("a restart does not import the same file again, quietly: removed records stay removed", () => {
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const before = readFileSync(cc.ccSnapshotPath());
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     cc.importCommandCenterSnapshot();
-    run({ action: "remove", id: "alpha" });
-    // As if the rename had failed after the commit: the same file is back under its v2 name.
-    renameSync(cc.ccImportedSnapshotPath(), cc.ccSnapshotPath());
-    expect(cc.importCommandCenterSnapshot()).toBeNull();
     log.mockRestore();
-    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+    run({ action: "remove", id: "alpha" });
+    // A restart: the process forgets it imported; the file is still there, unchanged.
+    cc._resetCommandCenterForTests();
+    const quiet = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
     expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(quiet).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    quiet.mockRestore();
+    warn.mockRestore();
+    expect(readFileSync(cc.ccSnapshotPath()).equals(before)).toBe(true);
   });
 
-  it("deletes the imported file 30 days after the import", () => {
+  it("deletes the snapshot 30 days after the import while its sha256 is the imported one", () => {
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     cc.importCommandCenterSnapshot();
     log.mockRestore();
+    cc.sweepCommandCenter(NOW + 29 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+  });
+
+  it("never deletes a snapshot rewritten after the import; it gets its own window once imported", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    cc.sweepCommandCenter(NOW + DAY); // hashes the imported file once
+    // A rolled-back v2.19 rewrites it with the same size; move the mtime as a real write would.
+    writeSnapshot({ [OWNER]: [v2Record("alpha", { title: "Title alphb" })] });
+    utimesSync(cc.ccSnapshotPath(), new Date(NOW + 2 * DAY), new Date(NOW + 2 * DAY));
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    cc.sweepCommandCenter(NOW + 60 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    // The next v3 start imports it, and its own 30 days start then.
+    cc._resetCommandCenterForTests();
+    expect(cc.importCommandCenterSnapshot(NOW + 60 * DAY)).not.toBeNull();
+    log.mockRestore();
+    cc.sweepCommandCenter(NOW + 70 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 91 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+  });
+
+  it("imports new initiatives from a rewritten snapshot and never overwrites ones already in SQLite", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    const alpha = cc.ccGet(OWNER, "alpha");
+    const alphaLog = cc.ccLogOf(OWNER);
+    // On v2.19 after a rollback: alpha changed (title, seq, a new comment) and gamma is new.
+    writeSnapshot({
+      [OWNER]: [
+        v2Record("alpha", { title: "Changed on v2", seq: 9, comments: [{ id: "n9", text: "written on v2", at: new Date(NOW - HOUR).toISOString() }] }),
+        v2Record("gamma"),
+      ],
+    });
+    cc._resetCommandCenterForTests();
+    expect(cc.importCommandCenterSnapshot()).toEqual({ imported: 1, skipped: 1, dropped: 0, notes: 2 });
+    log.mockRestore();
+    expect(cc.ccGet(OWNER, "alpha")).toEqual(alpha);
+    expect(cc.ccLogOf(OWNER).filter((e) => e.initiative === "alpha")).toEqual(alphaLog);
+    expect(cc.ccGet(OWNER, "gamma")).toMatchObject({ title: "Title gamma", seq: 4 });
+  });
+
+  it("deletes a command-center-snapshot.imported.json left by an earlier build after the window", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    writeFileSync(cc.ccImportedSnapshotPath(), "{}");
     cc.sweepCommandCenter(NOW + 29 * DAY);
     expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
     cc.sweepCommandCenter(NOW + 31 * DAY);
@@ -735,18 +798,16 @@ describe("the one-time import of a v2 snapshot", () => {
 });
 
 describe("migration v54", () => {
-  it("rewinds: tables come back, a re-import after renaming the file back gives the same data and no duplicates", async () => {
+  it("rewinds: tables come back, a re-import of the untouched file gives the same data and no duplicates", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     cc.importCommandCenterSnapshot();
     const first = { record: cc.ccGet(OWNER, "alpha"), log: cc.ccLogOf(OWNER) };
-    // Rewind to v53, as a rollback to v2 would leave it: the version row and the v3 tables gone,
-    // the imported snapshot renamed back to its v2 name.
+    // Rewind to v53: the version row and the v3 tables gone; the snapshot was never moved.
     const db = getDb();
     db.prepare("DELETE FROM migrations WHERE version >= 54").run();
     db.exec("DROP TABLE command_center_initiatives; DROP TABLE command_center_log; DROP TABLE command_center_export_grants; DROP TABLE command_center_imports;");
-    renameSync(cc.ccImportedSnapshotPath(), cc.ccSnapshotPath());
     _resetDbForTests();
     cc._resetCommandCenterForTests();
     const again = getDb();
@@ -760,7 +821,6 @@ describe("migration v54", () => {
     // A rerun of the migration and of the import changes nothing.
     again.prepare("DELETE FROM migrations WHERE version >= 54").run();
     _resetDbForTests();
-    renameSync(cc.ccImportedSnapshotPath(), cc.ccSnapshotPath());
     cc.importCommandCenterSnapshot();
     expect(cc.ccLogOf(OWNER)).toEqual(first.log);
     log.mockRestore();

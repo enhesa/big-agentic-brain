@@ -12,13 +12,14 @@
  *   never shows.
  * - One store: SQLite (migration v54). Live records in command_center_initiatives, the work log
  *   in command_center_log, export consent in command_center_export_grants. Every query is keyed
- *   by owner_id. A v2 snapshot file is imported once and renamed, then deleted after 30 days.
+ *   by owner_id. A v2 snapshot file is imported once and never changed, so a rollback to v2 can
+ *   still read it; it is deleted 30 days after its import, only while its sha256 is the imported one.
  * - The log: a publish may carry `worked` (one line) and `size`; the server adds entries for
  *   task, question, health and state changes it sees. Entry ids are stable, so a retry is a no-op.
  * - Writes are audited (person, initiative id, result), never bodies.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { getDb, inTransaction, resolveDataDir } from "./db";
 import { config } from "./config";
@@ -448,6 +449,8 @@ interface ProcessState {
   lastSweep: number;
   /** Set once the missing command_center_imports table was logged, so it is logged once. */
   warnedNoImports?: boolean;
+  /** The snapshot's last hash, by size and mtime, so the sweep re-reads it only when it changed. */
+  snapshotHash?: { size: number; mtimeMs: number; sha256: string };
 }
 const STATE_KEY = "__babCommandCenterState";
 type Holder = { [STATE_KEY]?: ProcessState };
@@ -647,35 +650,75 @@ export function ccSnapshotPath(): string {
   return path.join(resolveDataDir(), "command-center-snapshot.json");
 }
 
+/** The sha256 of a file's bytes. */
+function fileSha256(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+/** The snapshot's sha256, re-read only when its size or mtime changed since the last call. */
+function snapshotSha256(file: string): string {
+  const st = statSync(file);
+  const cached = processState().snapshotHash;
+  if (cached && cached.size === st.size && cached.mtimeMs === st.mtimeMs) return cached.sha256;
+  const sha256 = fileSha256(file);
+  processState().snapshotHash = { size: st.size, mtimeMs: st.mtimeMs, sha256 };
+  return sha256;
+}
+
+function deleteSnapshotFile(file: string): void {
+  try {
+    rmSync(file, { force: true });
+  } catch (err) {
+    console.warn(`bab: could not delete ${path.basename(file)}: ` + (err instanceof Error ? err.message : String(err)));
+  }
+}
+
 /**
- * The imported snapshot is kept CC_OFF_KEEP_MS after the import, so a rollback to v2 can rename it
- * back, and then deleted: it holds v2 records that Delete now and retention no longer reach.
+ * The v2 snapshot stays untouched CC_OFF_KEEP_MS after its import, so a rollback to v2.19 still
+ * reads it, and is then deleted: it holds v2 records that Delete now and retention no longer reach.
+ * It is deleted only while its sha256 is an imported one that is past the window. A file that a
+ * rolled-back v2.19 rewrote has a new sha256, so it is kept; the next v3 start imports it and its
+ * own window starts then. A command-center-snapshot.imported.json left by an earlier v3 build is
+ * deleted once the latest import is past the window.
  */
 function retireImportedSnapshot(now: number): void {
-  const file = ccImportedSnapshotPath();
-  if (!existsSync(file)) return;
-  let row: { at: string | null };
+  const file = ccSnapshotPath();
+  const legacy = ccImportedSnapshotPath();
+  const hasFile = existsSync(file);
+  const hasLegacy = existsSync(legacy);
+  if (!hasFile && !hasLegacy) return;
+  const cutoff = iso(now - CC_OFF_KEEP_MS);
   try {
-    row = getDb().prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
+    const db = getDb();
+    if (hasLegacy) {
+      const row = db.prepare("SELECT MAX(imported_at) AS at FROM command_center_imports").get() as { at: string | null };
+      if (row.at && row.at <= cutoff) deleteSnapshotFile(legacy);
+    }
+    if (hasFile) {
+      let sha256: string;
+      try {
+        sha256 = snapshotSha256(file);
+      } catch {
+        return; // Gone or unreadable right now: the next sweep looks again.
+      }
+      const row = db.prepare("SELECT imported_at AS at FROM command_center_imports WHERE sha256 = ?").get(sha256) as { at: string } | undefined;
+      if (row && row.at <= cutoff) {
+        deleteSnapshotFile(file);
+        delete processState().snapshotHash;
+      }
+    }
   } catch (err) {
-    // A database that ran an early v54 without command_center_imports: keep the file, never fail
+    // A database that ran an early v54 without command_center_imports: keep the files, never fail
     // a Command Center call over it. Any other error is a real one.
     if (!/no such table/i.test(err instanceof Error ? err.message : String(err))) throw err;
     if (!processState().warnedNoImports) {
       processState().warnedNoImports = true;
-      console.warn("bab: cannot read command_center_imports, so the imported Command Center snapshot is kept: " + (err instanceof Error ? err.message : String(err)));
+      console.warn("bab: cannot read command_center_imports, so the Command Center snapshot is kept: " + (err instanceof Error ? err.message : String(err)));
     }
-    return;
-  }
-  if (!row.at || now - Date.parse(row.at) < CC_OFF_KEEP_MS) return;
-  try {
-    rmSync(file, { force: true });
-  } catch (err) {
-    console.warn("bab: could not delete the imported Command Center snapshot: " + (err instanceof Error ? err.message : String(err)));
   }
 }
 
-/** Where an imported snapshot goes. Kept 30 days, so a rollback to v2 can rename it back. */
+/** Where an earlier v3 build renamed an imported snapshot. Only deleted now, never written. */
 export function ccImportedSnapshotPath(): string {
   return path.join(resolveDataDir(), "command-center-snapshot.imported.json");
 }
@@ -780,38 +823,40 @@ export interface CcImportResult {
 }
 
 /**
- * Moves a v2 snapshot into SQLite once: every record is checked again, broken ones are dropped and
+ * Moves a v2 snapshot into SQLite: every record is checked again, broken ones are dropped and
  * counted, a record already in SQLite is never overwritten, and old comments become "note" log
- * entries with stable ids. Then the file is renamed to command-center-snapshot.imported.json, so it
- * is never read again but stays for a rollback. Running it twice imports nothing twice. Never throws.
+ * entries with stable ids. The file itself is never renamed or rewritten, so a rollback to v2.19
+ * still reads it. Its sha256 is recorded, and a later start skips a file with a recorded sha256
+ * quietly (a person may have removed or deleted records since). A file with a new sha256 (rewritten
+ * by a rolled-back v2.19) is imported again: only initiatives not in SQLite are added. Never throws.
  */
 export function importCommandCenterSnapshot(now: number = Date.now()): CcImportResult | null {
   const file = ccSnapshotPath();
   if (!existsSync(file)) return null;
   const out: CcImportResult = { imported: 0, skipped: 0, dropped: 0, notes: 0 };
-  let parsed: unknown;
+  let raw: Buffer;
   let sha256: string;
   try {
-    const raw = readFileSync(file, "utf8");
+    raw = readFileSync(file);
     sha256 = createHash("sha256").update(raw).digest("hex");
-    parsed = JSON.parse(raw);
   } catch (err) {
-    console.warn("bab: the Command Center snapshot is not readable JSON; it is left in place and not imported: " + (err instanceof Error ? err.message : String(err)));
+    console.warn("bab: the Command Center snapshot is not readable; it is left in place and not imported: " + (err instanceof Error ? err.message : String(err)));
     return null;
   }
-  const owners = isObject(parsed) && isObject(parsed.owners) ? parsed.owners : {};
   try {
     const db = getDb();
-    const done = !!db.prepare("SELECT 1 FROM command_center_imports WHERE sha256 = ?").get(sha256);
-    if (done) {
-      // Imported before, but the rename did not happen: never import it again (a person may have
-      // removed or deleted records since), only retire the file.
-      retireSnapshotFile(file);
+    if (db.prepare("SELECT 1 FROM command_center_imports WHERE sha256 = ?").get(sha256)) return null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw.toString("utf8"));
+    } catch (err) {
+      console.warn("bab: the Command Center snapshot is not readable JSON; it is left in place and not imported: " + (err instanceof Error ? err.message : String(err)));
       return null;
     }
+    const owners = isObject(parsed) && isObject(parsed.owners) ? parsed.owners : {};
     const won = inTransaction(db, () => {
       // Another replica may have imported the same file since the check above: then it owns the
-      // import and the rename, and this one does nothing.
+      // import, and this one does nothing.
       if (!Number(db.prepare("INSERT OR IGNORE INTO command_center_imports (sha256, imported_at) VALUES (?, ?)").run(sha256, iso(now)).changes)) return false;
       for (const [owner, records] of Object.entries(owners)) {
         if (!owner || owner.includes("/") || owner.length > 320 || !Array.isArray(records)) {
@@ -833,7 +878,10 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
           const r = checked.record;
           const usage = personUsage(owner);
           if (loadRecord(owner, r.id)) {
+            // SQLite holds this initiative already: its record and log stay as they are, so
+            // changes made to it on a rolled-back v2.19 are not imported (agents republish).
             out.skipped += 1;
+            continue;
           } else if (usage.initiatives >= CC_MAX_INITIATIVES || usage.bytes + bytesOf(r) > CC_MAX_BYTES_PER_PERSON) {
             out.dropped += 1;
             continue;
@@ -865,22 +913,15 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
       console.log("bab: the Command Center snapshot was imported by another process; not imported again.");
       return null;
     }
-    retireSnapshotFile(file);
   } catch (err) {
     console.warn("bab: could not import the Command Center snapshot; it is left in place and tried again at the next start: " + (err instanceof Error ? err.message : String(err)));
     return null;
   }
-  console.log(`bab: imported the Command Center snapshot: ${out.imported} records, ${out.notes} notes; ${out.skipped} already there, ${out.dropped} dropped. Renamed it to command-center-snapshot.imported.json.`);
+  console.log(
+    `bab: imported the Command Center snapshot: ${out.imported} records, ${out.notes} notes; ${out.skipped} already there, ${out.dropped} dropped. ` +
+      "The file is left untouched for a rollback to v2.19 and deleted 30 days after this import.",
+  );
   return out;
-}
-
-/** Renames an imported snapshot out of the way. Already gone (another replica renamed it) is fine. */
-function retireSnapshotFile(file: string): void {
-  try {
-    renameSync(file, ccImportedSnapshotPath());
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-  }
 }
 
 // ---------------------------------------------------------------------------

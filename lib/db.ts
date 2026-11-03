@@ -351,12 +351,12 @@ function runMigrations(database: DatabaseSync) {
 
 function runMigrationV54(database: DatabaseSync) {
   // Command Center v3 (lib/command-center.ts): SQLite is its one store. Live records replace the
-  // in-memory map and its snapshot file (imported once by lib/command-center.ts, then renamed to
-  // command-center-snapshot.imported.json, deleted 30 days later). The log keeps what was worked on, with
+  // in-memory map and its snapshot file (imported by lib/command-center.ts and left untouched for a
+  // rollback to v2.19, deleted 30 days after its import). The log keeps what was worked on, with
   // the server's time; entry ids are stable per person, so a retried write is a no-op. Export
   // grants are the person's own consent for one export app. Every row is keyed by owner_id.
-  // command_center_imports remembers each imported snapshot by its sha256, so a file is never
-  // imported twice, even when its rename failed.
+  // command_center_imports remembers each imported snapshot by its sha256, so the same file is
+  // never imported twice and is deleted only while it is still the imported one.
   database.exec(`
     CREATE TABLE IF NOT EXISTS command_center_initiatives (
       owner_id TEXT NOT NULL,
