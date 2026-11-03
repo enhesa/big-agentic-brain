@@ -24,6 +24,18 @@ import {
   checkUploadUrl,
   parseBound,
   USAGE,
+  applyPlanOp,
+  parseSyncLine,
+  readSyncTranscripts,
+  sessionState,
+  collectSessionStates,
+  groupSessions,
+  buildSyncDraft,
+  maskField,
+  flagField,
+  syncSlug,
+  uploadCurrent,
+  uploadBody,
 } from "../scripts/cc-backfill.mjs";
 
 /** scripts/cc-backfill.mjs: drafts worked lines from transcripts in a temp dir, uploads to a fake fetch. Never the network. */
@@ -689,5 +701,492 @@ describe("cli", () => {
     const cli = spawnSync(process.execPath, [SCRIPT], { encoding: "utf8" });
     expect(cli.status).toBe(2);
     expect(cli.stderr).toContain("node scripts/cc-backfill.mjs draft --out");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// sync
+
+type SyncOpts = {
+  type?: "user" | "assistant";
+  session?: string;
+  at: number;
+  content?: unknown;
+  cwd?: string;
+  branch?: string;
+  extra?: Record<string, unknown>;
+};
+
+function sline(o: SyncOpts): string {
+  return JSON.stringify({
+    type: o.type ?? "user",
+    sessionId: o.session ?? "s1",
+    timestamp: new Date(o.at).toISOString(),
+    cwd: o.cwd ?? "/home/user/work/acme-api",
+    gitBranch: o.branch ?? "main",
+    message: { role: o.type ?? "user", content: o.content ?? "hello" },
+    ...(o.extra ?? {}),
+  });
+}
+
+const tool = (name: string, input: unknown) => [{ type: "tool_use", id: `tu-${randomUUID().slice(0, 8)}`, name, input }];
+const asst = (o: Omit<SyncOpts, "type" | "content">, name: string, input: unknown) => sline({ ...o, type: "assistant", content: tool(name, input) });
+const toolResult = (o: Omit<SyncOpts, "type" | "content">) =>
+  sline({ ...o, type: "user", content: [{ type: "tool_result", tool_use_id: "x", content: "ok" }], extra: { toolUseResult: { ok: true } } });
+const titleLine = (session: string, kind: "custom-title" | "ai-title", text: string) =>
+  JSON.stringify(kind === "custom-title" ? { type: kind, customTitle: text, sessionId: session } : { type: kind, aiTitle: text, sessionId: session });
+const PLAN = "mcp__agent-board__update_plan";
+const WRAP = "mcp__agent-board__wrap_up";
+type Plan = Array<{ text: string; status: string }>;
+
+function stateOf(lines: string[]) {
+  return sessionState(lines.map(parseSyncLine).filter(Boolean));
+}
+
+describe("sync: plan and todo state", () => {
+  it("folds update_plan like the plan tool: items replace, done [n], advance, start n", () => {
+    const items = applyPlanOp(null, { items: [{ content: "a", status: "in_progress" }, { content: "b" }, { content: "c", status: "completed" }, { content: "  " }] });
+    expect(items).toEqual([
+      { text: "a", status: "in_progress" },
+      { text: "b", status: "pending" },
+      { text: "c", status: "done" },
+    ]);
+    expect(applyPlanOp(null, { advance: true })).toBeNull();
+    const adv = applyPlanOp(items, { advance: true }) as Plan;
+    expect(adv.map((x) => x.status)).toEqual(["done", "in_progress", "done"]);
+    expect((items as Plan)[0].status).toBe("in_progress"); // a copy, not in place
+    const started = applyPlanOp(adv, { start: 1 }) as Plan;
+    expect(started.map((x) => x.status)).toEqual(["in_progress", "pending", "done"]);
+    const done = applyPlanOp(started, { done: [1, 2, 9] }) as Plan;
+    expect(done.map((x) => x.status)).toEqual(["done", "done", "done"]);
+    expect(applyPlanOp(null, { items: Array.from({ length: 60 }, (_, i) => ({ content: `s${i}` })) })).toHaveLength(50);
+  });
+
+  it("takes the latest of update_plan and TodoWrite, maps statuses, and a wrap_up checks the plan off", () => {
+    const t0 = NOW - 5 * HOUR;
+    const base = [
+      sline({ at: t0, content: "start please" }),
+      asst({ at: t0 + MIN }, PLAN, { items: [{ content: "Plan one", status: "in_progress" }, { content: "Plan two" }] }),
+      asst({ at: t0 + 2 * MIN }, PLAN, { advance: true }),
+    ];
+    expect(stateOf(base).plan).toEqual([
+      { text: "Plan one", status: "done" },
+      { text: "Plan two", status: "in_progress" },
+    ]);
+    const todo = [
+      ...base,
+      asst({ at: t0 + 3 * MIN }, "TodoWrite", {
+        todos: [
+          { content: "Todo one", status: "completed", activeForm: "x" },
+          { content: "Todo two", status: "in_progress", activeForm: "y" },
+          { content: "Todo three", status: "pending" },
+        ],
+      }),
+    ];
+    expect(stateOf(todo).plan).toEqual([
+      { text: "Todo one", status: "done" },
+      { text: "Todo two", status: "in_progress" },
+      { text: "Todo three", status: "pending" },
+    ]);
+    // An update_plan increment after a TodoWrite applies to that list.
+    expect((stateOf([...todo, asst({ at: t0 + 4 * MIN }, PLAN, { start: 3 })]).plan as Plan).map((x) => x.status)).toEqual(["done", "pending", "in_progress"]);
+    const wrapped = stateOf([...todo, asst({ at: t0 + 5 * MIN }, WRAP, { recap: "done" })]);
+    expect((wrapped.plan as Plan).every((x) => x.status === "done")).toBe(true);
+  });
+});
+
+describe("sync: open question from the last wrap_up", () => {
+  const t0 = NOW - 5 * HOUR;
+  const ask = (at: number, blocked = true) =>
+    asst({ at }, WRAP, { recap: "r", ask: "Merge the PR now?", blocked, actions: [{ label: "Merge", message: "merge it" }, { action: "Wait" }, { label: "" }, null] });
+
+  it("is open when blocked and no real user turn came after, even with a later tool result or meta line", () => {
+    const s = stateOf([sline({ at: t0, content: "go" }), ask(t0 + MIN), toolResult({ at: t0 + 2 * MIN })]);
+    expect(s.question).toMatchObject({ ask: "Merge the PR now?", options: ["Merge", "Wait"] });
+    const s2 = stateOf([
+      sline({ at: t0, content: "go" }),
+      ask(t0 + MIN),
+      sline({ at: t0 + 2 * MIN, content: "<command-name>/clear</command-name>" }),
+      sline({ at: t0 + 3 * MIN, content: "meta", extra: { isMeta: true } }),
+    ]);
+    expect(s2.question).not.toBeNull();
+  });
+
+  it("is gone once the person answered, when not blocked, without an ask, or when a later wrap_up was not blocked", () => {
+    expect(stateOf([sline({ at: t0, content: "go" }), ask(t0 + MIN), sline({ at: t0 + 2 * MIN, content: "yes merge" })]).question).toBeNull();
+    expect(stateOf([sline({ at: t0, content: "go" }), ask(t0 + MIN, false)]).question).toBeNull();
+    expect(stateOf([sline({ at: t0, content: "go" }), ask(t0 + MIN), ask(t0 + 2 * MIN, false)]).question).toBeNull();
+    expect(stateOf([sline({ at: t0, content: "go" }), asst({ at: t0 + MIN }, WRAP, { blocked: true })]).question).toBeNull();
+  });
+
+  it("prefers the custom title over the ai title and tolerates malformed lines", () => {
+    const s = stateOf([
+      "not json {",
+      "null",
+      "[]",
+      JSON.stringify({ type: "assistant", sessionId: "s1", timestamp: "nope" }),
+      JSON.stringify({ type: "assistant", sessionId: "s1", timestamp: new Date(t0).toISOString(), message: { content: [null, { type: "tool_use" }, { type: "tool_use", name: PLAN, input: "x" }] } }),
+      JSON.stringify({ type: "assistant", sessionId: "s1", timestamp: new Date(t0).toISOString(), message: { content: tool("TodoWrite", { todos: "bad" }) } }),
+      JSON.stringify({ type: "user", sessionId: "s1", timestamp: new Date(t0).toISOString(), message: null }),
+      sline({ at: t0 + MIN, content: "go" }),
+      titleLine("s1", "ai-title", "Ai named it"),
+      titleLine("s1", "custom-title", "Login rework"),
+      JSON.stringify({ type: "custom-title", customTitle: 5, sessionId: "s1" }),
+    ]);
+    expect(s).toMatchObject({ rawTitle: "Login rework", repo: "acme-api", branch: "main", userTurns: 1, plan: null });
+    expect(stateOf([sline({ at: t0, content: "go" }), titleLine("s1", "ai-title", "Ai named it")]).rawTitle).toBe("Ai named it");
+  });
+});
+
+describe("sync: grouping, window and ids", () => {
+  const t0 = NOW - 5 * HOUR;
+  const sess = (session: string, at: number, o: Partial<SyncOpts> = {}) => [sline({ ...o, session, at, content: "work on it" })];
+
+  it("merges sessions sharing a key (branch or title) or repo and non-trunk branch; trunk sessions stay apart", () => {
+    writeTranscript([
+      ...sess("a", t0, { branch: "feature/ACME-12-login" }),
+      ...sess("b", t0 + MIN, { cwd: "/home/user/work/acme-web", branch: "main" }),
+      titleLine("b", "custom-title", "Follow up on ACME-12"),
+      ...sess("c", t0 + 2 * MIN, { branch: "fix/cache" }),
+      ...sess("d", t0 + 3 * MIN, { branch: "fix/cache" }),
+      ...sess("e", t0 + 4 * MIN, { branch: "main" }),
+      ...sess("f", t0 + 5 * MIN, { branch: "main" }),
+    ]);
+    const states = collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW });
+    const { draft } = buildSyncDraft(states, { now: NOW });
+    const byId = new Map<string, Entry>(draft.current.map((r: Entry) => [String(r.id), r]));
+    expect(byId.get("acme-12")).toMatchObject({ key: "ACME-12", title: "Follow up on ACME-12", mappedBy: "key ACME-12", state: "active", include: true });
+    expect([...(byId.get("acme-12")!.sessions as string[])].sort()).toEqual(["a", "b"]);
+    expect(byId.get("acme-api-fix-cache")).toMatchObject({ mappedBy: "repo+branch", title: "acme-api fix/cache", area: "acme-api" });
+    expect([...(byId.get("acme-api-fix-cache")!.sessions as string[])].sort()).toEqual(["c", "d"]);
+    expect(byId.get("session-e")).toMatchObject({ mappedBy: "session" });
+    expect(byId.get("session-f")).toMatchObject({ mappedBy: "session" });
+    expect(draft.current).toHaveLength(4);
+    expect(draft.current[0].id).toBe("session-f"); // newest first
+    for (const r of draft.current) expect(String(r.id)).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
+    // Stable across reruns.
+    const again = buildSyncDraft(collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW }), { now: NOW }).draft;
+    expect(again.current.map((r: Entry) => r.id)).toEqual(draft.current.map((r: Entry) => r.id));
+  });
+
+  it("honours --map rules: a rule names the initiative, unassigned leaves sessions out, reserved ids are never used", () => {
+    writeTranscript([
+      ...sess("a", t0, { branch: "feature/x" }),
+      ...sess("b", t0 + MIN, { cwd: "/home/user/work/acme-web" }),
+      ...sess("c", t0 + 2 * MIN, { cwd: "/home/user/work/scratch" }),
+    ]);
+    const states = collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW });
+    const rules = validateMap({
+      rules: [
+        { initiative: "api-work", repo: "acme-api", title: "API work", key: "KEY-9" },
+        { initiative: "backfill", repo: "acme-web" },
+        { initiative: "unassigned", repo: "scratch" },
+      ],
+    });
+    const { groups, left } = groupSessions(states, rules);
+    expect(left).toBe(1);
+    expect(groups).toHaveLength(2);
+    const { draft } = buildSyncDraft(states, { rules, now: NOW });
+    expect(draft.current.find((r: Entry) => r.id === "api-work")).toMatchObject({ title: "API work", key: "KEY-9", mappedBy: "rule 1 (repo)" });
+    const ids = draft.current.map((r: Entry) => String(r.id));
+    expect(ids).not.toContain("backfill");
+    expect(ids.some((id: string) => id.startsWith("backfill-"))).toBe(true);
+    expect(syncSlug("export")).not.toBe("export");
+    expect(syncSlug("backfill")).toMatch(/^backfill-[0-9a-f]{6}$/);
+    expect(syncSlug("x".repeat(60))).toHaveLength(40);
+    expect(syncSlug("KEY-12")).toBe("key-12");
+  });
+
+  it("reads only sessions active in the last --days, and skips sessions with nothing in them", async () => {
+    writeTranscript([
+      ...sess("old", NOW - 20 * 24 * HOUR),
+      ...sess("mid", NOW - 10 * 24 * HOUR),
+      ...sess("new", NOW - HOUR),
+      sline({ session: "empty", at: NOW - HOUR, type: "assistant", content: [{ type: "text", text: "hi" }] }),
+    ]);
+    const { sessions } = readSyncTranscripts(projects);
+    expect(collectSessionStates(sessions, { now: NOW }).map((s: { session: string }) => s.session)).toEqual(["new", "mid"]);
+    expect(collectSessionStates(sessions, { now: NOW, days: 7 }).map((s: { session: string }) => s.session)).toEqual(["new"]);
+    const out = path.join(dir, "sync.json");
+    expect(await run(["sync", "--projects-dir", projects, "--out", out, "--days", "30"], capture().deps)).toBe(0);
+    expect(JSON.parse(readFileSync(out, "utf8")).current).toHaveLength(3);
+    const c = capture();
+    expect(await run(["sync", "--projects-dir", projects, "--out", out, "--days", "0"], c.deps)).toBe(2);
+    expect(c.err.join("\n")).toMatch(/--days must be a number from 1 to 365/);
+    expect(await run(["sync", "--projects-dir", projects, "--out", out, "--no-llm"], capture().deps)).toBe(2);
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--days", "3"], capture().deps)).toBe(2);
+    expect(await run(["sync", "--projects-dir", projects], capture().deps)).toBe(2);
+  });
+
+  it("caps a draft at 100 records, newest first", () => {
+    const states = Array.from({ length: 105 }, (_, i) => sessionState([parseSyncLine(sline({ session: `s${String(i).padStart(3, "0")}`, at: NOW - (i + 1) * MIN, content: "go" }))]));
+    const { draft, dropped } = buildSyncDraft(states, { now: NOW });
+    expect(draft.current).toHaveLength(100);
+    expect(dropped).toBe(5);
+    expect(draft.current[0].sessions).toEqual(["s000"]);
+  });
+});
+
+describe("sync: draft output and masking", () => {
+  it("writes current records with tasks and questions, and the readable file, owner only (0600)", async () => {
+    const t0 = NOW - 3 * HOUR;
+    const b = "feature/KEY-5-login";
+    writeTranscript([
+      sline({ at: t0, content: "please do the login", branch: b }),
+      titleLine("s1", "custom-title", "Login page"),
+      asst({ at: t0 + MIN, branch: b }, PLAN, { items: [{ content: "Write the form", status: "completed" }, { content: "Add tests", status: "in_progress" }, { content: "Open the PR" }] }),
+      asst({ at: t0 + 2 * MIN, branch: b }, WRAP, { ask: "Open the PR against main?", blocked: true, actions: [{ label: "Open it" }, { label: "Not yet" }] }),
+    ]);
+    const out = path.join(dir, "out", "sync.json");
+    mkdirSync(path.dirname(out));
+    writeFileSync(out, "{}", { mode: 0o644 });
+    const writes: Array<{ file: string; mode: unknown }> = [];
+    const realWrite = fs.writeFileSync;
+    const spy = vi.spyOn(fs, "writeFileSync").mockImplementation(((file: string, data: string, opts?: { mode?: number }) => {
+      writes.push({ file: String(file), mode: opts?.mode });
+      return realWrite(file, data, opts);
+    }) as typeof fs.writeFileSync);
+    const c = capture();
+    try {
+      expect(await run(["sync", "--projects-dir", projects, "--out", out], c.deps)).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const md = path.join(dir, "out", "sync.md");
+    expect(writes).toEqual([out, md].map((file) => ({ file, mode: 0o600 })));
+    if (process.platform !== "win32") for (const f of [out, md]) expect(statSync(f).mode & 0o777).toBe(0o600);
+    const draft = JSON.parse(readFileSync(out, "utf8"));
+    expect(draft).toMatchObject({ v: 1, kind: "bab-cc-backfill-draft", entries: [] });
+    // The wrap_up checks off the plan, as the app does.
+    expect(draft.current).toEqual([
+      {
+        id: "key-5",
+        title: "Login page",
+        area: "acme-api",
+        key: "KEY-5",
+        state: "active",
+        tasks: [
+          { id: "step-1", text: "Write the form", status: "done" },
+          { id: "step-2", text: "Add tests", status: "done" },
+          { id: "step-3", text: "Open the PR", status: "done" },
+        ],
+        questions: [{ id: expect.stringMatching(/^ask-[0-9a-f]{8}$/), text: "Open the PR against main?", options: ["Open it", "Not yet"] }],
+        include: true,
+        mappedBy: "key KEY-5",
+        lastActiveAt: new Date(t0 + 2 * MIN).toISOString(),
+        sessions: ["s1"],
+        repo: "acme-api",
+        branch: b,
+      },
+    ]);
+    const mdText = readFileSync(md, "utf8");
+    expect(mdText).toContain("## Login page");
+    expect(mdText).toContain("- [x] Add tests");
+    expect(mdText).toContain("Question: Open the PR against main? (options: Open it / Not yet)");
+    expect(c.out.join("\n")).toContain("1 included, 0 flagged, 1 open questions");
+    expect(c.out.join("\n")).toContain("Nothing was uploaded");
+  });
+
+  it("masks secrets, emails, links and paths in titles, tasks and questions, and flags those records", () => {
+    const pat = ["ghp", randomBytes(18).toString("hex")].join("_");
+    const email = `person.${randomUUID().slice(0, 6)}@example.com`;
+    expect(maskField(`push with ${pat}`, 120)).toBe("push with [redacted:token]");
+    expect(maskField(String.raw`read C:\Users\someone\notes.txt`, 120)).toBe("read [redacted:path]");
+    expect(maskField("read /home/someone/x.txt and ~/y", 120)).toBe("read [redacted:path] and [redacted:path]");
+    expect(maskField("see https://intranet.example.com/x?y=1 now", 120)).toBe("see [redacted:link] now");
+    expect(maskField("a\nb\u0007  c", 120)).toBe("a b c");
+    expect(maskField("ab ".repeat(100), 120)).toHaveLength(119); // cut to 120, then trimmed
+    expect(flagField("call +32 2 555 01 23")).toBe("long number");
+    expect(flagField("[redacted:email] x")).toBe("masked email");
+    expect(flagField("Fix the login for KEY-1 on feature/KEY-1-login")).toBeNull();
+    const t0 = NOW - HOUR;
+    const s = stateOf([
+      sline({ session: "x", at: t0, content: "go" }),
+      titleLine("x", "custom-title", `Mail ${email}`),
+      asst({ session: "x", at: t0 + MIN }, PLAN, { items: [{ content: `Rotate ${pat}` }, { content: "Plain step" }] }),
+    ]);
+    const { draft } = buildSyncDraft([s], { now: NOW });
+    const [r] = draft.current;
+    expect(r).toMatchObject({ include: false, flagged: "title: masked email", title: "Mail [redacted:email]" });
+    expect(r.tasks[0].text).toBe("Rotate [redacted:token]");
+    expect(JSON.stringify(draft)).not.toContain(pat);
+    expect(JSON.stringify(draft)).not.toContain(email);
+    // Flagged records are not sent unless the person sets include: true after review.
+    expect(uploadCurrent(draft).records).toEqual([]);
+  });
+
+  it("sentinel: transcript text, tool results, other tool input and the cwd path never reach the draft, console or upload", async () => {
+    const S = `sentinel${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    // The real CLI below runs on the real clock, so these turns are an hour before now.
+    const t0 = Date.now() - HOUR;
+    const cwd = `/home/user/${S}dir/acme-api`;
+    writeTranscript([
+      sline({ at: t0, cwd, content: `please look at ${S}` }),
+      sline({ at: t0 + MIN, cwd, type: "assistant", content: [{ type: "text", text: `I looked at ${S}` }, { type: "thinking", thinking: S }, ...tool("Bash", { command: `echo ${S}` })] }),
+      sline({ at: t0 + 2 * MIN, cwd, content: [{ type: "tool_result", content: `tool said ${S}` }], extra: { toolUseResult: { stdout: S } } }),
+      asst({ at: t0 + 3 * MIN, cwd }, PLAN, { items: [{ content: "Check the cache" }], note: S }),
+      asst({ at: t0 + 4 * MIN, cwd }, WRAP, { recap: `recap ${S}`, ask: "Ship it?", blocked: true, actions: [{ label: "Ship", message: `msg ${S}` }] }),
+      JSON.stringify({ type: "summary", summary: S, sessionId: "s1" }),
+    ]);
+    const outDir = path.join(dir, "out");
+    mkdirSync(outDir);
+    const cli = spawnSync(process.execPath, [SCRIPT, "sync", "--projects-dir", projects, "--out", path.join(outDir, "s.json")], { encoding: "utf8" });
+    expect(cli.status).toBe(0);
+    expect(cli.stdout + cli.stderr).not.toContain(S);
+    const text = allFilesText(outDir);
+    expect(text).not.toContain(S);
+    expect(text).not.toContain("/home/user");
+    const draft = JSON.parse(readFileSync(path.join(outDir, "s.json"), "utf8"));
+    expect(draft.current[0]).toMatchObject({ tasks: [{ text: "Check the cache" }], questions: [{ text: "Ship it?", options: ["Ship"] }], repo: "acme-api" });
+    const bodies: string[] = [];
+    const fetch = async (_u: string, init: { body: string }) => {
+      bodies.push(init.body);
+      return new Response(JSON.stringify({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [] }), { status: 200 });
+    };
+    const u = capture();
+    expect(await run(["upload", "--draft", path.join(outDir, "s.json"), "--dry-run"], { ...u.deps, fetch })).toBe(0);
+    expect(await run(["upload", "--draft", path.join(outDir, "s.json"), "--url", "https://bab.example.com/api/command-center/backfill/abcdef0123"], { ...u.deps, fetch })).toBe(0);
+    expect(u.out.join("\n") + u.err.join("\n") + bodies.join("\n")).not.toContain(S);
+    expect(bodies).toHaveLength(1);
+  });
+});
+
+describe("sync: upload of current records", () => {
+  const rec = (i: number, extra: Entry = {}): Entry => ({
+    id: `init-${i}`,
+    title: `Initiative ${i}`,
+    area: "acme-api",
+    key: "KEY-1",
+    state: "active",
+    tasks: [{ id: "step-1", text: "Do it", status: "in_progress" }],
+    questions: [{ id: "ask-1", text: "Go?", options: ["Yes", "No"] }],
+    include: true,
+    mappedBy: "key KEY-1",
+    lastActiveAt: new Date(NOW).toISOString(),
+    sessions: ["s1"],
+    repo: "acme-api",
+    branch: "feature/KEY-1",
+    ...extra,
+  });
+  const logEntry = (i: number): Entry => ({
+    id: `s1:${i}`,
+    initiative: "init-1",
+    worked: `Worked ${i}`,
+    size: "small",
+    at: new Date(NOW - i * MIN).toISOString(),
+    session: "s1",
+    machine: "acme-box",
+    include: true,
+  });
+  function syncDraft(current: Entry[], entries: Entry[] = []) {
+    const p = path.join(dir, "sync.json");
+    writeFileSync(p, JSON.stringify({ v: 1, kind: "bab-cc-backfill-draft", generatedAt: new Date(NOW).toISOString(), entries, current }));
+    return p;
+  }
+  const okFetch = (sent: Array<Record<string, unknown>>) => async (_u: string, init: { body: string }) => {
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], current: { published: 2, refused: [] } }), { status: 200 });
+  };
+  const URL1 = "https://bab.example.com/api/command-center/backfill/abcdef0123";
+
+  it("sends included records as current, allowlisted, without include or review fields", async () => {
+    const p = syncDraft([
+      rec(1, {
+        links: [{ label: "x", url: "https://x.example.com" }],
+        flagged: "x",
+        extra: 1,
+        tasks: [{ id: "step-1", text: "Do it", status: "done", startedAt: "x" }],
+        questions: [{ id: "ask-1", text: "Go?", options: [], askedAt: "x" }],
+      }),
+      rec(2, { area: "", key: undefined, tasks: [], questions: undefined }),
+      rec(3, { include: false }),
+    ]);
+    const sent: Array<Record<string, unknown>> = [];
+    const c = capture();
+    expect(await run(["upload", "--draft", p, "--url", URL1], { ...c.deps, fetch: okFetch(sent) })).toBe(0);
+    expect(sent).toHaveLength(1);
+    expect(Object.keys(sent[0])).toEqual(["v", "entries", "current"]);
+    expect(sent[0]).toEqual({
+      v: 1,
+      entries: [],
+      current: [
+        { id: "init-1", title: "Initiative 1", area: "acme-api", key: "KEY-1", state: "active", tasks: [{ id: "step-1", text: "Do it", status: "done" }], questions: [{ id: "ask-1", text: "Go?" }] },
+        { id: "init-2", title: "Initiative 2", state: "active" },
+      ],
+    });
+    expect(c.out.join("\n")).toContain("Uploading 0 entries and 2 current records");
+    expect(c.out.join("\n")).toContain("current: published 2, refused 0");
+  });
+
+  it("sends log entries and current records together in the first body, current only there, and not with --from", async () => {
+    const p = syncDraft([rec(1)], Array.from({ length: 2001 }, (_, i) => logEntry(i)));
+    const sent: Array<Record<string, unknown>> = [];
+    expect(await run(["upload", "--draft", p, "--url", URL1, "--url", URL1], { ...capture().deps, fetch: okFetch(sent) })).toBe(0);
+    expect(sent.map((b) => Object.keys(b))).toEqual([
+      ["v", "entries", "current"],
+      ["v", "entries"],
+    ]);
+    expect(sent.map((b) => (b.entries as Entry[]).length)).toEqual([2000, 1]);
+    sent.length = 0;
+    const c = capture();
+    expect(await run(["upload", "--draft", p, "--url", URL1, "--from", "2000"], { ...c.deps, fetch: okFetch(sent) })).toBe(0);
+    expect(Object.keys(sent[0])).toEqual(["v", "entries"]);
+    expect(c.out.join("\n")).toContain("1 current records are sent with --from 0 only");
+  });
+
+  it("dry run counts current records, names id and title only, and sends nothing", async () => {
+    const p = syncDraft([rec(1), rec(2), rec(3), rec(4)]);
+    const c = capture();
+    let called = 0;
+    const fetch = async () => {
+      called++;
+      return new Response("{}");
+    };
+    expect(await run(["upload", "--draft", p, "--dry-run"], { ...c.deps, fetch })).toBe(0);
+    expect(called).toBe(0);
+    const text = c.out.join("\n");
+    expect(text).toMatch(/Dry run: 0 entries and 4 current records in 1 batch\(es\) of \d+ bytes/);
+    expect(text).toContain("current init-3: Initiative 3 (1 tasks, 1 questions)");
+    expect(text).not.toContain("init-4");
+    expect(text).not.toMatch(/feature\/KEY-1|sessions|mappedBy|s1/);
+  });
+
+  it("skips records that break the server's limits, naming the field, and refuses more than 100 included", () => {
+    const { records, skipped } = uploadCurrent({
+      current: [
+        rec(1, { id: "backfill" }),
+        rec(2, { id: "export" }),
+        rec(3, { title: "t".repeat(121) }),
+        rec(4, { tasks: [{ id: "a", text: "x", status: "completed" }] }),
+        rec(5, { questions: [{ id: "q", text: "x", options: ["1", "2", "3", "4", "5"] }] }),
+        rec(6, { key: "nope" }),
+        rec(7, { area: "a".repeat(41) }),
+        rec(8, { tasks: [{ id: "a", text: "x", status: "done" }, { id: "a", text: "y", status: "done" }] }),
+        rec(9, { state: "done" }),
+        rec(10),
+        rec(10),
+      ],
+    });
+    expect(records.map((r: Entry) => r.id)).toEqual(["init-10"]);
+    expect(skipped.map((s: { id: string }) => s.id)).toEqual(["backfill", "export", "init-3", "init-4", "init-5", "init-6", "init-7", "init-8", "init-9", "init-10"]);
+    expect(skipped[2].reason).toMatch(/title/);
+    expect(skipped[3].reason).toMatch(/status/);
+    expect(() => uploadCurrent({ current: Array.from({ length: 101 }, (_, i) => rec(i)) })).toThrow(/at most 100/);
+    expect(uploadCurrent({}).records).toEqual([]);
+    expect(() => uploadCurrent({ current: {} })).toThrow(/list/);
+  });
+
+  it("counts current records toward the 1 MB cap of the first body", () => {
+    const current = [{ id: "a", title: "x".repeat(300) }];
+    const entries = Array.from({ length: 6 }, (_, i) => ({ id: `x:${i}`, worked: "w".repeat(100) }));
+    const batches = batchEntries(entries, { maxBytes: 700, current });
+    batches.forEach((b: Entry[], i: number) => expect(Buffer.byteLength(JSON.stringify(uploadBody(b, i, current)))).toBeLessThanOrEqual(700));
+    expect(batches.flat()).toHaveLength(6);
+    // No room for any entry next to the current records: they go alone first.
+    const tight = batchEntries([{ id: "x", worked: "w".repeat(200) }], { maxBytes: 400, current });
+    expect(tight.map((b: Entry[]) => b.length)).toEqual([0, 1]);
+    expect(batchEntries([], { current })).toEqual([[]]);
+    expect(() => batchEntries([], { maxBytes: 100, current })).toThrow(/current records alone/);
+    expect(USAGE).toContain("sync --out");
   });
 });

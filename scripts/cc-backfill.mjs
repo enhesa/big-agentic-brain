@@ -4,8 +4,11 @@
 //   draft   reads session transcripts (JSONL) on this machine, splits them into work blocks and
 //           drafts one `worked` line per block. It writes a draft file for the person to review.
 //           It uploads nothing.
-//   upload  sends the reviewed draft lines (include: true) to a single-use backfill link that the
-//           person's agent minted with bab_command_center action=backfill_link.
+//   sync    reads the sessions active in the last days and drafts one `current` initiative record
+//           per session or group of sessions (title, plan tasks, open blocked question), so a fresh
+//           Command Center page shows what is going on now. It uploads nothing.
+//   upload  sends the reviewed draft lines and current records (include: true) to a single-use
+//           backfill link that the person's agent minted with bab_command_center action=backfill_link.
 //
 // Transcript text never leaves this machine except as the prompt to the drafting model (when one
 // is configured), and then only as a capped excerpt with secret-shaped strings, email addresses
@@ -16,6 +19,7 @@
 // Node built-ins only. The pure functions are exported for tests; main() runs only when this
 // file is invoked directly.
 
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,6 +27,7 @@ import { pathToFileURL } from "node:url";
 
 export const USAGE = `Usage:
   node scripts/cc-backfill.mjs draft --out <draft.json> [options]
+  node scripts/cc-backfill.mjs sync --out <draft.json> [--projects-dir <dir>] [--map <file.json>] [--days <n>]
   node scripts/cc-backfill.mjs upload --draft <draft.json> [--url <link> ...] [--from <n>] [--dry-run]
 
 draft options:
@@ -40,8 +45,21 @@ draft options:
   Without --no-llm, draft needs BAB_BACKFILL_BASE_URL, BAB_BACKFILL_MODEL and BAB_BACKFILL_API_KEY_ENV
   (the name of the variable that holds the API key). It posts to <base>/v1/messages.
 
+sync options (the current state of recent sessions as initiatives, for a fresh Command Center page):
+  --out <file.json>       draft to write, with "current" records; also writes <file>.md
+  --projects-dir <dir>    as for draft
+  --map <file.json>       as for draft; a matching rule names the initiative, and a rule with
+                          initiative "unassigned" leaves its sessions out
+  --days <n>              sessions active in the last n days, 1 to 365 (default 14)
+
+  Per session: its last plan (update_plan or TodoWrite), its open blocked question (the last
+  wrap_up, if no later user turn answered it), its title, repo and branch. Sessions sharing a
+  ticket key (in branch or title), or the same repo and non-trunk branch, are one initiative.
+  Text is masked; a record with masked or secret-shaped text is flagged and set include: false.
+
 upload options:
-  --draft <file.json>     the reviewed draft; only entries with include: true and a worked line are sent
+  --draft <file.json>     the reviewed draft; only entries with include: true and a worked line are sent,
+                          and current records with include: true (with the first link, --from 0 only)
   --url <link>            a backfill link (https, or http on loopback). One upload per link; repeat
                           --url to send more batches. Without --url, the link is read from
                           BAB_BACKFILL_LINK, which keeps it off the command line
@@ -56,6 +74,17 @@ export const WORKED_MAX = 200;
 export const TITLE_MAX = 120;
 export const MACHINE_MAX = 20; // the server's source.machine limit
 export const SESSION_MAX = 60; // the server's source.session limit
+// The server's publish limits for a `current` record.
+export const MAX_CURRENT = 100;
+export const AREA_MAX = 40;
+export const CC_MAX_TASKS = 50;
+export const TASK_TEXT_MAX = 120;
+export const CC_MAX_QUESTIONS = 5;
+export const QUESTION_TEXT_MAX = 500;
+export const CC_MAX_OPTIONS = 4;
+export const OPTION_MAX = 60;
+const TASK_STATUSES = ["pending", "in_progress", "done"];
+const RESERVED_IDS = ["export", "backfill"];
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
@@ -122,10 +151,12 @@ export function defaultProjectsDir() {
   return path.join(os.homedir(), ".claude", "projects");
 }
 
-/** Reads <dir>/*\/*.jsonl (one level) and returns events grouped by session. */
-export function readTranscripts(dir) {
+/**
+ * Calls `onFile(lines)` for each <dir>/*\/*.jsonl (one level) with its non-blank lines, and
+ * returns the number of files.
+ */
+function walkTranscripts(dir, onFile) {
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new CliError(`projects dir not found: ${dir}`);
-  const sessions = new Map();
   let files = 0;
   for (const sub of fs.readdirSync(dir, { withFileTypes: true })) {
     if (!sub.isDirectory()) continue;
@@ -134,15 +165,23 @@ export function readTranscripts(dir) {
       if (!f.isFile() || !f.name.endsWith(".jsonl")) continue;
       files++;
       const raw = fs.readFileSync(path.join(subDir, f.name), "utf8");
-      for (const line of raw.split(/\r?\n/)) {
-        if (!line.trim()) continue;
-        const e = parseLine(line);
-        if (!e) continue;
-        if (!sessions.has(e.session)) sessions.set(e.session, []);
-        sessions.get(e.session).push(e);
-      }
+      onFile(raw.split(/\r?\n/).filter((l) => l.trim()));
     }
   }
+  return files;
+}
+
+/** Reads <dir>/*\/*.jsonl (one level) and returns events grouped by session. */
+export function readTranscripts(dir) {
+  const sessions = new Map();
+  const files = walkTranscripts(dir, (lines) => {
+    for (const line of lines) {
+      const e = parseLine(line);
+      if (!e) continue;
+      if (!sessions.has(e.session)) sessions.set(e.session, []);
+      sessions.get(e.session).push(e);
+    }
+  });
   return { sessions, files };
 }
 
@@ -566,6 +605,415 @@ export function outputPaths(out) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Sync: the latest state of recent sessions as `current` initiative records
+
+/**
+ * A user line the person typed, as the agent-board app counts it: not meta, not a compact
+ * summary, not a task notification or peer message, not a tool result, not a command wrapper.
+ */
+function isRealUser(o) {
+  if (o.type !== "user" || o.isMeta || o.isCompactSummary || o.isVisibleInTranscriptOnly) return false;
+  if (o.turnOrigin === "task_notification" || o.turnOrigin === "peer" || o.promptSource === "system") return false;
+  if (o.toolUseResult !== undefined) return false;
+  const c = o.message?.content;
+  if (Array.isArray(c) && c.some((b) => b && b.type === "tool_result")) return false;
+  const t = messageText(c).trimStart();
+  return Boolean(t) && !t.startsWith("<");
+}
+
+/**
+ * Turns one JSONL line into a sync event, or null. Events: { session, ms, role: "title", title:
+ * { source, text } } for custom-title / ai-title lines (ms NaN), or { session, ms, role, realUser,
+ * cwd, branch, tools: [{ name, input }] } for user and assistant lines. No message text is kept;
+ * tool inputs are kept in memory only for the plan, todo and wrap_up tools.
+ */
+export function parseSyncLine(line) {
+  let o;
+  try {
+    o = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  if (typeof o.sessionId !== "string" || !SESSION_RE.test(o.sessionId)) return null;
+  if (o.type === "custom-title" || o.type === "ai-title") {
+    const t = o.type === "custom-title" ? o.customTitle : o.aiTitle;
+    if (typeof t !== "string" || !t.trim()) return null;
+    return { session: o.sessionId, ms: NaN, role: "title", title: { source: o.type === "custom-title" ? "custom" : "ai", text: t } };
+  }
+  if (o.type !== "user" && o.type !== "assistant") return null;
+  if (o.isSidechain === true) return null;
+  const ms = typeof o.timestamp === "string" ? Date.parse(o.timestamp) : NaN;
+  if (!Number.isFinite(ms)) return null;
+  const tools = [];
+  const content = o.message?.content;
+  if (o.type === "assistant" && Array.isArray(content)) {
+    for (const b of content) {
+      if (!b || b.type !== "tool_use" || typeof b.name !== "string") continue;
+      if (!b.name.endsWith("update_plan") && !b.name.endsWith("wrap_up") && b.name !== "TodoWrite") continue;
+      tools.push({ name: b.name, input: b.input && typeof b.input === "object" && !Array.isArray(b.input) ? b.input : {} });
+    }
+  }
+  return {
+    session: o.sessionId,
+    ms,
+    role: o.type,
+    realUser: isRealUser(o),
+    cwd: typeof o.cwd === "string" ? o.cwd : "",
+    branch: typeof o.gitBranch === "string" ? o.gitBranch : "",
+    tools,
+  };
+}
+
+/** Reads <dir>/*\/*.jsonl (one level) into sync events by session. A title line takes the time of the line before it. */
+export function readSyncTranscripts(dir) {
+  const sessions = new Map();
+  const files = walkTranscripts(dir, (lines) => {
+    let lastMs = 0;
+    for (const line of lines) {
+      const e = parseSyncLine(line);
+      if (!e) continue;
+      if (e.role === "title") e.ms = lastMs;
+      else lastMs = e.ms;
+      if (!sessions.has(e.session)) sessions.set(e.session, []);
+      sessions.get(e.session).push(e);
+    }
+  });
+  return { sessions, files };
+}
+
+function planStatus(s) {
+  if (s === "completed" || s === "done") return "done";
+  if (s === "in_progress") return "in_progress";
+  return "pending";
+}
+
+function planItems(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((x) => (x && typeof x === "object" ? { text: typeof x.content === "string" ? x.content : typeof x.text === "string" ? x.text : "", status: planStatus(x.status) } : null))
+    .filter((x) => x && x.text.trim())
+    .slice(0, CC_MAX_TASKS);
+}
+
+/**
+ * One update_plan call on a plan (statuses pending, in_progress, done), as the plan tool defines
+ * it: `items` replaces the list; `done: [n]` (1-based) completes those; `advance` completes the
+ * in_progress step and starts the first pending one; `start: n` puts n in progress and any other
+ * in_progress step back to pending. Returns the new plan, or `items` unchanged.
+ */
+export function applyPlanOp(items, input) {
+  if (!input || typeof input !== "object") return items;
+  if (Array.isArray(input.items)) return planItems(input.items);
+  if (!items) return items; // an increment with no list to apply it to
+  const out = items.map((x) => ({ ...x }));
+  if (Array.isArray(input.done)) {
+    for (const n of input.done) {
+      const t = out[Number(n) - 1];
+      if (t) t.status = "done";
+    }
+  }
+  if (input.advance === true) {
+    const cur = out.findIndex((x) => x.status === "in_progress");
+    if (cur >= 0) out[cur].status = "done";
+    const next = out.findIndex((x) => x.status === "pending");
+    if (next >= 0) out[next].status = "in_progress";
+  }
+  if (input.start != null && Number.isFinite(Number(input.start))) {
+    const i = Number(input.start) - 1;
+    if (out[i]) {
+      out.forEach((x, k) => {
+        if (k !== i && x.status === "in_progress") x.status = "pending";
+      });
+      out[i].status = "in_progress";
+    }
+  }
+  return out;
+}
+
+/**
+ * The latest state of one session: its last plan (update_plan or TodoWrite, whichever came last;
+ * a wrap_up checks the whole plan off, as the app does), its open blocked question (the last
+ * wrap_up, blocked, with an ask, and no real user turn after it), its title (custom over ai),
+ * repo and branch. `rawTitle` stays in memory for key and rule matching only.
+ */
+export function sessionState(events) {
+  const sorted = [...events].sort((a, b) => a.ms - b.ms);
+  let plan = null;
+  let wrap = null;
+  let custom = "";
+  let ai = "";
+  let cwd = "";
+  let branch = "";
+  let firstMs = Infinity;
+  let lastMs = -Infinity;
+  let userTurns = 0;
+  for (const e of sorted) {
+    if (e.role === "title") {
+      if (e.title.source === "custom") custom = e.title.text;
+      else ai = e.title.text;
+      continue;
+    }
+    firstMs = Math.min(firstMs, e.ms);
+    lastMs = Math.max(lastMs, e.ms);
+    if (e.cwd) cwd = e.cwd;
+    if (e.branch) branch = e.branch;
+    if (e.realUser) {
+      userTurns++;
+      if (wrap) wrap.answered = true;
+    }
+    for (const t of e.tools ?? []) {
+      if (t.name === "TodoWrite") {
+        if (Array.isArray(t.input.todos)) plan = planItems(t.input.todos);
+      } else if (t.name.endsWith("update_plan")) {
+        plan = applyPlanOp(plan, t.input);
+      } else if (t.name.endsWith("wrap_up")) {
+        if (plan) plan = plan.map((x) => ({ ...x, status: "done" }));
+        const actions = Array.isArray(t.input.actions) ? t.input.actions : [];
+        wrap = {
+          ms: e.ms,
+          blocked: t.input.blocked === true,
+          ask: typeof t.input.ask === "string" ? t.input.ask : "",
+          options: actions.map((a) => (a && typeof a === "object" ? a.label || a.action : "")).filter((s) => typeof s === "string" && s.trim()),
+          answered: false,
+        };
+      }
+    }
+  }
+  const question = wrap && wrap.blocked && !wrap.answered && wrap.ask.trim() ? { ms: wrap.ms, ask: wrap.ask, options: wrap.options } : null;
+  const session = sorted[0]?.session ?? "";
+  return { session, firstMs, lastMs, cwd, repo: repoOf(cwd), branch, rawTitle: custom || ai, plan, question, userTurns };
+}
+
+/** The states of sessions last active in the `days` before `now`, skipping ones with no turn, plan or question. */
+export function collectSessionStates(sessions, { now, days = 14 }) {
+  const from = now - days * 24 * 60 * 60 * 1000;
+  const out = [];
+  for (const events of sessions.values()) {
+    const s = sessionState(events);
+    if (!Number.isFinite(s.lastMs) || s.lastMs < from) continue;
+    if (!s.userTurns && !s.plan?.length && !s.question) continue;
+    out.push(s);
+  }
+  return out.sort((a, b) => b.lastMs - a.lastMs || a.session.localeCompare(b.session));
+}
+
+// Absolute paths and links: only the repo name and branch may say where work happened.
+const SYNC_MASKS = [
+  [/\bhttps?:\/\/[^\s"'<>`]+/gi, "link"],
+  [/(?:\b[A-Za-z]:[\\/]|\\\\[^\s\\]+\\|~[\\/]|(?<![\w.~-])\/(?:home|Users|root|tmp|var|etc|opt|mnt|srv|private|workspace|workspaces|c)\/)[^\s"'`<>|]*/g, "path"],
+];
+// Long digit runs (phone, card, account numbers) the server refuses; stricter than its checks.
+const LONG_NUMBER_RE = /\d(?:[\s().+-]*\d){8,}/;
+const MARKER_RE = /\[redacted:([^\]]+)\]/;
+
+/** One line of text for a record field: masked like an excerpt, plus links and paths, control characters and runs of space folded, cut to max. */
+export function maskField(text, max) {
+  let s = maskExcerpt(String(text ?? ""));
+  for (const [re, kind] of SYNC_MASKS) s = s.replace(re, `[redacted:${kind}]`);
+  return s.replace(CONTROL_RE, " ").replace(/\s+/g, " ").trim().slice(0, max).trim();
+}
+
+/** A reason when masked field text must be reviewed before upload, else null. */
+export function flagField(masked) {
+  const m = masked.match(MARKER_RE);
+  if (m) return `masked ${m[1]}`;
+  if (LONG_NUMBER_RE.test(masked)) return "long number";
+  return flagLine(masked);
+}
+
+function shortHash(s, n = 6) {
+  return createHash("sha256").update(s).digest("hex").slice(0, n);
+}
+
+/** A slug for an initiative or item id: a-z, 0-9 and -, at most 40, never a reserved route. A cut or reserved one gets a hash of the source. */
+export function syncSlug(raw) {
+  const s = String(raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (s && s.length <= 40 && !RESERVED_IDS.includes(s) && SLUG_RE.test(s)) return s;
+  const head = (s || "cc").slice(0, 33).replace(/-+$/, "") || "cc";
+  return `${head}-${shortHash(String(raw ?? ""))}`;
+}
+
+const TRUNK_BRANCHES = new Set(["main", "master", "develop", "dev", "trunk", "head"]);
+
+/**
+ * Groups session states into initiatives. A --map rule wins (its initiative; "unassigned" leaves
+ * the session out). Other sessions are merged when they share a Jira-style key (from the branch
+ * or the title) or the same repo and non-trunk branch; the rest stay one initiative each.
+ * Returns { groups: [{ id, label, mappedBy, rule?, keys, states }], left }.
+ */
+export function groupSessions(states, rules = []) {
+  const parent = states.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const union = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+  };
+  const ruled = new Map();
+  const free = [];
+  const keysOfState = states.map((s) => [...new Set([...(s.branch.match(KEY_FIND_RE) ?? []), ...(s.rawTitle.match(KEY_FIND_RE) ?? [])])].sort());
+  const byKey = new Map();
+  const byRb = new Map();
+  let left = 0;
+  states.forEach((s, i) => {
+    // The rule sees the title, never the transcript text.
+    const m = matchRule({ cwd: s.cwd, repo: s.repo, branch: s.branch, text: s.rawTitle }, rules);
+    if (m && m.rule.initiative === "unassigned") {
+      left++;
+      return;
+    }
+    if (m) {
+      if (!ruled.has(m.rule.initiative)) ruled.set(m.rule.initiative, { rule: m.rule, mappedBy: m.mappedBy, idx: [] });
+      ruled.get(m.rule.initiative).idx.push(i);
+      return;
+    }
+    free.push(i);
+    for (const k of keysOfState[i]) {
+      if (byKey.has(k)) union(i, byKey.get(k));
+      else byKey.set(k, i);
+    }
+    if (s.repo && s.branch && !TRUNK_BRANCHES.has(s.branch.toLowerCase())) {
+      const rb = `${s.repo}\n${s.branch}`;
+      if (byRb.has(rb)) union(i, byRb.get(rb));
+      else byRb.set(rb, i);
+    }
+  });
+  const groups = [];
+  for (const [initiative, g] of [...ruled.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const idx = g.idx;
+    groups.push({ id: RESERVED_IDS.includes(initiative) ? syncSlug(initiative) : initiative, label: `rule:${initiative}`, mappedBy: g.mappedBy, rule: g.rule, keys: [...new Set(idx.flatMap((i) => keysOfState[i]))].sort(), states: idx.map((i) => states[i]) });
+  }
+  const roots = new Map();
+  for (const i of free) {
+    const r = find(i);
+    if (!roots.has(r)) roots.set(r, []);
+    roots.get(r).push(i);
+  }
+  const used = new Set(groups.map((g) => g.id));
+  const free_groups = [];
+  for (const idx of roots.values()) {
+    const keys = [...new Set(idx.flatMap((i) => keysOfState[i]))].sort();
+    const first = states[idx[0]];
+    let label;
+    let base;
+    let mappedBy;
+    if (keys.length) {
+      label = `key:${keys[0]}`;
+      base = syncSlug(keys[0]);
+      mappedBy = `key ${keys[0]}`;
+    } else if (idx.length > 1 || (first.repo && first.branch && !TRUNK_BRANCHES.has(first.branch.toLowerCase()))) {
+      label = `rb:${first.repo}\n${first.branch}`;
+      base = syncSlug(`${first.repo}-${first.branch}`);
+      mappedBy = "repo+branch";
+    } else {
+      label = `session:${first.session}`;
+      base = syncSlug(`session-${first.session.slice(0, 12)}`);
+      mappedBy = "session";
+    }
+    free_groups.push({ label, base, mappedBy, keys, states: idx.map((i) => states[i]) });
+  }
+  free_groups.sort((a, b) => a.label.localeCompare(b.label));
+  for (const g of free_groups) {
+    let id = g.base;
+    if (used.has(id)) id = `${id.slice(0, 33).replace(/-+$/, "")}-${shortHash(g.label)}`;
+    used.add(id);
+    groups.push({ id, label: g.label, mappedBy: g.mappedBy, keys: g.keys, states: g.states });
+  }
+  return { groups, left };
+}
+
+/** One draft record for a group, with review fields; flagged records are left out (include: false) until reviewed. */
+export function buildSyncRecord(group) {
+  const states = [...group.states].sort((a, b) => b.lastMs - a.lastMs || a.session.localeCompare(b.session));
+  const latest = states[0];
+  const flags = [];
+  const field = (raw, max, where) => {
+    const v = maskField(raw, max);
+    const f = v ? flagField(v) : null;
+    if (f) flags.push(`${where}: ${f}`);
+    return v;
+  };
+  const key = group.rule?.key ?? group.keys.find((k) => KEY_RE.test(k));
+  let title = group.rule?.title ?? "";
+  if (!title) {
+    const titled = states.find((s) => s.rawTitle.trim());
+    if (titled) title = field(titled.rawTitle, TITLE_MAX, "title");
+  }
+  if (!title) title = maskField([key, latest.repo, latest.branch].filter(Boolean).join(" "), TITLE_MAX);
+  if (!title) title = `Session ${latest.session.slice(0, 8)}`;
+  const planned = states.find((s) => s.plan?.length);
+  const tasks = [];
+  for (const [i, t] of (planned?.plan ?? []).entries()) {
+    const text = field(t.text, TASK_TEXT_MAX, `tasks[${tasks.length}]`);
+    if (text) tasks.push({ id: `step-${i + 1}`, text, status: t.status });
+  }
+  const questions = [];
+  const asks = states.filter((s) => s.question).sort((a, b) => b.question.ms - a.question.ms);
+  for (const s of asks.slice(0, CC_MAX_QUESTIONS)) {
+    const at = `questions[${questions.length}]`;
+    const text = field(s.question.ask, QUESTION_TEXT_MAX, at);
+    if (!text) continue;
+    const options = [];
+    for (const o of s.question.options) {
+      if (options.length >= CC_MAX_OPTIONS) break;
+      const v = field(o, OPTION_MAX, `${at}.options`);
+      if (v && !options.includes(v)) options.push(v);
+    }
+    const q = { id: `ask-${shortHash(`${s.session}:${s.question.ms}`, 8)}`, text };
+    if (options.length) q.options = options;
+    questions.push(q);
+  }
+  /** @type {Record<string, any>} */
+  const record = { id: group.id, title };
+  const area = latest.repo ? maskField(latest.repo, AREA_MAX) : "";
+  if (area && !flagField(area)) record.area = area;
+  if (key) record.key = key;
+  record.state = "active";
+  if (tasks.length) record.tasks = tasks;
+  if (questions.length) record.questions = questions;
+  Object.assign(record, {
+    include: !flags.length,
+    mappedBy: group.mappedBy,
+    lastActiveAt: new Date(latest.lastMs).toISOString(),
+    sessions: states.map((s) => s.session.slice(0, SESSION_MAX)),
+    repo: latest.repo,
+    branch: latest.branch,
+  });
+  if (flags.length) record.flagged = flags[0];
+  return record;
+}
+
+/** The sync draft: `current` records, newest first, at most 100. */
+export function buildSyncDraft(states, { rules = [], now }) {
+  const { groups, left } = groupSessions(states, rules);
+  const records = groups.map(buildSyncRecord).sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt) || a.id.localeCompare(b.id));
+  return {
+    draft: { v: 1, kind: DRAFT_KIND, generatedAt: new Date(now).toISOString(), entries: [], current: records.slice(0, MAX_CURRENT) },
+    dropped: Math.max(0, records.length - MAX_CURRENT),
+    left,
+  };
+}
+
+/** A readable view of a sync draft. */
+export function syncMarkdown(draft) {
+  const mark = { done: "[x]", in_progress: "[~]", pending: "[ ]" };
+  const lines = [
+    "# Command Center sync draft",
+    "",
+    `Generated ${draft.generatedAt}. ${draft.current.length} initiatives. Edit the .json file (title, tasks, questions, include), then run upload.`,
+    "",
+  ];
+  for (const r of draft.current) {
+    const inc = r.include ? "yes" : `no${r.flagged ? ` (flagged: ${r.flagged})` : ""}`;
+    lines.push(`## ${cell(r.title)}`, "", `id ${cell(r.id)}${r.key ? `, key ${cell(r.key)}` : ""}${r.area ? `, area ${cell(r.area)}` : ""}. Include: ${cell(inc)}. Last active ${r.lastActiveAt.slice(0, 16).replace("T", " ")} UTC.`, "");
+    for (const t of r.tasks ?? []) lines.push(`- ${mark[t.status] ?? "[ ]"} ${cell(t.text)}`);
+    for (const q of r.questions ?? []) lines.push(`- Question: ${cell(q.text)}${q.options?.length ? ` (options: ${q.options.map(cell).join(" / ")})` : ""}`);
+    if (r.tasks?.length || r.questions?.length) lines.push("");
+  }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------------------------
 // Upload
 
 /** The sendable entries of a draft, each built from the allowlist only. */
@@ -586,12 +1034,82 @@ export function uploadEntries(draft) {
   return out;
 }
 
-/** Splits entries into request bodies of at most 2000 entries and 1 MB each. */
-export function batchEntries(entries, { maxEntries = MAX_ENTRIES, maxBytes = MAX_BYTES } = {}) {
+function plainText(v, max) {
+  return typeof v === "string" && v.trim() !== "" && v.length <= max;
+}
+
+/** Why a reviewed `current` record cannot be sent, or null. Mirrors the server's publish limits. */
+function currentProblem(r) {
+  if (typeof r.id !== "string" || !SLUG_RE.test(r.id) || RESERVED_IDS.includes(r.id)) return "id must be a slug (a-z, 0-9, -), not export or backfill";
+  if (!plainText(r.title, TITLE_MAX)) return `title must be text of 1 to ${TITLE_MAX} characters`;
+  if (r.area != null && r.area !== "" && !plainText(r.area, AREA_MAX)) return `area must be text of at most ${AREA_MAX} characters`;
+  if (r.key != null && r.key !== "" && (typeof r.key !== "string" || !KEY_RE.test(r.key))) return "key must look like KEY-1";
+  if (r.state != null && r.state !== "active") return 'state must be "active"';
+  const tasks = r.tasks ?? [];
+  if (!Array.isArray(tasks) || tasks.length > CC_MAX_TASKS) return `tasks must be a list of at most ${CC_MAX_TASKS}`;
+  for (const t of tasks) {
+    if (!t || typeof t.id !== "string" || !SLUG_RE.test(t.id)) return "a task id must be a slug";
+    if (!plainText(t.text, TASK_TEXT_MAX)) return `a task text must be 1 to ${TASK_TEXT_MAX} characters`;
+    if (!TASK_STATUSES.includes(t.status)) return `a task status must be ${TASK_STATUSES.join(", ")}`;
+  }
+  if (new Set(tasks.map((t) => t.id)).size !== tasks.length) return "task ids must be unique";
+  const questions = r.questions ?? [];
+  if (!Array.isArray(questions) || questions.length > CC_MAX_QUESTIONS) return `questions must be a list of at most ${CC_MAX_QUESTIONS}`;
+  for (const q of questions) {
+    if (!q || typeof q.id !== "string" || !SLUG_RE.test(q.id)) return "a question id must be a slug";
+    if (!plainText(q.text, QUESTION_TEXT_MAX)) return `a question text must be 1 to ${QUESTION_TEXT_MAX} characters`;
+    const o = q.options ?? [];
+    if (!Array.isArray(o) || o.length > CC_MAX_OPTIONS || o.some((x) => !plainText(x, OPTION_MAX))) return `question options must be at most ${CC_MAX_OPTIONS} texts of 1 to ${OPTION_MAX}`;
+  }
+  if (new Set(questions.map((q) => q.id)).size !== questions.length) return "question ids must be unique";
+  return null;
+}
+
+/**
+ * The sendable `current` records of a sync draft (include: true), each built from the record
+ * allowlist only: id, title, area, key, state, tasks { id, text, status }, questions { id, text,
+ * options }. Links are never sent. Returns { records, skipped: [{ id, reason }] }.
+ */
+export function uploadCurrent(draft) {
+  if (draft?.current === undefined) return { records: [], skipped: [] };
+  if (!Array.isArray(draft.current)) throw new CliError("current in the draft must be a list");
+  const records = [];
+  const skipped = [];
+  const seen = new Set();
+  for (const r of draft.current) {
+    if (!r || typeof r !== "object" || r.include !== true) continue;
+    const problem = currentProblem(r) ?? (seen.has(r.id) ? "id is used twice" : null);
+    if (problem) {
+      skipped.push({ id: typeof r.id === "string" ? r.id.slice(0, 40) : "?", reason: problem });
+      continue;
+    }
+    seen.add(r.id);
+    const u = { id: r.id, title: r.title };
+    if (r.area) u.area = r.area;
+    if (r.key) u.key = r.key;
+    u.state = "active";
+    if (r.tasks?.length) u.tasks = r.tasks.map((t) => ({ id: t.id, text: t.text, status: t.status }));
+    if (r.questions?.length) u.questions = r.questions.map((q) => (q.options?.length ? { id: q.id, text: q.text, options: [...q.options] } : { id: q.id, text: q.text }));
+    records.push(u);
+  }
+  if (records.length > MAX_CURRENT) throw new CliError(`the draft includes ${records.length} current records; at most ${MAX_CURRENT}. Set include: false on some.`);
+  return { records, skipped };
+}
+
+/**
+ * Splits entries into request bodies of at most 2000 entries and 1 MB each. `current` records,
+ * when given, ride in the first body, and count toward its bytes; with no entries that is one
+ * body of current records only.
+ * @param {any[]} entries
+ * @param {{ maxEntries?: number, maxBytes?: number, current?: object[] }} [opts]
+ */
+export function batchEntries(entries, { maxEntries = MAX_ENTRIES, maxBytes = MAX_BYTES, current = [] } = {}) {
   const overhead = Buffer.byteLength(JSON.stringify({ v: 1, entries: [] }));
+  const firstOverhead = current.length ? Buffer.byteLength(JSON.stringify({ v: 1, entries: [], current })) : overhead;
+  if (firstOverhead > maxBytes) throw new CliError(`the current records alone are over ${maxBytes} bytes`);
   const batches = [];
   let cur = [];
-  let bytes = overhead;
+  let bytes = firstOverhead;
   for (const e of entries) {
     const own = Buffer.byteLength(JSON.stringify(e));
     if (overhead + own > maxBytes) throw new CliError(`entry ${e.id} alone is over ${maxBytes} bytes`);
@@ -600,12 +1118,27 @@ export function batchEntries(entries, { maxEntries = MAX_ENTRIES, maxBytes = MAX
       batches.push(cur);
       cur = [];
       bytes = overhead;
+    } else if (!cur.length && !batches.length && bytes + own > maxBytes) {
+      // The current records leave no room for this entry in the first body.
+      batches.push(cur);
+      cur = [];
+      bytes = overhead;
     }
     bytes += own + (cur.length ? 1 : 0);
     cur.push(e);
   }
-  if (cur.length) batches.push(cur);
+  if (cur.length || (current.length && !batches.length)) batches.push(cur);
   return batches;
+}
+
+/**
+ * The request body for batch i: current records go with the first only.
+ * @param {any[]} batch
+ * @param {number} i
+ * @param {object[]} [current]
+ */
+export function uploadBody(batch, i, current = []) {
+  return i === 0 && current.length ? { v: 1, entries: batch, current } : { v: 1, entries: batch };
 }
 
 /** Checks a backfill link: https, or http on loopback. */
@@ -631,7 +1164,7 @@ export function maskUrl(raw) {
 
 function parseArgs(args) {
   const flags = { url: [] };
-  const valued = new Set(["--out", "--projects-dir", "--map", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from"]);
+  const valued = new Set(["--out", "--projects-dir", "--map", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from", "--days"]);
   const bare = new Set(["--no-llm", "--dry-run"]);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -664,6 +1197,7 @@ async function runDraft(flags, deps) {
   const { stdout } = deps;
   if (!flags.out) throw new CliError("draft needs --out <file.json>");
   if (flags.url.length || flags.draft || flags["dry-run"] || flags.from) throw new CliError("--url, --draft, --from and --dry-run are for upload");
+  if (flags.days !== undefined) throw new CliError("--days is for sync");
   const settleHours = intFlag(flags["settle-hours"], "--settle-hours", 0, 24 * 365, 2);
   const concurrency = Math.floor(intFlag(flags.concurrency, "--concurrency", 1, 4, 2));
   const since = flags.since !== undefined ? parseBound(flags.since, "--since") : undefined;
@@ -673,16 +1207,7 @@ async function runDraft(flags, deps) {
   }
   const machine = flags.machine ?? reduceMachine(deps.hostname());
   if (!machine) throw new CliError("this host name has none of A-Z a-z 0-9 . _ -; pass --machine");
-  let rules = [];
-  if (flags.map) {
-    let raw;
-    try {
-      raw = JSON.parse(fs.readFileSync(flags.map, "utf8"));
-    } catch {
-      throw new CliError(`cannot read the map file as JSON: ${flags.map}`);
-    }
-    rules = validateMap(raw);
-  }
+  const rules = readMapRules(flags.map);
   // Settings first: a missing variable fails before any transcript is read.
   const provider = flags["no-llm"] ? null : (deps.provider ?? makeLlmProvider(deps.env, deps.fetch));
   const dir = flags["projects-dir"] ?? defaultProjectsDir();
@@ -707,6 +1232,45 @@ async function runDraft(flags, deps) {
   return 0;
 }
 
+function readMapRules(file) {
+  if (!file) return [];
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    throw new CliError(`cannot read the map file as JSON: ${file}`);
+  }
+  return validateMap(raw);
+}
+
+async function runSync(flags, deps) {
+  const { stdout } = deps;
+  if (!flags.out) throw new CliError("sync needs --out <file.json>");
+  if (flags.url.length || flags.draft || flags["dry-run"] || flags.from) throw new CliError("--url, --draft, --from and --dry-run are for upload");
+  for (const f of ["since", "until", "settle-hours", "machine", "concurrency", "no-llm"]) {
+    if (flags[f] !== undefined) throw new CliError(`--${f} is for draft`);
+  }
+  const days = Math.floor(intFlag(flags.days, "--days", 1, 365, 14));
+  const rules = readMapRules(flags.map);
+  const dir = flags["projects-dir"] ?? defaultProjectsDir();
+  const { sessions, files } = readSyncTranscripts(dir);
+  const states = collectSessionStates(sessions, { now: deps.now(), days });
+  const { draft, dropped, left } = buildSyncDraft(states, { rules, now: deps.now() });
+  const p = outputPaths(flags.out);
+  fs.mkdirSync(path.dirname(path.resolve(p.json)), { recursive: true });
+  writePrivate(p.json, `${JSON.stringify(draft, null, 2)}\n`);
+  writePrivate(p.md, syncMarkdown(draft));
+  const included = draft.current.filter((r) => r.include).length;
+  const flagged = draft.current.filter((r) => r.flagged).length;
+  const questions = draft.current.reduce((n, r) => n + (r.questions?.length ?? 0), 0);
+  stdout(`${files} transcript files, ${states.length} sessions active in the last ${days} days, ${draft.current.length} initiatives.`);
+  stdout(`${included} included, ${flagged} flagged, ${questions} open questions${left ? `, ${left} sessions left out by the map` : ""}${dropped ? `, ${dropped} older initiatives cut (at most ${MAX_CURRENT})` : ""}.`);
+  stdout(`Draft: ${p.json}`);
+  stdout(`Readable: ${p.md}`);
+  stdout("Nothing was uploaded. Review the draft, then run upload with a backfill link.");
+  return 0;
+}
+
 function printAnswer(stdout, body) {
   const n = (v) => (typeof v === "number" ? v : 0);
   const refused = Array.isArray(body?.refused) ? body.refused : [];
@@ -715,12 +1279,20 @@ function printAnswer(stdout, body) {
   stdout(`accepted ${n(body?.accepted)}, duplicate ${n(body?.duplicate)}, refused ${refused.length}, created ${created.length}, reassigned to unassigned ${reassigned.length}`);
   for (const r of refused) stdout(`  refused #${r?.index} ${r?.id}: ${r?.reason}`);
   if (created.length) stdout(`  created initiatives: ${created.join(", ")}`);
+  // The server's answer for current records: printed as counts per field, whatever its shape.
+  const cur = body?.current;
+  if (cur && typeof cur === "object" && !Array.isArray(cur)) {
+    const parts = Object.entries(cur)
+      .filter(([k, v]) => /^[A-Za-z_]{1,30}$/.test(k) && (typeof v === "number" || Array.isArray(v)))
+      .map(([k, v]) => `${k} ${Array.isArray(v) ? v.length : v}`);
+    if (parts.length) stdout(`current: ${parts.join(", ")}`);
+  }
 }
 
 async function runUpload(flags, deps) {
   const { stdout, stderr } = deps;
   if (!flags.draft) throw new CliError("upload needs --draft <file.json>");
-  if (flags.out || flags.map || flags["no-llm"]) throw new CliError("--out, --map and --no-llm are for draft");
+  if (flags.out || flags.map || flags["no-llm"] || flags.days !== undefined) throw new CliError("--out, --map, --no-llm and --days are for draft and sync");
   // The link from the environment keeps it off the command line (shell history, process lists).
   if (!flags.url.length && deps.env.BAB_BACKFILL_LINK) flags.url.push(deps.env.BAB_BACKFILL_LINK);
   if (!flags["dry-run"] && !flags.url.length) throw new CliError("upload needs --url <link> or BAB_BACKFILL_LINK (or --dry-run)");
@@ -732,17 +1304,24 @@ async function runUpload(flags, deps) {
     throw new CliError(`cannot read the draft as JSON: ${flags.draft}`);
   }
   const all = uploadEntries(draft);
+  const { records, skipped } = uploadCurrent(draft);
+  for (const s of skipped) stderr(`  current ${s.id} not sent: ${s.reason}`);
   const from = Math.floor(intFlag(flags.from, "--from", 0, Number.MAX_SAFE_INTEGER, 0));
   const entries = all.slice(from);
-  if (!entries.length) {
-    stdout(`Nothing to send: ${all.length} sendable entries, starting at ${from}.`);
+  // Current records go with the first upload only; a --from rerun continues the log entries.
+  const current = from === 0 ? records : [];
+  if (records.length && from > 0) stdout(`${records.length} current records are sent with --from 0 only; not sent now.`);
+  if (!entries.length && !current.length) {
+    stdout(`Nothing to send: ${all.length} sendable entries, starting at ${from}${records.length ? `, ${records.length} current records` : ""}.`);
     return 0;
   }
-  const batches = batchEntries(entries);
+  const batches = batchEntries(entries, { current });
+  const withCurrent = current.length ? ` and ${current.length} current records` : "";
   if (flags["dry-run"]) {
-    const bytes = batches.map((b) => Buffer.byteLength(JSON.stringify({ v: 1, entries: b })));
-    stdout(`Dry run: ${entries.length} entries in ${batches.length} batch(es) of ${bytes.join(", ")} bytes. Nothing sent.`);
+    const bytes = batches.map((b, i) => Buffer.byteLength(JSON.stringify(uploadBody(b, i, current))));
+    stdout(`Dry run: ${entries.length} entries${withCurrent} in ${batches.length} batch(es) of ${bytes.join(", ")} bytes. Nothing sent.`);
     for (const e of entries.slice(0, 3)) stdout(`  ${e.at} ${e.initiative}: ${e.worked}`);
+    for (const r of current.slice(0, 3)) stdout(`  current ${r.id}: ${r.title} (${r.tasks?.length ?? 0} tasks, ${r.questions?.length ?? 0} questions)`);
     return 0;
   }
   let sent = 0;
@@ -750,8 +1329,8 @@ async function runUpload(flags, deps) {
   for (let i = 0; i < batches.length && i < flags.url.length; i++) {
     const url = flags.url[i];
     const masked = maskUrl(url);
-    const body = JSON.stringify({ v: 1, entries: batches[i] });
-    stdout(`Uploading ${batches[i].length} entries to ${masked}`);
+    const body = JSON.stringify(uploadBody(batches[i], i, current));
+    stdout(`Uploading ${batches[i].length} entries${i === 0 ? withCurrent : ""} to ${masked}`);
     let res;
     try {
       // A redirect could carry the entries to another host: refuse it.
@@ -798,6 +1377,7 @@ export async function run(argv, deps = {}) {
   const [mode, ...rest] = argv;
   try {
     if (mode === "draft") return await runDraft(parseArgs(rest), d);
+    if (mode === "sync") return await runSync(parseArgs(rest), d);
     if (mode === "upload") return await runUpload(parseArgs(rest), d);
     d.stderr(USAGE);
     return 2;
