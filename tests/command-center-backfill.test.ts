@@ -124,6 +124,15 @@ describe("backfill_link", () => {
     expect(minted[0].details).not.toContain(String(rows[0].token_hash));
   });
 
+  it("accepts the session ids and machine names the local tool sends", async () => {
+    // The tool sends a transcript's session id (a UUID) and a host name cut to 20 characters.
+    const sessions = Array.from({ length: 20 }, () => crypto.randomUUID());
+    const entries = sessions.map((session, n) => entry(n, { id: `${session}:${1_700_000_000_000 + n}`, session, machine: "dev-box-01.local" }));
+    const res = await post(mint().url, upload(entries));
+    expect(res.json.refused).toEqual([]);
+    expect(res.json.accepted).toBe(20);
+  });
+
   it("takes no other fields", () => {
     expect(() => cc.runCommandCenter(ME, { action: "backfill_link", id: "x" }, "mcp", ORIGIN)).toThrow(/unknown field 'id' for backfill_link/);
   });
