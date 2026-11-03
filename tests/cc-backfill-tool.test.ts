@@ -314,9 +314,24 @@ describe("drafting", () => {
     expect(readFileSync(path.join(dir, "d.md"), "utf8")).toContain("no (flagged: token)");
   });
 
-  it("reduces a host name to a safe machine name", () => {
+  it("defaults the machine to the host name reduced and cut to 20, and refuses a --machine over 20 or with other characters", async () => {
     expect(reduceMachine("acme box!.example")).toBe("acmebox.example");
     expect(reduceMachine("a".repeat(80))).toHaveLength(20);
+    writeTranscript(pair(NOW - 10 * HOUR, 5, { branch: "feature/KEY-123-add-login-page-validation" }));
+    const out = path.join(dir, "d.json");
+    const c = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--no-llm"], { ...c.deps, hostname: () => "acme-workstation-01.example.com" })).toBe(0);
+    const [e] = JSON.parse(readFileSync(out, "utf8")).entries;
+    expect(e.machine).toBe("acme-workstation-01.");
+    // A long dashed branch in the template line is not a secret.
+    expect(e).toMatchObject({ include: true, worked: "Worked in acme-api on feature/KEY-123-add-login-page-validation (2 turns)" });
+    expect(e.flagged).toBeUndefined();
+    for (const bad of ["a".repeat(21), "acme box"]) {
+      const c2 = capture();
+      expect(await run(["draft", "--projects-dir", projects, "--out", out, "--no-llm", "--machine", bad], c2.deps)).toBe(2);
+      expect(c2.err.join("\n")).toMatch(/--machine must be 1 to 20 characters/);
+    }
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--no-llm", "--machine", "a".repeat(20)], capture().deps)).toBe(0);
   });
 
   it("fails naming a missing variable, never printing a value, and writes nothing", async () => {

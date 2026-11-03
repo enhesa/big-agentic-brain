@@ -30,7 +30,8 @@ draft options:
   --since <date>          only blocks starting at or after this date or ISO time (a date is UTC midnight)
   --until <date>          only blocks starting before the end of this date, or before this ISO time
   --settle-hours <n>      skip blocks that ended less than n hours ago (default 2)
-  --machine <name>        machine name sent with each entry (default: this host name, reduced)
+  --machine <name>        machine name sent with each entry: 1 to 20 of A-Z a-z 0-9 . _ -
+                          (default: this host name, reduced and cut to 20)
   --concurrency <n>       drafting requests at once, 1 to 4 (default 2)
   --no-llm                write a template line per block instead of asking a model
 
@@ -58,6 +59,7 @@ const KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
 const KEY_FIND_RE = /\b[A-Z][A-Z0-9]+-\d+\b/g;
 const ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const SESSION_RE = /^[A-Za-z0-9._-]{1,100}$/;
+const MACHINE_RE = /^[A-Za-z0-9._-]{1,20}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f\u0085\u2028\u2029]/g;
 const DRAFT_KIND = "bab-cc-backfill-draft";
@@ -204,8 +206,12 @@ export function parseBound(value, flag, endOfDay = false) {
   return ms;
 }
 
-/** All blocks from all sessions, filtered by the settle window and since/until, sorted by start. */
-export function collectBlocks(sessions, { now, settleHours = 2, since, until } = {}) {
+/**
+ * All blocks from all sessions, filtered by the settle window and since/until, sorted by start.
+ * @param {Map<string, any[]>} sessions
+ * @param {{ now: number, settleHours?: number, since?: number, until?: number }} opts
+ */
+export function collectBlocks(sessions, { now, settleHours = 2, since, until }) {
   const settleMs = settleHours * 60 * 60 * 1000;
   const out = [];
   for (const events of sessions.values()) {
@@ -358,7 +364,8 @@ const SECRET_CHECKS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY/, "private key"],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/, "email"],
   [/\b[0-9a-f]{32,}\b/i, "long hex run"],
-  [/[A-Za-z0-9+/_-]{40,}={0,2}/, "long base64 run"],
+  // No - or _ in the class: long dashed branch names are not secrets.
+  [/[A-Za-z0-9+/]{40,}={0,2}/, "long base64 run"],
   [/\b[\w-]*key\s*[=:]/i, "key="],
   [/token/i, "token"],
   [/pass(word|wd)?\s*[=:]|password/i, "password"],
@@ -621,8 +628,11 @@ async function runDraft(flags, deps) {
   const concurrency = Math.floor(intFlag(flags.concurrency, "--concurrency", 1, 4, 2));
   const since = flags.since !== undefined ? parseBound(flags.since, "--since") : undefined;
   const until = flags.until !== undefined ? parseBound(flags.until, "--until", true) : undefined;
-  const machine = reduceMachine(flags.machine ?? deps.hostname());
-  if (!machine) throw new CliError("--machine must hold at least one of A-Z a-z 0-9 . _ -");
+  if (flags.machine !== undefined && !MACHINE_RE.test(flags.machine)) {
+    throw new CliError(`--machine must be 1 to ${MACHINE_MAX} characters of A-Z a-z 0-9 . _ -`);
+  }
+  const machine = flags.machine ?? reduceMachine(deps.hostname());
+  if (!machine) throw new CliError("this host name has none of A-Z a-z 0-9 . _ -; pass --machine");
   let rules = [];
   if (flags.map) {
     let raw;

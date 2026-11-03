@@ -114,9 +114,9 @@ transcript text.
 3. Map. Each block goes to an initiative by the rules in the map file you edit: a working folder
    (substring), a repository folder name, a branch pattern or a ticket-style key such as `KEY-1`
    in the branch or the text. The first rule that matches wins. A block no rule matches goes to
-   `unassigned`; nothing is guessed. The draft also writes `<out>.map-template.json` with the
+   `unassigned`; nothing is guessed. The draft also writes `backfill.map-template.json` with the
    folders, branches and keys of unmapped blocks, so you can add rules and draft again.
-4. Review `backfill.json` and the readable `backfill.json.md`. Set `include` to false for a line
+4. Review `backfill.json` and the readable `backfill.md`. Set `include` to false for a line
    you do not want, or edit it. Lines that look like a secret are already set to false with the
    reason in `flagged`.
 5. Upload: ask your agent for a backfill link (`bab_command_center` action `backfill_link`), then
@@ -130,8 +130,8 @@ The link:
   stored. Entries always land in the log of the person who made it; the upload carries no identity.
 - works once, within 15 minutes. It is spent before the body is read, so a refused upload needs a
   new link. At most 20 unused links per person.
-- takes at most 2000 entries and 1 MB. The tool sends the first batch and says how many are left;
-  make a new link for the rest.
+- takes at most 2000 entries and 1 MB. The tool sends one batch per link and prints the `--from`
+  value to continue with a new link (or pass `--url` more than once).
 - is a public path for BAB's API token gate (the token in the path is the credential). A sign-in
   proxy in front of BAB needs `/api/command-center/backfill/` on its own public-path list too. A
   reverse proxy may log the path, so the link is short-lived and single use.
