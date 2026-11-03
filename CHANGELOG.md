@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.1](https://github.com/enhesa/big-agentic-brain/compare/v2.20.0...v2.20.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* quieter unlinked-viewer log, clearer link notice, honest search share ([3346424](https://github.com/enhesa/big-agentic-brain/commit/3346424d3c0849941b0b277cab9fbe3360327365))
+
 ## [2.20.0](https://github.com/enhesa/big-agentic-brain/compare/v2.19.0...v2.20.0) (2026-11-03)
 
 
