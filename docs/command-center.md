@@ -199,7 +199,8 @@ The import:
 ## Storage
 
 SQLite is the one store (migration 54): `command_center_initiatives` holds the live records,
-`command_center_log` the log, `command_center_export_grants` the person's consent per app. Every
+`command_center_log` the log, `command_center_export_grants` the person's consent per app, and
+`command_center_backfill_links` (migration 55) the sha256 of each backfill link's token. Every
 query is keyed by the owner. Each write runs in one transaction from its first read to its last
 write, so there is no lease, no snapshot and no need to republish after a restart.
 
