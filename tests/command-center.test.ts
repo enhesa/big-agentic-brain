@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 /**
- * Command Center store (lib/command-center.ts): validation, upsert, question lifecycle, opt-in,
- * retention, snapshot and the lease. Each test gets its own DATA_DIR and a fresh store.
+ * Command Center store (lib/command-center.ts): validation, upsert, question lifecycle, the work
+ * log, opt-in, retention, the SQLite store, the v2 snapshot import and migration v54. Each test
+ * gets its own DATA_DIR and a fresh database.
  */
 
 let dataDir: string;
@@ -81,6 +82,7 @@ afterEach(async () => {
   delete process.env.DATA_DIR;
   delete process.env.BAB_COMMAND_CENTER;
   delete process.env.BAB_REPLICAS;
+  delete process.env.BAB_COMMAND_CENTER_LOG_DAYS;
   (await import("../lib/config"))._resetConfigForTests();
   vi.resetModules();
 });
@@ -116,18 +118,23 @@ describe("publish", () => {
 
   it("refuses a sixth open question", () => {
     const qs = Array.from({ length: 6 }, (_, i) => ({ id: `q${i}`, text: "Why?" }));
-    expect(refusal(() => publish({ questions: qs }))).toMatchObject({ status: 400, message: "questions: at most 5 open; clear one first" });
+    expect(refusal(() => publish({ questions: qs }))).toMatchObject({ status: 400, message: "questions: at most 5 open; leave an answered one out to clear it" });
   });
 
   it("refuses a record over 32 KB with 413 and stores nothing", () => {
     const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `t${i}`, text: "x".repeat(120), status: "pending" }));
-    const comments = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, text: "y".repeat(500) }));
     const links = Array.from({ length: 20 }, (_, i) => ({ label: "z".repeat(60), url: "https://example.com/" + "p".repeat(470) + i }));
     const questions = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, text: "w".repeat(500), options: ["o".repeat(60), "o".repeat(60), "o".repeat(60), "o".repeat(60)] }));
-    const r = refusal(() => publish({ tasks, comments, links, questions }));
+    // Twenty cleared questions are kept for a week and count towards the record.
+    for (let round = 0; round < 5; round++) {
+      publish({ id: "big", questions: Array.from({ length: 5 }, (_, i) => ({ id: `old${round}-${i}`, text: "v".repeat(500) })) });
+    }
+    const logged = cc.ccLogOf(OWNER).length;
+    const r = refusal(() => publish({ id: "big", tasks, links, questions, worked: "tried a big one" }));
     expect(r.status).toBe(413);
-    expect(r.message).toMatch(/at most 32 KB per initiative/);
-    expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(r.message).toMatch(/at most 32 KB per initiative.*keeps 20 cleared questions for 7 days/);
+    expect(cc.ccGet(OWNER, "big").tasks).toHaveLength(2);
+    expect(cc.ccLogOf(OWNER)).toHaveLength(logged);
   });
 
   it("refuses an unknown field and names it with the allowed list", () => {
@@ -135,6 +142,10 @@ describe("publish", () => {
     expect(r.status).toBe(400);
     expect(r.message).toMatch(/^unknown field 'owner'; allowed: v, id, title/);
     expect(refusal(() => publish({ tasks: [{ id: "a", text: "b", status: "done", extra: 1 }] })).message).toMatch(/unknown field 'tasks\[0\]\.extra'; allowed: id, text, status/);
+  });
+
+  it("refuses comments and names worked as the fix", () => {
+    expect(refusal(() => publish({ comments: [{ id: "c1", text: "hi" }] })).message).toMatch(/^comments is gone: send "worked"/);
   });
 
   it("requires v: 1", () => {
@@ -158,32 +169,43 @@ describe("publish", () => {
     expect(refusal(() => publish({ tasks: [{ id: "a", text: "b", status: "done" }, { id: "a", text: "c", status: "done" }] })).message).toMatch(/used twice/);
     expect(refusal(() => publish({ priority: "soon" })).message).toBe("priority must be urgent, high, low or paused");
     expect(refusal(() => publish({ expectSeq: -1 })).message).toMatch(/expectSeq must be a whole number/);
+    expect(refusal(() => publish({ worked: "w".repeat(201) })).message).toMatch(/worked is 201 characters; at most 200/);
+    expect(refusal(() => publish({ worked: "line one\nline two" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ worked: "line one\u2028line two" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ worked: "bell\u0007" })).message).toMatch(/worked must be one line/);
+    expect(refusal(() => publish({ id: "export" })).message).toBe("id 'export' is reserved; pick another id");
+    expect(refusal(() => publish({ worked: "x", size: "huge" })).message).toBe("size must be small, medium or large");
+    expect(refusal(() => publish({ size: "small" })).message).toMatch(/size goes with worked/);
   });
 
-  it("expectSeq mismatch is 409 with the current record", () => {
+  it("expectSeq mismatch is 409 with the current record, and logs nothing", () => {
     publish();
-    const r = refusal(() => publish({ expectSeq: 0, title: "Someone else's change" }));
+    const before = cc.ccLogOf(OWNER).length;
+    const r = refusal(() => publish({ expectSeq: 0, title: "Someone else's change", worked: "my change" }));
     expect(r.status).toBe(409);
     expect(r.current).toMatchObject({ id: "billing-export", seq: 1, title: "Billing export" });
     expect(r.message).toMatch(/expectSeq 1/);
+    expect(cc.ccLogOf(OWNER)).toHaveLength(before);
     expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2 });
     expect(refusal(() => publish({ expectSeq: 1, title: "Stale" })).status).toBe(409);
   });
 
   it("a retried publish with the expectSeq the first try moved past is a no-op, not a 409", async () => {
-    expect(publish({ expectSeq: 0 })).toMatchObject({ seq: 1 });
+    expect(publish({ expectSeq: 0, worked: "started it" })).toMatchObject({ seq: 1 });
     // The answer was lost; the agent sends the very same request again.
-    expect(publish({ expectSeq: 0 })).toMatchObject({ seq: 1, unchanged: true });
+    expect(publish({ expectSeq: 0, worked: "started it" })).toMatchObject({ seq: 1, unchanged: true });
     expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2 });
     expect(publish({ expectSeq: 1, title: "Changed" })).toMatchObject({ seq: 2, unchanged: true });
     expect(await auditRows("cc_publish")).toHaveLength(2);
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked")).toHaveLength(1);
   });
 
-  it("refuses a token in a comment and names the field and the kind", () => {
+  it("refuses a token in worked and names the field and the kind", () => {
     const token = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
-    const r = refusal(() => publish({ comments: [{ id: "c1", text: `use ${token}` }] }));
+    const r = refusal(() => publish({ worked: `used ${token}` }));
     expect(r.status).toBe(400);
-    expect(r.message).toMatch(/^comments\[0\]\.text holds .+, and Command Center never keeps confidential data/);
+    expect(r.message).toMatch(/^worked holds .+, and Command Center never keeps confidential data/);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
   });
 
   it("owns every timestamp: tasks get started and finished times, health gets receivedAt", () => {
@@ -202,32 +224,110 @@ describe("publish", () => {
   });
 });
 
+describe("the work log", () => {
+  it("logs worked with the server time, the session and machine, and a size", () => {
+    const res = publish({ worked: "Built the export", size: "medium" });
+    expect(res.logged).toMatch(/^[0-9a-f]{32}$/);
+    const worked = cc.ccLogOf(OWNER).filter((e) => e.kind === "worked");
+    expect(worked).toEqual([
+      {
+        id: res.logged,
+        initiative: "billing-export",
+        title: "Billing export",
+        key: null,
+        kind: "worked",
+        text: "Built the export",
+        size: "medium",
+        session: "s-1",
+        machine: "laptop-1",
+        source: "live",
+        at: new Date(NOW).toISOString(),
+      },
+    ]);
+  });
+
+  it("derives entries for task, question, health and state changes, once each", () => {
+    publish({ tasks: [{ id: "a", text: "Do A", status: "pending" }] });
+    const kinds = () => cc.ccLogOf(OWNER).map((e) => `${e.kind}:${e.text}`);
+    expect(kinds()).toEqual(["question_asked:Which months?"]);
+    vi.setSystemTime(NOW + HOUR);
+    publish({ tasks: [{ id: "a", text: "Do A", status: "in_progress" }] });
+    vi.setSystemTime(NOW + 2 * HOUR);
+    publish({ tasks: [{ id: "a", text: "Do A", status: "done" }], questions: [] });
+    vi.setSystemTime(NOW + 3 * HOUR);
+    publish({ tasks: [{ id: "a", text: "Do A", status: "done" }], questions: [], state: "done" });
+    publish({ tasks: [{ id: "a", text: "Do A", status: "done" }], questions: [], state: "done" });
+    expect(kinds()).toHaveLength(5);
+    expect(kinds()).toEqual(expect.arrayContaining(["question_asked:Which months?", "task_started:Do A", "task_done:Do A", "question_cleared:Which months?", "state:done"]));
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], health: { level: "green", reason: "ok", checkedAt: "2026-03-02T12:00:00Z" } });
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], health: { level: "green", reason: "still ok", checkedAt: "2026-03-02T12:30:00Z" } });
+    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], health: { level: "red", reason: "failing", checkedAt: "2026-03-02T13:00:00Z" } });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "health").map((e) => e.text)).toEqual(["green: ok", "red: failing"]);
+  });
+
+  it("an unchanged record with a new worked line logs it, keeps seq and touches updatedAt", () => {
+    publish({ worked: "first" });
+    vi.setSystemTime(NOW + DAY);
+    const res = publish({ worked: "answered a question" });
+    expect(res).toMatchObject({ seq: 1, unchanged: true });
+    expect(res.logged).toBeTruthy();
+    expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, updatedAt: new Date(NOW + DAY).toISOString() });
+    // The retry answers the same entry and writes nothing.
+    expect(publish({ worked: "answered a question" }).logged).toBe(res.logged);
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["first", "answered a question"]);
+  });
+
+  it("keeps the log when an initiative is removed or leaves the live view", () => {
+    publish({ worked: "did it" });
+    run({ action: "remove", id: "billing-export" });
+    expect(cc.ccLogOf(OWNER).some((e) => e.text === "did it")).toBe(true);
+  });
+
+  it("logs the same line again after an initiative is removed and created anew", () => {
+    publish({ worked: "same line" });
+    run({ action: "remove", id: "billing-export" });
+    vi.setSystemTime(NOW + HOUR);
+    expect(publish({ worked: "same line" })).toMatchObject({ seq: 1 });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.text === "same line")).toHaveLength(2);
+  });
+
+  it("keeps people's logs apart", () => {
+    cc.ccSetSwitch(OTHER, true);
+    publish({ worked: "mine" });
+    publish({ worked: "theirs" }, device(OTHER, "dev-2"));
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["mine"]);
+    expect(cc.ccLogOf(OTHER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["theirs"]);
+    expect(cc.ccRecentLog(OTHER, "billing-export").every((e) => e.text !== "mine")).toBe(true);
+  });
+
+  it("drops entries older than BAB_COMMAND_CENTER_LOG_DAYS", async () => {
+    process.env.BAB_COMMAND_CENTER_LOG_DAYS = "10";
+    (await import("../lib/config"))._resetConfigForTests();
+    publish({ worked: "old work" });
+    vi.setSystemTime(NOW + 5 * DAY);
+    publish({ worked: "newer work", title: "Billing export 2" });
+    vi.setSystemTime(NOW + 11 * DAY);
+    cc.sweepCommandCenter();
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["newer work"]);
+    delete process.env.BAB_COMMAND_CENTER_LOG_DAYS;
+  });
+});
+
 describe("the other actions", () => {
-  it("clear_question clears an open one, and answers unknown otherwise", () => {
+  it("comment, health and clear_question are gone, with the fix in the answer", () => {
     publish();
-    expect(run({ action: "clear_question", id: "billing-export", questionId: "q-scope" })).toEqual({ cleared: true });
-    expect(run({ action: "clear_question", id: "billing-export", questionId: "q-scope" })).toEqual({ cleared: false, reason: "unknown" });
-    expect(run({ action: "clear_question", id: "nope", questionId: "q-scope" })).toEqual({ cleared: false, reason: "unknown" });
+    expect(refusal(() => run({ action: "comment", id: "billing-export", text: "x" })).message).toMatch(/comment is gone: publish the record with "worked"/);
+    expect(refusal(() => run({ action: "health", id: "billing-export" })).message).toMatch(/health is gone as an action/);
+    expect(refusal(() => run({ action: "clear_question", id: "billing-export", questionId: "q-scope" })).message).toMatch(/clear_question is gone/);
   });
 
-  it("comment appends with a server time and keeps the last 20", () => {
+  it("health is a field for recurring initiatives and marks overdue by cadence", () => {
     publish();
-    for (let i = 0; i < 20; i++) cc.ccComment(ME, OWNER, { id: "billing-export", text: `note ${i}` }, "mcp");
-    expect(cc.ccComment(ME, OWNER, { id: "billing-export", text: "note 20" }, "mcp").dropped).toBe("n2");
-    cc.ccComment(ME, OWNER, { id: "billing-export", text: "note 21" }, "mcp");
-    const got = cc.ccGet(OWNER, "billing-export");
-    expect(got.comments).toHaveLength(20);
-    expect(got.comments[19]).toMatchObject({ text: "note 21", at: new Date(NOW).toISOString() });
-    expect(refusal(() => run({ action: "comment", id: "missing", text: "x" })).status).toBe(404);
-    expect(refusal(() => run({ action: "comment", id: "billing-export", text: "x", extra: 1 })).message).toMatch(/unknown field 'extra' for comment/);
-  });
-
-  it("health is for recurring initiatives and marks overdue by cadence", () => {
-    publish();
-    expect(refusal(() => run({ action: "health", id: "billing-export", level: "green", reason: "", checkedAt: "2026-03-02T09:00:00Z" })).message).toMatch(/recurring/);
-    publish({ id: "inbox-drain", kind: "recurring", cadence: "drain", tasks: [], questions: [] });
-    expect(run({ action: "health", id: "inbox-drain", level: "green", reason: "empty", checkedAt: "2026-03-02T09:00:00Z" })).toEqual({ seq: 2 });
-    expect(refusal(() => run({ action: "health", id: "inbox-drain", level: "blue", checkedAt: "x" })).message).toMatch(/level must be/);
+    expect(refusal(() => publish({ health: { level: "green", reason: "", checkedAt: "2026-03-02T09:00:00Z" } })).message).toMatch(/recurring/);
+    const upkeep = { id: "inbox-drain", kind: "recurring", cadence: "drain", tasks: [], questions: [] };
+    publish({ ...upkeep, health: { level: "green", reason: "empty", checkedAt: "2026-03-02T09:00:00Z" } });
+    expect(refusal(() => publish({ ...upkeep, health: { level: "blue", checkedAt: "x" } })).message).toMatch(/level must be/);
+    expect(refusal(() => publish({ ...upkeep, health: { level: "green", reason: "", checkedAt: "March 2" } })).message).toMatch(/checkedAt must be an ISO/);
     vi.setSystemTime(NOW + 3 * HOUR);
     const list = run({ action: "list" });
     expect((list.initiatives as { id: string; overdue: boolean }[]).find((i) => i.id === "inbox-drain")!.overdue).toBe(true);
@@ -241,17 +341,24 @@ describe("the other actions", () => {
     expect((await auditRows("cc_remove"))[0]).toMatchObject({ actor_id: OWNER, entity_id: "billing-export" });
   });
 
+  it("list with an id is the full record", () => {
+    publish();
+    expect(run({ action: "list", id: "billing-export" })).toMatchObject({ id: "billing-export", seq: 1, tasks: [{ id: "design" }, { id: "build" }] });
+    expect(refusal(() => run({ action: "list", id: "missing" })).status).toBe(404);
+    expect(refusal(() => run({ action: "list", id: "billing-export", extra: 1 })).message).toMatch(/unknown field 'extra' for list/);
+  });
+
   it("refuses an unknown action, and an action with no default", () => {
     expect(refusal(() => run({ action: "nope" })).message).toMatch(/required, has no default/);
     expect(refusal(() => run({})).message).toMatch(/required, has no default/);
   });
 
   it("audits writes without bodies", async () => {
-    publish();
-    run({ action: "comment", id: "billing-export", text: "BODY-TEXT-HERE" });
-    const rows = [...(await auditRows("cc_publish")), ...(await auditRows("cc_comment"))];
+    publish({ worked: "BODY-TEXT-HERE" });
+    publish({ worked: "MORE-BODY-TEXT", title: "Renamed" });
+    const rows = await auditRows("cc_publish");
     expect(rows).toHaveLength(2);
-    for (const r of rows) expect(r.details).not.toContain("BODY-TEXT-HERE");
+    for (const r of rows) expect(r.details).not.toMatch(/BODY-TEXT/);
   });
 });
 
@@ -259,6 +366,7 @@ describe("review fixes", () => {
   it("a question the person dismissed stays dismissed while its text is the same", () => {
     publish();
     expect(cc.ccClearQuestion(OWNER, { id: "billing-export", questionId: "q-scope" }, "ui")).toEqual({ cleared: true });
+    expect(cc.ccClearQuestion(OWNER, { id: "billing-export", questionId: "q-scope" }, "ui")).toEqual({ cleared: false, reason: "unknown" });
     const again = publish();
     expect(again.dismissed).toEqual(["q-scope"]);
     expect(cc.ccView(OWNER).needsYou).toEqual([]);
@@ -266,31 +374,21 @@ describe("review fixes", () => {
     expect(cc.ccView(OWNER).needsYou).toHaveLength(1);
   });
 
-  it("a dismissal on the page moves neither seq nor updatedAt", () => {
+  it("a dismissal on the page moves neither seq nor updatedAt, and is logged", () => {
     publish();
     vi.setSystemTime(NOW + DAY);
     cc.ccClearQuestion(OWNER, { id: "billing-export", questionId: "q-scope" }, "ui");
     expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, updatedAt: new Date(NOW).toISOString() });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind.startsWith("question")).map((e) => e.kind)).toEqual(["question_asked", "question_cleared"]);
   });
 
-  it("a publish without comments or health keeps them; an explicit empty value clears them", () => {
-    publish();
-    run({ action: "comment", id: "billing-export", text: "woken 10:30" });
-    publish();
-    expect(cc.ccGet(OWNER, "billing-export").comments.map((c) => c.text)).toEqual(["woken 10:30"]);
-    publish({ comments: [] });
-    expect(cc.ccGet(OWNER, "billing-export").comments).toEqual([]);
-    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
-    run({ action: "health", id: "upkeep", level: "green", reason: "ok", checkedAt: "2026-03-02T09:00:00Z" });
-    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], title: "Upkeep" });
+  it("a publish without health keeps it; an explicit null clears it", () => {
+    const upkeep = { id: "upkeep", kind: "recurring", tasks: [], questions: [] };
+    publish({ ...upkeep, health: { level: "green", reason: "ok", checkedAt: "2026-03-02T09:00:00Z" } });
+    publish({ ...upkeep, title: "Upkeep" });
     expect(cc.ccGet(OWNER, "upkeep").health).toMatchObject({ level: "green" });
-    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [], title: "Upkeep", health: null });
+    publish({ ...upkeep, title: "Upkeep", health: null });
     expect(cc.ccGet(OWNER, "upkeep").health).toBeNull();
-  });
-
-  it("checkedAt must be a strict ISO time", () => {
-    publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
-    expect(refusal(() => run({ action: "health", id: "upkeep", level: "green", reason: "", checkedAt: "March 2" })).message).toMatch(/checkedAt must be an ISO/);
   });
 
   it("keeps at most 20 cleared questions", () => {
@@ -300,29 +398,11 @@ describe("review fixes", () => {
     expect(qs.filter((q) => !q.clearedAt).map((q) => q.id)).toEqual(["q24"]);
   });
 
-  it("does not load the records of someone switched off past the keep window", () => {
+  it("drops cleared questions after 7 days", () => {
     publish();
-    cc.saveCommandCenterSnapshot();
-    cc.ccSetSwitch(OWNER, false);
-    cc._resetCommandCenterForTests();
-    vi.setSystemTime(NOW + 31 * DAY);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(cc.ccView(OWNER).records).toEqual([]);
-    warn.mockRestore();
-    // The drop is written back, so the file forgets them too.
-    expect(cc.saveCommandCenterSnapshot()).toBe(true);
-    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
-  });
-
-  it("delete now and remove are written to disk at once", () => {
-    publish();
-    cc.saveCommandCenterSnapshot();
-    run({ action: "remove", id: "billing-export" });
-    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
-    publish();
-    cc.saveCommandCenterSnapshot();
-    cc.ccDeleteAll(OWNER);
-    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners).toEqual({});
+    publish({ questions: [] });
+    vi.setSystemTime(NOW + 8 * DAY);
+    expect(cc.ccGet(OWNER, "billing-export").questions).toEqual([]);
   });
 });
 
@@ -336,35 +416,40 @@ describe("identity and opt-in", () => {
 
   it("switch off is 403 with the exact sentence and stores nothing", () => {
     const other = device(OTHER, "dev-2");
-    const r = refusal(() => publish({}, other));
+    const r = refusal(() => publish({ worked: "x" }, other));
     expect(r).toMatchObject({
       status: 403,
       message: `Command Center is off for Other Two. Ask them to open ${ORIGIN}/command-center and switch it on, then publish again. Nothing was stored.`,
     });
     expect(refusal(() => run({ action: "list" }, other)).status).toBe(403);
     expect(cc.ccView(OTHER).records).toEqual([]);
+    expect(cc.ccLogOf(OTHER)).toEqual([]);
   });
 
-  it("switch off then on restores the records; delete now empties and audits", async () => {
-    publish();
+  it("switch off then on restores the records; delete now empties records and log and audits", async () => {
+    publish({ worked: "did a thing" });
     cc.ccSetSwitch(OWNER, false);
     expect(refusal(() => run({ action: "list" })).status).toBe(403);
     const off = cc.ccView(OWNER);
     expect(off.keptUntil).toBe("2026-04-01");
     cc.ccSetSwitch(OWNER, true);
     expect(run({ action: "list" }).initiatives).toHaveLength(1);
-    expect(cc.ccDeleteAll(OWNER)).toEqual({ deleted: 1 });
+    expect(cc.ccDeleteAll(OWNER)).toMatchObject({ deleted: 1 });
     expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
     expect(await auditRows("cc_delete_all")).toHaveLength(1);
     expect(await auditRows("cc_enable")).toHaveLength(2);
     expect(await auditRows("cc_disable")).toHaveLength(1);
   });
 
-  it("deletes a switched-off person's records after 30 days", () => {
-    publish();
+  it("deletes a switched-off person's records, log and grants after 30 days", () => {
+    publish({ worked: "x" });
     cc.ccSetSwitch(OWNER, false);
+    vi.setSystemTime(NOW + 29 * DAY);
+    expect(cc.sweepCommandCenter()).toMatchObject({ people: 0 });
     vi.setSystemTime(NOW + 31 * DAY);
-    expect(cc.sweepCommandCenter()).toBe(1);
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 1, people: 1 });
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
     cc.ccSetSwitch(OWNER, true);
     expect(run({ action: "list" }).initiatives).toEqual([]);
   });
@@ -373,6 +458,8 @@ describe("identity and opt-in", () => {
     publish();
     cc.ccSetSwitch(OTHER, true);
     expect(run({ action: "list" }, device(OTHER, "dev-2")).initiatives).toEqual([]);
+    expect(refusal(() => run({ action: "list", id: "billing-export" }, device(OTHER, "dev-2"))).status).toBe(404);
+    expect(run({ action: "remove", id: "billing-export" }, device(OTHER, "dev-2"))).toEqual({ removed: false });
     expect(cc.ccView(OTHER).records).toEqual([]);
     expect(cc.ccView(OWNER).records.map((r) => r.id)).toEqual(["billing-export"]);
   });
@@ -399,18 +486,18 @@ describe("identity and opt-in", () => {
     expect(prepare).toHaveBeenCalledTimes(1);
   });
 
-  it("is 404 when switched off on the server, 503 with replicas", async () => {
+  it("is 404 when switched off on the server; more replicas no longer refuse it", async () => {
     process.env.BAB_COMMAND_CENTER = "0";
     (await import("../lib/config"))._resetConfigForTests();
     expect(refusal(() => run({ action: "list" })).status).toBe(404);
     process.env.BAB_COMMAND_CENTER = "1";
     process.env.BAB_REPLICAS = "2";
     (await import("../lib/config"))._resetConfigForTests();
-    expect(refusal(() => run({ action: "list" })).status).toBe(503);
+    expect(run({ action: "list" }).initiatives).toEqual([]);
   });
 });
 
-describe("derived flags", () => {
+describe("derived flags and the live view", () => {
   it("flags stale questions at 3 days, on closed initiatives and when another session kept them", () => {
     publish();
     expect(cc.ccView(OWNER).needsYou[0].question.stale).toBe(false);
@@ -424,99 +511,345 @@ describe("derived flags", () => {
     expect(cc.ccView(OWNER).dataHealth.staleQuestions).toBe(1);
   });
 
-  it("paused hides questions and counts nothing as stale or silent", () => {
+  it("paused hides questions and counts nothing as stale or silent, and stays on the page", () => {
     publish({ priority: "paused" });
     vi.setSystemTime(NOW + 20 * DAY);
     const v = cc.ccView(OWNER);
     expect(v.needsYou).toEqual([]);
+    expect(v.records.map((r) => r.id)).toEqual(["billing-export"]);
     expect(v.dataHealth).toEqual({ staleQuestions: 0, silentInitiatives: 0, recurringWithoutHealth: 0, overdueRecurring: 0 });
   });
 
-  it("silent after 14 days, dropped after 60; done dropped after 30", () => {
-    publish();
+  it("the page drops done, parked and silent ones; list keeps them; the store deletes them 30 days after the last write", () => {
+    publish({ worked: "work on it" });
     publish({ id: "old-done", state: "done", questions: [] });
+    publish({ id: "parked-one", state: "parked", questions: [] });
+    let v = cc.ccView(OWNER);
+    expect(v.records.map((r) => r.id)).toEqual(["billing-export"]);
+    expect(v.offPage).toBe(2);
+    expect(v.records[0].log.map((e) => e.kind)).toContain("worked");
     vi.setSystemTime(NOW + 15 * DAY);
-    expect(cc.ccView(OWNER).dataHealth.silentInitiatives).toBe(1);
+    v = cc.ccView(OWNER);
+    expect(v.records).toEqual([]);
+    expect(v.offPage).toBe(3);
+    expect(v.dataHealth.silentInitiatives).toBe(1);
+    expect((run({ action: "list" }).initiatives as unknown[]).length).toBe(3);
     vi.setSystemTime(NOW + 31 * DAY);
-    expect(cc.ccView(OWNER).records.map((r) => r.id)).toEqual(["billing-export"]);
-    vi.setSystemTime(NOW + 61 * DAY);
-    expect(cc.ccView(OWNER).records).toEqual([]);
+    cc.sweepCommandCenter();
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(cc.ccLogOf(OWNER).some((e) => e.text === "work on it")).toBe(true);
   });
 
-  it("counts recurring without health, sorts by state and priority", () => {
+  it("counts recurring without health, sorts by priority", () => {
     publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
     publish({ id: "low-one", priority: "low", questions: [] });
     publish({ id: "urgent-one", priority: "urgent", questions: [] });
     publish({ id: "done-one", state: "done", questions: [] });
     const v = cc.ccView(OWNER);
     expect(v.dataHealth.recurringWithoutHealth).toBe(1);
-    expect(v.records.map((r) => r.id)).toEqual(["urgent-one", "upkeep", "low-one", "done-one"]);
-    expect(v.records.at(-1)!.progress).toBe(100);
+    expect(v.records.map((r) => r.id)).toEqual(["urgent-one", "upkeep", "low-one"]);
+    expect(cc.ccGet(OWNER, "done-one").progress).toBe(100);
+  });
+
+  it("the stamp changes when a worked line is logged on an unchanged record", () => {
+    publish();
+    const a = cc.ccView(OWNER).stamp;
+    publish({ worked: "answered" });
+    expect(cc.ccView(OWNER).stamp).not.toBe(a);
   });
 });
 
-describe("snapshot and lease", () => {
-  it("survives a restart", () => {
-    publish();
-    expect(cc.saveCommandCenterSnapshot()).toBe(true);
-    expect(cc.saveCommandCenterSnapshot()).toBe(false);
+describe("one store: SQLite", () => {
+  it("survives a restart of the process", () => {
+    publish({ worked: "kept" });
     cc._resetCommandCenterForTests();
     expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, title: "Billing export" });
+    expect(cc.ccLogOf(OWNER).some((e) => e.text === "kept")).toBe(true);
   });
 
-  it("drops a corrupt entry and counts it in the log", () => {
+  it("writes no snapshot and no lease file", () => {
     publish();
-    cc.saveCommandCenterSnapshot();
-    cc._resetCommandCenterForTests();
-    const file = cc.ccSnapshotPath();
-    const snap = JSON.parse(readFileSync(file, "utf8"));
-    snap.owners[OWNER].push({ ...snap.owners[OWNER][0], id: "broken", links: [{ label: "x", url: "javascript:1" }] });
-    snap.owners[OWNER].push({ ...snap.owners[OWNER][0] });
-    writeFileSync(file, JSON.stringify(snap));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(run({ action: "list" }).initiatives).toHaveLength(1);
-    expect(warn.mock.calls.some((c) => String(c[0]).includes("dropped 2 Command Center snapshot entries"))).toBe(true);
-    warn.mockRestore();
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+    expect(existsSync(path.join(dataDir, "kv.lease"))).toBe(false);
+  });
+});
+
+/** A v2 snapshot record, as lib/command-center.ts v2.19 wrote it. */
+function v2Record(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  const at = new Date(NOW - DAY).toISOString();
+  return {
+    v: 1,
+    id,
+    title: `Title ${id}`,
+    area: "finance",
+    key: "KEY-1",
+    state: "active",
+    kind: "project",
+    cadence: null,
+    deadline: null,
+    priority: null,
+    tasks: [{ id: "t1", text: "Task", status: "in_progress", startedAt: at, finishedAt: null }],
+    questions: [{ id: "q1", text: "Ask?", options: [], askedAt: at, clearedAt: null, session: "s-1" }],
+    health: null,
+    comments: [
+      { id: "n1", text: "woken 10:30", at },
+      { id: "n2", text: "second note", at: new Date(NOW - HOUR).toISOString() },
+    ],
+    links: [],
+    source: { machine: "laptop-1", session: "s-1" },
+    updatedAt: at,
+    seq: 4,
+    publishedBy: "device:dev-1",
+    writers: [{ session: "s-1", at }],
+    ...extra,
+  };
+}
+
+function writeSnapshot(owners: Record<string, unknown[]>): void {
+  writeFileSync(path.join(dataDir, "command-center-snapshot.json"), JSON.stringify({ version: 1, savedAt: new Date(NOW).toISOString(), owners }));
+}
+
+describe("the one-time import of a v2 snapshot", () => {
+  it("moves records into SQLite, turns comments into notes, keeps seq and leaves the file byte-identical", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha"), v2Record("beta")] });
+    const before = readFileSync(cc.ccSnapshotPath());
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toEqual({ imported: 2, skipped: 0, dropped: 0, notes: 4 });
+    log.mockRestore();
+    // Untouched, so a rollback to v2.19 still reads it; nothing is renamed.
+    expect(readFileSync(cc.ccSnapshotPath()).equals(before)).toBe(true);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(false);
+    expect(cc.ccGet(OWNER, "alpha")).toMatchObject({ seq: 4, title: "Title alpha", key: "KEY-1", questions: [{ id: "q1" }] });
+    expect((cc.ccGet(OWNER, "alpha") as unknown as Record<string, unknown>).comments).toBeUndefined();
+    const notes = cc.ccLogOf(OWNER).filter((e) => e.initiative === "alpha");
+    expect(notes.map((e) => [e.kind, e.text, e.source])).toEqual([
+      ["note", "woken 10:30", "import"],
+      ["note", "second note", "import"],
+    ]);
+    // The next publish continues from the imported seq.
+    expect(cc.ccPublish(ME, OWNER, record({ id: "alpha", title: "Title alpha", expectSeq: 4 }), "mcp")).toMatchObject({ seq: 5 });
+    // Nothing left to import: a second run is a no-op.
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
   });
 
-  it("a broken file is an empty store", () => {
-    writeFileSync(path.join(dataDir, "command-center-snapshot.json"), "{not json");
+  it("runs on first use, drops broken or duplicated entries and people switched off past the window", () => {
+    cc.ccSetSwitch(OTHER, false, NOW - 40 * DAY);
+    writeSnapshot({
+      [OWNER]: [v2Record("alpha"), v2Record("alpha"), v2Record("broken", { links: [{ label: "x", url: "javascript:1" }] }), v2Record("future", { updatedAt: new Date(NOW + 2 * DAY).toISOString() })],
+      [OTHER]: [v2Record("theirs")],
+      "bad/owner": [v2Record("x")],
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
+    expect(log.mock.calls.some((c) => String(c[0]).includes("1 records") && String(c[0]).includes("5 dropped"))).toBe(true);
+    log.mockRestore();
+    expect(cc.ccLogOf(OTHER)).toEqual([]);
+  });
+
+  it("leaves a file that is not JSON in place and starts empty", () => {
+    writeFileSync(cc.ccSnapshotPath(), "{not json");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(run({ action: "list" }).initiatives).toEqual([]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
   });
 
-  it("a second process on a fresh lease gets 503", () => {
-    publish();
+  it("a restart does not import the same file again, quietly: removed records stay removed", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const before = readFileSync(cc.ccSnapshotPath());
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    run({ action: "remove", id: "alpha" });
+    // A restart: the process forgets it imported; the file is still there, unchanged.
     cc._resetCommandCenterForTests();
-    // Another live process on another host holds the lease.
-    writeFileSync(path.join(dataDir, "kv.lease"), JSON.stringify({ instance: "other", host: "another-host", pid: 1, at: Date.now() }));
-    const r = refusal(() => run({ action: "list" }));
-    expect(r.status).toBe(503);
-    expect(r.message).toMatch(/another BAB process serves it/);
+    const quiet = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(quiet).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    quiet.mockRestore();
+    warn.mockRestore();
+    expect(readFileSync(cc.ccSnapshotPath()).equals(before)).toBe(true);
   });
 
-  it("flush writes when dirty, and never without the lease", () => {
-    cc.flushCommandCenterSnapshot();
-    publish();
-    cc.flushCommandCenterSnapshot();
-    expect(JSON.parse(readFileSync(cc.ccSnapshotPath(), "utf8")).owners[OWNER]).toHaveLength(1);
+  it("deletes the snapshot 30 days after the import while its sha256 is the imported one", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    cc.sweepCommandCenter(NOW + 29 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+  });
+
+  it("never deletes a snapshot rewritten after the import; it gets its own window once imported", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    cc.sweepCommandCenter(NOW + DAY); // hashes the imported file once
+    // A rolled-back v2.19 rewrites it with the same size; move the mtime as a real write would.
+    writeSnapshot({ [OWNER]: [v2Record("alpha", { title: "Title alphb" })] });
+    utimesSync(cc.ccSnapshotPath(), new Date(NOW + 2 * DAY), new Date(NOW + 2 * DAY));
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    cc.sweepCommandCenter(NOW + 60 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    // The next v3 start imports it, and its own 30 days start then.
+    cc._resetCommandCenterForTests();
+    expect(cc.importCommandCenterSnapshot(NOW + 60 * DAY)).not.toBeNull();
+    log.mockRestore();
+    cc.sweepCommandCenter(NOW + 70 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 91 * DAY);
+    expect(existsSync(cc.ccSnapshotPath())).toBe(false);
+  });
+
+  it("imports new initiatives from a rewritten snapshot and never overwrites ones already in SQLite", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    const alpha = cc.ccGet(OWNER, "alpha");
+    const alphaLog = cc.ccLogOf(OWNER);
+    // On v2.19 after a rollback: alpha changed (title, seq, a new comment) and gamma is new.
+    writeSnapshot({
+      [OWNER]: [
+        v2Record("alpha", { title: "Changed on v2", seq: 9, comments: [{ id: "n9", text: "written on v2", at: new Date(NOW - HOUR).toISOString() }] }),
+        v2Record("gamma"),
+      ],
+    });
+    cc._resetCommandCenterForTests();
+    expect(cc.importCommandCenterSnapshot()).toEqual({ imported: 1, skipped: 1, dropped: 0, notes: 2 });
+    log.mockRestore();
+    expect(cc.ccGet(OWNER, "alpha")).toEqual(alpha);
+    expect(cc.ccLogOf(OWNER).filter((e) => e.initiative === "alpha")).toEqual(alphaLog);
+    expect(cc.ccGet(OWNER, "gamma")).toMatchObject({ title: "Title gamma", seq: 4 });
+  });
+
+  it("deletes a command-center-snapshot.imported.json left by an earlier build after the window", () => {
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    writeFileSync(cc.ccImportedSnapshotPath(), "{}");
+    cc.sweepCommandCenter(NOW + 29 * DAY);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(false);
+  });
+
+  it("normalizes imported times, drops future note times, and checks a joined comment as one line", () => {
+    const at = new Date(NOW - DAY).toISOString();
+    writeSnapshot({
+      [OWNER]: [
+        v2Record("alpha", {
+          comments: [
+            { id: "n1", text: "kept", at: "2026-03-01T10:00:00+02:00" },
+            { id: "n2", text: "from the future", at: new Date(NOW + 5 * DAY).toISOString() },
+            { id: "n3", text: "not a time", at: "Sunday" },
+            { id: "n4", text: "two\nlines", at },
+          ],
+        }),
+      ],
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    log.mockRestore();
+    const notes = cc.ccLogOf(OWNER).filter((e) => e.kind === "note");
+    expect(notes.map((e) => [e.text, e.at]).sort()).toEqual([
+      ["from the future", at],
+      ["kept", "2026-03-01T08:00:00.000Z"],
+      ["not a time", at],
+      ["two lines", at],
+    ]);
+  });
+
+  it("the replica that loses the import race imports nothing and says another process did it", async () => {
+    const { getDb } = await import("../lib/db");
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    // Another replica commits the same sha256 between this one's check and its insert.
+    getDb().exec(
+      "CREATE TEMP TRIGGER cc_race BEFORE INSERT ON command_center_imports BEGIN INSERT OR IGNORE INTO command_center_imports (sha256, imported_at) VALUES (NEW.sha256, NEW.imported_at); END;",
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toBeNull();
+    expect(log.mock.calls.some((c) => String(c[0]).includes("imported by another process"))).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    log.mockRestore();
+    warn.mockRestore();
+    getDb().exec("DROP TRIGGER cc_race");
+    // Left in place for the replica that imported it, and never imported here.
+    expect(existsSync(cc.ccSnapshotPath())).toBe(true);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+  });
+
+  it("never overwrites a record already in SQLite", () => {
+    publish({ id: "alpha", title: "Newer", questions: [] });
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(cc.importCommandCenterSnapshot()).toMatchObject({ imported: 0, skipped: 1 });
+    log.mockRestore();
+    expect(cc.ccGet(OWNER, "alpha")).toMatchObject({ title: "Newer", seq: 1 });
   });
 });
 
-describe("migration v53", () => {
-  it("adds the opt-in columns and keeps a decision across a rewind", async () => {
+describe("migration v54", () => {
+  it("rewinds: tables come back, a re-import of the untouched file gives the same data and no duplicates", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
+    writeSnapshot({ [OWNER]: [v2Record("alpha")] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    cc.importCommandCenterSnapshot();
+    const first = { record: cc.ccGet(OWNER, "alpha"), log: cc.ccLogOf(OWNER) };
+    // Rewind to v53: the version row and the v3 tables gone; the snapshot was never moved.
     const db = getDb();
+    db.prepare("DELETE FROM migrations WHERE version >= 54").run();
+    db.exec("DROP TABLE command_center_initiatives; DROP TABLE command_center_log; DROP TABLE command_center_export_grants; DROP TABLE command_center_imports;");
+    _resetDbForTests();
+    cc._resetCommandCenterForTests();
+    const again = getDb();
+    expect(again.prepare("SELECT 1 FROM migrations WHERE version = 54").get()).toBeTruthy();
+    const tables = (again.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'command_center_%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
+    expect(tables).toEqual(["command_center_export_grants", "command_center_imports", "command_center_initiatives", "command_center_log"]);
+    expect(cc.ccSwitch(OWNER).enabledAt).not.toBeNull();
+    cc.importCommandCenterSnapshot();
+    expect(cc.ccGet(OWNER, "alpha")).toEqual(first.record);
+    expect(cc.ccLogOf(OWNER)).toEqual(first.log);
+    // A rerun of the migration and of the import changes nothing.
+    again.prepare("DELETE FROM migrations WHERE version >= 54").run();
+    _resetDbForTests();
+    cc.importCommandCenterSnapshot();
+    expect(cc.ccLogOf(OWNER)).toEqual(first.log);
+    log.mockRestore();
+  });
+
+  it("a database at v54 without command_center_imports still serves publish and list, and logs it once", async () => {
+    const { getDb } = await import("../lib/db");
+    // An early v54 build created no command_center_imports; the imported file is still there.
+    getDb().exec("DROP TABLE command_center_imports");
+    writeFileSync(cc.ccImportedSnapshotPath(), "{}");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(publish()).toMatchObject({ seq: 1 });
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
+    cc.sweepCommandCenter(NOW + 31 * DAY);
+    cc.sweepCommandCenter(NOW + 32 * DAY);
+    const missing = warn.mock.calls.filter((c) => String(c[0]).includes("command_center_imports"));
+    warn.mockRestore();
+    expect(missing).toHaveLength(1);
+    expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
+  });
+
+  it("keeps the v53 opt-in columns across a rewind", async () => {
+    const { getDb, _resetDbForTests } = await import("../lib/db");
     const before = cc.ccSwitch(OWNER).enabledAt;
     expect(before).not.toBeNull();
-    db.prepare("DELETE FROM migrations WHERE version >= 53").run();
+    getDb().prepare("DELETE FROM migrations WHERE version >= 53").run();
     _resetDbForTests();
-    const again = getDb();
-    const cols = (again.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
+    const cols = (getDb().prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(expect.arrayContaining(["command_center_enabled_at", "command_center_disabled_at"]));
-    expect(again.prepare("SELECT 1 FROM migrations WHERE version = 53").get()).toBeTruthy();
     expect(cc.ccSwitch(OWNER).enabledAt).toBe(before);
   });
 });

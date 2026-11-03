@@ -1278,15 +1278,13 @@ export const TOOLS: Tool[] = [
     annotations: { title: "Command Center", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     // Kept short on purpose: every session pays for it. The field rules live in the command-center
     // skill (content/instructions/command-center.md) and in the 400 answers, which name the fix.
-    description:
-      "Use only when the command-center skill is loaded; it has the format. " +
-      CC_CONTENT_RULE,
+    description: "Needs the command-center skill, which has the format. " + CC_CONTENT_RULE,
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: [...CC_ACTIONS], description: "Required, has no default." },
         id: { type: "string" },
-        record: { type: "object", additionalProperties: true, description: "The record (publish) or fields (health, comment)." },
+        record: { type: "object", additionalProperties: true, description: "The record, with worked, for publish." },
       },
       required: ["action"],
     },

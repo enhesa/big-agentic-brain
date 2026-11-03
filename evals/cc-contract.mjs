@@ -80,17 +80,21 @@ async function main() {
     const tool = (await agents.agent.listTools()).find((t) => t.name === "bab_command_center");
     const props = Object.keys(tool?.inputSchema?.properties ?? {}).sort();
     const actions = tool?.inputSchema?.properties?.action?.enum ?? [];
-    const wantActions = ["publish", "list", "clear_question", "comment", "health", "remove"];
+    const wantActions = ["publish", "list", "remove"];
     if (!tool) fail("tool schema", "bab_command_center is not in tools/list");
     else if (props.join(",") !== "action,id,record") fail("tool schema", `properties are ${props.join(",")}, want action,id,record`);
-    else if (!wantActions.every((a) => actions.includes(a))) fail("tool schema", `action enum ${actions.join(",")} misses one of ${wantActions.join(",")}`);
+    else if ([...actions].sort().join(",") !== [...wantActions].sort().join(",")) fail("tool schema", `action enum is ${actions.join(",")}, want exactly ${wantActions.join(",")}`);
     else if (tool.inputSchema.properties.record?.type !== "object") fail("tool schema", "record is not declared as an object");
     else pass("tool schema");
 
+    // Values an earlier step saved with expect.save { name: path }, read back as {{saved:name}}.
+    const saved = {};
     const fill = async (v) => {
       if (typeof v === "string") {
         const m = /^\{\{seq(-1)?:([a-z0-9-]+)\}\}$/.exec(v);
         if (m) return ((await getRecord(bab.origin, person, m[2]))?.seq ?? 0) - (m[1] ? 1 : 0);
+        const sv = /^\{\{saved:([a-z0-9-]+)\}\}$/.exec(v);
+        if (sv) return saved[sv[1]];
         return v.replaceAll("{{origin}}", bab.origin).replaceAll("{{now}}", now).replaceAll("{{secret}}", secret);
       }
       if (Array.isArray(v)) return Promise.all(v.map(fill));
@@ -136,6 +140,7 @@ async function main() {
           const why = check(body, await fill(c));
           if (why) errs.push(`answer: ${why}`);
         }
+        for (const [name, p] of Object.entries(e.save ?? {})) saved[name] = at(body, p);
       }
       for (const [id, checks] of Object.entries(e.state ?? {})) {
         const rec = await getRecord(bab.origin, person, id);

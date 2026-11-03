@@ -188,6 +188,46 @@ describe("config", () => {
     expect(() => config()).toThrow(/BAB_API_TOKENS is set but holds no token/);
   });
 
+  it("BAB_COMMAND_CENTER_LOG_DAYS defaults to 400 and must be a positive integer", () => {
+    expect(config().commandCenterLogDays).toBe(400);
+    process.env.BAB_COMMAND_CENTER_LOG_DAYS = "0";
+    _resetConfigForTests();
+    expect(() => config()).toThrow(/BAB_COMMAND_CENTER_LOG_DAYS must be a positive integer/);
+  });
+
+  it("BAB_COMMAND_CENTER_EXPORT_APPS parses app=token and refuses bad entries without printing a token", () => {
+    // Built at runtime: no token-shaped literal in the source.
+    const a = "a".repeat(40);
+    const b = "b".repeat(40);
+    expect(config().commandCenterExportApps.size).toBe(0);
+    process.env.BAB_COMMAND_CENTER_EXPORT_APPS = `reports=${a}\nother=${b}`;
+    _resetConfigForTests();
+    expect([...config().commandCenterExportApps.entries()]).toEqual([["reports", a], ["other", b]]);
+    for (const bad of [`Bad Name=${a}`, "reports=short", `${a}=reports`, `reports=${a},reports=${b}`, `one=${a},two=${a}`]) {
+      process.env.BAB_COMMAND_CENTER_EXPORT_APPS = bad;
+      _resetConfigForTests();
+      let message = "";
+      try {
+        config();
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConfigError);
+        message = (err as Error).message;
+      }
+      expect(message, bad).toMatch(/^BAB_COMMAND_CENTER_EXPORT_APPS/);
+      expect(message).not.toContain(a);
+    }
+  });
+
+  it("BAB_COMMAND_CENTER_EXPORT_APPS refuses a token that is also an API token", () => {
+    const t = "c".repeat(40);
+    process.env.BAB_API_TOKENS = `${t}=jane.doe@example.com`;
+    process.env.BAB_COMMAND_CENTER_EXPORT_APPS = `reports=${t}`;
+    expect(() => config()).toThrow(/is also in BAB_API_TOKENS/);
+    process.env.BAB_API_TOKENS = t;
+    _resetConfigForTests();
+    expect(() => config()).toThrow(/is also in BAB_API_TOKENS/);
+  });
+
   it("BAB_API_TOKENS holding only separators throws", () => {
     process.env.BAB_API_TOKENS = ",, ";
     expect(() => config()).toThrow(ConfigError);

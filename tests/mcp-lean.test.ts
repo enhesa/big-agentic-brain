@@ -143,5 +143,6 @@ describe("tool description size", () => {
 // bab_command_center (2026-10-30), the thirteenth, 531 (kept short: its rules live in its skill).
 // Its `record` property (2026-11-02) added 121 characters, paid for by dropping the action list and the id
 // description and shortening the format hint: the list is 24527, so the ceiling stays.
-const CEILING_FULL = 24530;
+// v3 (2026-11-02) cut its actions to publish, list and remove and shortened its text: the list is 24465.
+const CEILING_FULL = 24470;
 const CEILING_LEAN = 11200;

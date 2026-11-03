@@ -20,8 +20,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-03",
-    title: "Clearer link notice, honest search share",
+    title: "Command Center work log, clearer link notice, honest search share",
     changes: [
+      "Command Center keeps a work log: agents add one worked line per turn; you can download it.",
+      "Command Center stores everything in the database; comment, health and clear_question became publish fields.",
+      "You choose which report apps may read your Command Center log: counts only, or entries.",
       "Pages now say why BAB does not know you yet and the one step on Your devices that fixes it.",
       "The usage tile is now Searches with a helpful reaction, and its hover explains how it is counted.",
       "Search calls refused before the caller identified no longer lower the helpful reaction share.",

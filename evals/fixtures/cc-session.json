@@ -1,14 +1,14 @@
 {
-  "_about": "A typical Command Center session, as the MCP calls an agent sends with the slim tool schema (action, id, record). evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step). Checks: [path, op, value], ops eq, len, set, unset, match.",
+  "_about": "A typical Command Center session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). Checks: [path, op, value], ops eq, len, set, unset, match.",
   "steps": [
     {
       "name": "publish before the person switched it on is a 403 that stores nothing",
-      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export" } },
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "worked": "Started the billing export" } },
       "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
     },
     { "name": "the person switches it on (the page, never the agent)", "switch": "on" },
     {
-      "name": "first publish on the first turn",
+      "name": "first publish of the turn, with worked and size",
       "call": {
         "action": "publish",
         "id": "billing-export",
@@ -23,11 +23,15 @@
             { "id": "add-tests", "text": "Add tests", "status": "pending" }
           ],
           "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
-          "source": { "machine": "laptop", "session": "session-a" }
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Planned the billing export in three steps",
+          "size": "small"
         }
       },
       "expect": {
         "answer": { "id": "billing-export", "seq": 1 },
+        "answerChecks": [["logged", "set"]],
+        "save": { "first": "logged" },
         "state": {
           "billing-export": [
             ["seq", "eq", 1],
@@ -39,13 +43,38 @@
             ["tasks.1.startedAt", "unset"],
             ["links.0.url", "eq", "https://example.com/spec"],
             ["source.session", "eq", "session-a"],
-            ["updatedAt", "set"]
+            ["updatedAt", "set"],
+            ["worked", "unset"],
+            ["size", "unset"]
           ]
         }
       }
     },
     {
-      "name": "task status change publishes the whole record again",
+      "name": "a retried publish is a no-op with the same log entry",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "in_progress" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "pending" },
+            { "id": "add-tests", "text": "Add tests", "status": "pending" }
+          ],
+          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Planned the billing export in three steps",
+          "size": "small"
+        }
+      },
+      "expect": { "answer": { "seq": 1, "unchanged": true, "logged": "{{saved:first}}" }, "state": { "billing-export": [["seq", "eq", 1]] } }
+    },
+    {
+      "name": "task status change at wrap-up, with worked",
       "call": {
         "action": "publish",
         "id": "billing-export",
@@ -60,11 +89,13 @@
             { "id": "add-tests", "text": "Add tests", "status": "pending" }
           ],
           "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
-          "source": { "machine": "laptop", "session": "session-a" }
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Mapped the 8 export fields"
         }
       },
       "expect": {
         "answer": { "seq": 2 },
+        "answerChecks": [["logged", "set"]],
         "state": {
           "billing-export": [
             ["seq", "eq", 2],
@@ -93,7 +124,8 @@
           ],
           "questions": [{ "id": "date-format", "text": "Which date format should the export use?", "options": ["ISO 8601", "DD/MM/YYYY"] }],
           "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
-          "source": { "machine": "laptop", "session": "session-a" }
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Asked which date format the export should use"
         }
       },
       "expect": {
@@ -109,20 +141,7 @@
       }
     },
     {
-      "name": "the answer arrives: clear_question before anything else",
-      "call": { "action": "clear_question", "id": "billing-export", "record": { "questionId": "date-format" } },
-      "expect": {
-        "answer": { "cleared": true },
-        "state": { "billing-export": [["seq", "eq", 4], ["questions.0.clearedAt", "set"]] }
-      }
-    },
-    {
-      "name": "clearing it again is a no-op",
-      "call": { "action": "clear_question", "id": "billing-export", "record": { "questionId": "date-format" } },
-      "expect": { "answer": { "cleared": false }, "state": { "billing-export": [["seq", "eq", 4]] } }
-    },
-    {
-      "name": "publish after the answer, without the question",
+      "name": "the answer arrives: the next publish leaves the question out, which clears it",
       "call": {
         "action": "publish",
         "id": "billing-export",
@@ -137,71 +156,110 @@
             { "id": "add-tests", "text": "Add tests", "status": "in_progress" }
           ],
           "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
-          "source": { "machine": "laptop", "session": "session-a" }
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Wrote the exporter with ISO 8601 dates",
+          "size": "medium"
         }
       },
       "expect": {
-        "answer": { "seq": 5 },
-        "state": { "billing-export": [["tasks.1.status", "eq", "done"], ["questions.0.clearedAt", "set"]] }
+        "answer": { "seq": 4 },
+        "state": { "billing-export": [["tasks.1.status", "eq", "done"], ["questions.0.id", "eq", "date-format"], ["questions.0.clearedAt", "set"]] }
       }
     },
     {
-      "name": "a comment",
-      "call": { "action": "comment", "id": "billing-export", "record": { "text": "The exporter writes UTF-8 with a byte order mark for spreadsheet apps." } },
+      "name": "clear_question is gone for agents and names the fix",
+      "call": { "action": "clear_question", "id": "billing-export", "record": { "questionId": "date-format" } },
+      "expect": { "error": "^clear_question is gone: publish the record without that question", "state": { "billing-export": [["seq", "eq", 4]] } }
+    },
+    {
+      "name": "comment is gone for agents and names worked",
+      "call": { "action": "comment", "id": "billing-export", "record": { "text": "The exporter writes UTF-8." } },
+      "expect": { "error": "^comment is gone: publish the record with \"worked\"", "state": { "billing-export": [["seq", "eq", 4]] } }
+    },
+    {
+      "name": "comments in a record are refused and name worked",
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "comments": [{ "id": "n1", "text": "A note" }] } },
+      "expect": { "error": "^comments is gone: send \"worked\"", "state": { "billing-export": [["seq", "eq", 4], ["tasks", "len", 3]] } }
+    },
+    {
+      "name": "a secret in worked is refused, names the field and stores nothing",
+      "call": {
+        "action": "publish",
+        "id": "billing-export",
+        "record": {
+          "v": 1,
+          "title": "Billing export",
+          "area": "Finance tools",
+          "key": "KEY-1",
+          "tasks": [
+            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
+            { "id": "write-exporter", "text": "Write the exporter", "status": "done" },
+            { "id": "add-tests", "text": "Add tests", "status": "done" }
+          ],
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Used the key {{secret}} for the test account"
+        }
+      },
       "expect": {
-        "answer": { "seq": 6 },
-        "state": { "billing-export": [["comments", "len", 1], ["comments.0.at", "set"], ["comments.0.text", "match", "byte order mark"]] }
+        "error": "^worked holds .+, and Command Center never keeps confidential data\\.",
+        "state": { "billing-export": [["seq", "eq", 4], ["tasks.2.status", "eq", "in_progress"]] }
       }
     },
     {
-      "name": "a secret in a comment is refused and names the field",
-      "call": { "action": "comment", "id": "billing-export", "record": { "text": "Use the key {{secret}} for the test account." } },
+      "name": "worked must be one line",
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "worked": "First line\nsecond line" } },
+      "expect": { "error": "^worked must be one line", "state": { "billing-export": [["seq", "eq", 4]] } }
+    },
+    {
+      "name": "size goes with worked only",
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "size": "large" } },
+      "expect": { "error": "^size goes with worked", "state": { "billing-export": [["seq", "eq", 4]] } }
+    },
+    {
+      "name": "a recurring upkeep initiative publishes its health as a field",
+      "call": {
+        "action": "publish",
+        "id": "nightly-sync",
+        "record": {
+          "v": 1,
+          "title": "Nightly sync check",
+          "kind": "recurring",
+          "cadence": "daily",
+          "health": { "level": "green", "reason": "Last run finished without errors", "checkedAt": "{{now}}" },
+          "worked": "Checked the nightly sync"
+        }
+      },
       "expect": {
-        "error": "^text holds .+, and Command Center never keeps confidential data\\.",
-        "state": { "billing-export": [["seq", "eq", 6], ["comments", "len", 1]] }
+        "answer": { "seq": 1 },
+        "state": { "nightly-sync": [["kind", "eq", "recurring"], ["cadence", "eq", "daily"], ["health.level", "eq", "green"], ["health.checkedAt", "eq", "{{now}}"], ["health.receivedAt", "set"]] }
       }
     },
     {
-      "name": "a recurring upkeep initiative",
-      "call": { "action": "publish", "id": "nightly-sync", "record": { "v": 1, "title": "Nightly sync check", "kind": "recurring", "cadence": "daily" } },
-      "expect": { "answer": { "seq": 1 }, "state": { "nightly-sync": [["kind", "eq", "recurring"], ["cadence", "eq", "daily"], ["health", "unset"]] } }
+      "name": "health is gone as an action and names the field",
+      "call": { "action": "health", "id": "nightly-sync", "record": { "level": "red", "reason": "Failed", "checkedAt": "{{now}}" } },
+      "expect": { "error": "^health is gone as an action: publish the recurring record with its \"health\" field", "state": { "nightly-sync": [["health.level", "eq", "green"]] } }
     },
     {
-      "name": "health after the recurring run",
-      "call": { "action": "health", "id": "nightly-sync", "record": { "level": "green", "reason": "Last run finished without errors", "checkedAt": "{{now}}" } },
+      "name": "a turn that changed nothing still logs worked: unchanged, logged, health kept",
+      "call": { "action": "publish", "id": "nightly-sync", "record": { "v": 1, "title": "Nightly sync check", "kind": "recurring", "cadence": "daily", "worked": "Answered when the sync last ran" } },
       "expect": {
-        "answer": { "seq": 2 },
-        "state": { "nightly-sync": [["health.level", "eq", "green"], ["health.checkedAt", "eq", "{{now}}"], ["health.receivedAt", "set"]] }
+        "answer": { "seq": 1, "unchanged": true },
+        "answerChecks": [["logged", "set"]],
+        "state": { "nightly-sync": [["seq", "eq", 1], ["health.level", "eq", "green"]] }
       }
     },
     {
       "name": "list shows both, with seq and the data-health summary",
       "call": { "action": "list" },
       "expect": {
-        "answer": { "initiatives": [{ "id": "billing-export", "seq": 6, "openQuestions": 0 }, { "id": "nightly-sync", "seq": 2 }] },
+        "answer": { "initiatives": [{ "id": "billing-export", "seq": 4, "openQuestions": 0 }, { "id": "nightly-sync", "seq": 1 }] },
         "answerChecks": [["initiatives", "len", 2], ["dataHealth", "set"]]
       }
     },
     {
-      "name": "wrap-up republish of the same record is a no-op",
-      "call": {
-        "action": "publish",
-        "id": "billing-export",
-        "record": {
-          "v": 1,
-          "title": "Billing export",
-          "area": "Finance tools",
-          "key": "KEY-1",
-          "tasks": [
-            { "id": "map-fields", "text": "Map the export fields", "status": "done" },
-            { "id": "write-exporter", "text": "Write the exporter", "status": "done" },
-            { "id": "add-tests", "text": "Add tests", "status": "in_progress" }
-          ],
-          "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
-          "source": { "machine": "laptop", "session": "session-a" }
-        }
-      },
-      "expect": { "answer": { "seq": 6, "unchanged": true }, "state": { "billing-export": [["seq", "eq", 6], ["comments", "len", 1]] } }
+      "name": "list with an id returns the full record",
+      "call": { "action": "list", "id": "billing-export" },
+      "expect": { "answer": { "id": "billing-export", "seq": 4 }, "answerChecks": [["tasks", "len", 3], ["questions.0.clearedAt", "set"]] }
     },
     {
       "name": "a stale expectSeq from a second session is a 409 and changes nothing",
@@ -214,13 +272,14 @@
           "title": "Billing export",
           "tasks": [{ "id": "map-fields", "text": "Map the export fields", "status": "done" }],
           "source": { "machine": "vm", "session": "session-b" },
-          "expectSeq": "{{seq-1:billing-export}}"
+          "expectSeq": "{{seq-1:billing-export}}",
+          "worked": "Reviewed the exporter"
         }
       },
       "expect": {
-        "error": "^expectSeq is 5 but 'billing-export' is at seq 6\\. Merge your change into the current record",
-        "current": [["id", "eq", "billing-export"], ["seq", "eq", 6], ["tasks", "len", 3], ["tasks.2.id", "eq", "add-tests"], ["comments", "len", 1], ["source.session", "eq", "session-a"]],
-        "state": { "billing-export": [["seq", "eq", 6], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
+        "error": "^expectSeq is 3 but 'billing-export' is at seq 4\\. Merge your change into the current record",
+        "current": [["id", "eq", "billing-export"], ["seq", "eq", 4], ["tasks", "len", 3], ["tasks.2.id", "eq", "add-tests"], ["source.session", "eq", "session-a"]],
+        "state": { "billing-export": [["seq", "eq", 4], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
       }
     },
     {
@@ -241,18 +300,30 @@
           ],
           "links": [{ "label": "Spec", "url": "https://example.com/spec" }],
           "source": { "machine": "vm", "session": "session-b" },
-          "expectSeq": "{{seq:billing-export}}"
+          "expectSeq": "{{seq:billing-export}}",
+          "worked": "Added the exporter tests, merged with the other session"
         }
       },
       "expect": {
-        "answer": { "seq": 7 },
-        "state": { "billing-export": [["seq", "eq", 7], ["tasks.2.status", "eq", "done"], ["comments", "len", 1], ["source.session", "eq", "session-b"], ["writers", "set"]] }
+        "answer": { "seq": 5 },
+        "answerChecks": [["logged", "set"]],
+        "state": { "billing-export": [["seq", "eq", 5], ["tasks.2.status", "eq", "done"], ["source.session", "eq", "session-b"], ["writers", "set"]] }
       }
+    },
+    {
+      "name": "remove takes an initiative off the page",
+      "call": { "action": "remove", "id": "nightly-sync" },
+      "expect": { "answer": { "removed": true } }
+    },
+    {
+      "name": "list after remove shows one",
+      "call": { "action": "list" },
+      "expect": { "answer": { "initiatives": [{ "id": "billing-export", "seq": 5 }] }, "answerChecks": [["initiatives", "len", 1]] }
     },
     { "name": "the person switches it off", "switch": "off" },
     {
       "name": "publish while off: the 403 sentence, nothing stored",
-      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export after off", "state": "done" } },
+      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export after off", "state": "done", "worked": "Finished" } },
       "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
     },
     {
@@ -265,7 +336,7 @@
       "name": "the records came back unchanged by the refused publish",
       "call": { "action": "list" },
       "expect": {
-        "answer": { "initiatives": [{ "id": "billing-export", "seq": 7 }] },
+        "answer": { "initiatives": [{ "id": "billing-export", "seq": 5 }] },
         "state": { "billing-export": [["title", "eq", "Billing export"], ["state", "eq", "active"]] }
       }
     }

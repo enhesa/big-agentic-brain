@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 53;
+export const CURRENT_VERSION = 54;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -342,6 +342,62 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(53);
     appliedVersion = 53;
   }
+  if (appliedVersion < 54) {
+    runMigrationV54(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(54);
+    appliedVersion = 54;
+  }
+}
+
+function runMigrationV54(database: DatabaseSync) {
+  // Command Center v3 (lib/command-center.ts): SQLite is its one store. Live records replace the
+  // in-memory map and its snapshot file (imported by lib/command-center.ts and left untouched for a
+  // rollback to v2.19, deleted 30 days after its import). The log keeps what was worked on, with
+  // the server's time; entry ids are stable per person, so a retried write is a no-op. Export
+  // grants are the person's own consent for one export app. Every row is keyed by owner_id.
+  // command_center_imports remembers each imported snapshot by its sha256, so the same file is
+  // never imported twice and is deleted only while it is still the imported one.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS command_center_initiatives (
+      owner_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      record TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      bytes INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (owner_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS command_center_log (
+      owner_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      initiative_id TEXT NOT NULL,
+      title TEXT,
+      key TEXT,
+      kind TEXT NOT NULL,
+      text TEXT,
+      size TEXT,
+      session TEXT,
+      machine TEXT,
+      source TEXT NOT NULL DEFAULT 'live',
+      at TEXT NOT NULL,
+      PRIMARY KEY (owner_id, entry_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_command_center_log_owner_at ON command_center_log(owner_id, at);
+    CREATE INDEX IF NOT EXISTS idx_command_center_log_initiative ON command_center_log(owner_id, initiative_id, at);
+    CREATE INDEX IF NOT EXISTS idx_command_center_log_at ON command_center_log(at);
+    CREATE TABLE IF NOT EXISTS command_center_export_grants (
+      owner_id TEXT NOT NULL,
+      app TEXT NOT NULL,
+      level TEXT NOT NULL,
+      granted_at TEXT NOT NULL,
+      PRIMARY KEY (owner_id, app)
+    );
+    CREATE INDEX IF NOT EXISTS idx_command_center_export_grants_app ON command_center_export_grants(app);
+    CREATE TABLE IF NOT EXISTS command_center_imports (
+      sha256 TEXT PRIMARY KEY,
+      imported_at TEXT NOT NULL
+    );
+  `);
 }
 
 function runMigrationV53(database: DatabaseSync) {
