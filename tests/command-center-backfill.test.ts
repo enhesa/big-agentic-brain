@@ -446,7 +446,6 @@ describe("current: open initiatives to create if absent", () => {
       { id: "t-3", text: "Third task", status: "done" },
     ],
     questions: [{ id: "q-1", text: "Which months?", options: ["Jan", "Feb"] }],
-    links: [{ label: "PR", url: "https://example.com/pr/1" }],
     ...extra,
   });
   const syncUpload = (current: unknown[], entries?: unknown[]) => ({ v: 1, current, ...(entries ? { entries } : {}) });
@@ -457,7 +456,7 @@ describe("current: open initiatives to create if absent", () => {
   };
 
   it("creates an active record with server times and one synced log entry; a body with only current is valid", async () => {
-    const res = await post(mint().url, syncUpload([record("alpha"), record("beta", { tasks: [], questions: [], links: [], area: undefined, key: undefined })]));
+    const res = await post(mint().url, syncUpload([record("alpha"), record("beta", { tasks: [], questions: [], area: undefined, key: undefined })]));
     expect(res.status).toBe(200);
     expect(res.json).toEqual({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 2, syncSkipped: 0, syncRefused: [] });
     const rec = cc.ccGet(OWNER, "alpha");
@@ -468,7 +467,7 @@ describe("current: open initiatives to create if absent", () => {
       { id: "t-3", text: "Third task", status: "done", startedAt: ISO_NOW, finishedAt: ISO_NOW },
     ]);
     expect(rec.questions).toEqual([{ id: "q-1", text: "Which months?", options: ["Jan", "Feb"], askedAt: ISO_NOW, clearedAt: null, session: null }]);
-    expect(rec.links).toEqual([{ label: "PR", url: "https://example.com/pr/1" }]);
+    expect(rec.links).toEqual([]);
     expect(cc.ccGet(OWNER, "beta")).toMatchObject({ area: null, key: null, tasks: [], questions: [], links: [] });
     expect(synced().map((e) => [e.initiative, e.title, e.key, e.source, e.at, e.text])).toEqual([
       ["alpha", "Title of alpha", "KEY-7", "backfill", ISO_NOW, null],
@@ -518,6 +517,45 @@ describe("current: open initiatives to create if absent", () => {
     expect(synced()).toHaveLength(1);
   });
 
+  it("does not bring back a removed initiative: an id with log entries or an audited removal is skipped", async () => {
+    // Removed with log entries (a started task).
+    cc.ccPublish(device(OWNER), OWNER, { v: 1, id: "alpha", title: "Live", tasks: [{ id: "a", text: "Task", status: "in_progress" }] }, "mcp");
+    expect(cc.ccLogOf(OWNER).some((e) => e.initiative === "alpha")).toBe(true);
+    // Removed without any log entry (a bare publish logs nothing).
+    cc.ccPublish(device(OWNER), OWNER, { v: 1, id: "beta", title: "Bare" }, "mcp");
+    expect(cc.ccLogOf(OWNER).some((e) => e.initiative === "beta")).toBe(false);
+    expect(cc.ccRemove(OWNER, { id: "alpha" }, "mcp")).toEqual({ removed: true });
+    expect(cc.ccRemove(OWNER, { id: "beta" }, "mcp")).toEqual({ removed: true });
+    const res = await post(mint().url, syncUpload([record("alpha"), record("beta"), record("gamma")]));
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ syncCreated: 1, syncSkipped: 2, syncRefused: [] });
+    expect(() => cc.ccGet(OWNER, "alpha")).toThrow(/No initiative/);
+    expect(() => cc.ccGet(OWNER, "beta")).toThrow(/No initiative/);
+    expect(synced().map((e) => e.initiative)).toEqual(["gamma"]);
+    // Another person's removal of the same id is no tombstone for this person.
+    cc.ccSetSwitch(OTHER, true);
+    cc.ccPublish(device(OTHER), OTHER, { v: 1, id: "delta", title: "Theirs" }, "mcp");
+    cc.ccRemove(OTHER, { id: "delta" }, "mcp");
+    expect((await post(mint().url, syncUpload([record("delta")]))).json).toMatchObject({ syncCreated: 1, syncSkipped: 0 });
+  });
+
+  it("reserves unassigned for current records but keeps it for entries", async () => {
+    const res = await post(mint().url, syncUpload([record("unassigned")], [entry(1, { initiative: "unassigned" })]));
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/current\[0\]\.id 'unassigned' is reserved/);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    const ok = await post(mint().url, syncUpload([record("alpha")], [entry(1, { initiative: "unassigned" })]));
+    expect(ok.json).toMatchObject({ accepted: 1, syncCreated: 1 });
+    expect(backfilled().filter((e) => e.kind === "worked").map((e) => e.initiative)).toEqual(["unassigned"]);
+  });
+
+  it("takes no links on a current record: the field is unknown", async () => {
+    const res = await post(mint().url, syncUpload([record("alpha", { links: [] })]));
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/unknown field 'current\[0\]\.links'/);
+    expect(cc.ccList(OWNER).initiatives).toEqual([]);
+  });
+
   it("never overwrites a record written between the read and the insert (insert-if-absent)", async () => {
     // A racing writer: the row appears after the upload read the person's records, right before its insert.
     const { getDb } = await import("../lib/db");
@@ -561,7 +599,8 @@ describe("current: open initiatives to create if absent", () => {
       [record("alpha", { title: "" }), /current\[0\]\.title is required/],
       [record("alpha", { title: "x".repeat(121) }), /current\[0\]\.title is 121 characters; at most 120/],
       [record("alpha", { key: "not-a-key" }), /current\[0\]\.key must be a ticket key/],
-      [record("alpha", { links: [{ label: "x", url: "http://example.com" }] }), /current\[0\]\.links\[0\]\.url must start with https:\/\//],
+      [record("alpha", { links: [{ label: "PR", url: "https://example.com/pr/1" }] }), /unknown field 'current\[0\]\.links'/],
+      [record("unassigned"), /current\[0\]\.id 'unassigned' is reserved for entries without an initiative/],
       [record("alpha", { questions: Array.from({ length: 6 }, (_, i) => ({ id: `q-${i}`, text: "x" })) }), /current\[0\]\.questions: at most 5 open/],
       [record("alpha", { tasks: Array.from({ length: 51 }, (_, i) => ({ id: `t-${i}`, text: "x", status: "pending" })) }), /current\[0\]\.tasks: at most 50 tasks/],
       [record("alpha", { tasks: [{ id: "t", text: "x", status: "pending" }, { id: "t", text: "y", status: "pending" }] }), /tasks\[1\]\.id 't' is used twice/],
@@ -598,7 +637,6 @@ describe("current: open initiatives to create if absent", () => {
       record("alpha", { tasks: [{ id: "t-1", text: `use ${token}`, status: "pending" }] }),
       record("alpha", { title: `token ${token}` }),
       record("alpha", { questions: [{ id: "q-1", text: `is ${token} ok?` }] }),
-      record("alpha", { links: [{ label: "x", url: `https://example.com/?t=${token}` }] }),
     ]) {
       const res = await post(mint().url, syncUpload([rec]));
       expect(res.status).toBe(400);

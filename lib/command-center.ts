@@ -1542,7 +1542,7 @@ export interface CcBackfillResult {
   reassigned: { index: number; id: string; reason: string }[];
   /** `current` records created as new active initiatives. */
   syncCreated: number;
-  /** `current` records whose id the person already has: left exactly as they are. */
+  /** `current` records whose id the person has or had (logged or removed before): nothing written. */
   syncSkipped: number;
   /** `current` records that were valid but not created (initiative or size limits), with the reason. */
   syncRefused: { index: number; id: string; reason: string }[];
@@ -1557,10 +1557,9 @@ interface CurrentRecord {
   key: string | null;
   tasks: RecordInput["tasks"];
   questions: RecordInput["questions"];
-  links: CcLink[];
 }
 
-const CURRENT_FIELDS = ["id", "title", "area", "key", "state", "tasks", "questions", "links"];
+const CURRENT_FIELDS = ["id", "title", "area", "key", "state", "tasks", "questions"];
 
 /**
  * Checks one `current` record with the same rules, limits and secret checks as publish. Only
@@ -1568,10 +1567,12 @@ const CURRENT_FIELDS = ["id", "title", "area", "key", "state", "tasks", "questio
  */
 function checkCurrentRecord(raw: unknown, index: number): CurrentRecord {
   const where = `current[${index}]`;
-  if (!isObject(raw)) throw new ValidationError(`${where} must be an object { id, title, state, tasks, questions, links }`);
+  if (!isObject(raw)) throw new ValidationError(`${where} must be an object { id, title, state, tasks, questions }`);
   onlyFields(raw, CURRENT_FIELDS, `${where}.`);
   const id = slug(raw.id, `${where}.id`);
   if (CC_RESERVED_IDS.includes(id)) throw new ValidationError(`${where}.id '${id}' is reserved; pick another id`);
+  // Entries without an initiative are logged under it; a record by that name would claim them.
+  if (id === UNASSIGNED) throw new ValidationError(`${where}.id '${UNASSIGNED}' is reserved for entries without an initiative; pick another id`);
   const title = text(raw.title, `${where}.title`, 120)!;
   const area = text(raw.area, `${where}.area`, 40, false);
   let key: string | null = null;
@@ -1587,8 +1588,19 @@ function checkCurrentRecord(raw: unknown, index: number): CurrentRecord {
   }
   const questions = list(raw.questions, `${where}.questions`, CC_MAX_OPEN_QUESTIONS, "open questions").map((q, i) => checkQuestion(q, `${where}.questions[${i}]`));
   uniqueIds(questions, `${where}.questions`);
-  const links = list(raw.links, `${where}.links`, CC_MAX_LINKS, "links").map((l, i) => checkLink(l, `${where}.links[${i}]`));
-  return { index, id, title, area, key, tasks, questions, links };
+  return { index, id, title, area, key, tasks, questions };
+}
+
+/**
+ * True when the person had an initiative with this id before: it has log entries, or a removal
+ * was audited. `current` then skips it, so a stale session cannot bring back a removed one.
+ */
+function hadInitiative(owner: string, id: string): boolean {
+  const db = getDb();
+  if (db.prepare("SELECT 1 FROM command_center_log WHERE owner_id = ? AND initiative_id = ? LIMIT 1").get(owner, id)) return true;
+  return !!db
+    .prepare("SELECT 1 FROM audit_log WHERE actor_id = ? AND action = 'cc_remove' AND entity = 'command_center' AND entity_id = ? LIMIT 1")
+    .get(owner, id);
 }
 
 /** Writes a record only when the person has none with that id. True when it was written. */
@@ -1648,7 +1660,8 @@ function checkBackfillEntry(raw: unknown, index: number, now: number): BackfillE
  * "unassigned". One transaction, one audit row with counts.
  *
  * `current` carries the person's open initiatives from another machine. It is create-only: a
- * record whose id the person already has is skipped and counted, never changed; a new one is an
+ * record whose id the person has, or had (log entries, or an audited removal), is skipped and
+ * counted, never changed; a new one is an
  * active record with server times and one "synced" log entry. Any invalid record refuses the whole
  * upload, as a publish would. New records count toward CC_BACKFILL_MAX_CREATED with the entries'.
  */
@@ -1691,7 +1704,7 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
     const at = iso(now);
     // Current records first, so an entry for one of them lands under it with its title and key.
     for (const c of current) {
-      if (records.has(c.id)) {
+      if (records.has(c.id) || hadInitiative(owner, c.id)) {
         out.syncSkipped += 1;
         continue;
       }
@@ -1713,7 +1726,7 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
         tasks: c.tasks.map((t) => ({ ...t, startedAt: t.status !== "pending" ? at : null, finishedAt: t.status === "done" ? at : null })),
         questions: c.questions.map((q) => ({ ...q, askedAt: at, clearedAt: null, session: null })),
         health: null,
-        links: c.links,
+        links: [],
         source: null,
         updatedAt: at,
         seq: 1,

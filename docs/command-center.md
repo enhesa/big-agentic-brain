@@ -164,13 +164,14 @@ The import:
 Current state (`current`, optional, at most 100 records per upload; a body with only `current`
 is valid):
 
-- Each record is `{ id, title, area?, key?, state: "active", tasks?, questions?, links? }`,
-  checked exactly like a publish (same id rules, limits and secret checks; `id` `backfill` is
-  reserved; only state `active`). Any field outside that list, or any invalid record, refuses the
-  whole upload (400).
-- Create only: a record whose `id` you already have is skipped and counted in `syncSkipped`; the
-  live record is never changed. The insert is conditional inside the upload's transaction, so a
-  publish racing it is never overwritten.
+- Each record is `{ id, title, area?, key?, state: "active", tasks?, questions? }`,
+  checked exactly like a publish (same id rules, limits and secret checks; ids `backfill`,
+  `export` and `unassigned` are reserved; only state `active`). Any field outside that list
+  (also `links`), or any invalid record, refuses the whole upload (400).
+- Create only: a record whose `id` you already have, or had (it has log entries, or its removal
+  is in the audit log), is skipped and counted in `syncSkipped`, so a stale session cannot bring
+  back a removed initiative. The live record is never changed. The insert is conditional inside
+  the upload's transaction, so a publish racing it is never overwritten.
 - A new record is an active project with server times (task `startedAt`/`finishedAt`, question
   `askedAt`, `updatedAt`); client times are not taken. It gets one log entry of kind `synced`
   (source `backfill`) and counts in `syncCreated`. New records share the 20 new initiatives per
