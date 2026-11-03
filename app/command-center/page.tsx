@@ -515,6 +515,7 @@ const LOG_KIND_LABEL: Record<string, string> = {
   question_cleared: "cleared",
   health: "health",
   state: "state",
+  synced: "synced",
 };
 
 /** The newest log entries of one initiative, newest first. Every string is React text. */

@@ -62,6 +62,8 @@ export const CC_BACKFILL_LINKS_PER_OWNER = 20;
 export const CC_BACKFILL_MAX_PER_PERSON = 20000;
 /** Initiatives one backfill upload may create; entries for further unknown initiatives go under "unassigned". */
 export const CC_BACKFILL_MAX_CREATED = 20;
+/** Current-state records one backfill upload may carry (`current`). */
+export const CC_BACKFILL_MAX_CURRENT = 100;
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -95,7 +97,7 @@ export const CC_PRIORITIES = ["urgent", "high", "low", "paused"] as const;
 export const CC_TASK_STATUSES = ["pending", "in_progress", "done"] as const;
 export const CC_HEALTH_LEVELS = ["green", "amber", "red", "unknown"] as const;
 export const CC_SIZES = ["small", "medium", "large"] as const;
-export const CC_LOG_KINDS = ["worked", "note", "task_started", "task_done", "question_asked", "question_cleared", "health", "state"] as const;
+export const CC_LOG_KINDS = ["worked", "note", "task_started", "task_done", "question_asked", "question_cleared", "health", "state", "synced"] as const;
 export const CC_EXPORT_LEVELS = ["aggregate", "entries"] as const;
 
 type State = (typeof CC_STATES)[number];
@@ -1472,6 +1474,8 @@ export interface CcBackfillLink {
   url: string;
   expiresAt: string;
   maxEntries: number;
+  /** Current-state records (`current`) per upload. */
+  maxCurrent: number;
   maxBytes: number;
   how: string;
 }
@@ -1505,6 +1509,7 @@ export function createBackfillLink(owner: string, origin: string, via: AuditVia,
     url: `${origin}/api/command-center/backfill/${token}`,
     expiresAt,
     maxEntries: CC_BACKFILL_MAX_ENTRIES,
+    maxCurrent: CC_BACKFILL_MAX_CURRENT,
     maxBytes: CC_BACKFILL_MAX_BYTES,
     how: `Run the backfill tool's upload mode with this url; it takes one upload, within ${CC_BACKFILL_LINK_TTL_MINUTES} minutes.`,
   };
@@ -1535,6 +1540,63 @@ export interface CcBackfillResult {
   created: string[];
   /** Entries logged under "unassigned" instead of the initiative they named. */
   reassigned: { index: number; id: string; reason: string }[];
+  /** `current` records created as new active initiatives. */
+  syncCreated: number;
+  /** `current` records whose id the person already has: left exactly as they are. */
+  syncSkipped: number;
+  /** `current` records that were valid but not created (initiative or size limits), with the reason. */
+  syncRefused: { index: number; id: string; reason: string }[];
+}
+
+/** One checked `current` record: the person's open work on another machine, to create if absent. */
+interface CurrentRecord {
+  index: number;
+  id: string;
+  title: string;
+  area: string | null;
+  key: string | null;
+  tasks: RecordInput["tasks"];
+  questions: RecordInput["questions"];
+  links: CcLink[];
+}
+
+const CURRENT_FIELDS = ["id", "title", "area", "key", "state", "tasks", "questions", "links"];
+
+/**
+ * Checks one `current` record with the same rules, limits and secret checks as publish. Only
+ * state "active" is taken. Throws a ValidationError naming the field.
+ */
+function checkCurrentRecord(raw: unknown, index: number): CurrentRecord {
+  const where = `current[${index}]`;
+  if (!isObject(raw)) throw new ValidationError(`${where} must be an object { id, title, state, tasks, questions, links }`);
+  onlyFields(raw, CURRENT_FIELDS, `${where}.`);
+  const id = slug(raw.id, `${where}.id`);
+  if (CC_RESERVED_IDS.includes(id)) throw new ValidationError(`${where}.id '${id}' is reserved; pick another id`);
+  const title = text(raw.title, `${where}.title`, 120)!;
+  const area = text(raw.area, `${where}.area`, 40, false);
+  let key: string | null = null;
+  if (raw.key != null && raw.key !== "") {
+    if (typeof raw.key !== "string" || !KEY_RE.test(raw.key)) throw new ValidationError(`${where}.key must be a ticket key such as KEY-1, or null`);
+    key = raw.key;
+  }
+  if (raw.state !== "active") throw new ValidationError(`${where}.state must be "active": only open work is synced`);
+  const tasks = list(raw.tasks, `${where}.tasks`, CC_MAX_TASKS, "tasks").map((t, i) => checkTask(t, `${where}.tasks[${i}]`));
+  uniqueIds(tasks, `${where}.tasks`);
+  if (Array.isArray(raw.questions) && raw.questions.length > CC_MAX_OPEN_QUESTIONS) {
+    throw new ValidationError(`${where}.questions: at most ${CC_MAX_OPEN_QUESTIONS} open; leave an answered one out`);
+  }
+  const questions = list(raw.questions, `${where}.questions`, CC_MAX_OPEN_QUESTIONS, "open questions").map((q, i) => checkQuestion(q, `${where}.questions[${i}]`));
+  uniqueIds(questions, `${where}.questions`);
+  const links = list(raw.links, `${where}.links`, CC_MAX_LINKS, "links").map((l, i) => checkLink(l, `${where}.links[${i}]`));
+  return { index, id, title, area, key, tasks, questions, links };
+}
+
+/** Writes a record only when the person has none with that id. True when it was written. */
+function insertRecordIfAbsent(owner: string, r: CcRecord): boolean {
+  const res = getDb()
+    .prepare("INSERT INTO command_center_initiatives (owner_id, id, record, seq, bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id, id) DO NOTHING")
+    .run(owner, r.id, JSON.stringify(r), r.seq, bytesOf(r), r.updatedAt);
+  return Number(res.changes) > 0;
 }
 
 interface BackfillEntry {
@@ -1584,22 +1646,36 @@ function checkBackfillEntry(raw: unknown, index: number, now: number): BackfillE
  * source "backfill" and a stable id, so a second upload of the same entries changes nothing. An
  * unknown initiative with a title gets a parked record; without one, the entry goes under
  * "unassigned". One transaction, one audit row with counts.
+ *
+ * `current` carries the person's open initiatives from another machine. It is create-only: a
+ * record whose id the person already has is skipped and counted, never changed; a new one is an
+ * active record with server times and one "synced" log entry. Any invalid record refuses the whole
+ * upload, as a publish would. New records count toward CC_BACKFILL_MAX_CREATED with the entries'.
  */
 export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: string, now: number = Date.now()): CcBackfillResult {
   assertCommandCenterEnabled();
-  if (!isObject(body)) throw new ValidationError('The upload must be a JSON object { "v": 1, "entries": [...] }');
+  if (!isObject(body)) throw new ValidationError('The upload must be a JSON object { "v": 1, "entries": [...], "current": [...] }');
   for (const k of Object.keys(body)) {
-    if (k !== "v" && k !== "entries") throw new ValidationError(`unknown field '${k}'; allowed: v, entries`);
+    if (k !== "v" && k !== "entries" && k !== "current") throw new ValidationError(`unknown field '${k}'; allowed: v, entries, current`);
   }
   if (body.v !== 1) throw new ValidationError("v must be 1; this server reads version 1 uploads only");
-  if (!Array.isArray(body.entries) || body.entries.length === 0) throw new ValidationError("entries must be a non-empty array");
-  if (body.entries.length > CC_BACKFILL_MAX_ENTRIES) {
-    throw new CcTooLargeError(`entries: at most ${CC_BACKFILL_MAX_ENTRIES} per upload; you sent ${body.entries.length}. Upload the rest with a new link.`);
+  if (body.entries !== undefined && !Array.isArray(body.entries)) throw new ValidationError("entries must be an array");
+  if (body.current !== undefined && !Array.isArray(body.current)) throw new ValidationError("current must be an array");
+  const rawEntries: unknown[] = (body.entries as unknown[] | undefined) ?? [];
+  const rawCurrent: unknown[] = (body.current as unknown[] | undefined) ?? [];
+  if (rawEntries.length === 0 && rawCurrent.length === 0) throw new ValidationError("entries or current must be a non-empty array");
+  if (rawEntries.length > CC_BACKFILL_MAX_ENTRIES) {
+    throw new CcTooLargeError(`entries: at most ${CC_BACKFILL_MAX_ENTRIES} per upload; you sent ${rawEntries.length}. Upload the rest with a new link.`);
+  }
+  if (rawCurrent.length > CC_BACKFILL_MAX_CURRENT) {
+    throw new CcTooLargeError(`current: at most ${CC_BACKFILL_MAX_CURRENT} records per upload; you sent ${rawCurrent.length}. Upload the rest with a new link.`);
   }
   assertOptedIn(owner, origin);
-  const out: CcBackfillResult = { accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [] };
+  const current = rawCurrent.map((raw, i) => checkCurrentRecord(raw, i));
+  uniqueIds(current, "current");
+  const out: CcBackfillResult = { accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 0, syncSkipped: 0, syncRefused: [] };
   const checked: BackfillEntry[] = [];
-  for (const [i, raw] of body.entries.entries()) {
+  for (const [i, raw] of rawEntries.entries()) {
     try {
       checked.push(checkBackfillEntry(raw, i, now));
     } catch (err) {
@@ -1612,6 +1688,56 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
   const db = getDb();
   inTransaction(db, () => {
     const records = loadRecords(owner);
+    const at = iso(now);
+    // Current records first, so an entry for one of them lands under it with its title and key.
+    for (const c of current) {
+      if (records.has(c.id)) {
+        out.syncSkipped += 1;
+        continue;
+      }
+      if (out.created.length + out.syncCreated >= CC_BACKFILL_MAX_CREATED) {
+        out.syncRefused.push({ index: c.index, id: c.id, reason: `initiative '${c.id}' was not created: one upload creates at most ${CC_BACKFILL_MAX_CREATED} initiatives` });
+        continue;
+      }
+      const rec: CcRecord = {
+        v: 1,
+        id: c.id,
+        title: c.title,
+        area: c.area,
+        key: c.key,
+        state: "active",
+        kind: "project",
+        cadence: null,
+        deadline: null,
+        priority: null,
+        tasks: c.tasks.map((t) => ({ ...t, startedAt: t.status !== "pending" ? at : null, finishedAt: t.status === "done" ? at : null })),
+        questions: c.questions.map((q) => ({ ...q, askedAt: at, clearedAt: null, session: null })),
+        health: null,
+        links: c.links,
+        source: null,
+        updatedAt: at,
+        seq: 1,
+        publishedBy: "backfill",
+        writers: [],
+      };
+      try {
+        assertFits(owner, rec, null);
+      } catch (err) {
+        if (!(err instanceof ApiError)) throw err;
+        out.syncRefused.push({ index: c.index, id: c.id, reason: `initiative '${c.id}' could not be created: ${err.message}` });
+        continue;
+      }
+      // Insert-if-absent inside this BEGIN IMMEDIATE transaction: a live record is never overwritten.
+      if (!insertRecordIfAbsent(owner, rec)) {
+        out.syncSkipped += 1;
+        continue;
+      }
+      records.set(rec.id, rec);
+      out.syncCreated += 1;
+      writeLog(owner, [
+        { id: ccEntryId("synced", rec.id, at), initiative: rec.id, title: rec.title, key: rec.key, kind: "synced", text: null, size: null, session: null, machine: null, source: "backfill", at },
+      ]);
+    }
     const counted = db.prepare("SELECT COUNT(*) AS n FROM command_center_log WHERE owner_id = ? AND source = 'backfill'").get(owner) as { n: number };
     let total = Number(counted.n);
     const exists = db.prepare("SELECT 1 FROM command_center_log WHERE owner_id = ? AND entry_id = ?");
@@ -1638,7 +1764,7 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
       } else if (CC_RESERVED_IDS.includes(initiative)) {
         out.refused.push({ index: e.index, id: e.id, reason: `entries[${e.index}].initiative '${initiative}' is reserved; pick another id` });
         continue;
-      } else if (e.title && out.created.length >= CC_BACKFILL_MAX_CREATED) {
+      } else if (e.title && out.created.length + out.syncCreated >= CC_BACKFILL_MAX_CREATED) {
         out.reassigned.push({ index: e.index, id: e.id, reason: `initiative '${initiative}' was not created: one upload creates at most ${CC_BACKFILL_MAX_CREATED} initiatives` });
         initiative = UNASSIGNED;
         title = "Unassigned";
@@ -1667,7 +1793,8 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
         };
         try {
           assertFits(owner, rec, null);
-          saveRecord(owner, rec);
+          // records was read in this transaction, so the id is absent; never overwrite one anyway.
+          if (!insertRecordIfAbsent(owner, rec)) throw new ApiError(`initiative '${initiative}' already exists`, 409);
           records.set(rec.id, rec);
           out.created.push(rec.id);
           title = rec.title;
@@ -1694,7 +1821,16 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
       } else out.duplicate += 1;
     }
     audit(db, owner, "cc_backfill", "command_center", "-", via, {
-      details: { accepted: out.accepted, duplicate: out.duplicate, refused: out.refused.length, created: out.created.length, reassigned: out.reassigned.length },
+      details: {
+        accepted: out.accepted,
+        duplicate: out.duplicate,
+        refused: out.refused.length,
+        created: out.created.length,
+        reassigned: out.reassigned.length,
+        syncCreated: out.syncCreated,
+        syncSkipped: out.syncSkipped,
+        syncRefused: out.syncRefused.length,
+      },
     });
   });
   out.refused.sort((a, b) => a.index - b.index);

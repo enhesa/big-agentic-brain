@@ -56,7 +56,7 @@ afterEach(async () => {
   vi.resetModules();
 });
 
-function mint(actor: Parameters<Cc["runCommandCenter"]>[0] = ME): { url: string; expiresAt: string; maxEntries: number; maxBytes: number; how: string } {
+function mint(actor: Parameters<Cc["runCommandCenter"]>[0] = ME): { url: string; expiresAt: string; maxEntries: number; maxCurrent: number; maxBytes: number; how: string } {
   return cc.runCommandCenter(actor, { action: "backfill_link" }, "mcp", ORIGIN) as ReturnType<typeof mint>;
 }
 
@@ -111,7 +111,7 @@ describe("backfill_link", () => {
   it("answers a link with its limits and stores only the token's hash", async () => {
     const link = mint();
     expect(link.url).toMatch(/^https:\/\/bab\.example\.com\/api\/command-center\/backfill\/[0-9a-f]{64}$/);
-    expect(link).toMatchObject({ expiresAt: new Date(NOW + 15 * MINUTE).toISOString(), maxEntries: 2000, maxBytes: 1024 * 1024 });
+    expect(link).toMatchObject({ expiresAt: new Date(NOW + 15 * MINUTE).toISOString(), maxEntries: 2000, maxCurrent: 100, maxBytes: 1024 * 1024 });
     expect(link.how).toMatch(/upload mode/);
     const { getDb } = await import("../lib/db");
     const rows = getDb().prepare("SELECT * FROM command_center_backfill_links").all() as Record<string, unknown>[];
@@ -179,7 +179,7 @@ describe("POST /api/command-center/backfill/:token", () => {
     const at = "2026-02-20T09:30:00+02:00";
     const res = await post(link.url, upload([entry(1, { at }), entry(2, { size: undefined })]));
     expect(res.status).toBe(200);
-    expect(res.json).toEqual({ accepted: 2, duplicate: 0, refused: [], created: [], reassigned: [] });
+    expect(res.json).toEqual({ accepted: 2, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 0, syncSkipped: 0, syncRefused: [] });
     const log = backfilled();
     expect(log).toHaveLength(2);
     expect(log.every((e) => e.kind === "worked" && e.initiative === "billing-export" && e.title === "Billing export")).toBe(true);
@@ -187,7 +187,7 @@ describe("POST /api/command-center/backfill/:token", () => {
     expect(log[0].id).toBe(cc.ccEntryId("backfill", String(entry(1).id)));
     const rows = await auditRows("cc_backfill");
     expect(rows).toHaveLength(1);
-    expect(JSON.parse(rows[0].details)).toEqual({ accepted: 2, duplicate: 0, refused: 0, created: 0, reassigned: 0 });
+    expect(JSON.parse(rows[0].details)).toEqual({ accepted: 2, duplicate: 0, refused: 0, created: 0, reassigned: 0, syncCreated: 0, syncSkipped: 0, syncRefused: 0 });
     expect(rows[0].details).not.toContain("Built part");
   });
 
@@ -429,5 +429,253 @@ describe("log entries without a record (unassigned)", () => {
     const rows = app.people[0].rows!;
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.initiative === "unassigned" && r.title === "Unassigned" && r.worked === 1 && r.backfilled === 1)).toBe(true);
+  });
+});
+
+describe("current: open initiatives to create if absent", () => {
+  const ISO_NOW = new Date(NOW).toISOString();
+  const record = (id: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id,
+    title: `Title of ${id}`,
+    area: "platform",
+    key: "KEY-7",
+    state: "active",
+    tasks: [
+      { id: "t-1", text: "First task", status: "pending" },
+      { id: "t-2", text: "Second task", status: "in_progress" },
+      { id: "t-3", text: "Third task", status: "done" },
+    ],
+    questions: [{ id: "q-1", text: "Which months?", options: ["Jan", "Feb"] }],
+    links: [{ label: "PR", url: "https://example.com/pr/1" }],
+    ...extra,
+  });
+  const syncUpload = (current: unknown[], entries?: unknown[]) => ({ v: 1, current, ...(entries ? { entries } : {}) });
+  const synced = (owner = OWNER) => cc.ccLogOf(owner).filter((e) => e.kind === "synced");
+  const rawRecord = async (id: string) => {
+    const { getDb } = await import("../lib/db");
+    return getDb().prepare("SELECT record, seq, bytes, updated_at FROM command_center_initiatives WHERE owner_id = ? AND id = ?").get(OWNER, id);
+  };
+
+  it("creates an active record with server times and one synced log entry; a body with only current is valid", async () => {
+    const res = await post(mint().url, syncUpload([record("alpha"), record("beta", { tasks: [], questions: [], links: [], area: undefined, key: undefined })]));
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 2, syncSkipped: 0, syncRefused: [] });
+    const rec = cc.ccGet(OWNER, "alpha");
+    expect(rec).toMatchObject({ v: 1, id: "alpha", title: "Title of alpha", area: "platform", key: "KEY-7", state: "active", kind: "project", seq: 1, publishedBy: "backfill", updatedAt: ISO_NOW, writers: [], health: null, source: null });
+    expect(rec.tasks).toEqual([
+      { id: "t-1", text: "First task", status: "pending", startedAt: null, finishedAt: null },
+      { id: "t-2", text: "Second task", status: "in_progress", startedAt: ISO_NOW, finishedAt: null },
+      { id: "t-3", text: "Third task", status: "done", startedAt: ISO_NOW, finishedAt: ISO_NOW },
+    ]);
+    expect(rec.questions).toEqual([{ id: "q-1", text: "Which months?", options: ["Jan", "Feb"], askedAt: ISO_NOW, clearedAt: null, session: null }]);
+    expect(rec.links).toEqual([{ label: "PR", url: "https://example.com/pr/1" }]);
+    expect(cc.ccGet(OWNER, "beta")).toMatchObject({ area: null, key: null, tasks: [], questions: [], links: [] });
+    expect(synced().map((e) => [e.initiative, e.title, e.key, e.source, e.at, e.text])).toEqual([
+      ["alpha", "Title of alpha", "KEY-7", "backfill", ISO_NOW, null],
+      ["beta", "Title of beta", null, "backfill", ISO_NOW, null],
+    ]);
+    // Only the synced entry: no derived task or question entries.
+    expect(cc.ccLogOf(OWNER)).toHaveLength(2);
+    expect(cc.ccRecentLog(OWNER, "alpha").map((e) => e.kind)).toEqual(["synced"]);
+    const view = cc.ccView(OWNER);
+    expect(view.records.map((r) => r.id).sort()).toEqual(["alpha", "beta"]);
+    expect(view.records.find((r) => r.id === "alpha")!.log.map((e) => e.kind)).toEqual(["synced"]);
+    expect(view.needsYou.map((n) => n.question.id)).toEqual(["q-1"]);
+    expect(cc.CC_LOG_KINDS).toContain("synced");
+  });
+
+  it("takes no client times: time fields are refused, and server time is stamped", async () => {
+    const withTimes = record("alpha", { tasks: [{ id: "t-1", text: "x", status: "done", finishedAt: "2020-01-01T00:00:00Z" }] });
+    const res = await post(mint().url, syncUpload([withTimes]));
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/unknown field 'current\[0\]\.tasks\[0\]\.finishedAt'/);
+    vi.setSystemTime(NOW + 3 * MINUTE);
+    expect((await post(mint().url, syncUpload([record("alpha")]))).status).toBe(200);
+    const later = new Date(NOW + 3 * MINUTE).toISOString();
+    const rec = cc.ccGet(OWNER, "alpha");
+    expect(rec.updatedAt).toBe(later);
+    expect(rec.tasks[2].finishedAt).toBe(later);
+    expect(rec.questions[0].askedAt).toBe(later);
+    expect(synced()[0].at).toBe(later);
+  });
+
+  it("skips an id the person already has: the live record is unchanged and the skip is counted", async () => {
+    cc.ccPublish(device(OWNER), OWNER, { v: 1, id: "alpha", title: "Live title", tasks: [{ id: "a", text: "Live task", status: "in_progress" }], source: { machine: "m1", session: "s-live" } }, "mcp");
+    const before = await rawRecord("alpha");
+    const logBefore = cc.ccLogOf(OWNER);
+    vi.setSystemTime(NOW + 2 * MINUTE);
+    const res = await post(mint().url, syncUpload([record("alpha", { title: "Other title" }), record("gamma")]));
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ syncCreated: 1, syncSkipped: 1, syncRefused: [] });
+    expect(await rawRecord("alpha")).toEqual(before);
+    expect(cc.ccGet(OWNER, "alpha")).toMatchObject({ title: "Live title", seq: 1 });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.initiative === "alpha")).toEqual(logBefore);
+    expect(synced().map((e) => e.initiative)).toEqual(["gamma"]);
+    // The same upload again: everything skipped, nothing new logged.
+    const again = await post(mint().url, syncUpload([record("alpha"), record("gamma", { title: "Changed" })]));
+    expect(again.json).toMatchObject({ syncCreated: 0, syncSkipped: 2 });
+    expect(cc.ccGet(OWNER, "gamma").title).toBe("Title of gamma");
+    expect(synced()).toHaveLength(1);
+  });
+
+  it("never overwrites a record written between the read and the insert (insert-if-absent)", async () => {
+    // A racing writer: the row appears after the upload read the person's records, right before its insert.
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    const orig = db.prepare.bind(db);
+    let injected = false;
+    const spy = vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
+      if (!injected && sql.includes("ON CONFLICT(owner_id, id) DO NOTHING")) {
+        injected = true;
+        const rec = { v: 1, id: "alpha", title: "Racing live", area: null, key: null, state: "active", kind: "project", cadence: null, deadline: null, priority: null, tasks: [], questions: [], health: null, links: [], source: null, updatedAt: ISO_NOW, seq: 4, publishedBy: "token", writers: [] };
+        const json = JSON.stringify(rec);
+        orig("INSERT INTO command_center_initiatives (owner_id, id, record, seq, bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(OWNER, "alpha", json, 4, Buffer.byteLength(json), ISO_NOW);
+      }
+      return orig(sql);
+    });
+    try {
+      const res = await post(mint().url, syncUpload([record("alpha")]));
+      expect(res.json).toMatchObject({ syncCreated: 0, syncSkipped: 1 });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(injected).toBe(true);
+    expect(cc.ccGet(OWNER, "alpha")).toMatchObject({ title: "Racing live", seq: 4, publishedBy: "token" });
+    expect(synced()).toEqual([]);
+  });
+
+  it("refuses an invalid record as a whole upload (400), naming the field, and stores nothing", async () => {
+    // Many links: minted directly, past the per-minute pace of the MCP tool.
+    const mint = () => cc.createBackfillLink(OWNER, ORIGIN, "mcp");
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [record("alpha", { tasks: [{ id: "t-1", text: "x", status: "blocked" }] }), /current\[0\]\.tasks\[0\]\.status must be pending, in_progress or done/],
+      [record("alpha", { owner: OTHER }), /unknown field 'current\[0\]\.owner'/],
+      [record("alpha", { kind: "recurring" }), /unknown field 'current\[0\]\.kind'/],
+      [record("alpha", { updatedAt: ISO_NOW }), /unknown field 'current\[0\]\.updatedAt'/],
+      [record("alpha", { questions: [{ id: "q-1", text: "x", askedAt: ISO_NOW }] }), /unknown field 'current\[0\]\.questions\[0\]\.askedAt'/],
+      [record("backfill"), /current\[0\]\.id 'backfill' is reserved/],
+      [record("export"), /current\[0\]\.id 'export' is reserved/],
+      [record("Not A Slug"), /current\[0\]\.id must be a slug/],
+      [record("alpha", { state: "done" }), /current\[0\]\.state must be "active"/],
+      [record("alpha", { state: undefined }), /current\[0\]\.state must be "active"/],
+      [record("alpha", { title: "" }), /current\[0\]\.title is required/],
+      [record("alpha", { title: "x".repeat(121) }), /current\[0\]\.title is 121 characters; at most 120/],
+      [record("alpha", { key: "not-a-key" }), /current\[0\]\.key must be a ticket key/],
+      [record("alpha", { links: [{ label: "x", url: "http://example.com" }] }), /current\[0\]\.links\[0\]\.url must start with https:\/\//],
+      [record("alpha", { questions: Array.from({ length: 6 }, (_, i) => ({ id: `q-${i}`, text: "x" })) }), /current\[0\]\.questions: at most 5 open/],
+      [record("alpha", { tasks: Array.from({ length: 51 }, (_, i) => ({ id: `t-${i}`, text: "x", status: "pending" })) }), /current\[0\]\.tasks: at most 50 tasks/],
+      [record("alpha", { tasks: [{ id: "t", text: "x", status: "pending" }, { id: "t", text: "y", status: "pending" }] }), /tasks\[1\]\.id 't' is used twice/],
+      [record("alpha", { questions: [{ id: "q", text: "x", options: ["a", "b", "c", "d", "e"] }] }), /options: at most 4 options/],
+    ];
+    for (const [rec, msg] of cases) {
+      const res = await post(mint().url, syncUpload([record("fine"), rec], [entry(1, { initiative: "unassigned" })]));
+      expect(res.status, String(msg)).toBe(400);
+      expect(String(res.json.error).replace("current[1]", "current[0]")).toMatch(msg);
+    }
+    const dup = await post(mint().url, syncUpload([record("alpha"), record("alpha")]));
+    expect(dup.status).toBe(400);
+    expect(dup.json.error).toMatch(/current\[1\]\.id 'alpha' is used twice/);
+    for (const body of [{ v: 1, current: "x" }, { v: 1, current: [] }, { v: 1, entries: [], current: [] }, { v: 1, current: ["x"] }, { v: 1, entries: "x", current: [record("alpha")] }]) {
+      expect((await post(mint().url, body)).status).toBe(400);
+    }
+    expect(cc.ccList(OWNER).initiatives).toEqual([]);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    expect(await auditRows("cc_backfill")).toEqual([]);
+  });
+
+  it("refuses more than 100 records (413) and spends the link", async () => {
+    const link = mint();
+    const res = await post(link.url, syncUpload(Array.from({ length: 101 }, (_, i) => record(`r-${i}`))));
+    expect(res.status).toBe(413);
+    expect(res.json.error).toMatch(/current: at most 100 records per upload/);
+    expect(cc.ccList(OWNER).initiatives).toEqual([]);
+    expect((await post(link.url, syncUpload([record("alpha")]))).status).toBe(404);
+  });
+
+  it("refuses secret-shaped text like publish does, without echoing it", async () => {
+    const token = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    for (const rec of [
+      record("alpha", { tasks: [{ id: "t-1", text: `use ${token}`, status: "pending" }] }),
+      record("alpha", { title: `token ${token}` }),
+      record("alpha", { questions: [{ id: "q-1", text: `is ${token} ok?` }] }),
+      record("alpha", { links: [{ label: "x", url: `https://example.com/?t=${token}` }] }),
+    ]) {
+      const res = await post(mint().url, syncUpload([rec]));
+      expect(res.status).toBe(400);
+      expect(res.json.error).toMatch(/holds .+, and Command Center never keeps confidential data/);
+      expect(JSON.stringify(res.json)).not.toContain(token);
+    }
+    // Publish refuses the same text the same way.
+    expect(() => cc.ccPublish(device(OWNER), OWNER, { v: 1, id: "alpha", title: "x", tasks: [{ id: "t-1", text: `use ${token}`, status: "pending" }] }, "mcp")).toThrow(/tasks\[0\]\.text holds/);
+    expect(cc.ccList(OWNER).initiatives).toEqual([]);
+  });
+
+  it("shares the 20 new initiatives per upload with entries: current first, then entries go to unassigned", async () => {
+    const current = Array.from({ length: 15 }, (_, i) => record(`cur-${i}`));
+    const entries = Array.from({ length: 10 }, (_, i) => entry(i, { initiative: `log-${i}`, title: `Log ${i}` }));
+    const res = await post(mint().url, syncUpload(current, entries));
+    expect(res.status).toBe(200);
+    expect(res.json.syncCreated).toBe(15);
+    expect(res.json.created).toHaveLength(5);
+    expect((res.json.reassigned as { index: number; reason: string }[]).map((r) => r.index)).toEqual([5, 6, 7, 8, 9]);
+    expect(cc.ccList(OWNER).usage.initiatives).toBe(20);
+
+    // Over the cap in current itself: the rest are listed in syncRefused; skips do not count.
+    await storeRecord(OWNER, "already-here");
+    const many = [record("already-here"), ...Array.from({ length: 22 }, (_, i) => record(`more-${i}`))];
+    const res2 = await post(mint().url, syncUpload(many));
+    expect(res2.json).toMatchObject({ syncCreated: 20, syncSkipped: 1 });
+    const refused = res2.json.syncRefused as { index: number; id: string; reason: string }[];
+    expect(refused.map((r) => [r.index, r.id])).toEqual([
+      [21, "more-20"],
+      [22, "more-21"],
+    ]);
+    expect(refused.every((r) => r.reason.includes("one upload creates at most 20 initiatives"))).toBe(true);
+  });
+
+  it("respects the 100 initiative cap per person: the rest go to syncRefused", async () => {
+    for (let i = 0; i < cc.CC_MAX_INITIATIVES - 1; i++) await storeRecord(OWNER, `init-${i}`);
+    const res = await post(mint().url, syncUpload([record("last-one"), record("one-too-many")]));
+    expect(res.json).toMatchObject({ syncCreated: 1, syncSkipped: 0 });
+    expect(res.json.syncRefused).toEqual([{ index: 1, id: "one-too-many", reason: expect.stringMatching(/could not be created: You have 100 initiatives/) }]);
+    expect(() => cc.ccGet(OWNER, "one-too-many")).toThrow(/No initiative/);
+  });
+
+  it("an entry for an initiative created by current in the same upload lands under it", async () => {
+    const res = await post(mint().url, syncUpload([record("alpha")], [entry(1, { initiative: "alpha" })]));
+    expect(res.json).toMatchObject({ accepted: 1, created: [], reassigned: [], syncCreated: 1 });
+    expect(backfilled().map((e) => [e.initiative, e.kind, e.title, e.key])).toEqual(
+      expect.arrayContaining([
+        ["alpha", "worked", "Title of alpha", "KEY-7"],
+        ["alpha", "synced", "Title of alpha", "KEY-7"],
+      ]),
+    );
+  });
+
+  it("audits counts only, never titles or task text", async () => {
+    await storeRecord(OWNER, "already-here");
+    await post(mint().url, syncUpload([record("alpha"), record("already-here")], [entry(1, { initiative: "unassigned" })]));
+    const rows = await auditRows("cc_backfill");
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0].details)).toEqual({ accepted: 1, duplicate: 0, refused: 0, created: 0, reassigned: 0, syncCreated: 1, syncSkipped: 1, syncRefused: 0 });
+    for (const s of ["Title of alpha", "First task", "Which months?", "alpha", "example.com"]) expect(rows[0].details).not.toContain(s);
+  });
+
+  it("keeps the opt-in gate: off after minting is 403 and nothing is created", async () => {
+    const link = mint();
+    cc.ccSetSwitch(OWNER, false);
+    const res = await post(link.url, syncUpload([record("alpha")]));
+    expect(res.status).toBe(403);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    cc.ccSetSwitch(OWNER, true);
+    expect(() => cc.ccGet(OWNER, "alpha")).toThrow(/No initiative/);
+  });
+
+  it("exports synced entries: counted in entries and backfilled, not in worked", async () => {
+    await post(mint().url, syncUpload([record("alpha")], [entry(1, { initiative: "alpha", at: ISO_NOW })]));
+    expect(cc.ccExportOwn(OWNER).entries.map((e) => e.kind).sort()).toEqual(["synced", "worked"]);
+    cc.ccGrantExport(OWNER, "reports", "aggregate");
+    const rows = cc.ccExportForApp("reports", {}).people[0].rows!;
+    expect(rows).toEqual([{ initiative: "alpha", title: "Title of alpha", key: "KEY-7", day: ISO_NOW.slice(0, 10), entries: 2, worked: 1, backfilled: 2, sizes: { small: 1, medium: 0, large: 0 } }]);
   });
 });

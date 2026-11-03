@@ -32,9 +32,9 @@ async function readCapped(req: Request, max: number): Promise<string | null> {
 }
 
 /**
- * POST /api/command-center/backfill/:token: one upload of historic worked lines from the person's
- * local backfill tool, to a single-use link from bab_command_center action=backfill_link. The token
- * is the credential: 256 random bits, stored only as its hash, valid for 15 minutes and for one
+ * POST /api/command-center/backfill/:token: one upload of historic worked lines (`entries`) and of
+ * open initiatives to create if absent (`current`) from the person's local backfill tool, to a
+ * single-use link from bab_command_center action=backfill_link. The token is the credential: 256 random bits, stored only as its hash, valid for 15 minutes and for one
  * upload. The owner was fixed when the link was made; nothing in the request names a person. A
  * declared Content-Length over the cap is refused before the link is spent; after that the link is
  * spent before the body is read, so any later refusal needs a new link. The token is part of the
@@ -62,7 +62,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   try {
     body = JSON.parse(raw);
   } catch {
-    return Response.json({ error: 'Body must be JSON: { "v": 1, "entries": [...] }' }, { status: 400 });
+    return Response.json({ error: 'Body must be JSON: { "v": 1, "entries": [...], "current": [...] }' }, { status: 400 });
   }
   try {
     return Response.json(ccBackfill(link.ownerId, body, "mcp", publicOrigin(req.headers), now), { status: 200 });

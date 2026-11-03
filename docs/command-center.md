@@ -86,8 +86,8 @@ In short:
 optional `small`, `medium` or `large` beside it, never a time estimate. Neither is stored in the
 record. The server writes each `worked` line to the log with its own time, the initiative id, title
 and key, and the `source` machine and session. It also logs what it sees by itself: a task started
-or done, a question asked or cleared (also by the person's Dismiss), a health level change and a
-state change.
+or done, a question asked or cleared (also by the person's Dismiss), a health level change, a
+state change, and `synced` when a backfill upload created the initiative from its `current` state.
 
 Entry ids are stable, so a retry is a no-op. The `worked` entry of a publish is fixed by the `seq`
 it produced. On an unchanged record, a line that repeats the session's newest line for that
@@ -160,6 +160,24 @@ The import:
   so is spending one, with the verified client address, before the body is read
   (`cc_backfill_link_used`), so a spent link whose upload then fails still shows. The import
   itself is audited (`cc_backfill`) with counts only.
+
+Current state (`current`, optional, at most 100 records per upload; a body with only `current`
+is valid):
+
+- Each record is `{ id, title, area?, key?, state: "active", tasks?, questions?, links? }`,
+  checked exactly like a publish (same id rules, limits and secret checks; `id` `backfill` is
+  reserved; only state `active`). Any field outside that list, or any invalid record, refuses the
+  whole upload (400).
+- Create only: a record whose `id` you already have is skipped and counted in `syncSkipped`; the
+  live record is never changed. The insert is conditional inside the upload's transaction, so a
+  publish racing it is never overwritten.
+- A new record is an active project with server times (task `startedAt`/`finishedAt`, question
+  `askedAt`, `updatedAt`); client times are not taken. It gets one log entry of kind `synced`
+  (source `backfill`) and counts in `syncCreated`. New records share the 20 new initiatives per
+  upload with the entries' and the usual 100 initiative and size limits; one over a limit is
+  listed in `syncRefused` with the reason. Records are handled before entries, so an entry for a
+  synced initiative lands under it. The audit row adds `syncCreated`, `syncSkipped` and
+  `syncRefused` counts.
 
 ## Export
 
