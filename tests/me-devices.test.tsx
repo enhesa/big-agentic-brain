@@ -92,6 +92,9 @@ describe("/me/devices page", () => {
     upsertUser({ id: ALICE, email: ALICE, name: "Alice Example", roles: [] });
     asAliasViewer();
     const html = await render();
+    // Says what is missing, then the step.
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
+    expect(html).toContain("This browser stays linked after that.");
     expect(html).toContain("Are you");
     expect(html).toContain(ALICE);
     expect(html).toContain("that&#x27;s me");

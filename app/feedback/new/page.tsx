@@ -1,7 +1,8 @@
 import Link from "next/link";
 import Shell from "@/app/components/shell/Shell";
 import { getViewer } from "@/lib/notify-auth";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
+import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import { auditRequest } from "@/lib/request-audit";
 import { FEEDBACK_AREAS, FEEDBACK_KINDS, isUuid } from "@/lib/feedback";
 import styles from "../feedback.module.css";
@@ -25,6 +26,8 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: "/feedback/new", via: "ui" });
   const viewer = await getViewer();
+  // Signed in but not linked: say what is missing. Anyone else gets the short line.
+  const pending = viewer ? null : await pendingProxyLinkUser();
 
   return (
     <Shell>
@@ -38,7 +41,9 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
           names or personal data.
         </p>
 
-        {!viewer ? (
+        {pending ? (
+          <LinkBrowserNotice className={styles.error} then="you can post feedback here" />
+        ) : !viewer ? (
           <p className={styles.error}>
             BAB does not know who you are yet. Link your browser on the <Link href="/me/devices">Your devices</Link> page, then come back.
           </p>

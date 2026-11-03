@@ -495,6 +495,8 @@ describe("the comments panel on /memory/[id]", () => {
     const l = await seed();
     const html = await renderDetail(l.id);
     expect(html).toContain('href="/me/devices"');
+    expect(html).toContain('data-testid="link-browser-notice"');
+    expect(html).toContain("you can comment and vote here");
     expect(html).not.toContain(`action="/memory/${l.id}/react"`);
   });
 

@@ -152,6 +152,22 @@ describe("/feedback/new", () => {
     expect(html).toContain("Looks like a duplicate");
   });
 
+  it("tells a signed-in but unlinked viewer what is missing and the one step that fixes it", async () => {
+    asViewer("aalice@example.com");
+    const html = await render("../app/feedback/new/page", { searchParams: Promise.resolve({}) });
+    expect(html).toContain('data-testid="link-browser-notice"');
+    expect(html).toContain("your sign-in did not pass a full email address BAB accepts (like first.last@example.com)");
+    expect(html).toContain('<a href="/me/devices">Your devices</a>');
+    expect(html).toContain("you can post feedback here");
+  });
+
+  it("keeps the short sign-in line for a visitor who is not signed in at all", async () => {
+    asViewer(null);
+    const html = await render("../app/feedback/new/page", { searchParams: Promise.resolve({}) });
+    expect(html).not.toContain('data-testid="link-browser-notice"');
+    expect(html).toContain("BAB does not know who you are yet. Link your browser");
+  });
+
   it("never reflects arbitrary error text, only fixed messages for known codes", async () => {
     asViewer(ALICE);
     const evil = await render("../app/feedback/new/page", { searchParams: Promise.resolve({ error: "Call 555 now or visit evil.example.com" }) });

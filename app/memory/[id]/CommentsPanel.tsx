@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import type { OwnReactions } from "@/lib/learnings";
 import { MEMORY_COMMENT_MAX, type MemoryComment } from "@/lib/memory-comments";
 import { REACT_OK_CODES, type ReactCode } from "@/lib/memory-react-web";
@@ -116,9 +117,7 @@ export default function CommentsPanel({
       )}
 
       {state === "link" ? (
-        <p className={styles.reactHint}>
-          Link your browser on <Link href="/me/devices">/me/devices</Link> to comment and vote here.
-        </p>
+        <LinkBrowserNotice className={styles.reactHint} then="you can comment and vote here" />
       ) : canAct ? (
         <form method="post" action={`${base}/react`} className={styles.commentForm}>
           <label htmlFor="comment-body" className={styles.reactLabel}>
