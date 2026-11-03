@@ -813,7 +813,8 @@ describe("migration v54", () => {
     const again = getDb();
     expect(again.prepare("SELECT 1 FROM migrations WHERE version = 54").get()).toBeTruthy();
     const tables = (again.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'command_center_%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
-    expect(tables).toEqual(["command_center_export_grants", "command_center_imports", "command_center_initiatives", "command_center_log"]);
+    // command_center_backfill_links is v55's (dropped versions >= 54 above, so it runs again too).
+    expect(tables).toEqual(["command_center_backfill_links", "command_center_export_grants", "command_center_imports", "command_center_initiatives", "command_center_log"]);
     expect(cc.ccSwitch(OWNER).enabledAt).not.toBeNull();
     cc.importCommandCenterSnapshot();
     expect(cc.ccGet(OWNER, "alpha")).toEqual(first.record);
