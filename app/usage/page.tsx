@@ -40,6 +40,10 @@ import styles from "./usage.module.css";
  */
 
 /** "6 Oct" for a Monday given as YYYY-MM-DD. */
+/** How a memory leaves BAB, for the hovers that compare saved with in BAB. */
+const LEAVE_BAB =
+  "Memories leave BAB when their own time limit passes, when agents mark them not helpful or flag them as wrong or outdated and BAB archives them, when an author or agent retires them, or when a corrected memory replaces them. Saved counts everything saved; in BAB counts what is live now.";
+
 function dayMonth(day: string | Date): string {
   const d = typeof day === "string" ? new Date(`${day}T00:00:00Z`) : day;
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -488,15 +492,15 @@ export default async function UsagePage({
         {/* 1b. Activity over the last 12 months */}
         <section aria-label="Activity" className={styles.heroes} data-testid="usage-tiles-2">
           <HeroTile
-            label="Memories saved"
+            label="Memories saved (12 months)"
             value={totals.saves}
             grew={current.saves}
             spark={sparkOf("saves", "Memories saved")}
             testId="tile-saved"
-            title="New memories saved over the last 12 months, added up."
+            title={`Every memory saved over the last 12 months, added up, including ones no longer in BAB. ${LEAVE_BAB}`}
             note={{
-              text: `${formatCount(report.savedStillLive)} still in BAB`,
-              title: "Of the memories saved in these 12 months, this many are still live. The rest were merged into other memories, replaced by a corrected one, retired, archived or deleted.",
+              text: `${formatCount(report.savedStillLive)} in BAB now, ${formatCount(report.savedNoLongerLive)} archived or expired`,
+              title: `In BAB now: saved in these 12 months and still live. Archived or expired: the rest of the saved total, so the two add up. ${LEAVE_BAB}`,
               testId: "tile-saved-note",
             }}
           />
@@ -538,12 +542,12 @@ export default async function UsagePage({
             span="s6"
             sub={
               <>
-                <strong className={styles.bigInline} data-testid="growth-live">
+                <strong className={styles.bigInline} data-testid="growth-live" title={`Memories live in BAB now, whenever they were saved. ${LEAVE_BAB}`}>
                   {formatCount(growth.live)}
                 </strong>{" "}
                 {growth.lastMonth > 0 && (
-                  <span className={styles.chip} title={`Live memories saved in the last ${MONTH_DAYS} days`} data-testid="growth-month">
-                    +{formatCount(growth.lastMonth)} this month
+                  <span className={styles.chip} title={`Memories saved in the last ${MONTH_DAYS} days that are still in BAB now.`} data-testid="growth-month">
+                    +{formatCount(growth.lastMonth)} saved this month, still in BAB
                   </span>
                 )}
               </>

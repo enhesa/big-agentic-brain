@@ -1286,7 +1286,7 @@ every time.
   weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
   last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
   days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line, "What's in BAB", People enrolled and the Users
-  directory are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
+  directory are all-time, and the "+N saved this month, still in BAB" chip on Memories in BAB stays 30 days
   (`MONTH_DAYS`). Top to bottom:
   1. Two rows of four tiles, outcomes first. Each tile has one label, the number, one short note
      that names its window ("last 12 months", "this week", "since <date>" or "All time"), and a hover that says
@@ -1302,7 +1302,13 @@ every time.
      lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the
      sign-in proxy, a token or declared headers) and is not removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
      longer shown, but searches still record their result count for the maintainers' list below.
-     Activity over the last 12 months: memories saved (audit `create` on a learning), searches
+     Activity over the last 12 months: memories saved (audit `create` on a learning; labelled
+     "Memories saved (12 months)", with the note "N in BAB now, M archived or expired": N is
+     `savedStillLive`, the memories saved in the window that are still live, and M is
+     `savedNoLongerLive`, the saved total minus N, never below 0, so the two add up to the total; the
+     hover says how memories leave BAB: their own time limit passes, agents mark them not helpful or
+     flag them and BAB archives them, an author or agent retires them, or a corrected one replaces
+     them), searches
      (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and
      `confirm` reactions), each the sum of its weekly counts, and active this week, split into
      returning and new. Under the totals, how much they grew this week so far: "+12 this week", or
@@ -1315,8 +1321,8 @@ every time.
      helpful, kudos or confirm from anyone but the author; reads carry no reader, so the author's own
      reads count, and reads start on 7 Oct) is a small tile in Upkeep.
   2. Memories in BAB: live memories (status active) by the week they were saved, added up
-     from the week of the oldest one (at most 156 weeks), with "+N this month" (saved in the last 30
-     days). There is no archive date, so the line is "still live, by week saved".
+     from the week of the oldest one (at most 156 weeks), with "+N saved this month, still in BAB"
+     (saved in the last 30 days and still live). There is no archive date, so the line is "still live, by week saved".
   3. Activity per week: saves, searches and helpful reactions as grouped bars, with a numbers table.
      At 52 weeks the bars thin out (no gap between them) and only about eight week labels are drawn
      (four on a phone); every week keeps its bars and its tooltip. Below it, weekly active people as

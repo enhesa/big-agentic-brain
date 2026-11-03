@@ -330,8 +330,13 @@ export interface UsageReport {
   /** The hero tiles: saves, searches and reactions summed over the window; people are distinct, not a sum of weekly counts. */
   totals: ActivityCounts;
   growth: Growth;
-  /** Memories saved in the window (by created_at) that are still live: the saved tile's "still in BAB". */
+  /** Memories saved in the window (by created_at) that are still live: the saved tile's "in BAB now". */
   savedStillLive: number;
+  /**
+   * Memories saved in the window that are no longer live: saves minus savedStillLive, both over the
+   * same window, so the saved tile's two numbers always add up to its total. Never below 0.
+   */
+  savedNoLongerLive: number;
   contents: Contents;
   topHelpful: HelpfulItem[];
   topProjects: Array<{ project: string; n: number }>;
@@ -1036,20 +1041,23 @@ export function auditDataSince(): string | null {
 export function usageReport(now: Date = new Date()): UsageReport {
   const weeks = lastWeeks(now);
   const activity = activityByWeek(weeks);
+  const totals = activityTotals(activity);
+  const savedStillLive = num(
+    (
+      getDb()
+        .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
+        .get(sqlDate(weeks[0])) as { n: number }
+    ).n,
+  );
   return {
     dataSince: auditDataSince(),
     generatedAt: now.toISOString(),
     weeks,
     activity,
-    totals: activityTotals(activity),
+    totals,
     growth: growth(now),
-    savedStillLive: num(
-      (
-        getDb()
-          .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
-          .get(sqlDate(weeks[0])) as { n: number }
-      ).n,
-    ),
+    savedStillLive,
+    savedNoLongerLive: Math.max(0, totals.saves - savedStillLive),
     contents: contents(),
     topHelpful: topHelpful(now),
     topProjects: topProjects(5),

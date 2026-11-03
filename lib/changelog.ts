@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The usage tile is now Searches with a helpful reaction, and its hover explains how it is counted.",
       "Search calls refused before the caller identified no longer lower the helpful reaction share.",
       "The server log notes a signed-in viewer without a full email once an hour, not on every page.",
+      "The usage page shows memories saved next to how many are in BAB now and how many left.",
     ],
   },
   {
