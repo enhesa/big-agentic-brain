@@ -383,7 +383,7 @@ describe("activity per week and the hero tiles", () => {
     const r = usageReport(NOW);
     expect(r.activity).toHaveLength(52);
     expect(r.activity.every((w) => w.saves + w.searches + w.reactions + w.people + w.newPeople === 0)).toBe(true);
-    expect(r.totals).toEqual({ saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0 });
+    expect(r.totals).toEqual({ saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0 });
     expect(r.growth).toEqual({ points: [], live: 0, lastMonth: 0 });
     expect(r.contents.byKind.map((k) => k.n)).toEqual([0, 0, 0, 0]);
     expect(r.contents.standing).toEqual({ strong: 0, fair: 0, weak: 0 });
@@ -412,7 +412,7 @@ describe("activity per week and the hero tiles", () => {
     expect(r.activity.at(-1)).toMatchObject({ week: "2026-10-05", saves: 2, searches: 5, reactions: 3, people: 2 });
     expect(r.activity.slice(0, -1).every((w) => w.saves + w.searches + w.reactions + w.people === 0)).toBe(true);
     // One week in the window: the totals are that week.
-    expect(r.totals).toEqual({ saves: 2, searches: 5, reactions: 3, helpedSearches: 0, people: 2 }); // B reacted 49 minutes after searching
+    expect(r.totals).toEqual({ saves: 2, searches: 5, reactions: 3, helpedSearches: 0, identifiedSearches: 5, people: 2 }); // B reacted 49 minutes after searching
   });
 
   it("credits a helpful reaction to the same person's last search within 30 minutes, once per search", async () => {
@@ -444,6 +444,18 @@ describe("activity per week and the hero tiles", () => {
     expect(r.totals.reactions).toBe(2);
   });
 
+  it("leaves refused anonymous search calls out of the base of the helpful reaction share, not out of Searches", async () => {
+    // An anonymous search row is a call BAB refused until the caller identified: it found nothing to credit.
+    await row(A, "POST", "2026-10-06 09:00:00", { path: "/mcp#tools/call:bab_search" });
+    await row(A, "helpful", "2026-10-06 09:05:00", { entity: "learning" });
+    for (const m of ["10", "11", "12"]) await row("anonymous", "POST", `2026-10-06 09:${m}:00`, { path: "/mcp#tools/call:bab_search" });
+    await row("system", "GET", "2026-10-06 09:20:00", { path: "/api/learnings" });
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.totals).toMatchObject({ searches: 5, identifiedSearches: 1, helpedSearches: 1 });
+    expect(r.activity.at(-1)).toMatchObject({ searches: 5, identifiedSearches: 1, helpedSearches: 1 });
+  });
+
   it("counts a search exactly 30 minutes before the reaction", async () => {
     await row(A, "POST", "2026-10-06 09:00:00", { path: "/mcp#tools/call:bab_search" });
     await row(A, "helpful", "2026-10-06 09:30:00", { entity: "learning" });
@@ -460,6 +472,41 @@ describe("activity per week and the hero tiles", () => {
     const r = usageReport(NOW);
     expect(r.savedStillLive).toBe(1);
     expect(r.growth.live).toBe(2);
+  });
+
+  it("in BAB now plus archived or expired always adds up to the saved total of the same window", async () => {
+    await people(A);
+    for (const [at, status] of [
+      ["2026-10-05 09:00:00", undefined],
+      ["2026-10-05 10:00:00", "archived"],
+      ["2026-09-07 10:00:00", "deleted"],
+      ["2026-09-07 11:00:00", undefined],
+    ] as const) {
+      await memory(A, { createdAt: at, status });
+      // create() writes its own audit row at the real clock; date the save inside the window instead.
+      await row(A, "create", at, { entity: "learning" });
+    }
+    // Saved before the window: neither in the total nor in "in BAB now".
+    await memory(A, { createdAt: "2024-01-01 09:00:00" });
+    await row(A, "create", "2024-01-01 09:00:00", { entity: "learning" });
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.totals.saves).toBe(4);
+    expect(r.savedStillLive).toBe(2);
+    expect(r.savedNoLongerLive).toBe(2);
+    expect(r.savedStillLive + r.savedNoLongerLive).toBe(r.totals.saves);
+  });
+
+  it("never shows a negative archived or expired count when live memories have no save row", async () => {
+    await people(A);
+    await memory(A, { createdAt: "2026-10-05 09:00:00" });
+    // Imported: a live row with no audit "create" in the window.
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("DELETE FROM audit_log WHERE action = 'create'").run();
+    const { usageReport } = await import("../lib/usage");
+    const r = usageReport(NOW);
+    expect(r.savedStillLive).toBe(1);
+    expect(r.savedNoLongerLive).toBe(0);
   });
 
   it("spreads a typical year and totals it: sums for the counts, distinct people for people", async () => {
@@ -505,7 +552,7 @@ describe("activity per week and the hero tiles", () => {
     await row("system", "device-expire", "2026-10-06 10:00:00", { entity: "device" });
     const { usageReport, activityTotals } = await import("../lib/usage");
     const r = usageReport(NOW);
-    expect(r.totals).toEqual({ saves: 1, searches: 1, reactions: 0, helpedSearches: 0, people: 2 });
+    expect(r.totals).toEqual({ saves: 1, searches: 1, reactions: 0, helpedSearches: 0, identifiedSearches: 1, people: 2 });
     expect(activityTotals(r.activity)).toEqual(r.totals);
   });
 });
@@ -978,7 +1025,7 @@ describe("/usage page", () => {
     expect(html).toMatch(/data-testid="tile-saved"[^>]*>0</);
     expect(html).toContain("none yet this week");
     expect(html).not.toContain("vs last week");
-    expect(html).not.toContain("this month</span>"); // no "+0 this month
+    expect(html).not.toContain("still in BAB</span>"); // no "+0 saved this month, still in BAB"
     expect(html).toMatch(/Updated \d{1,2} [A-Z][a-z]{2,3}, \d{2}:\d{2} UTC/);
   });
 
@@ -1085,10 +1132,17 @@ describe("/usage page", () => {
     expect(html).toMatch(/data-testid="tile-searches"[^>]*>1</);
     expect(html).toMatch(/data-testid="tile-helpful"[^>]*>0</);
     expect(html).toMatch(/data-testid="people-total"[^>]*>3 people in 12 months</);
-    // Only audit rows are seeded here, no memories, so none are still in BAB.
-    expect(html).toMatch(/data-testid="tile-saved-note"[^>]*>0 still in BAB</);
+    // Only audit rows are seeded here, no memories, so none are in BAB now: all 4 saved count as gone.
+    expect(html).toMatch(/data-testid="tile-saved-note"[^>]*>0 in BAB now, 4 archived or expired</);
+    expect(html).toContain("Memories saved (12 months)");
+    expect(html).toContain("when their own time limit passes");
     expect(html).toMatch(/data-testid="tile-search-helped"[^>]*>0%</);
     expect(html).toMatch(/data-testid="tile-helped-note"[^>]*>0 of 1, last 12 months</);
+    // The label says what is counted; the hover says how, and what it misses.
+    expect(html).toContain("Searches with a helpful reaction");
+    expect(html).not.toContain("Searches that helped");
+    expect(html).toContain("Each reaction credits only the last search before it");
+    expect(html).toContain("A search with no reaction counts as not helped");
     const tiles = html.slice(html.indexOf('data-testid="usage-tiles"'), html.indexOf("Memories in BAB"));
     expect(tiles).toContain("+1 this week"); // saves and searches both grew by 1
     expect(tiles).toContain("none yet this week"); // no helpful reactions

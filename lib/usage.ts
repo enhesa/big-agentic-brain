@@ -189,6 +189,12 @@ export interface ActivityCounts {
    * does not count twice. A lower bound: agents do not always react.
    */
   helpedSearches: number;
+  /**
+   * The searches a reaction could credit: those by an identified person (not anonymous or system).
+   * The base of "Searches with a helpful reaction". An anonymous bab_search row is a call BAB refused
+   * (app/mcp/route.ts asks the caller to identify first), so it found nothing a reaction could credit.
+   */
+  identifiedSearches: number;
   /** Distinct people (audit actors, not anonymous or system) who used any BAB tool or page. */
   people: number;
 }
@@ -324,8 +330,13 @@ export interface UsageReport {
   /** The hero tiles: saves, searches and reactions summed over the window; people are distinct, not a sum of weekly counts. */
   totals: ActivityCounts;
   growth: Growth;
-  /** Memories saved in the window (by created_at) that are still live: the saved tile's "still in BAB". */
+  /** Memories saved in the window (by created_at) that are still live: the saved tile's "in BAB now". */
   savedStillLive: number;
+  /**
+   * Memories saved in the window that are no longer live: saves minus savedStillLive, both over the
+   * same window, so the saved tile's two numbers always add up to its total. Never below 0.
+   */
+  savedNoLongerLive: number;
   contents: Contents;
   topHelpful: HelpfulItem[];
   topProjects: Array<{ project: string; n: number }>;
@@ -366,7 +377,7 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
   const slot = (week: string) => {
     let c = out.get(week);
     if (!c) {
-      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 };
+      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 };
       out.set(week, c);
     }
     return c;
@@ -383,13 +394,14 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
   for (const r of writes) Object.assign(slot(r.week), { saves: num(r.saves), reactions: num(r.reactions) });
   const searches = db
     .prepare(
-      `SELECT ${weekSql("at")} AS week, COUNT(*) AS n
+      `SELECT ${weekSql("at")} AS week, COUNT(*) AS n,
+              SUM(CASE WHEN actor_id NOT IN ${NOT_PEOPLE} THEN 1 ELSE 0 END) AS identified
        FROM audit_log
        WHERE path IN (?, ?) AND at >= ? AND at < ? AND (path = ? OR action = 'GET')
        GROUP BY week`,
     )
-    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number }>;
-  for (const r of searches) slot(r.week).searches = num(r.n);
+    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number; identified: number }>;
+  for (const r of searches) Object.assign(slot(r.week), { searches: num(r.n), identifiedSearches: num(r.identified) });
   // For each helpful or kudos reaction, the same person's last search in the window before it
   // (idx_audit_actor_at), counted once per search, in the week of the search. Not a click on the
   // memory page (via 'ui'): it follows no search in an agent session, so it says nothing about
@@ -437,18 +449,19 @@ export function activityByWeek(weeks: string[]): ActivityWeek[] {
   return weeks.map((week) => ({
     week,
     label: isoWeekLabel(week),
-    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, people: 0, newPeople: 0 }),
+    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 }),
   }));
 }
 
 /** The window's totals for the hero tiles: the weekly counts added up, and the distinct people (each counted once). */
 export function activityTotals(activity: ActivityWeek[]): ActivityCounts {
-  const sum = (key: "saves" | "searches" | "reactions" | "helpedSearches" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
+  const sum = (key: "saves" | "searches" | "reactions" | "helpedSearches" | "identifiedSearches" | "newPeople") => activity.reduce((n, w) => n + w[key], 0);
   return {
     saves: sum("saves"),
     searches: sum("searches"),
     reactions: sum("reactions"),
     helpedSearches: sum("helpedSearches"),
+    identifiedSearches: sum("identifiedSearches"),
     people: sum("newPeople"),
   };
 }
@@ -1028,20 +1041,23 @@ export function auditDataSince(): string | null {
 export function usageReport(now: Date = new Date()): UsageReport {
   const weeks = lastWeeks(now);
   const activity = activityByWeek(weeks);
+  const totals = activityTotals(activity);
+  const savedStillLive = num(
+    (
+      getDb()
+        .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
+        .get(sqlDate(weeks[0])) as { n: number }
+    ).n,
+  );
   return {
     dataSince: auditDataSince(),
     generatedAt: now.toISOString(),
     weeks,
     activity,
-    totals: activityTotals(activity),
+    totals,
     growth: growth(now),
-    savedStillLive: num(
-      (
-        getDb()
-          .prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status IN ${LIVE} AND created_at >= ?`)
-          .get(sqlDate(weeks[0])) as { n: number }
-      ).n,
-    ),
+    savedStillLive,
+    savedNoLongerLive: Math.max(0, totals.saves - savedStillLive),
     contents: contents(),
     topHelpful: topHelpful(now),
     topProjects: topProjects(5),

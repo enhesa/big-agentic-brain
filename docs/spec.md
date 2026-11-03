@@ -1018,8 +1018,12 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
 - **Suggest**: "Are you Alice Example (alice.example@example.com)?" with "Yes, that's me"
   (`app/me/devices/SuggestLink.tsx`, on `/me/devices` only; posts `POST /notify/identity/claim`).
 - **Typed claim**: `/me/devices` takes the viewer's long-form address (`claimTypedIdentity`, see
-  "Identity"). `/reminders` shows one line pointing there: "Confirm who you are on
-  /me/devices to see your reminders here." `GET /notify/identity` reports where the viewer stands:
+  "Identity"). `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
+  notice for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`): what is
+  missing (the sign-in did not pass a full email address BAB accepts, with the `BAB_IDENTITY_HINT` example), the one
+  step (confirm it once on Your devices) and what it unlocks; the browser stays linked after that.
+  The server notes such a viewer in its log at most once per viewer per hour per server process, keyed in memory on a hash of
+  the sign-in id and never logging the address or the hash (`lib/unlinked-viewer-log.ts`). `GET /notify/identity` reports where the viewer stands:
   `linked`, `suggest` (with the email and name), or `claim` (`{ state: "claim", url: "/me/devices" }`).
   It never returns a code.
 - **Alias rule** (`suggestLinkFor`, `lib/proxy-links.ts`): the alias must be `@example.com` and
@@ -1282,7 +1286,7 @@ every time.
   weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
   last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
   days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line, "What's in BAB", People enrolled and the Users
-  directory are all-time, and the "+N this month" chip on Memories in BAB stays 30 days
+  directory are all-time, and the "+N saved this month, still in BAB" chip on Memories in BAB stays 30 days
   (`MONTH_DAYS`). Top to bottom:
   1. Two rows of four tiles, outcomes first. Each tile has one label, the number, one short note
      that names its window ("last 12 months", "this week", "since <date>" or "All time"), and a hover that says
@@ -1292,13 +1296,19 @@ every time.
      only reuses measured on both sides count; one reuse per person and memory with a `helpful` or
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
-     <date>", not 0); searches that helped (helped searches over searches, `n of d` in the note; a click on the memory page, via `ui`, never credits a search); and
+     <date>", not 0); searches with a helpful reaction (helped searches over `identifiedSearches`, the searches by identified people, `n of d` in the note; a search is helped when the same person gives a `helpful` or `kudos` reaction within `HELPED_WINDOW_MINUTES` after it, and each reaction credits only the last search before it; anonymous search rows are left out of the base: they are calls `/mcp` refused because the caller had not identified yet, so nothing a reaction could credit was found; a search with no reaction counts as not helped and the reaction need not be for a memory from that search, so the hover calls the share a sign, not proof; a click on the memory page, via `ui`, never credits a search); and
      People enrolled (every row in `users`, the people the Users directory lists, all time, with
      "+N new this week" and a running-total sparkline by week of `created_at`; `enrolledByWeek` in
      lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the
      sign-in proxy, a token or declared headers) and is not removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
      longer shown, but searches still record their result count for the maintainers' list below.
-     Activity over the last 12 months: memories saved (audit `create` on a learning), searches
+     Activity over the last 12 months: memories saved (audit `create` on a learning; labelled
+     "Memories saved (12 months)", with the note "N in BAB now, M archived or expired": N is
+     `savedStillLive`, the memories saved in the window that are still live, and M is
+     `savedNoLongerLive`, the saved total minus N, never below 0, so the two add up to the total; the
+     hover says how memories leave BAB: their own time limit passes, agents mark them not helpful or
+     flag them and BAB archives them, an author or agent retires them, or a corrected one replaces
+     them), searches
      (`bab_search` calls and GETs on `/api/learnings`), "found it helpful" (`helpful`, `kudos` and
      `confirm` reactions), each the sum of its weekly counts, and active this week, split into
      returning and new. Under the totals, how much they grew this week so far: "+12 this week", or
@@ -1311,8 +1321,8 @@ every time.
      helpful, kudos or confirm from anyone but the author; reads carry no reader, so the author's own
      reads count, and reads start on 7 Oct) is a small tile in Upkeep.
   2. Memories in BAB: live memories (status active) by the week they were saved, added up
-     from the week of the oldest one (at most 156 weeks), with "+N this month" (saved in the last 30
-     days). There is no archive date, so the line is "still live, by week saved".
+     from the week of the oldest one (at most 156 weeks), with "+N saved this month, still in BAB"
+     (saved in the last 30 days and still live). There is no archive date, so the line is "still live, by week saved".
   3. Activity per week: saves, searches and helpful reactions as grouped bars, with a numbers table.
      At 52 weeks the bars thin out (no gap between them) and only about eight week labels are drawn
      (four on a phone); every week keeps its bars and its tooltip. Below it, weekly active people as

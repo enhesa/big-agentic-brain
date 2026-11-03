@@ -1,4 +1,5 @@
 import Shell from "@/app/components/shell/Shell";
+import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import { getSessionUser, pendingProxyLinkUser } from "@/lib/session";
 import ReminderBody from "./ReminderBody";
 import LocalTime from "./LocalTime";
@@ -46,9 +47,7 @@ export default async function RemindersPage() {
       ) : (
         <div className={`card ${styles.privacy}`}>
           {proxy ? (
-            <p>
-              Confirm who you are on <a href="/me/devices">/me/devices</a> to see your reminders here.
-            </p>
+            <LinkBrowserNotice then="you can see your reminders here" />
           ) : null}
           <p>
             Reminders are private to their owner. Ask your agent to list yours with bab_remind.

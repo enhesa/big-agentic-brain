@@ -15,6 +15,7 @@ import { describeIp } from "@/lib/client-ip";
 import { formatDate } from "@/lib/me-web";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { identityHint } from "@/lib/identity";
+import { linkNeededReason } from "@/lib/link-notice";
 import { auditRequest } from "@/lib/request-audit";
 import styles from "./devices.module.css";
 
@@ -225,7 +226,9 @@ function WhoAreYou({ proxy, error, stale }: { proxy: ProxyUser; error?: string; 
   return (
     <>
       <div className={`card ${styles.section}`}>
-        <p className={styles.muted}>BAB does not know who you are yet.</p>
+        <p className={styles.muted}>
+          {stale ? "BAB does not know who you are yet." : `${linkNeededReason()} Confirm who you are once below. This browser stays linked after that.`}
+        </p>
         {suggestion ? <SuggestLink email={suggestion.email} name={suggestion.name} /> : null}
         <p className={styles.muted}>
           {suggestion ? "Not you? " : ""}Type your long address, {identityHint()}. It has to fit the name your sign-in shows.
