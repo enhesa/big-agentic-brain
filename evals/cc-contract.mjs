@@ -113,8 +113,24 @@ async function main() {
         continue;
       }
       const errs = [];
-      const args = await fill(step.call);
-      const { text, isError } = await agents[step.as ?? "agent"].call("bab_command_center", args);
+      let text;
+      let isError;
+      if (step.http) {
+        // A plain HTTP request, as the person's local tool sends it to a backfill link: no identity,
+        // the token in the url is the credential. A non-2xx answer is an error with its JSON body as text.
+        const h = await fill(step.http);
+        const res = await fetch(h.url, {
+          method: h.method ?? "POST",
+          headers: { "content-type": "application/json" },
+          body: h.body === undefined ? undefined : JSON.stringify(h.body),
+          signal: AbortSignal.timeout(30_000),
+        });
+        text = await res.text();
+        isError = !res.ok;
+        if (step.expect?.status !== undefined && res.status !== step.expect.status) errs.push(`want HTTP ${step.expect.status}, got ${res.status}`);
+      } else {
+        ({ text, isError } = await agents[step.as ?? "agent"].call("bab_command_center", await fill(step.call)));
+      }
       if (text.includes(secret)) errs.push("the answer echoes the secret");
       const e = step.expect ?? {};
       if (e.error) {

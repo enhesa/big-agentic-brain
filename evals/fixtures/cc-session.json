@@ -1,5 +1,5 @@
 {
-  "_about": "A typical Command Center session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). Checks: [path, op, value], ops eq, len, set, unset, match.",
+  "_about": "A typical Command Center session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). A step with \"http\" { url, body, method } sends a plain HTTP request instead (as the backfill tool posts to a backfill link; expect.status is the HTTP status), with the same expect handling. Checks: [path, op, value], ops eq, len, set, unset, match.",
   "steps": [
     {
       "name": "publish before the person switched it on is a 403 that stores nothing",
@@ -319,6 +319,140 @@
       "name": "list after remove shows one",
       "call": { "action": "list" },
       "expect": { "answer": { "initiatives": [{ "id": "billing-export", "seq": 5 }] }, "answerChecks": [["initiatives", "len", 1]] }
+    },
+    {
+      "name": "backfill_link mints a single-use upload link for the sync",
+      "call": { "action": "backfill_link" },
+      "expect": {
+        "answerChecks": [["url", "match", "^{{origin}}/api/command-center/backfill/[0-9a-f]{64}$"], ["maxCurrent", "eq", 100], ["expiresAt", "set"]],
+        "save": { "link1": "url" }
+      }
+    },
+    {
+      "name": "an upload of only current creates the open initiative, active with server times",
+      "http": {
+        "url": "{{saved:link1}}",
+        "body": {
+          "v": 1,
+          "current": [
+            {
+              "id": "payments-retry",
+              "title": "Payments retry",
+              "area": "Finance tools",
+              "key": "KEY-2",
+              "state": "active",
+              "tasks": [
+                { "id": "find-failures", "text": "Find the failed payments", "status": "done" },
+                { "id": "retry-job", "text": "Write the retry job", "status": "in_progress" },
+                { "id": "alerting", "text": "Add alerting", "status": "pending" }
+              ],
+              "questions": [{ "id": "retry-window", "text": "How long should retries go on?", "options": ["24 hours", "7 days"] }],
+              "links": []
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "answer": { "accepted": 0, "duplicate": 0, "syncCreated": 1, "syncSkipped": 0 },
+        "answerChecks": [["syncRefused", "len", 0], ["refused", "len", 0], ["created", "len", 0]],
+        "state": {
+          "payments-retry": [
+            ["seq", "eq", 1],
+            ["title", "eq", "Payments retry"],
+            ["state", "eq", "active"],
+            ["kind", "eq", "project"],
+            ["publishedBy", "eq", "backfill"],
+            ["tasks", "len", 3],
+            ["tasks.0.finishedAt", "set"],
+            ["tasks.1.startedAt", "set"],
+            ["tasks.2.startedAt", "unset"],
+            ["questions.0.askedAt", "set"],
+            ["questions.0.clearedAt", "unset"]
+          ]
+        }
+      }
+    },
+    {
+      "name": "the spent link is a 404 that names the fix",
+      "http": { "url": "{{saved:link1}}", "body": { "v": 1, "current": [{ "id": "other-work", "title": "Other work", "state": "active", "tasks": [] }] } },
+      "expect": { "status": 404, "error": "Not found \\(the backfill link is wrong, expired or already used: make a new one with bab_command_center action=backfill_link\\)" }
+    },
+    {
+      "name": "list shows the synced initiative next to the live one",
+      "call": { "action": "list" },
+      "expect": {
+        "answer": { "initiatives": [{ "id": "billing-export", "seq": 5 }, { "id": "payments-retry", "seq": 1, "openQuestions": 1 }] },
+        "answerChecks": [["initiatives", "len", 2]],
+        "state": { "billing-export": [["seq", "eq", 5], ["title", "eq", "Billing export"]] }
+      }
+    },
+    {
+      "name": "a live session takes the synced initiative over with a publish",
+      "call": {
+        "action": "publish",
+        "id": "payments-retry",
+        "record": {
+          "v": 1,
+          "title": "Payments retry",
+          "area": "Finance tools",
+          "key": "KEY-2",
+          "tasks": [
+            { "id": "find-failures", "text": "Find the failed payments", "status": "done" },
+            { "id": "retry-job", "text": "Write the retry job", "status": "done" },
+            { "id": "alerting", "text": "Add alerting", "status": "in_progress" }
+          ],
+          "source": { "machine": "laptop", "session": "session-a" },
+          "worked": "Wrote the retry job"
+        }
+      },
+      "expect": { "answer": { "seq": 2 }, "state": { "payments-retry": [["seq", "eq", 2], ["tasks.1.status", "eq", "done"], ["questions.0.clearedAt", "set"]] } }
+    },
+    {
+      "name": "a second backfill_link for a sync from another machine",
+      "as": "second",
+      "call": { "action": "backfill_link" },
+      "expect": { "answerChecks": [["url", "match", "^{{origin}}/api/command-center/backfill/[0-9a-f]{64}$"]], "save": { "link2": "url" } }
+    },
+    {
+      "name": "the same id in a second upload is skipped and the live record is unchanged",
+      "http": {
+        "url": "{{saved:link2}}",
+        "body": {
+          "v": 1,
+          "current": [
+            {
+              "id": "payments-retry",
+              "title": "Payments retry (older draft)",
+              "state": "active",
+              "tasks": [{ "id": "find-failures", "text": "Find the failed payments", "status": "in_progress" }],
+              "questions": [{ "id": "retry-window", "text": "How long should retries go on?", "options": ["24 hours", "7 days"] }]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "answer": { "syncCreated": 0, "syncSkipped": 1 },
+        "answerChecks": [["syncRefused", "len", 0]],
+        "state": {
+          "payments-retry": [
+            ["seq", "eq", 2],
+            ["title", "eq", "Payments retry"],
+            ["tasks", "len", 3],
+            ["tasks.1.status", "eq", "done"],
+            ["tasks.2.status", "eq", "in_progress"],
+            ["questions.0.clearedAt", "set"],
+            ["source.session", "eq", "session-a"]
+          ],
+          "billing-export": [["seq", "eq", 5]]
+        }
+      }
+    },
+    {
+      "name": "remove the synced initiative again",
+      "call": { "action": "remove", "id": "payments-retry" },
+      "expect": { "answer": { "removed": true } }
     },
     { "name": "the person switches it off", "switch": "off" },
     {
