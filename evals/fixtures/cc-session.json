@@ -346,8 +346,7 @@
                 { "id": "retry-job", "text": "Write the retry job", "status": "in_progress" },
                 { "id": "alerting", "text": "Add alerting", "status": "pending" }
               ],
-              "questions": [{ "id": "retry-window", "text": "How long should retries go on?", "options": ["24 hours", "7 days"] }],
-              "links": []
+              "questions": [{ "id": "retry-window", "text": "How long should retries go on?", "options": ["24 hours", "7 days"] }]
             }
           ]
         }
