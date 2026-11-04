@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.22.0](https://github.com/enhesa/big-agentic-brain/compare/v2.21.2...v2.22.0) (2026-11-04)
+
+
+### Features
+
+* Command Center as a kanban board with a detail panel ([#129](https://github.com/enhesa/big-agentic-brain/issues/129)) ([8efbb2f](https://github.com/enhesa/big-agentic-brain/commit/8efbb2fc5f5da0c3815278df637abc1468e88218))
+
 ## [2.21.2](https://github.com/enhesa/big-agentic-brain/compare/v2.21.1...v2.21.2) (2026-11-04)
 
 
