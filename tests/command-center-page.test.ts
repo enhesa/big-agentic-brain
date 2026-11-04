@@ -184,16 +184,94 @@ describe("/command-center page", () => {
     expect(html).toContain("high priority");
   });
 
-  it("shows progress as percent and done/total, the next task, and the task list with status labels", async () => {
+  it("shows progress as a bar with percent and done/total, the main task, and the subtasks with status labels", async () => {
     await seedAlice();
     asViewer(ALICE, "Alice A");
     const html = await render();
     expect(html).toContain("50%");
     expect(html).toContain("1/2 tasks");
+    expect(html).toMatch(/role="progressbar"[^>]*aria-valuenow="50"/);
+    expect(html).toContain('width="50%"');
     expect(html).toMatch(/Now<\/span><span[^>]*>Build</);
-    expect(html).toContain("Done: </span><span>Design");
-    expect(html).toContain("In progress: </span><span>Build");
+    // The main task is not repeated in the subtask list.
+    expect(html).toMatch(/aria-label="Subtasks"><li[^>]*>.*?Done: <\/span><span>Design</);
+    expect(html).not.toContain("In progress: </span><span>Build");
     expect(html).not.toContain('style="width:50%"');
+  });
+
+  it("collapses a card to title, badge, bar, main task and subtasks; the rest sits in a closed details", async () => {
+    await seedAlice({ key: "KEY-1", deadline: "2026-03-05", worked: "Wrote the parser" });
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const start = html.indexOf('data-initiative="billing-export"');
+    const card = html.slice(html.lastIndexOf("<article", start), html.indexOf("</article>", start));
+    const more = card.indexOf("<details");
+    expect(more).toBeGreaterThan(0);
+    // Starts closed: a click (or the Details toggle) opens it.
+    expect(card.slice(more, card.indexOf(">", more))).not.toMatch(/open/);
+    expect(card).toContain("data-more");
+    const collapsed = card.slice(0, more);
+    const hidden = card.slice(more);
+    for (const shown of ["Billing &lt;b&gt;export&lt;/b&gt;", 'data-badge="needs_you"', "50%", "Build", "Design"]) expect(collapsed).toContain(shown);
+    for (const gone of ["KEY-1", "due in 3 days", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question"]) {
+      expect(collapsed).not.toContain(gone);
+      expect(hidden).toContain(gone);
+    }
+    expect(hidden).toContain("last pushed by laptop-1 / s-1");
+    // The open question is in the details and still in Needs you on top.
+    expect(hidden).toContain('aria-label="Open questions"');
+    expect(html.indexOf("Which months?")).toBeLessThan(start);
+  });
+
+  it("shows up to 5 subtasks, open work first, then +N more, with every task in the details", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const tasks = Array.from({ length: 9 }, (_, i) => ({ id: `t${i}`, text: `Task ${i}`, status: i < 3 ? "done" : i === 3 ? "in_progress" : "pending" }));
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "big", title: "Big one", tasks }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const card = html.slice(html.indexOf('data-initiative="big"'), html.indexOf("</article>", html.indexOf('data-initiative="big"')));
+    const collapsed = card.slice(0, card.indexOf("<details"));
+    expect(collapsed).toMatch(/Now<\/span><span[^>]*>Task 3</);
+    const sub = collapsed.slice(collapsed.indexOf('aria-label="Subtasks"'));
+    // Five open tasks fill the list; the three done ones are behind +3 more.
+    for (const t of ["Task 4", "Task 5", "Task 6", "Task 7", "Task 8"]) expect(sub).toContain(`${t}<`);
+    for (const t of ["Task 0", "Task 1", "Task 2"]) expect(sub).not.toContain(`${t}<`);
+    expect(sub).toContain("+3 more");
+    expect(card.slice(card.indexOf("<details"))).toContain('aria-label="All tasks"');
+  });
+
+  it("derives the badge: active under 2 h, idle at 2 h, finished when all tasks are done, needs you first, paused idle", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const done = [{ id: "a", text: "A", status: "done" }];
+    cc.ccPublish(a, ALICE, { v: 1, id: "live", title: "Live", tasks: [{ id: "a", text: "A", status: "in_progress" }] }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "fin", title: "Fin", tasks: done }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "ask", title: "Ask", tasks: done, questions: [{ id: "q", text: "Go?" }] }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "rest", title: "Rest", priority: "paused" }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const badge = (html: string, id: string) => html.slice(html.indexOf(`data-initiative="${id}"`)).match(/data-status="([a-z_]+)"/)?.[1];
+    vi.setSystemTime(NOW + 2 * 3_600_000 - 1);
+    let html = await render();
+    expect(badge(html, "live")).toBe("active");
+    expect(badge(html, "fin")).toBe("finished");
+    expect(badge(html, "ask")).toBe("needs_you");
+    expect(badge(html, "rest")).toBe("idle");
+    const rest = html.slice(html.indexOf('data-initiative="rest"'), html.indexOf("</article>", html.indexOf('data-initiative="rest"')));
+    expect(rest).toMatch(/badgePaused[^"]*">.*paused/);
+    // Sort: needs you, active, idle, finished.
+    const at = (id: string) => html.indexOf(`data-initiative="${id}"`);
+    expect([at("ask"), at("live"), at("rest"), at("fin")].every((v, i, all) => v > 0 && (i === 0 || v > all[i - 1]))).toBe(true);
+    // Counts for the filter row.
+    expect(html).toMatch(/data-status-filter="active"[^>]*>.*?<span[^>]*>1<\/span><\/button>/);
+    const stampBefore = cc.ccView(ALICE).stamp;
+    vi.setSystemTime(NOW + 2 * 3_600_000);
+    html = await render();
+    expect(badge(html, "live")).toBe("idle");
+    expect(badge(html, "fin")).toBe("finished");
+    // Crossing the line changes the poll stamp, so an open page refreshes.
+    expect(cc.ccView(ALICE).stamp).not.toBe(stampBefore);
   });
 
   it("shows each link's host next to its label, with the full URL as the tooltip", async () => {

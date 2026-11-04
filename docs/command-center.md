@@ -276,22 +276,32 @@ with the person, the initiative id and the result, never the text.
 
 ## The page
 
-`app/command-center/page.tsx` renders for the signed-in viewer only, as a dense dashboard that
-uses up to 1400 px on wide screens. The header is one line: title, the On pill, the last push and
+`app/command-center/page.tsx` renders for the signed-in viewer only, at the app's standard content
+width like every other page. The header is one line: title, the On pill, the last push and
 the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
 settings menu; Delete asks for a confirm first.
 
-- Needs you: short question cards, oldest first, about four per row on a 1440 px screen: the
+- Needs you: short question cards, oldest first, about three per row on a desktop screen: the
   question, one meta line with the initiative, a possibly-stale tag and the age, then the options
   as small pills (display only) beside Dismiss. A left bar marks urgent and high priority. With
   none, an All clear card.
-- Initiatives: one masonry flow of compact cards (CSS columns: four at 1280 px and up, three at
-  1024, one on phones), with no area headings, ordered urgent, high, none, low, paused, then
-  most recently updated. An opened card grows in place without stretching its neighbours. Each card has state, priority, key and deadline tags
-  (near and overdue in words, days counted on UTC dates), a progress ring with the percent inside
-  beside the title, the task in progress on one line, and one meta line with a toggle that opens
-  the task list and a small Log of the latest entries, links as pills with their host, and who
-  pushed last. Paused cards have grey chrome and a label; their text keeps full contrast.
+- Initiatives: a row of status counts (All, Needs you, Active, Idle, Finished); pressing one shows
+  only that status, pressing it again shows all. Then one masonry flow of compact cards (CSS
+  columns: three at 1024 px and up, two at 700, one on phones), with no area headings.
+- Each card has one status badge, derived on the server (`ccStatusOf`): Needs you (an open
+  question), Finished (state done, or every task done), Active (a publish under 2 hours ago),
+  else Idle. Paused and parked cards are Idle with a small paused mark. Cards sort Needs you,
+  Active, Idle, Finished, then urgent, high, none, low, paused, then most recently updated. The
+  status is part of the poll stamp, so a card that passes the 2 hour line updates on its own.
+- Collapsed, a card shows only the title, the badge, a progress bar with the percent and done/total,
+  the main task (the one in progress, else the next pending) in larger type, and up to 5 other
+  tasks with status icons, open work first, then "+N more". A finished card shows no task list.
+- A click on the card, or its Details toggle (a `<details>`, keyboard accessible), opens the rest in
+  place: state, priority, key and deadline tags (near and overdue in words, days counted on UTC
+  dates), the open questions, the full task list when it was cut, links as pills with their host,
+  the small Log of the latest entries, when it was updated and who pushed last. Clicks on links,
+  buttons and the opened part do not toggle it. An opened card grows without stretching its
+  neighbours. Paused cards have grey chrome; their text keeps full contrast.
 - A line counts the done, parked and silent initiatives that left the page.
 - Your log: the download link for the person's own log, and each configured export app with
   Grant or Revoke.

@@ -994,6 +994,24 @@ export function dataHealthOf(records: Iterable<CcRecord>, now: number): CcDataHe
   return h;
 }
 
+/** A publish this recent makes an initiative ACTIVE on the page; older is IDLE. */
+export const CC_ACTIVE_MS = 2 * HOUR_MS;
+export const CC_STATUSES = ["needs_you", "active", "idle", "finished"] as const;
+export type CcStatus = (typeof CC_STATUSES)[number];
+
+/**
+ * The one status badge a card shows. An open question wins, then finished (state done or every
+ * task done), then active (a publish under CC_ACTIVE_MS ago), else idle. Paused and parked are idle.
+ */
+export function ccStatusOf(r: CcRecord, f: Pick<CcFlags, "openQuestions">, now: number): CcStatus {
+  if (f.openQuestions > 0) return "needs_you";
+  if (r.state === "done" || (r.tasks.length > 0 && r.tasks.every((t) => t.status === "done"))) return "finished";
+  if (r.state === "parked" || r.priority === "paused") return "idle";
+  return now - ms(r.updatedAt) < CC_ACTIVE_MS ? "active" : "idle";
+}
+
+const STATUS_ORDER: Record<CcStatus, number> = { needs_you: 0, active: 1, idle: 2, finished: 3 };
+const rank = (r: { kind: CcRecord["kind"]; status: CcStatus }): number => (r.kind === "recurring" ? 9 : STATUS_ORDER[r.status]);
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, none: 2, low: 3, paused: 4 };
 const STATE_ORDER: Record<State, number> = { active: 0, parked: 1, done: 2 };
 
@@ -1866,7 +1884,8 @@ export interface CcView {
   /** When off with data left: the day it is deleted. */
   keptUntil: string | null;
   /** On the page: active initiatives that are not silent. */
-  records: (CcRecord & CcFlags & { questionViews: CcQuestionView[]; log: CcLogEntry[] })[];
+  /** In page order: needs you, active, idle, finished, then priority, then newest. */
+  records: (CcRecord & CcFlags & { status: CcStatus; questionViews: CcQuestionView[]; log: CcLogEntry[] })[];
   /** Done, parked and silent initiatives: off the page, still in the log. */
   offPage: number;
   needsYou: { initiative: CcRecord; question: CcQuestionView }[];
@@ -1889,13 +1908,22 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
   const all = kept(sw, now) ? sortRecords([...loadRecords(ownerId).values()]) : [];
   for (const r of all) pruneQuestions(r, now);
   const shown = all.filter((r) => onPage(r, now));
-  const records = shown.map((r) => ({
-    ...r,
-    ...flagsOf(r, now),
-    questionViews: r.questions.map((q) => ({ ...q, stale: questionStale(r, q, now) })),
-    // Paused hides its questions, in the log too.
-    log: ccRecentLog(ownerId, r.id).filter((e) => r.priority !== "paused" || !e.kind.startsWith("question")),
-  }));
+  const records = shown
+    .map((r) => {
+      const flags = flagsOf(r, now);
+      return {
+        ...r,
+        ...flags,
+        status: ccStatusOf(r, flags, now),
+        questionViews: r.questions.map((q) => ({ ...q, stale: questionStale(r, q, now) })),
+        // Paused hides its questions, in the log too.
+        log: ccRecentLog(ownerId, r.id).filter((e) => r.priority !== "paused" || !e.kind.startsWith("question")),
+      };
+    })
+    // Projects: needs you, active, idle, finished; within each, the sortRecords order (priority,
+    // then newest). Stable. Recurring upkeep keeps the sortRecords order, after the projects.
+    .sort((a, b) => rank(a) - rank(b));
+  const statusOf = new Map(records.map((r) => [r.id, r.status]));
   const needsYou = records
     .filter((r) => r.priority !== "paused")
     .flatMap((r) => r.questionViews.filter((q) => !q.clearedAt).map((question) => ({ initiative: r as CcRecord, question })))
@@ -1912,7 +1940,8 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
     sw.disabledAt ?? "",
     `log:${logStamp.n}:${logStamp.m ?? ""}`,
     ...exportApps.map((a) => `${a.app}:${a.grant?.level ?? "-"}`),
-    ...all.map((r) => `${r.id}:${r.seq}:${r.questions.filter((q) => !q.clearedAt).length}:${onPage(r, now) ? 1 : 0}`),
+    // The status rides along so a card crossing the 2 h active line refreshes the page.
+    ...all.map((r) => `${r.id}:${r.seq}:${r.questions.filter((q) => !q.clearedAt).length}:${onPage(r, now) ? 1 : 0}:${statusOf.get(r.id) ?? "-"}`),
   ].join("|");
   return {
     enabledAt: sw.enabledAt,
