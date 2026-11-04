@@ -1138,8 +1138,8 @@
   margin-top: 2px;
 }
 
-.moreTasks {
-  padding-left: 20px !important;
+.subtasks .moreTasks {
+  padding-left: 20px;
   color: var(--c-muted);
   font-size: 0.75rem;
 }
