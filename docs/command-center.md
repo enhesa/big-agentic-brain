@@ -319,10 +319,8 @@ width like every other page. The header is one line: title, the On pill, the las
 the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
 settings menu; Delete asks for a confirm first.
 
-- Needs you: short question cards, oldest first, about three per row on a desktop screen: the
-  question, one meta line with the initiative, a possibly-stale tag and the age, then the options
-  as small pills (display only) beside Dismiss. A left bar marks urgent and high priority. With
-  none, an All clear card.
+- There is no separate questions section. An open question sits on its own card or upkeep row,
+  and the Needs you status count is the way to see only those cards.
 - Initiatives: a row of status counts (All, Needs you, Active, Idle, Finished); pressing one shows
   only that status, pressing it again shows all. Then one masonry flow of compact cards (CSS
   columns: three at 1024 px and up, two at 700, one on phones), with no area headings.
@@ -331,12 +329,16 @@ settings menu; Delete asks for a confirm first.
   else Idle. Paused and parked cards are Idle with a small paused mark. Cards sort Needs you,
   Active, Idle, Finished, then urgent, high, none, low, paused, then most recently updated. The
   status is part of the poll stamp, so a card that passes the 2 hour line updates on its own.
-- Collapsed, a card shows only the title, the badge, a progress bar with the percent and done/total,
-  the main task (the one in progress, else the next pending) in larger type, and up to 5 other
-  tasks with status icons, open work first, then "+N more". A finished card shows no task list.
+- Collapsed, a card shows only the title with a small progress ring (the percent inside, done/total
+  under it) and the badge at its right, the open questions, the main task (the one in progress,
+  else the next pending) in larger type, and up to 5 other tasks with status icons, open work
+  first, then "+N more". A finished card shows the ring and no task list.
+- Open questions on a card, oldest first, on a yellow wash: the text (2 lines until the card
+  opens), the age, a possibly-stale tag, the options as small pills (display only) and Dismiss.
+  More than 2: the first 2, then "+N more questions"; the rest sit in the opened card.
 - A click on the card, or its Details toggle (a `<details>`, keyboard accessible), opens the rest in
   place: state, priority, key and deadline tags (near and overdue in words, days counted on UTC
-  dates), the open questions, the full task list when it was cut, links as pills with their host,
+  dates), the questions beyond the first 2, the full task list when it was cut, links as pills with their host,
   the small Log of the latest entries, when it was updated and who pushed last. Clicks on links,
   buttons and the opened part do not toggle it. An opened card grows without stretching its
   neighbours. Paused cards have grey chrome; their text keeps full contrast.
@@ -344,7 +346,8 @@ settings menu; Delete asks for a confirm first.
 - Your log: the download link for the person's own log, and each configured export app with
   Grant or Revoke.
 - Recurring upkeep: one line each with a health dot and label, the reason (cut short, full text in
-  its tooltip; wrapped on phones), when it was checked and an overdue tag.
+  its tooltip; wrapped on phones), when it was checked and an overdue tag. A row with open
+  questions gets a yellow edge, a Needs you badge and all its questions under it, in the same form.
 
 Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours

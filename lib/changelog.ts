@@ -27,6 +27,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Command Center sync drafts only sessions with a plan, at most 20, with true progress and title ids.",
       "Command Center backfill handles thinking models, retries only failed blocks, and maps sessions by title, id or sync draft.",
       "Every page now has the home page footer, and the top bar no longer shifts between pages.",
+      "Command Center questions now sit on their own card, and cards show a compact progress ring.",
     ],
   },
   {
