@@ -319,33 +319,34 @@ width like every other page. The header is one line: title, the On pill, the las
 the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
 settings menu; Delete asks for a confirm first.
 
-- There is no separate questions section. An open question sits on its own card or upkeep row,
-  and the Needs you status count is the way to see only those cards.
-- Initiatives: a row of status counts (All, Needs you, Active, Idle, Finished); pressing one shows
-  only that status, pressing it again shows all. Then one masonry flow of compact cards (CSS
-  columns: three at 1024 px and up, two at 700, one on phones), with no area headings.
-- Each card has one status badge, derived on the server (`ccStatusOf`): Needs you (an open
-  question), Finished (state done, or every task done), Active (a publish under 2 hours ago),
-  else Idle. Paused and parked cards are Idle with a small paused mark. Cards sort Needs you,
-  Active, Idle, Finished, then urgent, high, none, low, paused, then most recently updated. The
-  status is part of the poll stamp, so a card that passes the 2 hour line updates on its own.
-- Collapsed, a card shows only the title with a small progress ring (the percent inside, done/total
-  under it) and the badge at its right, the open questions, the main task (the one in progress,
-  else the next pending) in larger type, and up to 5 other tasks with status icons, open work
-  first, then "+N more". A finished card shows the ring and no task list.
-- Open questions on a card, oldest first, on a yellow wash: the text (2 lines until the card
-  opens), the age, a possibly-stale tag, the options as small pills (display only) and Dismiss.
-  More than 2: the first 2, then "+N more questions"; the rest sit in the opened card.
-- A click on the card, or its Details toggle (a `<details>`, keyboard accessible), opens the rest in
-  place: state, priority, key and deadline tags (near and overdue in words, days counted on UTC
-  dates), the questions beyond the first 2, the full task list when it was cut, links as pills with their host,
-  the small Log of the latest entries, when it was updated and who pushed last. Clicks on links,
-  buttons and the opened part do not toggle it. An opened card grows without stretching its
-  neighbours. Paused cards have grey chrome; their text keeps full contrast.
+- There is no separate questions section. An open question sits on its own card or upkeep row.
+- Initiatives: a kanban board of four light columns by status, left to right Needs you, Active,
+  Idle, Finished, each headed by its name and count. Empty columns stay. Each column scrolls on its
+  own; under 900 px the board has two columns, and on phones the columns stack (no inner scroll).
+- The status is derived on the server (`ccStatusOf`): Needs you (an open question), Finished
+  (state done, or every task done), Active (a publish under 2 hours ago), else Idle. Paused and
+  parked cards are Idle. Inside a column cards sort urgent, high, none, low, paused, then most
+  recently updated. The status is part of the poll stamp, so a card that passes the 2 hour line
+  moves on its own.
+- A card is compact: the title (2 lines at most, a button) with a small progress ring (percent
+  inside), one muted line with the main task (in progress, else the next pending; a finished card
+  says all tasks are done), and small key, priority and near or overdue deadline chips when set.
+- A Needs you card has a yellow left edge and shows its oldest open question (2 lines), its age,
+  a possibly-stale tag, the options as small pills (display only), Dismiss, then "+N more
+  questions".
+- A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
+  status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
+  dates), the ring with done/total, every open question with Dismiss, every task with its status
+  icon, links as pills with their host, the Log, when it was updated and who pushed last. Esc,
+  the close button or a click outside closes it, and focus returns to the card. Clicks on links,
+  buttons and forms on a card do not open it. The open card is client state, so a poll refresh
+  keeps the drawer open with fresh content; a Dismiss posts the form and reloads the page, which
+  closes it. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
+  keeps full contrast.
 - A line counts the done, parked and silent initiatives that left the page.
 - Your log: the download link for the person's own log, and each configured export app with
   Grant or Revoke.
-- Recurring upkeep: one line each with a health dot and label, the reason (cut short, full text in
+- Recurring upkeep, a slim section under the board: one line each with a health dot and label, the reason (cut short, full text in
   its tooltip; wrapped on phones), when it was checked and an overdue tag. A row with open
   questions gets a yellow edge, a Needs you badge and all its questions under it, in the same form.
 

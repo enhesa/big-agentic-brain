@@ -7,8 +7,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { CC_OFF_KEEP_MS, ccView, type CcView } from "@/lib/command-center";
 import { ApiError } from "@/lib/errors";
 import CommandCenterPoll from "./CommandCenterPoll";
-import CardToggle from "./CardToggle";
-import StatusFilter from "./StatusFilter";
+import CardDrawer from "./CardDrawer";
 import styles from "./command-center.module.css";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +59,6 @@ export default async function CommandCenterPage() {
   return (
     <Shell>
       <CommandCenterPoll stamp={view.stamp} />
-      <CardToggle />
       <div className={styles.page}>{view.enabledAt ? <OnState view={view} /> : <OffState view={view} />}</div>
     </Shell>
   );
@@ -171,7 +169,7 @@ function OnState({ view }: { view: CcView }) {
       </header>
 
       {/* No separate questions section: open questions sit on their own card or upkeep row, and the
-          NEEDS YOU filter shows only those cards. */}
+          Needs you column holds those cards. */}
       <section className={styles.section} aria-labelledby="cc-initiatives">
         <SectionHead id="cc-initiatives" title="Initiatives" count={projects.length} />
         {projects.length === 0 ? (
@@ -184,14 +182,15 @@ function OnState({ view }: { view: CcView }) {
           </p>
         ) : null}
         {projects.length ? (
-          // One flat masonry flow, already in page order (status, then priority, then most recently updated).
           <>
-            <StatusCounts records={projects} />
-            <div className={styles.flow} data-cc-flow="">
-              {projects.map((r) => (
-                <Initiative key={r.id} r={r} />
-              ))}
-            </div>
+            <Board records={projects} />
+            <CardDrawer
+              panels={projects.map((r) => ({
+                id: r.id,
+                title: r.title,
+                body: <Detail r={r} />,
+              }))}
+            />
           </>
         ) : null}
         {view.offPage ? (
@@ -272,12 +271,6 @@ function DataHealth({ h }: { h: CcView["dataHealth"] }) {
 // One initiative
 // ---------------------------------------------------------------------------
 
-function urgencyClass(p: Rec["priority"]): string {
-  if (p === "urgent") return styles.urgent;
-  if (p === "high") return styles.high;
-  return "";
-}
-
 function PriorityTag({ p }: { p: Rec["priority"] }) {
   if (p === "urgent") return <span className={`${styles.tag} ${styles.tagBad}`}>urgent</span>;
   if (p === "high") return <span className={`${styles.tag} ${styles.tagWarn}`}>high priority</span>;
@@ -348,10 +341,12 @@ function TaskIcon({ status }: { status: Task["status"] }) {
 
 const TASK_LABEL: Record<Task["status"], string> = { done: "Done", in_progress: "In progress", pending: "To do" };
 
-/** Up to this many subtasks show on a collapsed card; the rest sit behind "+N more" in the details. */
-const SUBTASKS_SHOWN = 5;
-
-const STATUS_LABEL: Record<Rec["status"], string> = { needs_you: "Needs you", active: "Active", idle: "Idle", finished: "Finished" };
+const STATUS_LABEL: Record<Rec["status"], string> = {
+  needs_you: "Needs you",
+  active: "Active",
+  idle: "Idle",
+  finished: "Finished",
+};
 const STATUS_HINT: Record<Rec["status"], string> = {
   needs_you: "An open question waits for you",
   active: "Published in the last 2 hours",
@@ -375,15 +370,15 @@ function StatusBadge({ status, paused }: { status: Rec["status"]; paused: boolea
 }
 
 /**
- * A small progress ring with the percent inside and done/total under it. The arc uses
- * pathLength 100, so stroke-dasharray is the percent. SVG attributes, no inline style.
+ * A small progress ring with the percent inside; in the drawer done/total sits under it. The arc
+ * uses pathLength 100, so stroke-dasharray is the percent. SVG attributes, no inline style.
  */
-function ProgressRing({ r, done }: { r: Rec; done: number }) {
+function ProgressRing({ r, done, count = false }: { r: Rec; done: number; count?: boolean }) {
   if (r.progress === null) return null;
   const total = r.tasks.length;
   const valueText = total ? `${r.progress}%, ${done} of ${total} ${total === 1 ? "task" : "tasks"} done` : `${r.progress}%`;
   return (
-    <div className={styles.ring}>
+    <div className={`${styles.ring} ${count ? styles.ringLg : ""}`}>
       <svg
         className={styles.ringSvg}
         viewBox="0 0 44 44"
@@ -401,7 +396,7 @@ function ProgressRing({ r, done }: { r: Rec; done: number }) {
           {`${r.progress}%`}
         </text>
       </svg>
-      {total ? (
+      {count && total ? (
         <span className={styles.ringCount} aria-hidden="true">
           {`${done}/${total}`}
         </span>
@@ -410,16 +405,16 @@ function ProgressRing({ r, done }: { r: Rec; done: number }) {
   );
 }
 
-/** Open questions shown on the face of a card or upkeep row, oldest first. */
-const QUESTIONS_SHOWN = 2;
+/** Open questions shown on the face of a card, oldest first; the drawer has them all. */
+const QUESTIONS_SHOWN = 1;
 
 /**
- * One open question: its text (clamped to 2 lines until the card opens), age, a stale tag, the
- * options the agent offered and the Dismiss form. Every string is React text.
+ * One open question: its text (clamped to 2 lines on a card), age, a stale tag, the options the
+ * agent offered and the Dismiss form. Every string is React text.
  */
-function QuestionItem({ id, q }: { id: string; q: Rec["questionViews"][number] }) {
+function QuestionItem({ id, q, full = false }: { id: string; q: Rec["questionViews"][number]; full?: boolean }) {
   return (
-    <li className={styles.ask} data-question={q.id}>
+    <li className={`${styles.ask} ${full ? styles.askFull : ""}`} data-question={q.id}>
       <p className={styles.askText} title={q.text}>
         {q.text}
       </p>
@@ -468,125 +463,187 @@ function TaskItem({ t }: { t: Task }) {
   );
 }
 
+const COLUMNS: Rec["status"][] = ["needs_you", "active", "idle", "finished"];
+
 /**
- * One initiative card. Collapsed: title with the progress ring and status badge beside it, up to
- * two open questions (with options and Dismiss), the main task and a few subtasks. Everything
- * else (chips, key, deadline, more questions, links, log, who pushed) sits in a closed <details>;
- * its Details toggle or a click on the card opens it (CardToggle).
+ * The board: one column per status, left to right Needs you, Active, Idle, Finished. Cards keep
+ * the page order inside a column (priority, then most recently updated). Empty columns stay, so
+ * the board keeps its shape; each column scrolls on its own.
+ */
+function Board({ records }: { records: Rec[] }) {
+  return (
+    <div className={styles.board} data-cc-board="">
+      {COLUMNS.map((s) => {
+        const cards = records.filter((r) => r.status === s);
+        return (
+          <section key={s} className={`${styles.col} ${styles[`badge_${s}`] ?? ""}`} data-column={s} data-empty={cards.length ? undefined : ""} aria-labelledby={`cc-col-${s}`}>
+            <h3 id={`cc-col-${s}`} className={styles.colHead} title={STATUS_HINT[s]}>
+              <span className={styles.badgeDot} aria-hidden="true" />
+              {STATUS_LABEL[s]}
+              <span className={styles.colCount} data-count={cards.length}>
+                {cards.length}
+                <span className={styles.srOnly}> {cards.length === 1 ? "initiative" : "initiatives"}</span>
+              </span>
+            </h3>
+            {cards.length ? (
+              <div className={styles.colBody}>
+                {cards.map((r) => (
+                  <Initiative key={r.id} r={r} />
+                ))}
+              </div>
+            ) : (
+              <p className={styles.colEmpty}>Nothing here</p>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function doneCount(r: Rec): number {
+  return r.tasks.filter((t) => t.status === "done").length;
+}
+
+/**
+ * One compact card: the title (a button that opens the drawer) with the progress ring, one muted
+ * line with the current task, small key and priority chips when set, and on a Needs you card its
+ * oldest open question with options, Dismiss and "+N more". A click anywhere on the card opens
+ * the drawer (CardDrawer); everything else lives there.
  */
 function Initiative({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
   const main = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
-  const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
-  const done = r.tasks.filter((t) => t.status === "done").length;
-  const log = paused ? r.log.filter((e) => e.kind !== "question_asked" && e.kind !== "question_cleared") : r.log;
-  // Subtasks other than the main one: open work first, then done, each in the agent's order.
-  const rest = r.tasks.filter((t) => t !== main);
-  const ordered = [...rest.filter((t) => t.status !== "done"), ...rest.filter((t) => t.status === "done")];
-  // A finished card needs no task list on its face: the full bar says it.
-  const shown = r.status === "finished" ? [] : ordered.slice(0, SUBTASKS_SHOWN);
-  const more = ordered.length - shown.length;
+  const done = doneCount(r);
   const openQs = openQuestionsOf(r);
   const qShown = openQs.slice(0, QUESTIONS_SHOWN);
-  const qRest = openQs.slice(QUESTIONS_SHOWN);
-  const cls = [styles.card, styles[`status_${r.status}`] ?? "", urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
+  const qRest = openQs.length - qShown.length;
+  const near = deadlineTone(r);
+  const cls = [styles.card, styles[`status_${r.status}`] ?? "", r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
   return (
-    <article className={cls} data-initiative={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
+    <article className={cls} data-initiative={r.id} data-card={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
+      {/* Title and the task line on the left, the ring at the right of both. */}
       <div className={styles.cardHead}>
-        <h3 id={`cc-i-${r.id}`} className={styles.cardTitle}>
-          {r.title}
-        </h3>
-        <div className={styles.headSide}>
-          <ProgressRing r={r} done={done} />
-          <StatusBadge status={r.status} paused={paused} />
+        <div className={styles.cardMain}>
+          <h4 id={`cc-i-${r.id}`} className={styles.cardTitle}>
+            <button type="button" className={styles.cardOpen} data-open-card={r.id} aria-haspopup="dialog">
+              {r.title}
+            </button>
+          </h4>
+          {r.status === "finished" ? (
+            r.tasks.length ? (
+              <p className={styles.line}>
+                All {r.tasks.length} {r.tasks.length === 1 ? "task" : "tasks"} done
+              </p>
+            ) : null
+          ) : main ? (
+            <p className={styles.line} title={main.text}>
+              <TaskIcon status={main.status} />
+              <span className={styles.srOnly}>{main.status === "in_progress" ? "Now: " : "Next up: "}</span>
+              <span className={styles.lineText}>{main.text}</span>
+            </p>
+          ) : null}
         </div>
+        <ProgressRing r={r} done={done} />
       </div>
+
+      {r.key || r.priority || near ? (
+        <div className={styles.cardChips}>
+          {r.key ? <span className={styles.tag}>{r.key}</span> : null}
+          <PriorityTag p={r.priority} />
+          {near ? <Deadline r={r} /> : null}
+        </div>
+      ) : null}
 
       {qShown.length ? (
         <ul className={styles.asks} aria-label="Open questions">
           {qShown.map((q) => (
             <QuestionItem key={q.id} id={r.id} q={q} />
           ))}
-          {qRest.length ? (
+          {qRest ? (
             <li className={styles.moreAsks} data-more-questions="">
-              +{qRest.length} more {qRest.length === 1 ? "question" : "questions"}
+              +{qRest} more {qRest === 1 ? "question" : "questions"}
             </li>
           ) : null}
         </ul>
       ) : null}
-
-      {main && r.status !== "finished" ? (
-        <p className={styles.next}>
-          <TaskIcon status={main.status} />
-          <span className={styles.nextLabel}>{main.status === "in_progress" ? "Now" : "Next up"}</span>
-          <span className={styles.nextText} title={main.text}>
-            {main.text}
-          </span>
-        </p>
-      ) : null}
-
-      {shown.length ? (
-        <ul className={styles.subtasks} aria-label="Subtasks">
-          {shown.map((t) => (
-            <TaskItem key={t.id} t={t} />
-          ))}
-          {more > 0 ? <li className={styles.moreTasks}>+{more} more</li> : null}
-        </ul>
-      ) : null}
-
-      <details className={styles.more} data-more="">
-        <summary>Details</summary>
-        <div className={styles.moreBody}>
-          <div className={styles.chips}>
-            <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
-            <PriorityTag p={r.priority} />
-            {r.key ? <span className={styles.tag}>{r.key}</span> : null}
-            <Deadline r={r} />
-            {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
-            {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
-            {r.openQuestions ? (
-              <span className={`${styles.tag} ${styles.tagInfo}`}>
-                {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
-              </span>
-            ) : null}
-          </div>
-
-          {qRest.length ? (
-            <ul className={styles.asks} aria-label="More open questions">
-              {qRest.map((q) => (
-                <QuestionItem key={q.id} id={r.id} q={q} />
-              ))}
-            </ul>
-          ) : null}
-
-          {more > 0 || (r.status === "finished" && r.tasks.length) ? (
-            <ul className={styles.tasks} aria-label="All tasks">
-              {r.tasks.map((t) => (
-                <TaskItem key={t.id} t={t} />
-              ))}
-            </ul>
-          ) : null}
-
-          {r.links.length ? <Links links={r.links} /> : null}
-
-          {/* A paused initiative hides its questions, in the log too. */}
-          {log.length ? <LogList log={log} /> : null}
-
-          <p className={styles.cardFoot}>
-            Updated {formatRelativeTime(r.updatedAt)}
-            {who ? <> · last pushed by {who}</> : null}
-          </p>
-        </div>
-      </details>
     </article>
   );
 }
 
-/** Counts per status, rendered by the server; StatusFilter makes each one a filter button. */
-function StatusCounts({ records }: { records: Rec[] }) {
-  const counts: Record<Rec["status"], number> = { needs_you: 0, active: 0, idle: 0, finished: 0 };
-  for (const r of records) counts[r.status] += 1;
-  return <StatusFilter counts={(Object.keys(counts) as Rec["status"][]).map((s) => ({ status: s, label: STATUS_LABEL[s], n: counts[s] }))} />;
+/** True when a deadline is near or overdue: then it earns a chip on the card face too. */
+function deadlineTone(r: Rec): boolean {
+  if (!r.deadline || r.state === "done") return false;
+  return calendarDaysBetween(utcToday(), r.deadline) <= NEAR_DAYS;
+}
+
+/**
+ * The drawer body of one initiative: status, ring, every chip, all open questions (each with
+ * Dismiss), every task with its status icon, links, the log, and when it was updated and by whom.
+ */
+function Detail({ r }: { r: Rec }) {
+  const paused = r.priority === "paused";
+  const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
+  const log = paused ? r.log.filter((e) => e.kind !== "question_asked" && e.kind !== "question_cleared") : r.log;
+  const openQs = openQuestionsOf(r);
+  return (
+    <div className={`${styles.detail} ${r.status === "finished" ? styles.isDone : ""}`} data-detail-body={r.id}>
+      <div className={styles.detailTop}>
+        <div className={styles.chips}>
+          <StatusBadge status={r.status} paused={paused} />
+          <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
+          <PriorityTag p={r.priority} />
+          {r.key ? <span className={styles.tag}>{r.key}</span> : null}
+          <Deadline r={r} />
+          {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
+          {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
+          {r.openQuestions ? (
+            <span className={`${styles.tag} ${styles.tagInfo}`}>
+              {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
+            </span>
+          ) : null}
+        </div>
+        <ProgressRing r={r} done={doneCount(r)} count />
+      </div>
+
+      {openQs.length ? (
+        <div className={styles.detailBlock}>
+          <h3 className={styles.logHead}>Questions</h3>
+          <ul className={styles.asks} aria-label="All open questions">
+            {openQs.map((q) => (
+              <QuestionItem key={q.id} id={r.id} q={q} full />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {r.tasks.length ? (
+        <div className={styles.detailBlock}>
+          <h3 className={styles.logHead}>Tasks</h3>
+          <ul className={styles.tasks} aria-label="All tasks">
+            {r.tasks.map((t) => (
+              <TaskItem key={t.id} t={t} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {r.links.length ? (
+        <div className={styles.detailBlock}>
+          <h3 className={styles.logHead}>Links</h3>
+          <Links links={r.links} />
+        </div>
+      ) : null}
+
+      {/* A paused initiative hides its questions, in the log too. */}
+      {log.length ? <LogList log={log} /> : null}
+
+      <p className={styles.cardFoot}>
+        Updated {formatRelativeTime(r.updatedAt)}
+        {who ? <> · last pushed by {who}</> : null}
+      </p>
+    </div>
+  );
 }
 
 /** Short labels for the entries the server writes itself; a `worked` line needs none. */
@@ -605,7 +662,7 @@ const LOG_KIND_LABEL: Record<string, string> = {
 function LogList({ log }: { log: Rec["log"] }) {
   return (
     <div className={styles.log}>
-      <h5 className={styles.logHead}>Log</h5>
+      <h3 className={styles.logHead}>Log</h3>
       <ol className={styles.timeline} aria-label="Log, newest first">
         {log.map((e) => (
           <li key={e.id} data-kind={e.kind}>
@@ -745,7 +802,7 @@ function Upkeep({ r }: { r: Rec }) {
       {openQs.length ? (
         <ul className={`${styles.asks} ${styles.upAsks}`} aria-label="Open questions">
           {openQs.map((q) => (
-            <QuestionItem key={q.id} id={r.id} q={q} />
+            <QuestionItem key={q.id} id={r.id} q={q} full />
           ))}
         </ul>
       ) : null}

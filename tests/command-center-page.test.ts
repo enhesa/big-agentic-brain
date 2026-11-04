@@ -58,6 +58,19 @@ async function render(): Promise<string> {
   return (await new Response(await renderToReadableStream(element as never)).text()).replaceAll("<!-- -->", "");
 }
 
+/** The card (an <article>) of one initiative, as HTML. */
+function cardOf(html: string, id: string): string {
+  const at = html.indexOf(`data-initiative="${id}"`);
+  return html.slice(html.lastIndexOf("<article", at), html.indexOf("</article>", at));
+}
+
+/** The drawer panel of one initiative, as HTML (every panel is in the page, hidden unless open). */
+function panelOf(html: string, id: string): string {
+  const at = html.indexOf(`data-detail="${id}"`);
+  const next = html.indexOf("data-detail=", at + 1);
+  return html.slice(html.lastIndexOf("<div", at), next > 0 ? next : html.indexOf("</dialog>", at));
+}
+
 const agent = (email: string) => ({ id: email, email, name: "Agent", roles: [], source: "device" as const, deviceId: "d1" });
 
 async function seedAlice(extra: Record<string, unknown> = {}) {
@@ -196,76 +209,55 @@ describe("/command-center page", () => {
     expect(html).toMatch(/ringCount[^"]*"[^>]*>1\/2</);
     expect(html).toMatch(/role="progressbar"[^>]*aria-valuenow="50"[^>]*aria-valuetext="50%, 1 of 2 tasks done"/);
     expect(html).toContain('stroke-dasharray="50 100"');
-    // The ring sits in the card head, next to the badge.
-    const head = html.slice(html.indexOf('id="cc-i-billing-export"'), html.indexOf('data-badge="needs_you"'));
-    expect(head).toContain('role="progressbar"');
-    expect(html).toMatch(/Now<\/span><span[^>]*>Build</);
-    // The main task is not repeated in the subtask list.
-    expect(html).toMatch(/aria-label="Subtasks"><li[^>]*>.*?Done: <\/span><span>Design</);
-    expect(html).not.toContain("In progress: </span><span>Build");
+    // The ring sits in the card head next to the title; done/total only in the drawer.
+    const card = cardOf(html, "billing-export");
+    expect(card.slice(card.indexOf("</h4>"))).toMatch(/^<\/h4><p[^>]*>.*?<\/p><\/div><div[^>]*ring[^>]*><svg[^>]*role="progressbar"/);
+    expect(card).not.toContain("ringCount");
+    expect(panelOf(html, "billing-export")).toMatch(/ringCount[^"]*"[^>]*>1\/2</);
+    // One muted line with the task in progress; the full list is in the drawer.
+    expect(card).toMatch(/Now: <\/span><span[^>]*>Build</);
+    expect(card).not.toContain("Design");
+    expect(panelOf(html, "billing-export")).toMatch(/aria-label="All tasks"><li[^>]*>.*?Done: <\/span><span>Design</);
     expect(html).not.toMatch(/<(svg|circle|text)[^>]*style=/);
   });
 
-  it("collapses a card to title, badge, bar, main task and subtasks; the rest sits in a closed details", async () => {
-    await seedAlice({ key: "KEY-1", deadline: "2026-03-05", worked: "Wrote the parser" });
+  it("shows a compact card face and puts the rest in its drawer panel", async () => {
+    await seedAlice({ key: "KEY-1", deadline: "2026-03-20", worked: "Wrote the parser" });
     asViewer(ALICE, "Alice A");
     const html = await render();
-    const start = html.indexOf('data-initiative="billing-export"');
-    const card = html.slice(html.lastIndexOf("<article", start), html.indexOf("</article>", start));
-    const more = card.indexOf("<details");
-    expect(more).toBeGreaterThan(0);
-    // Starts closed: a click (or the Details toggle) opens it.
-    expect(card.slice(more, card.indexOf(">", more))).not.toMatch(/open/);
-    expect(card).toContain("data-more");
-    const collapsed = card.slice(0, more);
-    const hidden = card.slice(more);
-    for (const shown of ["Billing &lt;b&gt;export&lt;/b&gt;", 'data-badge="needs_you"', "50%", "Build", "Design", "Which months?", 'action="/command-center/dismiss"']) expect(collapsed).toContain(shown);
-    for (const gone of ["KEY-1", "due in 3 days", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question"]) {
-      expect(collapsed).not.toContain(gone);
-      expect(hidden).toContain(gone);
+    const card = cardOf(html, "billing-export");
+    const panel = panelOf(html, "billing-export");
+    // The card: title (a button that opens the drawer), ring, the task line, the key chip, the question.
+    expect(card).toMatch(/<button type="button"[^>]*data-open-card="billing-export"[^>]*>Billing &lt;b&gt;export&lt;\/b&gt;<\/button>/);
+    for (const shown of ["50%", "Build", "KEY-1", "Which months?", 'action="/command-center/dismiss"', "asked just now"]) expect(card).toContain(shown);
+    expect(card).toMatch(/aria-label="Options your agent offered"><li[^>]*>All</);
+    expect(card).not.toContain("<details");
+    expect(card).not.toContain("data-badge");
+    for (const gone of ["due 2026-03-20", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question<"]) {
+      expect(card).not.toContain(gone);
+      expect(panel).toContain(gone);
     }
-    expect(hidden).toContain("last pushed by laptop-1 / s-1");
-    // The open question is on the collapsed card only, with its options, age and Dismiss.
-    expect(collapsed).toContain('aria-label="Open questions"');
-    expect(collapsed).toMatch(/aria-label="Options your agent offered"><li[^>]*>All</);
-    expect(collapsed).toContain("asked just now");
-    // Only once as a question (the log in the details may still mention it).
-    expect(hidden).not.toContain("data-question=");
-    expect(html.match(/data-question="q1"/g)).toHaveLength(1);
-    expect(html.indexOf("Which months?")).toBeGreaterThan(start);
+    // The drawer: one dialog; each panel is labelled by its title and hidden until a card opens it.
+    expect(html.match(/<dialog/g)).toHaveLength(1);
+    expect(panel).toMatch(/^<div[^>]*hidden/);
+    expect(panel).toContain('id="cc-d-billing-export"');
+    expect(panel).toContain('data-badge="needs_you"');
+    expect(panel).toContain("last pushed by laptop-1 / s-1");
+    expect(panel).toContain('aria-label="Close details"');
+    expect(panel).toContain('name="questionId" value="q1"');
+    expect(panel).toContain('aria-label="All tasks"');
   });
 
-  it("shows 2 open questions on the card, oldest first, then +N more with the rest in the details", async () => {
+  it("shows a near deadline as a chip on the card, a far one only in the drawer", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
-    const a = agent(ALICE);
-    const q1 = { id: "q1", text: "First ask", options: ["Yes", "No"] };
-    const q2 = { id: "q2", text: "Second ask" };
-    vi.setSystemTime(NOW - 4 * DAY);
-    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1] }, "mcp");
-    vi.setSystemTime(NOW - DAY);
-    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2] }, "mcp");
-    vi.setSystemTime(NOW);
-    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2, { id: "q3", text: "Third ask" }] }, "mcp");
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "near", title: "Near", deadline: "2026-03-05" }, "mcp");
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "far", title: "Far", deadline: "2026-06-30" }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html).not.toContain('id="cc-needs"');
-    const start = html.indexOf('data-initiative="many"');
-    const card = html.slice(start, html.indexOf("</article>", start));
-    const collapsed = card.slice(0, card.indexOf("<details"));
-    const hidden = card.slice(card.indexOf("<details"));
-    expect(collapsed.indexOf("First ask")).toBeGreaterThan(0);
-    expect(collapsed.indexOf("First ask")).toBeLessThan(collapsed.indexOf("Second ask"));
-    expect(collapsed).not.toContain("Third ask");
-    expect(collapsed).toContain("+1 more question<");
-    expect(hidden).toContain('aria-label="More open questions"');
-    expect(hidden).toContain("Third ask");
-    // The oldest is possibly stale; every question keeps its own Dismiss form.
-    expect(collapsed).toContain("asked 4 days ago");
-    expect(collapsed).toContain("possibly stale");
-    expect(collapsed.match(/action="\/command-center\/dismiss"/g)).toHaveLength(2);
-    expect(hidden.match(/name="questionId" value="q3"/g)).toHaveLength(1);
-    expect(card).toContain('data-status="needs_you"');
+    expect(cardOf(html, "near")).toContain("due in 3 days");
+    expect(cardOf(html, "far")).not.toContain("2026-06-30");
+    expect(panelOf(html, "far")).toContain("due 2026-06-30");
   });
 
   it("shows a recurring upkeep row's questions on the row, with Dismiss, marked needs you", async () => {
@@ -284,22 +276,52 @@ describe("/command-center page", () => {
     expect(html).not.toContain("<b>keys</b>");
   });
 
-  it("shows up to 5 subtasks, open work first, then +N more, with every task in the details", async () => {
+  it("shows the oldest open question on the card, then +N more, with every question in the drawer", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const q1 = { id: "q1", text: "First ask", options: ["Yes", "No"] };
+    const q2 = { id: "q2", text: "Second ask" };
+    vi.setSystemTime(NOW - 4 * DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1] }, "mcp");
+    vi.setSystemTime(NOW - DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2] }, "mcp");
+    vi.setSystemTime(NOW);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2, { id: "q3", text: "Third ask" }] }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).not.toContain('id="cc-needs"');
+    const card = cardOf(html, "many");
+    expect(card).toContain("First ask");
+    expect(card).not.toContain("Second ask");
+    expect(card).toContain("+2 more questions<");
+    expect(card).toContain("asked 4 days ago");
+    expect(card).toContain("possibly stale");
+    expect(card.match(/action="\/command-center\/dismiss"/g)).toHaveLength(1);
+    expect(card).toContain('data-status="needs_you"');
+    const panel = panelOf(html, "many");
+    expect(panel.indexOf("First ask")).toBeLessThan(panel.indexOf("Second ask"));
+    expect(panel.indexOf("Second ask")).toBeLessThan(panel.indexOf("Third ask"));
+    expect(panel.match(/action="\/command-center\/dismiss"/g)).toHaveLength(3);
+  });
+
+  it("shows one task line on a card and every task, with its status, in the drawer", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     const tasks = Array.from({ length: 9 }, (_, i) => ({ id: `t${i}`, text: `Task ${i}`, status: i < 3 ? "done" : i === 3 ? "in_progress" : "pending" }));
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "big", title: "Big one", tasks }, "mcp");
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "fin", title: "Fin", tasks: [{ id: "a", text: "Only", status: "done" }] }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
-    const card = html.slice(html.indexOf('data-initiative="big"'), html.indexOf("</article>", html.indexOf('data-initiative="big"')));
-    const collapsed = card.slice(0, card.indexOf("<details"));
-    expect(collapsed).toMatch(/Now<\/span><span[^>]*>Task 3</);
-    const sub = collapsed.slice(collapsed.indexOf('aria-label="Subtasks"'));
-    // Five open tasks fill the list; the three done ones are behind +3 more.
-    for (const t of ["Task 4", "Task 5", "Task 6", "Task 7", "Task 8"]) expect(sub).toContain(`${t}<`);
-    for (const t of ["Task 0", "Task 1", "Task 2"]) expect(sub).not.toContain(`${t}<`);
-    expect(sub).toContain("+3 more");
-    expect(card.slice(card.indexOf("<details"))).toContain('aria-label="All tasks"');
+    const card = cardOf(html, "big");
+    expect(card).toMatch(/Now: <\/span><span[^>]*>Task 3</);
+    for (const t of ["Task 0", "Task 4", "Task 8"]) expect(card).not.toContain(`${t}<`);
+    const panel = panelOf(html, "big");
+    for (let i = 0; i < 9; i++) expect(panel).toContain(`Task ${i}<`);
+    expect(panel).toContain("Done: </span><span>Task 0<");
+    expect(panel).toContain("In progress: </span><span>Task 3<");
+    expect(panel).toContain("To do: </span><span>Task 8<");
+    expect(cardOf(html, "fin")).toContain("All 1 task done");
   });
 
   it("derives the badge: active under 2 h, idle at 2 h, finished when all tasks are done, needs you first, paused idle", async () => {
@@ -319,13 +341,19 @@ describe("/command-center page", () => {
     expect(badge(html, "fin")).toBe("finished");
     expect(badge(html, "ask")).toBe("needs_you");
     expect(badge(html, "rest")).toBe("idle");
-    const rest = html.slice(html.indexOf('data-initiative="rest"'), html.indexOf("</article>", html.indexOf('data-initiative="rest"')));
-    expect(rest).toMatch(/badgePaused[^"]*">.*paused/);
+    expect(cardOf(html, "rest")).toMatch(/tagPaused[^"]*">.*paused/);
+    expect(panelOf(html, "rest")).toMatch(/badgePaused[^"]*">.*paused/);
     // Sort: needs you, active, idle, finished.
     const at = (id: string) => html.indexOf(`data-initiative="${id}"`);
     expect([at("ask"), at("live"), at("rest"), at("fin")].every((v, i, all) => v > 0 && (i === 0 || v > all[i - 1]))).toBe(true);
-    // Counts for the filter row.
-    expect(html).toMatch(/data-status-filter="active"[^>]*>.*?<span[^>]*>1<\/span><\/button>/);
+    // Each card sits in its status column, and the column header counts them.
+    const col = (s: string) => html.slice(html.indexOf(`data-column="${s}"`), html.indexOf("</section>", html.indexOf(`data-column="${s}"`)));
+    expect(col("needs_you")).toContain('data-initiative="ask"');
+    expect(col("active")).toContain('data-initiative="live"');
+    expect(col("idle")).toContain('data-initiative="rest"');
+    expect(col("finished")).toContain('data-initiative="fin"');
+    expect(col("active")).toMatch(/>Active<span[^>]*data-count="1">1<span[^>]*> initiative<\/span><\/span><\/h3>/);
+    expect(html).not.toContain("data-status-filter");
     const stampBefore = cc.ccView(ALICE).stamp;
     vi.setSystemTime(NOW + 2 * 3_600_000);
     html = await render();
@@ -342,7 +370,7 @@ describe("/command-center page", () => {
     expect(html).toMatch(/title="https:\/\/git\.example\.com\/acme\/x\/pull\/1"[^>]*>.*?<span class="[^"]*linkHost[^"]*">git\.example\.com<\/span><\/a>/);
   });
 
-  it("flows every initiative in one flat masonry container, with no area headings or area text", async () => {
+  it("puts the initiatives on one board of four status columns, with no area headings or area text", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     const a = agent(ALICE);
@@ -352,8 +380,11 @@ describe("/command-center page", () => {
     cc.ccPublish(a, ALICE, { v: 1, id: "fin-high", title: "Fin high", area: "finance-zone", priority: "high" }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html.match(/class="[^"]*flow[^"]*"/g)).toHaveLength(1);
-    expect(html).not.toMatch(/class="[^"]*\bgrid\b/);
+    expect(html.match(/data-cc-board=""/g)).toHaveLength(1);
+    expect(html.match(/data-column="[a-z_]+"/g)).toEqual(['data-column="needs_you"', 'data-column="active"', 'data-column="idle"', 'data-column="finished"']);
+    // An empty column keeps its place, with a 0 count.
+    expect(html).toMatch(/data-column="finished"[^>]*data-empty=""/);
+    expect(html).toContain("Nothing here");
     expect(html).not.toMatch(/class="[^"]*\barea/);
     expect(html).not.toContain("finance-zone");
     expect(html).not.toContain("ops-zone");
@@ -362,7 +393,7 @@ describe("/command-center page", () => {
     expect(at("fin-high")).toBeGreaterThan(0);
     expect(at("fin-high")).toBeLessThan(at("ops-high"));
     expect(at("ops-high")).toBeLessThan(at("fin-low"));
-    expect(html).toContain('<h3 id="cc-i-fin-high"');
+    expect(html).toContain('<h4 id="cc-i-fin-high"');
   });
 
   it("tags a deadline as near, overdue or plain, in words", async () => {
