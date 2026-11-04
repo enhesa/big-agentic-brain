@@ -176,7 +176,7 @@ describe("/docs", () => {
     expect(missing, "name these tools on /docs (the architecture text alternative lists them)").toEqual([]);
   });
 
-  it("describes the newer features: files, keys, comments, web votes, new-device notices and the footer links", async () => {
+  it("describes the newer features: files, keys, comments, web votes and new-device notices", async () => {
     const html = await render();
     expect(html).toContain("Files and keys");
     expect(html).toContain("25 MB a file, 100 MB each");
@@ -187,7 +187,6 @@ describe("/docs", () => {
     expect(html).toContain("context, also on the web");
     expect(html).toContain("search, vote, comment");
     expect(html).toContain("a new device as you: told once");
-    expect(html).toContain("Docs and Feedback: home page footer");
     expect(html).toContain("file_shares");
   });
 

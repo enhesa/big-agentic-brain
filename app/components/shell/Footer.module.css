@@ -1,0 +1,40 @@
+/* The shared footer (Footer.tsx), on the home page and every Shell page. */
+
+.footer {
+  background: var(--mist);
+  padding: 36px 0;
+}
+
+.footerInner {
+  display: flex;
+  align-items: center;
+  gap: 16px 28px;
+  flex-wrap: wrap;
+}
+
+.footerMark {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+
+.footerLinks {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  color: var(--steel);
+}
+
+.footerLinks a:hover {
+  color: var(--navy);
+}
+
+@media (max-width: 640px) {
+  .footerLinks {
+    margin-left: 0;
+    width: 100%;
+  }
+}

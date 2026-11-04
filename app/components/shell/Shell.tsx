@@ -1,5 +1,6 @@
 import styles from "./Shell.module.css";
 import TopNav from "./TopNav";
+import Footer from "./Footer";
 import { branding } from "@/lib/branding";
 
 /**
@@ -9,14 +10,19 @@ import { branding } from "@/lib/branding";
  *
  * The bar itself lives in TopNav (a client component: it marks the current page and
  * badges the Inbox) and is styled to match the landing page's top bar exactly.
+ *
+ * Bar, main column and footer all sit in the shared `.container` box (--shell-max-width and
+ * --shell-gutter in app/globals.css), the same box the home page uses, so the bar never moves
+ * between pages. The footer is the home page's footer (./Footer.tsx).
  */
 export default function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <div className={styles.frame}>
       <TopNav orgName={branding().orgName} />
-      <div className={styles.content}>
+      <main className={styles.content}>
         <div className="container">{children}</div>
-      </div>
-    </>
+      </main>
+      <Footer />
+    </div>
   );
 }

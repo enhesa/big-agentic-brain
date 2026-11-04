@@ -392,7 +392,7 @@ describe("/command-center page", () => {
   it("is not in the navbar or the footer", async () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
     expect(NAV_ITEMS.map((i) => i.href as string)).not.toContain("/command-center");
-    expect(readFileSync(path.join(process.cwd(), "app/components/landing/Footer.tsx"), "utf8")).not.toContain("/command-center");
+    expect(readFileSync(path.join(process.cwd(), "app/components/shell/Footer.tsx"), "utf8")).not.toContain("/command-center");
   });
   it("shows a Log per initiative, newest first, with kind labels and size, as text", async () => {
     await seedAlice({ worked: "Wrote the <i>parser</i>", size: "medium" });

@@ -20,10 +20,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-04",
-    title: "Command Center backfill, first-use sync and calmer cards",
+    title: "Command Center backfill, calmer cards, one footer and width",
     changes: [
       "Command Center can fill your page from your recent sessions and backfill your log, after you review a draft.",
       "Command Center cards show status, progress and tasks; click a card for tags, links and its log.",
+      "Every page now has the home page footer, and the top bar no longer shifts between pages.",
     ],
   },
   {
