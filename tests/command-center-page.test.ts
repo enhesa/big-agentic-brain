@@ -106,13 +106,17 @@ describe("/command-center page", () => {
     expect(html).toContain("Command Center is off. Switch it on to let your Claude sessions publish their initiatives here.");
     expect(html).toContain('action="/command-center/enable"');
     expect(html).toContain("/instructions/command-center.md");
+    // The off art keeps its styled background (a missing CSS module class would render it black).
+    expect(html).toMatch(/<rect[^>]*class="[^"]*artBg/);
   });
 
-  it("shows the on-state: needs-you first, then the initiative, percent and links", async () => {
+  it("shows the on-state: no separate needs-you section, the question on its card, percent and links", async () => {
     await seedAlice();
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html.indexOf("Needs you")).toBeLessThan(html.indexOf('data-initiative="billing-export"'));
+    expect(html).not.toContain('id="cc-needs"');
+    expect(html).not.toMatch(/<h2[^>]*>Needs you</);
+    expect(html.indexOf("Which months?")).toBeGreaterThan(html.indexOf('data-initiative="billing-export"'));
     expect(html).toContain("50%");
     expect(html).toContain('href="https://git.example.com/acme/x/pull/1"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -184,19 +188,22 @@ describe("/command-center page", () => {
     expect(html).toContain("high priority");
   });
 
-  it("shows progress as a bar with percent and done/total, the main task, and the subtasks with status labels", async () => {
+  it("shows progress as a ring with percent and done/total, the main task, and the subtasks with status labels", async () => {
     await seedAlice();
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html).toContain("50%");
-    expect(html).toContain("1/2 tasks");
-    expect(html).toMatch(/role="progressbar"[^>]*aria-valuenow="50"/);
-    expect(html).toContain('width="50%"');
+    expect(html).toMatch(/<text[^>]*>50%<\/text>/);
+    expect(html).toMatch(/ringCount[^"]*"[^>]*>1\/2</);
+    expect(html).toMatch(/role="progressbar"[^>]*aria-valuenow="50"[^>]*aria-valuetext="50%, 1 of 2 tasks done"/);
+    expect(html).toContain('stroke-dasharray="50 100"');
+    // The ring sits in the card head, next to the badge.
+    const head = html.slice(html.indexOf('id="cc-i-billing-export"'), html.indexOf('data-badge="needs_you"'));
+    expect(head).toContain('role="progressbar"');
     expect(html).toMatch(/Now<\/span><span[^>]*>Build</);
     // The main task is not repeated in the subtask list.
     expect(html).toMatch(/aria-label="Subtasks"><li[^>]*>.*?Done: <\/span><span>Design</);
     expect(html).not.toContain("In progress: </span><span>Build");
-    expect(html).not.toContain('style="width:50%"');
+    expect(html).not.toMatch(/<(svg|circle|text)[^>]*style=/);
   });
 
   it("collapses a card to title, badge, bar, main task and subtasks; the rest sits in a closed details", async () => {
@@ -212,15 +219,69 @@ describe("/command-center page", () => {
     expect(card).toContain("data-more");
     const collapsed = card.slice(0, more);
     const hidden = card.slice(more);
-    for (const shown of ["Billing &lt;b&gt;export&lt;/b&gt;", 'data-badge="needs_you"', "50%", "Build", "Design"]) expect(collapsed).toContain(shown);
+    for (const shown of ["Billing &lt;b&gt;export&lt;/b&gt;", 'data-badge="needs_you"', "50%", "Build", "Design", "Which months?", 'action="/command-center/dismiss"']) expect(collapsed).toContain(shown);
     for (const gone of ["KEY-1", "due in 3 days", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question"]) {
       expect(collapsed).not.toContain(gone);
       expect(hidden).toContain(gone);
     }
     expect(hidden).toContain("last pushed by laptop-1 / s-1");
-    // The open question is in the details and still in Needs you on top.
-    expect(hidden).toContain('aria-label="Open questions"');
-    expect(html.indexOf("Which months?")).toBeLessThan(start);
+    // The open question is on the collapsed card only, with its options, age and Dismiss.
+    expect(collapsed).toContain('aria-label="Open questions"');
+    expect(collapsed).toMatch(/aria-label="Options your agent offered"><li[^>]*>All</);
+    expect(collapsed).toContain("asked just now");
+    // Only once as a question (the log in the details may still mention it).
+    expect(hidden).not.toContain("data-question=");
+    expect(html.match(/data-question="q1"/g)).toHaveLength(1);
+    expect(html.indexOf("Which months?")).toBeGreaterThan(start);
+  });
+
+  it("shows 2 open questions on the card, oldest first, then +N more with the rest in the details", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const q1 = { id: "q1", text: "First ask", options: ["Yes", "No"] };
+    const q2 = { id: "q2", text: "Second ask" };
+    vi.setSystemTime(NOW - 4 * DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1] }, "mcp");
+    vi.setSystemTime(NOW - DAY);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2] }, "mcp");
+    vi.setSystemTime(NOW);
+    cc.ccPublish(a, ALICE, { v: 1, id: "many", title: "Many asks", questions: [q1, q2, { id: "q3", text: "Third ask" }] }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(html).not.toContain('id="cc-needs"');
+    const start = html.indexOf('data-initiative="many"');
+    const card = html.slice(start, html.indexOf("</article>", start));
+    const collapsed = card.slice(0, card.indexOf("<details"));
+    const hidden = card.slice(card.indexOf("<details"));
+    expect(collapsed.indexOf("First ask")).toBeGreaterThan(0);
+    expect(collapsed.indexOf("First ask")).toBeLessThan(collapsed.indexOf("Second ask"));
+    expect(collapsed).not.toContain("Third ask");
+    expect(collapsed).toContain("+1 more question<");
+    expect(hidden).toContain('aria-label="More open questions"');
+    expect(hidden).toContain("Third ask");
+    // The oldest is possibly stale; every question keeps its own Dismiss form.
+    expect(collapsed).toContain("asked 4 days ago");
+    expect(collapsed).toContain("possibly stale");
+    expect(collapsed.match(/action="\/command-center\/dismiss"/g)).toHaveLength(2);
+    expect(hidden.match(/name="questionId" value="q3"/g)).toHaveLength(1);
+    expect(card).toContain('data-status="needs_you"');
+  });
+
+  it("shows a recurring upkeep row's questions on the row, with Dismiss, marked needs you", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate <b>keys</b>?", options: ["Now"] }] }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const start = html.indexOf('data-initiative="backup"');
+    expect(start).toBeGreaterThan(0);
+    const row = html.slice(html.lastIndexOf("<li", start), html.indexOf("</form>", start));
+    expect(row).toMatch(/class="[^"]*upAsk/);
+    expect(row).toContain('data-badge="needs_you"');
+    expect(row).toContain("Rotate &lt;b&gt;keys&lt;/b&gt;?");
+    expect(row).toContain('name="questionId" value="u1"');
+    expect(html).not.toContain("<b>keys</b>");
   });
 
   it("shows up to 5 subtasks, open work first, then +N more, with every task in the details", async () => {
@@ -359,11 +420,12 @@ describe("/command-center page", () => {
     expect(html).toMatch(/chipBad[^"]*" data-count="1"/);
   });
 
-  it("shows the All clear state, zero chips as neutral, and the settings menu with a confirm before delete", async () => {
+  it("shows no needs-you section, zero chips as neutral, and the settings menu with a confirm before delete", async () => {
     (await import("../lib/command-center")).ccSetSwitch(ALICE, true);
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(html).toContain("All clear");
+    expect(html).not.toContain("All clear");
+    expect(html).not.toContain('id="cc-needs"');
     expect(html).toContain("Nothing published yet");
     expect(html).toContain('aria-label="Command Center settings"');
     expect(html).toContain('action="/command-center/disable"');
@@ -503,6 +565,10 @@ describe("viewer routes", () => {
     const dismiss = await (await import("../app/command-center/dismiss/route")).POST(form("/command-center/dismiss", { id: "billing-export", questionId: "q1" }));
     expect(dismiss.status).toBe(303);
     expect(cc.ccView(ALICE).needsYou).toEqual([]);
+    // The card drops the question and its NEEDS YOU state on the next render.
+    const html = await render();
+    expect(html).not.toContain('data-question="q1"');
+    expect(html).not.toContain('data-status="needs_you"');
     expect((await (await import("../app/command-center/disable/route")).POST(form("/command-center/disable", {}))).status).toBe(303);
     expect(cc.ccSwitch(ALICE).enabledAt).toBeNull();
     expect((await (await import("../app/command-center/enable/route")).POST(form("/command-center/enable", {}))).status).toBe(303);

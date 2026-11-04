@@ -26,6 +26,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Command Center cards show status, progress and tasks; click a card for tags, links and its log.",
       "Command Center sync drafts only sessions with a plan, at most 20, with true progress and title ids.",
       "Every page now has the home page footer, and the top bar no longer shifts between pages.",
+      "Command Center questions now sit on their own card, and cards show a compact progress ring.",
     ],
   },
   {
