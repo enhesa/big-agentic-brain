@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Command Center backfill handles thinking models, retries only failed blocks, and maps sessions by title, id or sync draft.",
       "Every page now has the home page footer, and the top bar no longer shifts between pages.",
       "Command Center questions now sit on their own card, and cards show a compact progress ring.",
+      "Offline evals now run only on pull requests that change search, tools or Command Center logic.",
     ],
   },
   {

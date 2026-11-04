@@ -1,13 +1,17 @@
 name: evals
 
-# Offline retrieval eval + task validation on PRs that touch search or the evals (no LLM, no secrets).
+# Offline evals (no LLM, no secrets) only on PRs that change search, the MCP tools, Command Center logic or the evals.
 # Agent evals (LLM, costs money) only on manual dispatch, reading the key from the ANTHROPIC_API_KEY secret.
 on:
   pull_request:
+    # Only changes that can move an eval result: search ranking, the MCP tools, Command Center logic, skill text, the evals.
     paths:
-      - "lib/**"
-      - "app/api/**"
+      - "lib/learnings*.ts"
+      - "lib/similarity*.ts"
+      - "lib/mcp.ts"
+      - "lib/command-center*.ts"
       - "app/mcp/**"
+      - "app/api/command-center/**"
       - "evals/**"
       - "plugins/command-center/**"
       - "content/instructions/command-center.md"
