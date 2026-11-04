@@ -186,25 +186,34 @@ Right after installing the plugin, the page can show what your sessions are doin
 session publishing by hand. On first use, when `list` returns no initiatives, the skill offers this
 once. From a checkout of this repository, on each machine:
 
-1. `node scripts/cc-backfill.mjs sync --out sync.json [--days 14] [--map map.json]`. It reads the
+1. `node scripts/cc-backfill.mjs sync --out sync.json [--days 14] [--max 20] [--map map.json]`. It reads the
    sessions active in the last `--days` days (default 14) from `~/.claude/projects` (or
    `--projects-dir`). Per session it takes the latest state: the last plan (from the plan tool or
-   `TodoWrite`: step text and status), the open question of the last `wrap_up` when it was blocked
+   `TodoWrite`: step text and status as last set by those calls), the open question of the last `wrap_up` when it was blocked
    and nothing was answered after it (its ask, with the action labels as options), the session
    title, the repo folder name and the git branch. It writes `sync.json` and a readable `sync.md`
    (mode 0600). It sends nothing and calls no model.
-2. Initiatives: one per session, except that sessions sharing a Jira-style key, or the same repo
-   and a non-trunk branch, merge into one. A `--map` file (the same rules as for `draft`) wins.
-   The `id` is a stable slug, so a rerun gives the same ids.
-3. Review `sync.json` and `sync.md`. Task and question text goes through the same masking and
-   secret checks as the log draft; a record that was masked or looks like a secret has
-   `include: false` until you review it. Set `include` to false for any record you do not want.
+   The desktop app's `wrap_up` checks off the whole plan at the end of every turn, so the tool
+   ignores that: a plan reads finished only when the last `wrap_up` recap starts with "Done"
+   (as in "Done: ...") and no plan call came after it. A `TodoWrite` list keeps its own statuses.
+2. Initiatives: sessions with the same title (compared as a slug) count once (the most recent,
+   preferring one with a plan; the others are only counted, before `--map` and grouping). Sessions sharing a Jira-style key, or the same repo and a non-trunk branch, merge into
+   one. A `--map` file (the same rules as for `draft`) wins and names the id. Any other id is the
+   slug of the title, as an agent makes a publish id (a-z, 0-9, `-`, at most 40), so a later
+   publish by that session with the same id is the same initiative. A clash gets `-2`, `-3`.
+3. Review `sync.json` and `sync.md`. Every record is listed with `include` true or false, and
+   why: only records with a plan are included, at most `--max` (default 20, the most recent);
+   the rest say `left out (no plan)` or `left out (over --max 20)`. Task and question text goes
+   through the same masking and secret checks as the log draft; a record that was masked or looks
+   like a secret is flagged and has `include: false`. The tool does not judge content: set
+   `include` to false for anything personal or not work, true for anything you want.
 4. Upload with a backfill link as in step 5 above (`upload --draft sync.json`). Only `id`, `title`,
    `area`, `key`, `state`, `tasks` and `questions` of included records are sent. The server only
    creates: an initiative that already exists on your page is skipped and counted, never changed.
 
-Limits: a session without a plan tool gives a title only; the state is as of each session's last
-turn; the tool runs per machine; at most 100 records and 20 new initiatives per upload.
+Limits: a session without a plan is left out unless you include it (then it gives a title only);
+the state is as of each session's last turn; the tool runs per machine; at most 100 records and 20
+new initiatives per upload (so a `--max` over 20 needs a second link for the rest).
 
 ## Export
 
