@@ -170,54 +170,8 @@ function OnState({ view }: { view: CcView }) {
         <Settings />
       </header>
 
-      <section className={styles.section} aria-labelledby="cc-needs">
-        <SectionHead id="cc-needs" title="Needs you" count={view.needsYou.length} />
-        {view.needsYou.length === 0 ? (
-          <AllClear />
-        ) : (
-          <div className={styles.questions}>
-            {view.needsYou.map(({ initiative, question }) => (
-              <article
-                key={`${initiative.id}/${question.id}`}
-                className={`${styles.qCard} ${urgencyClass(initiative.priority)}`}
-                aria-label={`Question from ${initiative.title}`}
-              >
-                <p className={styles.qText}>{question.text}</p>
-                <div className={styles.qTop}>
-                  <span className={styles.chip} title={initiative.title}>
-                    {initiative.title}
-                  </span>
-                  <PriorityTag p={initiative.priority} />
-                  {question.stale ? <span className={`${styles.tag} ${styles.tagWarn}`}>possibly stale</span> : null}
-                  <span className={styles.age}>
-                    <ClockIcon />
-                    asked {formatRelativeTime(question.askedAt)}
-                  </span>
-                </div>
-                <div className={styles.qFoot}>
-                  {question.options.length ? (
-                    <ul className={styles.options} aria-label="Options your agent offered">
-                      {question.options.map((o, i) => (
-                        <li key={i} className={styles.option}>
-                          {o}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <form method="post" action="/command-center/dismiss">
-                    <input type="hidden" name="id" value={initiative.id} />
-                    <input type="hidden" name="questionId" value={question.id} />
-                    <button type="submit" className={styles.ghost}>
-                      Dismiss
-                    </button>
-                  </form>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
+      {/* No separate questions section: open questions sit on their own card or upkeep row, and the
+          NEEDS YOU filter shows only those cards. */}
       <section className={styles.section} aria-labelledby="cc-initiatives">
         <SectionHead id="cc-initiatives" title="Initiatives" count={projects.length} />
         {projects.length === 0 ? (
@@ -311,24 +265,6 @@ function DataHealth({ h }: { h: CcView["dataHealth"] }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function AllClear() {
-  return (
-    <div className={`${styles.panel} ${styles.allClear}`}>
-      <svg className={styles.allClearArt} viewBox="0 0 96 96" aria-hidden="true" focusable="false">
-        <circle cx="48" cy="48" r="44" className={styles.artBg} />
-        <circle cx="48" cy="48" r="30" className={styles.artRing} />
-        <path d="M34 49l9 9 20-21" className={styles.artCheck} />
-        <circle cx="80" cy="20" r="4" className={styles.artSpark} />
-        <circle cx="14" cy="70" r="3" className={styles.artSpark} />
-      </svg>
-      <div>
-        <p className={styles.allClearTitle}>All clear</p>
-        <p className={styles.muted}>Nothing waiting for you. Questions your agents ask show up here.</p>
-      </div>
-    </div>
   );
 }
 
@@ -438,19 +374,88 @@ function StatusBadge({ status, paused }: { status: Rec["status"]; paused: boolea
   );
 }
 
-/** A flat bar with the percent beside it. SVG attributes, no inline style. */
-function ProgressBar({ r, done }: { r: Rec; done: number }) {
+/**
+ * A small progress ring with the percent inside and done/total under it. The arc uses
+ * pathLength 100, so stroke-dasharray is the percent. SVG attributes, no inline style.
+ */
+function ProgressRing({ r, done }: { r: Rec; done: number }) {
   if (r.progress === null) return null;
+  const total = r.tasks.length;
+  const valueText = total ? `${r.progress}%, ${done} of ${total} ${total === 1 ? "task" : "tasks"} done` : `${r.progress}%`;
   return (
-    <div className={styles.bar}>
-      <svg className={styles.barTrack} role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.progress} focusable="false">
-        <rect x="0" y="0" width="100%" height="100%" rx="4" className={styles.barBg} />
-        {r.progress > 0 ? <rect x="0" y="0" width={`${r.progress}%`} height="100%" rx="4" className={styles.barFill} /> : null}
+    <div className={styles.ring}>
+      <svg
+        className={styles.ringSvg}
+        viewBox="0 0 44 44"
+        role="progressbar"
+        aria-label="Progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={r.progress}
+        aria-valuetext={valueText}
+        focusable="false"
+      >
+        <circle cx="22" cy="22" r="18" pathLength="100" className={styles.ringBg} />
+        {r.progress > 0 ? <circle cx="22" cy="22" r="18" pathLength="100" strokeDasharray={`${r.progress} 100`} transform="rotate(-90 22 22)" className={styles.ringFill} /> : null}
+        <text x="22" y="22" textAnchor="middle" dominantBaseline="central" className={styles.ringText}>
+          {`${r.progress}%`}
+        </text>
       </svg>
-      <span className={styles.barPercent}>{r.progress}%</span>
-      {r.tasks.length ? <span className={styles.barCount}>{`${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}`}</span> : null}
+      {total ? (
+        <span className={styles.ringCount} aria-hidden="true">
+          {`${done}/${total}`}
+        </span>
+      ) : null}
     </div>
   );
+}
+
+/** Open questions shown on the face of a card or upkeep row, oldest first. */
+const QUESTIONS_SHOWN = 2;
+
+/**
+ * One open question: its text (clamped to 2 lines until the card opens), age, a stale tag, the
+ * options the agent offered and the Dismiss form. Every string is React text.
+ */
+function QuestionItem({ id, q }: { id: string; q: Rec["questionViews"][number] }) {
+  return (
+    <li className={styles.ask} data-question={q.id}>
+      <p className={styles.askText} title={q.text}>
+        {q.text}
+      </p>
+      <div className={styles.askMeta}>
+        <span className={styles.age}>
+          <ClockIcon />
+          asked {formatRelativeTime(q.askedAt)}
+        </span>
+        {q.stale ? <span className={`${styles.tag} ${styles.tagWarn}`}>possibly stale</span> : null}
+      </div>
+      <div className={styles.askFoot}>
+        {q.options.length ? (
+          <ul className={styles.options} aria-label="Options your agent offered">
+            {q.options.map((o, i) => (
+              <li key={i} className={styles.option}>
+                {o}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <form method="post" action="/command-center/dismiss">
+          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="questionId" value={q.id} />
+          <button type="submit" className={styles.ghost}>
+            Dismiss
+          </button>
+        </form>
+      </div>
+    </li>
+  );
+}
+
+/** The open questions of one record, oldest first; paused hides them. */
+function openQuestionsOf(r: Rec): Rec["questionViews"] {
+  if (r.priority === "paused") return [];
+  return r.questionViews.filter((q) => !q.clearedAt).sort((a, b) => a.askedAt.localeCompare(b.askedAt));
 }
 
 function TaskItem({ t }: { t: Task }) {
@@ -464,9 +469,10 @@ function TaskItem({ t }: { t: Task }) {
 }
 
 /**
- * One initiative card. Collapsed: title, status badge, progress bar, the main task and a few
- * subtasks. Everything else (chips, key, deadline, questions, links, log, who pushed) sits in a
- * closed <details>; its Details toggle or a click on the card opens it (CardToggle).
+ * One initiative card. Collapsed: title with the progress ring and status badge beside it, up to
+ * two open questions (with options and Dismiss), the main task and a few subtasks. Everything
+ * else (chips, key, deadline, more questions, links, log, who pushed) sits in a closed <details>;
+ * its Details toggle or a click on the card opens it (CardToggle).
  */
 function Initiative({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
@@ -480,7 +486,9 @@ function Initiative({ r }: { r: Rec }) {
   // A finished card needs no task list on its face: the full bar says it.
   const shown = r.status === "finished" ? [] : ordered.slice(0, SUBTASKS_SHOWN);
   const more = ordered.length - shown.length;
-  const openQs = paused ? [] : r.questionViews.filter((q) => !q.clearedAt);
+  const openQs = openQuestionsOf(r);
+  const qShown = openQs.slice(0, QUESTIONS_SHOWN);
+  const qRest = openQs.slice(QUESTIONS_SHOWN);
   const cls = [styles.card, styles[`status_${r.status}`] ?? "", urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
   return (
     <article className={cls} data-initiative={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
@@ -488,10 +496,24 @@ function Initiative({ r }: { r: Rec }) {
         <h3 id={`cc-i-${r.id}`} className={styles.cardTitle}>
           {r.title}
         </h3>
-        <StatusBadge status={r.status} paused={paused} />
+        <div className={styles.headSide}>
+          <ProgressRing r={r} done={done} />
+          <StatusBadge status={r.status} paused={paused} />
+        </div>
       </div>
 
-      <ProgressBar r={r} done={done} />
+      {qShown.length ? (
+        <ul className={styles.asks} aria-label="Open questions">
+          {qShown.map((q) => (
+            <QuestionItem key={q.id} id={r.id} q={q} />
+          ))}
+          {qRest.length ? (
+            <li className={styles.moreAsks} data-more-questions="">
+              +{qRest.length} more {qRest.length === 1 ? "question" : "questions"}
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
 
       {main && r.status !== "finished" ? (
         <p className={styles.next}>
@@ -529,13 +551,10 @@ function Initiative({ r }: { r: Rec }) {
             ) : null}
           </div>
 
-          {openQs.length ? (
-            <ul className={styles.qList} aria-label="Open questions">
-              {openQs.map((q) => (
-                <li key={q.id}>
-                  {q.text}
-                  <span className={styles.when}> asked {formatRelativeTime(q.askedAt)}</span>
-                </li>
+          {qRest.length ? (
+            <ul className={styles.asks} aria-label="More open questions">
+              {qRest.map((q) => (
+                <QuestionItem key={q.id} id={r.id} q={q} />
               ))}
             </ul>
           ) : null}
@@ -691,8 +710,10 @@ const HEALTH_LABEL: Record<string, string> = { green: "Healthy", amber: "Needs a
 function Upkeep({ r }: { r: Rec }) {
   const level = r.health?.level ?? "unknown";
   const paused = r.priority === "paused";
+  // A row has no details to open, so every open question shows on it.
+  const openQs = openQuestionsOf(r);
   return (
-    <li className={`${styles.upRow} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id}>
+    <li className={`${styles.upRow} ${openQs.length ? styles.upAsk : ""} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id} data-status={r.status}>
       <span className={`${styles.hDot} ${styles[`h_${level}`] ?? ""}`} aria-hidden="true" />
       <div className={styles.upMain}>
         <span className={styles.upTitle}>
@@ -704,6 +725,12 @@ function Upkeep({ r }: { r: Rec }) {
           {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent</span> : null}
           <PriorityTag p={r.priority === "paused" ? null : r.priority} />
           {paused ? <span className={`${styles.tag} ${styles.tagPaused}`}>paused</span> : null}
+          {openQs.length ? (
+            <span className={`${styles.badge} ${styles.badge_needs_you}`} data-badge="needs_you">
+              <span className={styles.badgeDot} aria-hidden="true" />
+              Needs you
+            </span>
+          ) : null}
         </span>
         {r.health?.reason ? (
           <p className={styles.upReason} title={r.health.reason}>
@@ -715,6 +742,13 @@ function Upkeep({ r }: { r: Rec }) {
       <span className={styles.upWhen} title={r.health ? `Agent time ${r.health.checkedAt}` : undefined}>
         {r.health ? <>checked {formatRelativeTime(r.health.receivedAt)}</> : <>updated {formatRelativeTime(r.updatedAt)}</>}
       </span>
+      {openQs.length ? (
+        <ul className={`${styles.asks} ${styles.upAsks}`} aria-label="Open questions">
+          {openQs.map((q) => (
+            <QuestionItem key={q.id} id={r.id} q={q} />
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 }
