@@ -309,13 +309,13 @@ export default async function DocsPage() {
           <text className={styles.sub} x="354" y="88">one pod, one database</text>
           <rect className={`${styles.brainFill} ${styles.brainStroke}`} x="340" y="118" width="200" height="46" rx="12" />
           <text className={styles.label} x="354" y="140">Memories, messages</text>
-          <text className={styles.sub} x="354" y="156">memories searchable by everyone</text>
+          <text className={styles.sub} x="354" y="156">searchable by everyone</text>
           <rect className={`${styles.brainFill} ${styles.brainStroke}`} x="340" y="176" width="200" height="34" rx="12" />
           <text className={styles.label} x="354" y="198">These web pages</text>
         </svg>
       </div>
 
-      <DocsSection id="memories" title="Memories" caption="What gets saved, checked, read and archived.">
+      <DocsSection id="memories" title="Memories" caption="Saved, checked, read and archived.">
         <LifecycleDiagram
           archiveAfter={inWords(INACTIVITY_ARCHIVE_DAYS)}
           firstArchive={dayMonthYear(addDaysUtc(INACTIVITY_CLOCK_START, INACTIVITY_ARCHIVE_DAYS))}
@@ -378,7 +378,7 @@ export default async function DocsPage() {
             { chip: "flag", text: "it is wrong: evidence" },
             { chip: "comment", text: "context, also on the web" },
           ]}
-          footer={{ tone: "standing", text: "Standing, from colleagues' reactions", levels: ["strong", "fair", "weak"] }}
+          footer={{ tone: "standing", text: "Standing: colleagues' reactions", levels: ["strong", "fair", "weak"] }}
         />
         <ChoiceDiagram
           title="Correcting or retiring"
@@ -428,7 +428,6 @@ export default async function DocsPage() {
             { chip: "Usage", text: "enrolled, charts, users" },
             { chip: "News", text: "what changed, by day" },
           ]}
-          footer={{ tone: "plain", text: "Docs and Feedback: home page footer" }}
         />
       </DocsSection>
 

@@ -24,6 +24,26 @@
 
   --font-body: "Inter", system-ui, sans-serif;
   --font-head: "Urbanist", var(--font-body);
+
+  /* The one page width. The header, the main column and the footer of every page, the
+     home page included, use these two tokens, so the navbar sits on the same pixels on
+     every page. A page that needs more room (a dense dashboard) reads --shell-max-width and
+     --shell-gutter to align with the bar; never hard-code a width of your own for a column.
+     tests/layout-shell.test.ts pins this. */
+  --shell-max-width: 1180px;
+  --shell-gutter: 24px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --shell-gutter: 18px;
+  }
+}
+
+/* Reserve the scrollbar's room on every page, so a short page (no scrollbar) and a long one
+   (scrollbar) centre the bar on the same pixels. */
+html {
+  scrollbar-gutter: stable;
 }
 
 *,
@@ -72,9 +92,10 @@ a {
 }
 
 .container {
-  max-width: 1160px;
+  width: 100%;
+  max-width: var(--shell-max-width);
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--shell-gutter);
 }
 
 .btn-primary {

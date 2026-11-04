@@ -64,6 +64,21 @@
   white-space: nowrap;
 }
 
+/* Reserve the bold width of every label, so marking the current page (font-weight 600)
+   never widens the nav and nudges the other links. The same rule is in both bars. */
+.navLink {
+  display: inline-block;
+}
+
+.navLink::before {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
+}
+
 .navLink:hover {
   color: var(--navy);
 }
@@ -113,9 +128,17 @@
   outline-offset: 3px;
 }
 
+/* Bar on top, footer at the bottom of the window on a short page, below the content on a
+   long one. Widths come from the shared `.container` (--shell-max-width in app/globals.css). */
+.frame {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .content {
+  flex: 1 0 auto;
   background: #fff;
-  min-height: calc(100vh - 68px);
   padding: 32px 0 64px;
 }
 

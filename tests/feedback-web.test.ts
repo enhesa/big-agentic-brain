@@ -65,7 +65,7 @@ const goodFields = { kind: "idea", area: "web", title: "Dark mode for the web UI
 describe("navigation", () => {
   it("links Feedback from the homepage footer, not the top nav", () => {
     expect(NAV_ITEMS.some((i) => (i.href as string) === "/feedback")).toBe(false);
-    const footer = readFileSync(path.join(process.cwd(), "app/components/landing/Footer.tsx"), "utf8");
+    const footer = readFileSync(path.join(process.cwd(), "app/components/shell/Footer.tsx"), "utf8");
     expect(footer).toContain('href="/feedback"');
   });
 });
