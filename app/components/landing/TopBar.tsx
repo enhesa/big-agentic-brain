@@ -23,7 +23,7 @@ export default function TopBar({ orgName }: { orgName: string }) {
           {NAV_ITEMS.map((item) =>
             // The Inbox item hides while BAB_INBOX_PAGE=0 and carries the unread count.
             item.href === "/inbox" && inbox.off ? null : (
-              <Link key={item.href} className={styles.navLink} href={item.href}>
+              <Link key={item.href} className={styles.navLink} href={item.href} data-label={item.label}>
                 {item.label}
                 {item.href === "/inbox" ? <InboxBadge count={inbox.count} /> : null}
               </Link>

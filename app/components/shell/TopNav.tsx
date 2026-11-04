@@ -39,6 +39,7 @@ export default function TopNav({ orgName }: { orgName: string }) {
               <Link
                 key={item.href}
                 href={item.href}
+                data-label={item.label}
                 className={`${styles.navLink} ${current ? styles.navLinkOn : ""}`}
                 aria-current={current ? "page" : undefined}
               >

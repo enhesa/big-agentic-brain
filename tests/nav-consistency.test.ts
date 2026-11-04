@@ -58,14 +58,14 @@ describe("the navbar is the same everywhere", () => {
 
   it("keeps How it works out of the top bar and in the homepage footer, next to News", () => {
     expect(NAV_ITEMS.map((item) => item.href as string)).not.toContain("/docs");
-    const footer = read("app/components/landing/Footer.tsx");
+    const footer = read("app/components/shell/Footer.tsx");
     expect(footer).toContain('href="/docs"');
     expect(footer.indexOf('href="/docs"')).toBeLessThan(footer.indexOf('href="/changelog"'));
   });
 
   it("keeps Feedback out of the top bar and in the homepage footer, after News", () => {
     expect(NAV_ITEMS.map((item) => item.href as string)).not.toContain("/feedback");
-    const footer = read("app/components/landing/Footer.tsx");
+    const footer = read("app/components/shell/Footer.tsx");
     expect(footer).toContain('<Link href="/feedback">Feedback</Link>');
     expect(footer.indexOf('href="/changelog"')).toBeLessThan(footer.indexOf('href="/feedback"'));
   });

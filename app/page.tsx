@@ -6,7 +6,7 @@ import HowItWorks from "./components/landing/HowItWorks";
 import Holds from "./components/landing/Holds";
 import GetStarted from "./components/landing/GetStarted";
 import Faq from "./components/landing/Faq";
-import Footer from "./components/landing/Footer";
+import Footer from "./components/shell/Footer";
 
 /**
  * The landing page is the demo, so nobody has to record one.
