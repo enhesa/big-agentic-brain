@@ -64,10 +64,12 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
 | `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after each run. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
-| `source` | Optional `{ machine (20), session (60) }`, shown as "last pushed by". |
+| `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
+
+Put the link that opens this session in `source.link` when you know it (for example claude://claude.ai/epitaxy/<your session id>); the page shows an Open in Claude button.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
@@ -99,8 +101,8 @@ Run the Command Center sync tool from the BAB repository, as its documentation d
 
 - The server logs your `worked` lines and what it sees itself: tasks started and done, questions
   asked and cleared, health and state changes. A retried publish logs nothing twice.
-- The person can dismiss a question on the page. It stays dismissed while you send the same id
-  and text (the answer lists it in `dismissed`): stop asking it. Reword it only if it is a new ask.
+- A question the answer lists in `dismissed` stays cleared while you send the same id and text:
+  stop asking it. Reword it only if it is a new ask.
 - A question older than 3 days, on a done or parked initiative, or kept by another session is
   shown as possibly stale. Leave answered ones out of the next publish.
 - The page shows active initiatives. Done, parked and silent ones (no publish for 14 days) leave

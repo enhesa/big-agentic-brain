@@ -133,7 +133,7 @@ describe("/command-center page", () => {
     expect(html).toContain("50%");
     expect(html).toContain('href="https://git.example.com/acme/x/pull/1"');
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain('action="/command-center/dismiss"');
+    expect(html).not.toContain("/command-center/dismiss");
     expect(html).toContain("Last push just now");
     expect(html).not.toContain("possibly stale");
   });
@@ -211,11 +211,13 @@ describe("/command-center page", () => {
     expect(html).toContain('stroke-dasharray="50 100"');
     // The ring sits in the card head next to the title; done/total only in the drawer.
     const card = cardOf(html, "billing-export");
-    expect(card.slice(card.indexOf("</h4>"))).toMatch(/^<\/h4><p[^>]*>.*?<\/p><\/div><div[^>]*ring[^>]*><svg[^>]*role="progressbar"/);
+    expect(card.slice(card.indexOf("</h4>"))).toMatch(/^<\/h4><span class="[^"]*srOnly[^"]*">Needs you<\/span><\/div><div[^>]*cardSide[^>]*><div[^>]*ring[^>]*><svg[^>]*role="progressbar"/);
     expect(card).not.toContain("ringCount");
     expect(panelOf(html, "billing-export")).toMatch(/ringCount[^"]*"[^>]*>1\/2</);
-    // One muted line with the task in progress; the full list is in the drawer.
-    expect(card).toMatch(/Now: <\/span><span[^>]*>Build</);
+    // A Needs you card shows no question and no task; both are in the drawer.
+    expect(card).not.toContain("&lt;script&gt;");
+    expect(card).not.toContain("<p");
+    expect(card).not.toContain("Build");
     expect(card).not.toContain("Design");
     expect(panelOf(html, "billing-export")).toMatch(/aria-label="All tasks"><li[^>]*>.*?Done: <\/span><span>Design</);
     expect(html).not.toMatch(/<(svg|circle|text)[^>]*style=/);
@@ -227,13 +229,14 @@ describe("/command-center page", () => {
     const html = await render();
     const card = cardOf(html, "billing-export");
     const panel = panelOf(html, "billing-export");
-    // The card: title (a button that opens the drawer), ring, the task line, the key chip, the question.
+    // The card: title (a button that opens the drawer), ring and Open in Claude, no question text.
     expect(card).toMatch(/<button type="button"[^>]*data-open-card="billing-export"[^>]*>Billing &lt;b&gt;export&lt;\/b&gt;<\/button>/);
-    for (const shown of ["50%", "Build", "KEY-1", "Which months?", 'action="/command-center/dismiss"', "asked just now"]) expect(card).toContain(shown);
-    expect(card).toMatch(/aria-label="Options your agent offered"><li[^>]*>All</);
+    for (const shown of ["50%", "Open in Claude"]) expect(card).toContain(shown);
     expect(card).not.toContain("<details");
     expect(card).not.toContain("data-badge");
-    for (const gone of ["due 2026-03-20", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question<"]) {
+    expect(card).not.toContain("<form");
+    expect(card).not.toMatch(/class="[^"]*\btag\b/);
+    for (const gone of ["Build", "KEY-1", "Which months?", 'data-question="q1"', "asked just now", 'aria-label="Options your agent offered"', "due 2026-03-20", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question<"]) {
       expect(card).not.toContain(gone);
       expect(panel).toContain(gone);
     }
@@ -244,23 +247,29 @@ describe("/command-center page", () => {
     expect(panel).toContain('data-badge="needs_you"');
     expect(panel).toContain("last pushed by laptop-1 / s-1");
     expect(panel).toContain('aria-label="Close details"');
-    expect(panel).toContain('name="questionId" value="q1"');
+    expect(panel).not.toContain("<form");
+    expect(panel).not.toContain("Dismiss");
     expect(panel).toContain('aria-label="All tasks"');
   });
 
-  it("shows a near deadline as a chip on the card, a far one only in the drawer", async () => {
+  it("keeps deadlines in the drawer and marks an overdue card with one red dot", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "near", title: "Near", deadline: "2026-03-05" }, "mcp");
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "far", title: "Far", deadline: "2026-06-30" }, "mcp");
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "late", title: "Late", deadline: "2026-02-28" }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
-    expect(cardOf(html, "near")).toContain("due in 3 days");
+    expect(cardOf(html, "near")).not.toContain("due in 3 days");
+    expect(panelOf(html, "near")).toContain("due in 3 days");
     expect(cardOf(html, "far")).not.toContain("2026-06-30");
     expect(panelOf(html, "far")).toContain("due 2026-06-30");
+    for (const id of ["near", "far"]) expect(cardOf(html, id)).not.toContain("data-overdue");
+    expect(cardOf(html, "late")).toMatch(/role="img" aria-label="Overdue by 2 days" title="Overdue by 2 days \(2026-02-28\)" data-overdue=""/);
+    expect(panelOf(html, "late")).toContain("overdue by 2 days");
   });
 
-  it("shows a recurring upkeep row's questions on the row, with Dismiss, marked needs you", async () => {
+  it("shows a recurring upkeep row's questions on the row, marked needs you, with Open in Claude and no form", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate <b>keys</b>?", options: ["Now"] }] }, "mcp");
@@ -268,15 +277,17 @@ describe("/command-center page", () => {
     const html = await render();
     const start = html.indexOf('data-initiative="backup"');
     expect(start).toBeGreaterThan(0);
-    const row = html.slice(html.lastIndexOf("<li", start), html.indexOf("</form>", start));
+    const row = html.slice(html.lastIndexOf("<li", start), html.indexOf("Open in Claude", start) + 200);
     expect(row).toMatch(/class="[^"]*upAsk/);
     expect(row).toContain('data-badge="needs_you"');
     expect(row).toContain("Rotate &lt;b&gt;keys&lt;/b&gt;?");
-    expect(row).toContain('name="questionId" value="u1"');
+    expect(row).toContain('data-question="u1"');
+    expect(row).toMatch(/disabled=""[^>]*title="No session link"/);
+    expect(row).not.toContain("<form");
     expect(html).not.toContain("<b>keys</b>");
   });
 
-  it("shows the oldest open question on the card, then +N more, with every question in the drawer", async () => {
+  it("keeps every question, oldest first, with its age, stale tag and options in the drawer only", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     const a = agent(ALICE);
@@ -292,17 +303,14 @@ describe("/command-center page", () => {
     const html = await render();
     expect(html).not.toContain('id="cc-needs"');
     const card = cardOf(html, "many");
-    expect(card).toContain("First ask");
-    expect(card).not.toContain("Second ask");
-    expect(card).toContain("+2 more questions<");
-    expect(card).toContain("asked 4 days ago");
-    expect(card).toContain("possibly stale");
-    expect(card.match(/action="\/command-center\/dismiss"/g)).toHaveLength(1);
+    for (const gone of ["First ask", "Second ask", "+2", "asked 4 days ago", "possibly stale", ">Yes<"]) expect(card).not.toContain(gone);
     expect(card).toContain('data-status="needs_you"');
     const panel = panelOf(html, "many");
+    for (const shown of ["asked 4 days ago", "possibly stale", ">Yes<"]) expect(panel).toContain(shown);
     expect(panel.indexOf("First ask")).toBeLessThan(panel.indexOf("Second ask"));
     expect(panel.indexOf("Second ask")).toBeLessThan(panel.indexOf("Third ask"));
-    expect(panel.match(/action="\/command-center\/dismiss"/g)).toHaveLength(3);
+    expect(panel.match(/data-question="/g)).toHaveLength(3);
+    expect(panel).not.toContain("<form");
   });
 
   it("shows one task line on a card and every task, with its status, in the drawer", async () => {
@@ -321,7 +329,9 @@ describe("/command-center page", () => {
     expect(panel).toContain("Done: </span><span>Task 0<");
     expect(panel).toContain("In progress: </span><span>Task 3<");
     expect(panel).toContain("To do: </span><span>Task 8<");
-    expect(cardOf(html, "fin")).toContain("All 1 task done");
+    // A Finished card has no line at all: title and ring only.
+    expect(cardOf(html, "fin")).not.toContain("<p");
+    expect(cardOf(html, "fin")).not.toContain("Only");
   });
 
   it("derives the badge: active under 2 h, idle at 2 h, finished when all tasks are done, needs you first, paused idle", async () => {
@@ -341,7 +351,8 @@ describe("/command-center page", () => {
     expect(badge(html, "fin")).toBe("finished");
     expect(badge(html, "ask")).toBe("needs_you");
     expect(badge(html, "rest")).toBe("idle");
-    expect(cardOf(html, "rest")).toMatch(/tagPaused[^"]*">.*paused/);
+    expect(cardOf(html, "rest")).toMatch(/class="[^"]*greyed/);
+    expect(cardOf(html, "rest")).not.toContain("tagPaused");
     expect(panelOf(html, "rest")).toMatch(/badgePaused[^"]*">.*paused/);
     // Sort: needs you, active, idle, finished.
     const at = (id: string) => html.indexOf(`data-initiative="${id}"`);
@@ -467,10 +478,10 @@ describe("/command-center page", () => {
     expect(confirmOpen).toBeGreaterThan(-1);
     expect(html.slice(confirmOpen, html.indexOf(">", confirmOpen))).not.toMatch(/open/);
     expect(html.indexOf("</details>", confirmOpen)).toBeGreaterThan(del);
-    // Section counts read as "0 items" to a screen reader without an aria-label on a plain span.
     expect(html).not.toMatch(/aria-label="\d+ items?"/);
-    expect(html).toMatch(/>0<span class="[^"]*srOnly[^"]*"> items<\/span>/);
     expect(html).toContain("No initiatives yet");
+    // Health chips show only when something is off.
+    expect(html).not.toContain('data-testid="data-health"');
     expect(html).not.toMatch(/chip(Warn|Bad)/);
   });
 
@@ -586,20 +597,118 @@ describe("/command-center page", () => {
     expect(html).toContain("shares entries");
     expect(html).toContain('action="/command-center/export/revoke"');
   });
+
+  it("puts Open in Claude on a Needs you card with its session link, disabled without one, and small in every drawer", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const link = "claude://claude.ai/epitaxy/session_01AbC-x_y.z";
+    cc.ccPublish(a, ALICE, { v: 1, id: "linked", title: "Linked", questions: [{ id: "q", text: "Go?" }], source: { machine: "vm", session: "s1", link } }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "nolink", title: "No link", questions: [{ id: "q", text: "Go?" }], source: { machine: "vm", session: "s2" } }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "busy", title: "Busy", tasks: [{ id: "t", text: "Work", status: "in_progress" }], source: { link: "https://claude.ai/code/session_01x" } }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    expect(cardOf(html, "linked")).toContain(`href="${link}" rel="noopener noreferrer" data-open-session="linked">Open in Claude`);
+    expect(cardOf(html, "linked")).not.toContain("target=");
+    expect(cardOf(html, "nolink")).toMatch(/<button type="button"[^>]*disabled=""[^>]*title="No session link"[^>]*>Open in Claude<span class="[^"]*srOnly[^"]*"> \(no session link\)<\/span><\/button>/);
+    // Other cards carry it in the drawer only.
+    expect(cardOf(html, "busy")).not.toContain("Open in Claude");
+    expect(panelOf(html, "busy")).toContain('href="https://claude.ai/code/session_01x" rel="noopener noreferrer" data-open-session="busy"');
+    expect(panelOf(html, "linked")).toContain(`href="${link}"`);
+    expect(panelOf(html, "nolink")).toContain('title="No session link"');
+  });
+
+  it("has no action on the board or in the drawer but Open in Claude", async () => {
+    const cc = await import("../lib/command-center");
+    await seedAlice({ source: { machine: "vm", session: "s1", link: "https://claude.ai/code/s1" } });
+    cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate?", options: ["Now"] }] }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    // From the board to the end of the upkeep section (the drawer sits between them).
+    const board = html.slice(html.indexOf('id="cc-initiatives"'), html.indexOf("</ul>", html.indexOf('data-initiative="backup"')));
+    expect(board).toContain("</dialog>");
+    expect(board).not.toContain("<form");
+    expect(board).not.toContain("<input");
+    expect(board).not.toContain("Dismiss");
+    // Every button opens a card or the drawer's close, or is a disabled Open in Claude.
+    for (const b of board.match(/<button[^>]*>/g) ?? []) expect(b).toMatch(/data-open-card=|aria-label="Close details"|data-open-session=""[^>]*|disabled=""/);
+    for (const a of board.match(/<a [^>]*>/g) ?? []) expect(a).toMatch(/data-open-session=|linkPill/);
+  });
+
+  it("checks the session link again before it becomes an href, so a stored bad one renders a disabled button", async () => {
+    await seedAlice({ source: { machine: "vm", session: "s1", link: "https://claude.ai/ok" } });
+    const { getDb } = await import("../lib/db");
+    const strings = ["javascript:alert(1)", "JAVASCRIPT:alert(1)", "data:text/html,x", "//evil.example.com/x", "https://claude.ai/a b", "https://claude.ai/a?b=1",
+      "https://claude.ai/x\n", "https://claude.ai/%6A", "https://claude.ai\\@evil.example.com", "https://claude.ai:8443/x", "https://u@example.com/x",
+      "https://claude.ai//evil.example.com", "https://claude.ai/a/../b", `https://claude.ai/${"a".repeat(290)}`];
+    // Stored as JSON values, so non-strings land as numbers, objects and arrays.
+    const values = [...strings.map((s) => JSON.stringify(s)), "42", "{}", '["https://claude.ai/x"]', "true"];
+    for (const bad of values) {
+      getDb().prepare("UPDATE command_center_initiatives SET record = json_set(record, '$.source.link', json(?)) WHERE owner_id = ? AND id = ?").run(bad, ALICE, "billing-export");
+      asViewer(ALICE, "Alice A");
+      const html = await render();
+      expect(html).not.toContain("data-open-session=\"billing-export\"");
+      expect(html).not.toMatch(/href="(javascript|data|JAVASCRIPT):/);
+      expect(cardOf(html, "billing-export")).toMatch(/disabled=""[^>]*title="No session link"/);
+    }
+  });
+
+  it("shows the 3 newest Finished cards, then +N more with the rest folded", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    for (let i = 0; i < 5; i++) {
+      vi.setSystemTime(NOW + i * 60_000);
+      cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: `f${i}`, title: `Fin ${i}`, tasks: [{ id: "a", text: "A", status: "done" }] }, "mcp");
+    }
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const col = html.slice(html.indexOf('data-column="finished"'), html.indexOf("</section>", html.indexOf('data-column="finished"')));
+    expect(col).toContain('data-count="5"');
+    const more = col.indexOf("<details");
+    expect(more).toBeGreaterThan(0);
+    for (const id of ["f4", "f3", "f2"]) expect(col.indexOf(`data-initiative="${id}"`)).toBeLessThan(more);
+    for (const id of ["f1", "f0"]) expect(col.indexOf(`data-initiative="${id}"`)).toBeGreaterThan(more);
+    expect(col.indexOf('data-initiative="f4"')).toBeLessThan(col.indexOf('data-initiative="f3"'));
+    expect(col).toMatch(/data-more-cards="2"><summary[^>]*>\+2 more<\/summary>/);
+    // Every card, folded or not, has its drawer panel.
+    for (let i = 0; i < 5; i++) expect(html).toContain(`data-detail="f${i}"`);
+  });
+
+  it("shows only upkeep that needs a look, then the healthy rows folded under N healthy", async () => {
+    const cc = await import("../lib/command-center");
+    cc.ccSetSwitch(ALICE, true);
+    const a = agent(ALICE);
+    const checkedAt = new Date(NOW - 60_000).toISOString();
+    cc.ccPublish(a, ALICE, { v: 1, id: "ok-1", title: "Green one", kind: "recurring", cadence: "daily", health: { level: "green", reason: "", checkedAt } }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "ok-2", title: "Green two", kind: "recurring", cadence: "daily", health: { level: "green", reason: "", checkedAt } }, "mcp");
+    cc.ccPublish(a, ALICE, { v: 1, id: "red-1", title: "Red one", kind: "recurring", cadence: "daily", health: { level: "red", reason: "Broken", checkedAt } }, "mcp");
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const fold = html.indexOf("data-healthy=");
+    expect(html).toMatch(/data-healthy="2"><summary[^>]*><span[^>]*><\/span>2 healthy<\/summary>/);
+    expect(html.indexOf('data-initiative="red-1"')).toBeLessThan(fold);
+    for (const id of ["ok-1", "ok-2"]) expect(html.indexOf(`data-initiative="${id}"`)).toBeGreaterThan(fold);
+  });
+
+  it("keeps the header on one quiet line: privacy and the log download in the menu, no Initiatives count", async () => {
+    await seedAlice();
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const at = html.indexOf('aria-label="Command Center settings"');
+    const menu = html.slice(at, html.indexOf('action="/command-center/disable"', at));
+    expect(menu).toContain("Private to you. Nothing confidential.");
+    expect(menu).toContain('href="/command-center/export"');
+    expect(html.match(/Private to you\. Nothing confidential\./g)).toHaveLength(1);
+    expect(html).not.toContain('id="cc-log"');
+    expect(html).toMatch(/<h2 id="cc-initiatives" class="[^"]*srOnly[^"]*">Initiatives<\/h2>/);
+  });
 });
 
 describe("viewer routes", () => {
-  it("enable, dismiss, disable and delete work for the viewer with a 303", async () => {
+  it("enable, disable and delete work for the viewer with a 303", async () => {
     await seedAlice();
     asViewer(ALICE, "Alice A");
     const cc = await import("../lib/command-center");
-    const dismiss = await (await import("../app/command-center/dismiss/route")).POST(form("/command-center/dismiss", { id: "billing-export", questionId: "q1" }));
-    expect(dismiss.status).toBe(303);
-    expect(cc.ccView(ALICE).needsYou).toEqual([]);
-    // The card drops the question and its NEEDS YOU state on the next render.
-    const html = await render();
-    expect(html).not.toContain('data-question="q1"');
-    expect(html).not.toContain('data-status="needs_you"');
     expect((await (await import("../app/command-center/disable/route")).POST(form("/command-center/disable", {}))).status).toBe(303);
     expect(cc.ccSwitch(ALICE).enabledAt).toBeNull();
     expect((await (await import("../app/command-center/enable/route")).POST(form("/command-center/enable", {}))).status).toBe(303);

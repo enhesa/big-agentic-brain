@@ -41,7 +41,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 
 The v2 actions `comment`, `health` and `clear_question` are gone for agents. Each answers a 400
 that names the fix: `worked` on the next publish, `health` as a field of the recurring record, and
-leaving an answered question out of the next publish. The person's Dismiss on the page stays.
+leaving an answered question out of the next publish.
 
 The MCP tool declares only `action`, `id` and `record`. Agents send the record, with `worked`, as
 one object in `record`. `action` and `id` go beside `record`, not inside it; the ones inside are
@@ -74,9 +74,14 @@ In short:
   A new `worked` line on it is still logged, and the answer carries its id in `logged`.
 - Leaving out `health` on a recurring initiative keeps it; `null` clears it. A `comments` field is
   refused with a pointer to `worked`.
-- A question left out of a publish is cleared. A question the person dismissed on the page stays
-  cleared while the agent sends the same id and text; the answer lists it in `dismissed`. A
-  dismissal moves neither `seq` nor `updatedAt`.
+- A question left out of a publish is cleared. The page has no Dismiss any more; a question
+  dismissed there earlier stays cleared while the agent sends the same id and text (the answer
+  lists it in `dismissed`).
+- `source.link` (optional, at most 300) is the link that opens the session behind the initiative.
+  Only `https://` with a plain lowercase host or `claude://claude.ai`, then a path of letters,
+  digits and `/ _ - .`; no query, fragment, port, credentials, percent-encoding or other scheme
+  (`lib/command-center-link.ts`). Anything else is 400 naming `source.link`; the secret check
+  applies as on any text. The page checks it again before it renders the href.
 - Cleared questions are kept 7 days, at most 20 per initiative.
 - 60 calls a minute and 20 at once per person, on top of the general limit.
 
@@ -86,7 +91,7 @@ In short:
 optional `small`, `medium` or `large` beside it, never a time estimate. Neither is stored in the
 record. The server writes each `worked` line to the log with its own time, the initiative id, title
 and key, and the `source` machine and session. It also logs what it sees by itself: a task started
-or done, a question asked or cleared (also by the person's Dismiss), a health level change, a
+or done, a question asked or cleared, a health level change, a
 state change, and `synced` when a backfill upload created the initiative from its `current` state.
 
 Entry ids are stable, so a retry is a no-op. The `worked` entry of a publish is fixed by the `seq`
@@ -315,40 +320,47 @@ with the person, the initiative id and the result, never the text.
 ## The page
 
 `app/command-center/page.tsx` renders for the signed-in viewer only, at the app's standard content
-width like every other page. The header is one line: title, the On pill, the last push and
-the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
-settings menu; Delete asks for a confirm first.
+width like every other page. The header is one quiet line: title, the On pill, the last push, the
+data-health chips only when one is not 0 (amber or red), and a settings menu with the privacy
+note, the log download, Switch off and Delete (Delete asks for a confirm first).
 
 - There is no separate questions section. An open question sits on its own card or upkeep row.
 - Initiatives: a kanban board of four light columns by status, left to right Needs you, Active,
-  Idle, Finished, each headed by its name and count. Empty columns stay. Each column scrolls on its
-  own; under 900 px the board has two columns, and on phones the columns stack (no inner scroll).
+  Idle, Finished, each headed by its name and count (no separate heading). Empty columns stay. Each
+  column scrolls on its own; under 900 px the board has two columns, and on phones the columns stack
+  (no inner scroll). Finished shows its 3 newest cards, then "+N more" folds the rest.
 - The status is derived on the server (`ccStatusOf`): Needs you (an open question), Finished
   (state done, or every task done), Active (a publish under 2 hours ago), else Idle. Paused and
   parked cards are Idle. Inside a column cards sort urgent, high, none, low, paused, then most
   recently updated. The status is part of the poll stamp, so a card that passes the 2 hour line
   moves on its own.
-- A card is compact: the title (2 lines at most, a button) with a small progress ring (percent
-  inside), one muted line with the main task (in progress, else the next pending; a finished card
-  says all tasks are done), and small key, priority and near or overdue deadline chips when set.
-- A Needs you card has a yellow left edge and shows its oldest open question (2 lines), its age,
-  a possibly-stale tag, the options as small pills (display only), Dismiss, then "+N more
-  questions".
+- A card face is the title (2 lines at most, a button), a small progress ring (percent inside)
+  and one line: the main task on Active and Idle cards (in progress, else the next pending), none
+  on Finished. An overdue deadline adds one small red dot with a tooltip. No chips, ages or lists.
+- The board has one action: Open in Claude. People only look; agents do the work, and the
+  person answers a question in the Claude session.
+- A Needs you card is the title, the ring, a coloured left edge and an Open in Claude button, no
+  question text. The button is the record's `source.link`, checked again on the page with the
+  server's rule (`lib/command-center-link.ts`) before it becomes an href, opened in the same tab
+  with `rel="noopener noreferrer"`; without a valid link it is a disabled button titled "No
+  session link". The questions, their ages, stale tags and options (display only) are in the
+  drawer.
 - A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
   status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
-  dates), the ring with done/total, every open question with Dismiss, every task with its status
-  icon, links as pills with their host, the Log, when it was updated and who pushed last. Esc,
+  dates), the ring with done/total, every open question, every task with its status
+  icon, links as pills with their host, the Log, when it was updated and who pushed last, and a
+  small Open in Claude button on every card. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
-  keeps the drawer open with fresh content; a Dismiss posts the form and reloads the page, which
-  closes it. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
+  keeps the drawer open with fresh content. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
   keeps full contrast.
 - A line counts the done, parked and silent initiatives that left the page.
-- Your log: the download link for the person's own log, and each configured export app with
-  Grant or Revoke.
-- Recurring upkeep, a slim section under the board: one line each with a health dot and label, the reason (cut short, full text in
-  its tooltip; wrapped on phones), when it was checked and an overdue tag. A row with open
-  questions gets a yellow edge, a Needs you badge and all its questions under it, in the same form.
+- Report apps, only when export apps are configured: each app with Grant or Revoke.
+- Recurring upkeep, a slim section under the board: rows that need a look (not green, overdue,
+  silent or asking something), one line each with a health dot and label, the reason (cut short,
+  full text in its tooltip; wrapped on phones), when it was checked and an overdue tag; then the
+  green rows folded under "N healthy". A row with open questions gets a yellow edge, a Needs you
+  badge, all its questions under it and a small Open in Claude button.
 
 Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours

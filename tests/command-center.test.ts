@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { isSessionLink } from "../lib/command-center-link";
 
 /**
  * Command Center store (lib/command-center.ts): validation, upsert, question lifecycle, the work
@@ -176,6 +177,87 @@ describe("publish", () => {
     expect(refusal(() => publish({ id: "export" })).message).toBe("id 'export' is reserved; pick another id");
     expect(refusal(() => publish({ worked: "x", size: "huge" })).message).toBe("size must be small, medium or large");
     expect(refusal(() => publish({ size: "small" })).message).toMatch(/size goes with worked/);
+  });
+
+  it("keeps source.link only for https:// or claude://claude.ai/ with a plain path, and refuses the rest naming the field", () => {
+    const withLink = (link: unknown) => {
+      publish({ source: { machine: "laptop-1", session: "s-1", link } });
+      return cc.ccGet(OWNER, record().id as string);
+    };
+    const accepted = [
+      "claude://claude.ai/epitaxy/session_01AbCdEf",
+      "claude://claude.ai",
+      "https://claude.ai/code/session_01x-y_z.1",
+      "https://bab.forge.example.com/a/b/",
+      "https://claude.ai",
+    ];
+    for (const link of accepted) expect((withLink(link).source as { link?: string }).link).toBe(link);
+    // Boundaries, checked on the shared rule: a 63-character label, exactly 300 characters.
+    const label63 = "a".repeat(63);
+    expect(isSessionLink(`https://${label63}.example.com/x`)).toBe(true);
+    expect(isSessionLink(`https://${label63}a.example.com/x`)).toBe(false);
+    const base = "https://claude.ai/";
+    expect(isSessionLink(base + "a".repeat(300 - base.length))).toBe(true);
+    expect(isSessionLink(base + "a".repeat(301 - base.length))).toBe(false);
+    for (const odd of ["https://claude.ai//evil.example.com", "https://claude.ai/a/../b", "https://claude.ai/./x", "https://claude.ai/a//", "https://claude.ai/.."]) {
+      expect(isSessionLink(odd)).toBe(false);
+    }
+    expect(isSessionLink("https://claude.ai/a/.well-known/x")).toBe(true);
+    expect(refusal(() => cc.validateRecord(record({ source: { link: " " } }))).message).toMatch(/^source\.link /);
+    const refused = [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      " javascript:alert(1)",
+      "java\tscript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "vbscript:msgbox(1)",
+      "file:///etc/passwd",
+      "//evil.example.com/x",
+      "http://claude.ai/x",
+      "HTTPS://claude.ai/x",
+      "Claude://claude.ai/x",
+      "claude://evil.example.com/x",
+      "claude://claude.ai.evil.com/x",
+      "claude://claude.aix/x",
+      "https://user:pw@example.com/x",
+      "https://claude.ai@example.com/x",
+      "https://claude.ai:8443/x",
+      "https://claude.ai/x?y=1",
+      "https://claude.ai/x#y",
+      "https://claude.ai/a%20b",
+      "https://claude.ai/%6Aavascript",
+      "https://claude.ai/a b",
+      "https://claude.ai/a\nb",
+      "https://claude.ai/x\n",
+      "https://claude.ai/x\u0000",
+      "https://claude.ai/café",
+      "https://claude.ai\\@evil.com",
+      "https://localhost/x",
+      "https://-bad.com/x",
+      "https://claude.ai/" + "a".repeat(300),
+      "claude:claude.ai/x",
+      42,
+      { url: "https://claude.ai" },
+    ];
+    for (const link of refused) {
+      // validateRecord directly: the publish rate limit would refuse this many publishes first.
+      const r = refusal(() => cc.validateRecord(record({ source: { machine: "laptop-1", session: "s-1", link } })));
+      expect(r.status, String(link)).toBe(400);
+      expect(r.message).toMatch(/^source\.link /);
+    }
+    // Empty or absent: no link, and the stored source has none.
+    expect(withLink(null).source).toEqual({ machine: "laptop-1", session: "s-1" });
+    expect(withLink("").source).toEqual({ machine: "laptop-1", session: "s-1" });
+    // The page's own check is the same function.
+    expect(refusal(() => withLink("https://claude.ai/" + "a".repeat(290))).message).toMatch(/source\.link is 308 characters; at most 300/);
+  });
+
+  it("refuses a source.link that holds a token, like any other text", async () => {
+    const { isSessionLink } = await import("../lib/command-center-link");
+    const tokenLink = "https://claude.ai/ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    // It passes the shape check, so the refusal comes from the confidential-data rule.
+    expect(isSessionLink(tokenLink)).toBe(true);
+    expect(refusal(() => publish({ source: { link: tokenLink } })).message).toMatch(/^source\.link holds .+, and Command Center never keeps confidential data/);
   });
 
   it("expectSeq mismatch is 409 with the current record, and logs nothing", () => {

@@ -6,6 +6,7 @@ import { config } from "@/lib/config";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { CC_OFF_KEEP_MS, ccView, type CcView } from "@/lib/command-center";
 import { ApiError } from "@/lib/errors";
+import { isSessionLink } from "@/lib/command-center-link";
 import CommandCenterPoll from "./CommandCenterPoll";
 import CardDrawer from "./CardDrawer";
 import styles from "./command-center.module.css";
@@ -153,7 +154,7 @@ function OnState({ view }: { view: CcView }) {
   const upkeep = view.records.filter((r) => r.kind === "recurring");
   return (
     <>
-      {/* One line: title, On, last push, data health, then the menu at the right. */}
+      {/* One quiet line: title, On, last push, data health only when something is off, the menu. */}
       <header className={`${styles.top} ${styles.topOn}`}>
         <div className={styles.titleLine}>
           <h1 className={styles.h1}>Command Center</h1>
@@ -164,14 +165,15 @@ function OnState({ view }: { view: CcView }) {
           <p className={styles.subline}>{view.lastPush ? <>Last push {formatRelativeTime(view.lastPush)}</> : <>Nothing published yet</>}</p>
         </div>
         <DataHealth h={view.dataHealth} />
-        <span className={styles.privacy}>Private to you. Nothing confidential.</span>
         <Settings />
       </header>
 
       {/* No separate questions section: open questions sit on their own card or upkeep row, and the
-          Needs you column holds those cards. */}
+          Needs you column holds those cards. The columns carry the counts. */}
       <section className={styles.section} aria-labelledby="cc-initiatives">
-        <SectionHead id="cc-initiatives" title="Initiatives" count={projects.length} />
+        <h2 id="cc-initiatives" className={styles.srOnly}>
+          Initiatives
+        </h2>
         {projects.length === 0 ? (
           <p className={`${styles.panel} ${styles.empty}`}>
             No initiatives yet. Your agent publishes them with the command-center skill. Its text is at{" "}
@@ -200,18 +202,9 @@ function OnState({ view }: { view: CcView }) {
         ) : null}
       </section>
 
-      {upkeep.length ? (
-        <section className={styles.section} aria-labelledby="cc-upkeep">
-          <SectionHead id="cc-upkeep" title="Recurring upkeep" count={upkeep.length} />
-          <ul className={`${styles.panel} ${styles.upkeep}`}>
-            {upkeep.map((r) => (
-              <Upkeep key={r.id} r={r} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {upkeep.length ? <UpkeepSection upkeep={upkeep} /> : null}
 
-      <YourLog view={view} />
+      {view.exportApps.length ? <ReportApps view={view} /> : null}
     </>
   );
 }
@@ -237,6 +230,13 @@ function Settings() {
         <DotsIcon />
       </summary>
       <div className={styles.menuBody}>
+        <p className={styles.menuNote}>Private to you. Nothing confidential.</p>
+        <p className={styles.menuNote}>
+          Every publish adds a line to your log, kept for reporting after initiatives leave this page.{" "}
+          <a className={styles.inlineLink} href="/command-center/export" download>
+            Download my log
+          </a>
+        </p>
         <p className={styles.menuNote}>Switching off stops agents from publishing. Your records are kept {CC_OFF_KEEP_MS / DAY_MS} days.</p>
         <form method="post" action="/command-center/disable">
           <button type="submit" className={styles.ghost}>
@@ -256,10 +256,12 @@ function DataHealth({ h }: { h: CcView["dataHealth"] }) {
     { n: h.recurringWithoutHealth, label: "upkeep without health", tone: "warn" },
     { n: h.overdueRecurring, label: "overdue upkeep", tone: "bad" },
   ];
+  const shown = chips.filter((c) => c.n > 0);
+  if (!shown.length) return null;
   return (
     <ul className={styles.health} data-testid="data-health" aria-label="Data health">
-      {chips.map((c) => (
-        <li key={c.label} className={`${styles.healthChip} ${c.n === 0 ? "" : c.tone === "bad" ? styles.chipBad : styles.chipWarn}`} data-count={c.n}>
+      {shown.map((c) => (
+        <li key={c.label} className={`${styles.healthChip} ${c.tone === "bad" ? styles.chipBad : styles.chipWarn}`} data-count={c.n}>
           <strong>{c.n}</strong> {c.label}
         </li>
       ))}
@@ -405,16 +407,13 @@ function ProgressRing({ r, done, count = false }: { r: Rec; done: number; count?
   );
 }
 
-/** Open questions shown on the face of a card, oldest first; the drawer has them all. */
-const QUESTIONS_SHOWN = 1;
-
 /**
- * One open question: its text (clamped to 2 lines on a card), age, a stale tag, the options the
- * agent offered and the Dismiss form. Every string is React text.
+ * One open question: its text, age, a stale tag and the options the agent offered, display only.
+ * The person answers in the Claude session (Open in Claude). Every string is React text.
  */
-function QuestionItem({ id, q, full = false }: { id: string; q: Rec["questionViews"][number]; full?: boolean }) {
+function QuestionItem({ q }: { q: Rec["questionViews"][number] }) {
   return (
-    <li className={`${styles.ask} ${full ? styles.askFull : ""}`} data-question={q.id}>
+    <li className={`${styles.ask} ${styles.askFull}`} data-question={q.id}>
       <p className={styles.askText} title={q.text}>
         {q.text}
       </p>
@@ -425,24 +424,15 @@ function QuestionItem({ id, q, full = false }: { id: string; q: Rec["questionVie
         </span>
         {q.stale ? <span className={`${styles.tag} ${styles.tagWarn}`}>possibly stale</span> : null}
       </div>
-      <div className={styles.askFoot}>
-        {q.options.length ? (
-          <ul className={styles.options} aria-label="Options your agent offered">
-            {q.options.map((o, i) => (
-              <li key={i} className={styles.option}>
-                {o}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <form method="post" action="/command-center/dismiss">
-          <input type="hidden" name="id" value={id} />
-          <input type="hidden" name="questionId" value={q.id} />
-          <button type="submit" className={styles.ghost}>
-            Dismiss
-          </button>
-        </form>
-      </div>
+      {q.options.length ? (
+        <ul className={styles.options} aria-label="Options your agent offered">
+          {q.options.map((o, i) => (
+            <li key={i} className={styles.option}>
+              {o}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 }
@@ -465,16 +455,23 @@ function TaskItem({ t }: { t: Task }) {
 
 const COLUMNS: Rec["status"][] = ["needs_you", "active", "idle", "finished"];
 
+/** The Finished column shows this many cards, newest first, then "+N more". */
+const FINISHED_SHOWN = 3;
+
 /**
  * The board: one column per status, left to right Needs you, Active, Idle, Finished. Cards keep
- * the page order inside a column (priority, then most recently updated). Empty columns stay, so
- * the board keeps its shape; each column scrolls on its own.
+ * the page order inside a column (priority, then most recently updated); Finished is newest first
+ * and shows FINISHED_SHOWN, the rest folded under "+N more". Empty columns stay, so the board
+ * keeps its shape; each column scrolls on its own.
  */
 function Board({ records }: { records: Rec[] }) {
   return (
     <div className={styles.board} data-cc-board="">
       {COLUMNS.map((s) => {
-        const cards = records.filter((r) => r.status === s);
+        let cards = records.filter((r) => r.status === s);
+        if (s === "finished") cards = [...cards].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+        const shown = s === "finished" ? cards.slice(0, FINISHED_SHOWN) : cards;
+        const rest = cards.slice(shown.length);
         return (
           <section key={s} className={`${styles.col} ${styles[`badge_${s}`] ?? ""}`} data-column={s} data-empty={cards.length ? undefined : ""} aria-labelledby={`cc-col-${s}`}>
             <h3 id={`cc-col-${s}`} className={styles.colHead} title={STATUS_HINT[s]}>
@@ -487,9 +484,19 @@ function Board({ records }: { records: Rec[] }) {
             </h3>
             {cards.length ? (
               <div className={styles.colBody}>
-                {cards.map((r) => (
+                {shown.map((r) => (
                   <Initiative key={r.id} r={r} />
                 ))}
+                {rest.length ? (
+                  <details className={styles.colMore} data-more-cards={rest.length}>
+                    <summary className={styles.colMoreSummary}>+{rest.length} more</summary>
+                    <div className={styles.colMoreBody}>
+                      {rest.map((r) => (
+                        <Initiative key={r.id} r={r} />
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             ) : (
               <p className={styles.colEmpty}>Nothing here</p>
@@ -506,23 +513,50 @@ function doneCount(r: Rec): number {
 }
 
 /**
- * One compact card: the title (a button that opens the drawer) with the progress ring, one muted
- * line with the current task, small key and priority chips when set, and on a Needs you card its
- * oldest open question with options, Dismiss and "+N more". A click anywhere on the card opens
- * the drawer (CardDrawer); everything else lives there.
+ * The button that opens the session behind an initiative in Claude (source.link). The link is
+ * checked again here before it becomes an href (isSessionLink, the server's rule); no link, or one
+ * that fails the check, gives a disabled button. Same tab, like CCC: a claude:// link hands off to
+ * the app.
+ */
+function OpenInClaude({ r, small = false }: { r: Rec; small?: boolean }) {
+  const link = r.source?.link;
+  const cls = `${styles.openClaude} ${small ? styles.openClaudeSm : ""}`;
+  if (isSessionLink(link)) {
+    return (
+      <a className={cls} href={link} rel="noopener noreferrer" data-open-session={r.id}>
+        Open in Claude <span aria-hidden="true">↗</span>
+      </a>
+    );
+  }
+  return (
+    <button type="button" className={cls} disabled title="No session link" data-open-session="">
+      Open in Claude<span className={styles.srOnly}> (no session link)</span>
+    </button>
+  );
+}
+
+/** Days past the deadline; 0 when it is not overdue, has none, or the initiative is done. */
+function overdueDays(r: Rec): number {
+  if (!r.deadline || r.state === "done") return 0;
+  const d = calendarDaysBetween(utcToday(), r.deadline);
+  return d < 0 ? -d : 0;
+}
+
+/**
+ * One compact card. The face holds the title (a button that opens the drawer), the progress ring
+ * and one line: the current task on an Active or Idle card; on a Needs you card no line, only the
+ * Open in Claude button (the board's only action); nothing on a Finished card. An overdue deadline
+ * is a small red dot with a tooltip. Chips, questions, options, ages, tasks, links and the log are
+ * in the drawer only (CardDrawer); a click on the card opens it.
  */
 function Initiative({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
   const main = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
-  const done = doneCount(r);
-  const openQs = openQuestionsOf(r);
-  const qShown = openQs.slice(0, QUESTIONS_SHOWN);
-  const qRest = openQs.length - qShown.length;
-  const near = deadlineTone(r);
+  const late = overdueDays(r);
+  const lateText = `Overdue by ${late} ${late === 1 ? "day" : "days"}`;
   const cls = [styles.card, styles[`status_${r.status}`] ?? "", r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
   return (
     <article className={cls} data-initiative={r.id} data-card={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
-      {/* Title and the task line on the left, the ring at the right of both. */}
       <div className={styles.cardHead}>
         <div className={styles.cardMain}>
           <h4 id={`cc-i-${r.id}`} className={styles.cardTitle}>
@@ -530,13 +564,9 @@ function Initiative({ r }: { r: Rec }) {
               {r.title}
             </button>
           </h4>
-          {r.status === "finished" ? (
-            r.tasks.length ? (
-              <p className={styles.line}>
-                All {r.tasks.length} {r.tasks.length === 1 ? "task" : "tasks"} done
-              </p>
-            ) : null
-          ) : main ? (
+          {r.status === "needs_you" ? (
+            <span className={styles.srOnly}>Needs you</span>
+          ) : r.status !== "finished" && main ? (
             <p className={styles.line} title={main.text}>
               <TaskIcon status={main.status} />
               <span className={styles.srOnly}>{main.status === "in_progress" ? "Now: " : "Next up: "}</span>
@@ -544,42 +574,23 @@ function Initiative({ r }: { r: Rec }) {
             </p>
           ) : null}
         </div>
-        <ProgressRing r={r} done={done} />
-      </div>
-
-      {r.key || r.priority || near ? (
-        <div className={styles.cardChips}>
-          {r.key ? <span className={styles.tag}>{r.key}</span> : null}
-          <PriorityTag p={r.priority} />
-          {near ? <Deadline r={r} /> : null}
+        <div className={styles.cardSide}>
+          <ProgressRing r={r} done={doneCount(r)} />
+          {late ? <span className={styles.lateDot} role="img" aria-label={lateText} title={`${lateText} (${r.deadline})`} data-overdue="" /> : null}
         </div>
-      ) : null}
-
-      {qShown.length ? (
-        <ul className={styles.asks} aria-label="Open questions">
-          {qShown.map((q) => (
-            <QuestionItem key={q.id} id={r.id} q={q} />
-          ))}
-          {qRest ? (
-            <li className={styles.moreAsks} data-more-questions="">
-              +{qRest} more {qRest === 1 ? "question" : "questions"}
-            </li>
-          ) : null}
-        </ul>
+      </div>
+      {r.status === "needs_you" ? (
+        <div className={styles.cardAct}>
+          <OpenInClaude r={r} />
+        </div>
       ) : null}
     </article>
   );
 }
 
-/** True when a deadline is near or overdue: then it earns a chip on the card face too. */
-function deadlineTone(r: Rec): boolean {
-  if (!r.deadline || r.state === "done") return false;
-  return calendarDaysBetween(utcToday(), r.deadline) <= NEAR_DAYS;
-}
-
 /**
- * The drawer body of one initiative: status, ring, every chip, all open questions (each with
- * Dismiss), every task with its status icon, links, the log, and when it was updated and by whom.
+ * The drawer body of one initiative: status, ring, every chip, all open questions (display
+ * only), every task with its status icon, links, the log, and when it was updated and by whom.
  */
 function Detail({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
@@ -605,13 +616,16 @@ function Detail({ r }: { r: Rec }) {
         </div>
         <ProgressRing r={r} done={doneCount(r)} count />
       </div>
+      <div className={styles.detailAct}>
+        <OpenInClaude r={r} small />
+      </div>
 
       {openQs.length ? (
         <div className={styles.detailBlock}>
           <h3 className={styles.logHead}>Questions</h3>
           <ul className={styles.asks} aria-label="All open questions">
             {openQs.map((q) => (
-              <QuestionItem key={q.id} id={r.id} q={q} full />
+              <QuestionItem key={q.id} q={q} />
             ))}
           </ul>
         </div>
@@ -680,55 +694,45 @@ function LogList({ log }: { log: Rec["log"] }) {
   );
 }
 
-/** The person's own log download and the export apps they may share it with. */
-function YourLog({ view }: { view: CcView }) {
+/** The report apps the person may share their log with; the download itself is in the menu. */
+function ReportApps({ view }: { view: CcView }) {
   return (
-    <section className={styles.section} aria-labelledby="cc-log">
+    <section className={styles.section} aria-labelledby="cc-apps">
       <div className={styles.sectionHead}>
-        <h2 id="cc-log" className={styles.h2}>
-          Your log
+        <h2 id="cc-apps" className={styles.h2}>
+          Report apps
         </h2>
       </div>
       <div className={`${styles.panel} ${styles.logPanel}`}>
-        <p>
-          Every publish adds a line on what was worked on. The log is kept for reporting after initiatives leave this page.{" "}
-          <a className={styles.inlineLink} href="/command-center/export" download>
-            Download my log
-          </a>
+        <p className={styles.muted}>
+          Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. Sharing entries also shares the session and machine names on each line. You can
+          stop sharing at any time.
         </p>
-        {view.exportApps.length ? (
-          <>
-            <p className={styles.muted}>
-              Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. Sharing entries also shares the session and machine names on each line. You
-              can stop sharing at any time.
-            </p>
-            <ul className={styles.apps} aria-label="Report apps">
-              {view.exportApps.map(({ app, grant }) => (
-                <li key={app} className={styles.appRow} data-app={app}>
-                  <span className={styles.appName}>{app}</span>
-                  <span className={styles.tag}>{grant ? (grant.level === "entries" ? "shares entries" : "shares counts") : "not shared"}</span>
-                  <form method="post" action="/command-center/export/grant" className={styles.appForm}>
-                    <input type="hidden" name="app" value={app} />
-                    <button type="submit" name="level" value="aggregate" className={styles.ghost}>
-                      Share counts
-                    </button>
-                    <button type="submit" name="level" value="entries" className={styles.ghost}>
-                      Share entries
-                    </button>
-                  </form>
-                  {grant ? (
-                    <form method="post" action="/command-center/export/revoke" className={styles.appForm}>
-                      <input type="hidden" name="app" value={app} />
-                      <button type="submit" className={styles.ghost}>
-                        Stop sharing
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
+        <ul className={styles.apps} aria-label="Report apps">
+          {view.exportApps.map(({ app, grant }) => (
+            <li key={app} className={styles.appRow} data-app={app}>
+              <span className={styles.appName}>{app}</span>
+              <span className={styles.tag}>{grant ? (grant.level === "entries" ? "shares entries" : "shares counts") : "not shared"}</span>
+              <form method="post" action="/command-center/export/grant" className={styles.appForm}>
+                <input type="hidden" name="app" value={app} />
+                <button type="submit" name="level" value="aggregate" className={styles.ghost}>
+                  Share counts
+                </button>
+                <button type="submit" name="level" value="entries" className={styles.ghost}>
+                  Share entries
+                </button>
+              </form>
+              {grant ? (
+                <form method="post" action="/command-center/export/revoke" className={styles.appForm}>
+                  <input type="hidden" name="app" value={app} />
+                  <button type="submit" className={styles.ghost}>
+                    Stop sharing
+                  </button>
+                </form>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -760,6 +764,42 @@ function hostOf(url: string): string {
   } catch {
     return "";
   }
+}
+
+/** An upkeep row earns a place on the page when it is not green, is overdue or silent, or asks something. */
+function upkeepNeedsLook(r: Rec): boolean {
+  return r.health?.level !== "green" || r.overdue || r.silent || openQuestionsOf(r).length > 0;
+}
+
+/** Recurring upkeep: the rows that need a look, then "N healthy" folded; a click shows them. */
+function UpkeepSection({ upkeep }: { upkeep: Rec[] }) {
+  const look = upkeep.filter(upkeepNeedsLook);
+  const healthy = upkeep.filter((r) => !upkeepNeedsLook(r));
+  return (
+    <section className={styles.section} aria-labelledby="cc-upkeep">
+      <SectionHead id="cc-upkeep" title="Recurring upkeep" count={upkeep.length} />
+      {look.length ? (
+        <ul className={`${styles.panel} ${styles.upkeep}`}>
+          {look.map((r) => (
+            <Upkeep key={r.id} r={r} />
+          ))}
+        </ul>
+      ) : null}
+      {healthy.length ? (
+        <details className={styles.healthy} data-healthy={healthy.length}>
+          <summary className={styles.healthySummary}>
+            <span className={`${styles.hDot} ${styles.h_green}`} aria-hidden="true" />
+            {healthy.length} healthy
+          </summary>
+          <ul className={`${styles.panel} ${styles.upkeep}`}>
+            {healthy.map((r) => (
+              <Upkeep key={r.id} r={r} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </section>
+  );
 }
 
 const HEALTH_LABEL: Record<string, string> = { green: "Healthy", amber: "Needs a look", red: "Failing", unknown: "Unknown" };
@@ -800,11 +840,14 @@ function Upkeep({ r }: { r: Rec }) {
         {r.health ? <>checked {formatRelativeTime(r.health.receivedAt)}</> : <>updated {formatRelativeTime(r.updatedAt)}</>}
       </span>
       {openQs.length ? (
-        <ul className={`${styles.asks} ${styles.upAsks}`} aria-label="Open questions">
-          {openQs.map((q) => (
-            <QuestionItem key={q.id} id={r.id} q={q} full />
-          ))}
-        </ul>
+        <div className={styles.upAskBody}>
+          <ul className={`${styles.asks} ${styles.upAsks}`} aria-label="Open questions">
+            {openQs.map((q) => (
+              <QuestionItem key={q.id} q={q} />
+            ))}
+          </ul>
+          <OpenInClaude r={r} small />
+        </div>
       ) : null}
     </li>
   );
