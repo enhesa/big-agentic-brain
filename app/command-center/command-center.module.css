@@ -26,20 +26,14 @@
   --c-ok-ink: #11704a;
   --c-ok-wash: rgba(31, 157, 107, 0.12);
   --c-grey: #b7c0cd;
+  --c-done: #3b6fd8;
+  --c-done-ink: #2a55ad;
+  --c-done-wash: rgba(59, 111, 216, 0.1);
   --c-radius: 10px;
 
   color: var(--c-ink);
   font-size: 0.875rem;
   padding-bottom: 24px;
-}
-
-/* A dense dashboard: on wide screens the page uses more of the width than the 1112 px app
-   column, centred on it, so four initiative columns stay readable. */
-@media (min-width: 1200px) {
-  .page {
-    width: min(1400px, calc(100vw - 48px));
-    margin-left: calc(50% - min(700px, 50vw - 24px));
-  }
 }
 
 :root[data-theme="dark"] .page {
@@ -65,6 +59,9 @@
   --c-ok-ink: #6fe0b1;
   --c-ok-wash: rgba(60, 207, 148, 0.14);
   --c-grey: #5a6680;
+  --c-done: #6e9bff;
+  --c-done-ink: #9dbcff;
+  --c-done-wash: rgba(110, 155, 255, 0.14);
 }
 
 .srOnly {
@@ -131,11 +128,14 @@
   white-space: nowrap;
 }
 
+/* Wraps to two short lines before it pushes the menu to a new row. */
 .privacy {
   margin-left: auto;
+  flex: 0 1 140px;
   font-size: 0.75rem;
+  line-height: 1.3;
+  text-align: right;
   color: var(--c-muted);
-  white-space: nowrap;
 }
 
 .status {
@@ -692,12 +692,6 @@
   }
 }
 
-@media (min-width: 1280px) {
-  .flow {
-    columns: 4;
-  }
-}
-
 .card {
   display: flex;
   flex-direction: column;
@@ -709,10 +703,10 @@
 
 .cardHead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  min-height: 40px;
+  min-height: 28px;
 }
 
 .cardTitle {
@@ -731,49 +725,6 @@
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
-}
-
-.progress {
-  flex: none;
-}
-
-.ringWrap {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-}
-
-.ring {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.ringTrack {
-  fill: none;
-  stroke: var(--c-line);
-  stroke-width: 3.5;
-}
-
-.ringFill {
-  fill: none;
-  stroke: var(--c-accent);
-  stroke-width: 3.5;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.6s ease;
-}
-
-.percent {
-  position: relative;
-  font-family: var(--font-head);
-  font-weight: 800;
-  font-size: 0.75rem;
-  letter-spacing: -0.04em;
-  color: var(--c-ink);
 }
 
 .next {
@@ -838,56 +789,6 @@
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-/* The meta line: tasks toggle, links and footer share one wrapping row. An open toggle takes the
-   full width, so its list sits right under it and the links and footer move below the list. */
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-  font-size: 0.75rem;
-}
-
-.details {
-  flex: none;
-}
-
-.details[open] {
-  flex: 1 1 100%;
-}
-
-.details summary {
-  list-style: none;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--c-accent-ink);
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.details summary::-webkit-details-marker {
-  display: none;
-}
-
-.details summary::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease;
-}
-
-.details[open] summary::before {
-  transform: rotate(45deg);
 }
 
 .tasks {
@@ -1003,7 +904,7 @@
   max-width: 100%;
 }
 
-/* Silent or paused: grey the chrome (wash, borders, tags, ring), never the text, so it keeps its
+/* Silent or paused: grey the chrome (wash, borders, tags, bar), never the text, so it keeps its
    contrast. Hover or keyboard focus inside brings the colour back. */
 .greyed:not(:hover):not(:focus-within) {
   background: var(--c-plane);
@@ -1023,12 +924,12 @@
   color: var(--c-ink-2);
 }
 
-.greyed:not(:hover):not(:focus-within) .ringFill,
 .greyed:not(:hover):not(:focus-within) .tNow circle,
 .greyed:not(:hover):not(:focus-within) .tTodo circle {
   stroke: var(--c-grey);
 }
 
+.greyed:not(:hover):not(:focus-within) .barFill,
 .greyed:not(:hover):not(:focus-within) .tNow path,
 .greyed:not(:hover):not(:focus-within) .tDone circle,
 .greyed:not(:hover):not(:focus-within) .hDot {
@@ -1045,8 +946,343 @@
   color: var(--c-ink-2);
 }
 
-.isDone .percent {
+.isDone .barPercent {
+  color: var(--c-ok-ink);
+}
+
+.isDone .barFill {
+  fill: var(--c-ok);
+}
+
+/* ------------------------------------------------- compact cards: status, bar */
+
+/* One colour set per status; the badge, its filter button and the card accent read it. */
+.badge_needs_you {
+  --b: var(--c-warn);
+  --b-ink: var(--c-warn-ink);
+  --b-wash: var(--c-warn-wash);
+}
+
+.badge_active {
+  --b: var(--c-ok);
+  --b-ink: var(--c-ok-ink);
+  --b-wash: var(--c-ok-wash);
+}
+
+.badge_idle {
+  --b: var(--c-grey);
+  --b-ink: var(--c-ink-2);
+  --b-wash: var(--c-plane);
+}
+
+.badge_finished {
+  --b: var(--c-done);
+  --b-ink: var(--c-done-ink);
+  --b-wash: var(--c-done-wash);
+}
+
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--b-wash);
+  color: var(--b-ink);
+  font-family: var(--font-head);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 18px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badgeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--b);
+  flex: none;
+}
+
+.badge_active .badgeDot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ok) 25%, transparent);
+}
+
+.badgePaused {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-body, inherit);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--c-muted);
+}
+
+/* A thin status line along the top of the card, so the state reads at a glance. */
+.status_needs_you,
+.status_active,
+.status_idle,
+.status_finished {
+  border-top: 3px solid var(--b, var(--c-line));
+}
+
+.status_needs_you {
+  --b: var(--c-warn);
+}
+
+.status_active {
+  --b: var(--c-ok);
+}
+
+.status_idle {
+  --b: var(--c-line-2);
+}
+
+.status_finished {
+  --b: var(--c-done);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.barTrack {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 10px;
+  display: block;
+}
+
+.barBg {
+  fill: var(--c-line);
+}
+
+.barFill {
+  fill: var(--c-accent);
+}
+
+.barPercent {
+  flex: none;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--c-ink);
+}
+
+.barCount {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+
+/* The main task, larger than the rest. */
+.card .next {
+  align-items: flex-start;
+  padding: 6px 9px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.card .next .taskIcon {
+  margin-top: 3px;
+}
+
+.card .nextLabel {
+  line-height: 20px;
+}
+
+.card .nextText {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.subtasks {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 9px;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8125rem;
+  line-height: 18px;
+}
+
+.subtasks li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 1px 0;
+  min-width: 0;
+}
+
+.subtasks li > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtasks .taskIcon {
+  margin-top: 2px;
+}
+
+.moreTasks {
+  padding-left: 20px !important;
+  color: var(--c-muted);
+  font-size: 0.75rem;
+}
+
+/* Collapsed card is clickable: a hand cursor says so. */
+.card {
+  cursor: pointer;
+}
+
+.card .moreBody,
+.card a {
+  cursor: auto;
+}
+
+.more summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--c-accent-ink);
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.more summary::-webkit-details-marker {
+  display: none;
+}
+
+.more summary::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+}
+
+.more[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.moreBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--c-line-2);
+  font-size: 0.75rem;
+}
+
+.moreBody .cardFoot {
+  margin: 0;
+  white-space: normal;
+}
+
+.qList {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--c-warn-wash);
+  font-size: 0.8125rem;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* Status counts and filter */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.filter:hover:not(:disabled) {
+  border-color: var(--b, var(--c-accent));
+}
+
+.filter[aria-pressed="true"] {
+  background: var(--b-wash, var(--c-accent-wash));
+  border-color: var(--b, var(--c-accent));
+  color: var(--b-ink, var(--c-accent-ink));
+}
+
+.filter:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.filter:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.filterCount {
+  font-family: var(--font-head);
+  font-weight: 800;
+  color: var(--c-ink);
+}
+
+.flow[data-filter="needs_you"] > .card:not([data-status="needs_you"]),
+.flow[data-filter="active"] > .card:not([data-status="active"]),
+.flow[data-filter="idle"] > .card:not([data-status="idle"]),
+.flow[data-filter="finished"] > .card:not([data-status="finished"]) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .badge_active .badgeDot {
+    animation: cc-ping 2s ease-out infinite;
+  }
+}
+
+@keyframes cc-ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-ok) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
 }
 
 /* ------------------------------------------------------------------- upkeep */
@@ -1238,6 +1474,8 @@
 
   .privacy {
     margin-left: 0;
+    flex: 1 1 100%;
+    text-align: left;
     width: 100%;
     order: 5;
   }
@@ -1264,7 +1502,8 @@
   .danger,
   .option,
   .linkPill,
-  .details summary {
+  .more summary,
+  .filter {
     min-height: 32px;
   }
 
@@ -1390,11 +1629,10 @@
 @media (prefers-reduced-motion: reduce) {
   .qCard,
   .card,
-  .ringFill,
   .ghost,
   .danger,
   .linkPill,
-  .details summary::before {
+  .more summary::before {
     transition: none;
   }
 }

@@ -547,7 +547,8 @@ describe("derived flags and the live view", () => {
     publish({ id: "done-one", state: "done", questions: [] });
     const v = cc.ccView(OWNER);
     expect(v.dataHealth.recurringWithoutHealth).toBe(1);
-    expect(v.records.map((r) => r.id)).toEqual(["urgent-one", "upkeep", "low-one"]);
+    // Projects first (by status, then priority), then recurring upkeep.
+    expect(v.records.map((r) => r.id)).toEqual(["urgent-one", "low-one", "upkeep"]);
     expect(cc.ccGet(OWNER, "done-one").progress).toBe(100);
   });
 

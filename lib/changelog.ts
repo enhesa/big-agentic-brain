@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-04",
+    title: "Calmer Command Center cards",
+    changes: ["Command Center cards show status, progress and tasks; click a card for tags, links and its log."],
+  },
+  {
     date: "2026-11-03",
     title: "Command Center work log, clearer link notice, honest search share",
     changes: [
