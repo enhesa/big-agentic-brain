@@ -71,7 +71,6 @@ beforeEach(async () => {
   const { upsertUser } = await import("../lib/users");
   upsertUser({ id: OWNER, email: OWNER, name: "Owner One", roles: [] });
   upsertUser({ id: OTHER, email: OTHER, name: "Other Two", roles: [] });
-  cc.ccSetSwitch(OWNER, true);
 });
 
 afterEach(async () => {
@@ -374,7 +373,6 @@ describe("the work log", () => {
   });
 
   it("keeps people's logs apart", () => {
-    cc.ccSetSwitch(OTHER, true);
     publish({ worked: "mine" });
     publish({ worked: "theirs" }, device(OTHER, "dev-2"));
     expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked").map((e) => e.text)).toEqual(["mine"]);
@@ -496,49 +494,46 @@ describe("identity and opt-in", () => {
     expect(run({ action: "list" }, { ...declared, tokenBound: true }).initiatives).toEqual([]);
   });
 
-  it("switch off is 403 with the exact sentence and stores nothing", () => {
+  it("needs no opt-in: a person's first publish creates their Command Center", () => {
     const other = device(OTHER, "dev-2");
-    const r = refusal(() => publish({ worked: "x" }, other));
-    expect(r).toMatchObject({
-      status: 403,
-      message: `Command Center is off for Other Two. Ask them to open ${ORIGIN}/command-center and switch it on, then publish again. Nothing was stored.`,
-    });
-    expect(refusal(() => run({ action: "list" }, other)).status).toBe(403);
-    expect(cc.ccView(OTHER).records).toEqual([]);
-    expect(cc.ccLogOf(OTHER)).toEqual([]);
+    expect(run({ action: "list" }, other).initiatives).toEqual([]);
+    expect(publish({ worked: "x" }, other)).toMatchObject({ seq: 1 });
+    expect(run({ action: "list" }, other).initiatives).toHaveLength(1);
+    expect(cc.ccLogOf(OTHER).some((e) => e.kind === "worked" && e.text === "x")).toBe(true);
   });
 
-  it("switch off then on restores the records; delete now empties records and log and audits", async () => {
-    publish({ worked: "did a thing" });
-    cc.ccSetSwitch(OWNER, false);
-    expect(refusal(() => run({ action: "list" })).status).toBe(403);
-    const off = cc.ccView(OWNER);
-    expect(off.keptUntil).toBe("2026-04-01");
-    cc.ccSetSwitch(OWNER, true);
-    expect(run({ action: "list" }).initiatives).toHaveLength(1);
-    expect(cc.ccDeleteAll(OWNER)).toMatchObject({ deleted: 1 });
-    expect(run({ action: "list" }).initiatives).toEqual([]);
-    expect(cc.ccLogOf(OWNER)).toEqual([]);
-    expect(await auditRows("cc_delete_all")).toHaveLength(1);
-    expect(await auditRows("cc_enable")).toHaveLength(2);
-    expect(await auditRows("cc_disable")).toHaveLength(1);
-  });
-
-  it("deletes a switched-off person's records, log and grants after 30 days", () => {
+  it("the sweep keeps a person who never had a switch; only the live and log rules delete", () => {
     publish({ worked: "x" });
-    cc.ccSetSwitch(OWNER, false);
     vi.setSystemTime(NOW + 29 * DAY);
-    expect(cc.sweepCommandCenter()).toMatchObject({ people: 0 });
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 0, people: 0 });
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
     vi.setSystemTime(NOW + 31 * DAY);
-    expect(cc.sweepCommandCenter()).toMatchObject({ records: 1, people: 1 });
-    expect(cc.ccLogOf(OWNER)).toEqual([]);
-    cc.ccSetSwitch(OWNER, true);
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 1, people: 0 });
+    expect(cc.ccLogOf(OWNER).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the data of a person whose old switch column says off", async () => {
+    publish({ worked: "x" });
+    (await import("../lib/db")).getDb().prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = ? WHERE id = ?").run(new Date(NOW - 40 * DAY).toISOString(), OWNER);
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 0, people: 0 });
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
+    expect(cc.ccView(OWNER).records).toHaveLength(1);
+  });
+
+  it("delete_all empties the caller's records, log and grants only, and audits", async () => {
+    publish({ worked: "mine" });
+    publish({ worked: "theirs" }, device(OTHER, "dev-2"));
+    expect(run({ action: "delete_all" })).toMatchObject({ deleted: 1 });
     expect(run({ action: "list" }).initiatives).toEqual([]);
+    expect(cc.ccLogOf(OWNER)).toEqual([]);
+    expect(run({ action: "list" }, device(OTHER, "dev-2")).initiatives).toHaveLength(1);
+    expect(cc.ccLogOf(OTHER).some((e) => e.text === "theirs")).toBe(true);
+    expect(await auditRows("cc_delete_all")).toHaveLength(1);
+    expect(refusal(() => run({ action: "delete_all", id: "billing-export" })).message).toMatch(/unknown field 'id' for delete_all/);
   });
 
   it("keeps people apart: the viewer's owner key is the agent's owner key", () => {
     publish();
-    cc.ccSetSwitch(OTHER, true);
     expect(run({ action: "list" }, device(OTHER, "dev-2")).initiatives).toEqual([]);
     expect(refusal(() => run({ action: "list", id: "billing-export" }, device(OTHER, "dev-2"))).status).toBe(404);
     expect(run({ action: "remove", id: "billing-export" }, device(OTHER, "dev-2"))).toEqual({ removed: false });
@@ -556,7 +551,6 @@ describe("identity and opt-in", () => {
   it("runs prepare only after every gate passes", async () => {
     const prepare = vi.fn((a: Record<string, unknown>) => a);
     const go = (actor: Parameters<Cc["runCommandCenter"]>[0] = ME) => refusal(() => cc.runCommandCenter(actor, { action: "list" }, "mcp", ORIGIN, prepare));
-    expect(go(device(OTHER, "dev-2")).status).toBe(403);
     expect(go({ id: OWNER, email: OWNER, name: "Owner One", source: "header" } as never).status).toBe(403);
     process.env.BAB_COMMAND_CENTER = "0";
     (await import("../lib/config"))._resetConfigForTests();
@@ -715,8 +709,7 @@ describe("the one-time import of a v2 snapshot", () => {
     expect(cc.importCommandCenterSnapshot()).toBeNull();
   });
 
-  it("runs on first use, drops broken or duplicated entries and people switched off past the window", () => {
-    cc.ccSetSwitch(OTHER, false, NOW - 40 * DAY);
+  it("runs on first use and drops broken or duplicated entries; nobody is dropped for an old switch", () => {
     writeSnapshot({
       [OWNER]: [v2Record("alpha"), v2Record("alpha"), v2Record("broken", { links: [{ label: "x", url: "javascript:1" }] }), v2Record("future", { updatedAt: new Date(NOW + 2 * DAY).toISOString() })],
       [OTHER]: [v2Record("theirs")],
@@ -724,9 +717,9 @@ describe("the one-time import of a v2 snapshot", () => {
     });
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(run({ action: "list" }).initiatives).toHaveLength(1);
-    expect(log.mock.calls.some((c) => String(c[0]).includes("1 records") && String(c[0]).includes("5 dropped"))).toBe(true);
+    expect(log.mock.calls.some((c) => String(c[0]).includes("2 records") && String(c[0]).includes("4 dropped"))).toBe(true);
     log.mockRestore();
-    expect(cc.ccLogOf(OTHER)).toEqual([]);
+    expect(cc.ccList(OTHER).initiatives.map((r) => r.id)).toEqual(["theirs"]);
   });
 
   it("leaves a file that is not JSON in place and starts empty", () => {
@@ -898,7 +891,6 @@ describe("migration v54", () => {
     const tables = (again.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'command_center_%' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
     // command_center_backfill_links is v55's (dropped versions >= 54 above, so it runs again too).
     expect(tables).toEqual(["command_center_backfill_links", "command_center_export_grants", "command_center_imports", "command_center_initiatives", "command_center_log"]);
-    expect(cc.ccSwitch(OWNER).enabledAt).not.toBeNull();
     cc.importCommandCenterSnapshot();
     expect(cc.ccGet(OWNER, "alpha")).toEqual(first.record);
     expect(cc.ccLogOf(OWNER)).toEqual(first.log);
@@ -926,14 +918,14 @@ describe("migration v54", () => {
     expect(existsSync(cc.ccImportedSnapshotPath())).toBe(true);
   });
 
-  it("keeps the v53 opt-in columns across a rewind", async () => {
+  it("keeps the v53 opt-in columns (no longer read) across a rewind", async () => {
     const { getDb, _resetDbForTests } = await import("../lib/db");
-    const before = cc.ccSwitch(OWNER).enabledAt;
-    expect(before).not.toBeNull();
+    const at = new Date(NOW).toISOString();
+    getDb().prepare("UPDATE users SET command_center_enabled_at = ? WHERE id = ?").run(at, OWNER);
     getDb().prepare("DELETE FROM migrations WHERE version >= 53").run();
     _resetDbForTests();
     const cols = (getDb().prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(expect.arrayContaining(["command_center_enabled_at", "command_center_disabled_at"]));
-    expect(cc.ccSwitch(OWNER).enabledAt).toBe(before);
+    expect((getDb().prepare("SELECT command_center_enabled_at AS e FROM users WHERE id = ?").get(OWNER) as { e: string }).e).toBe(at);
   });
 });

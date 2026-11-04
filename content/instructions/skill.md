@@ -378,7 +378,7 @@ curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for 
 # One at a time: bab_kv action=lock key=... ttlSeconds=600 returns a token; unlock with it when done. acquired:false names the holder: wait, never break it. A stuck shared key: ask a BAB maintainer (force_delete).
 
 # Command Center: the person's private {{ORIGIN}}/command-center page of initiatives, open questions, upkeep health and a work log.
-# Only when the optional command-center skill is loaded ({{ORIGIN}}/instructions/command-center.md) and the person switched it on there. It goes through the bab_command_center tool.
+# Only when the optional command-center skill is loaded ({{ORIGIN}}/instructions/command-center.md) (installing the command-center plugin is the opt-in). It goes through the bab_command_center tool.
 
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H

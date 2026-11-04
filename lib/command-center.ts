@@ -2,8 +2,11 @@
  * Command Center: a private page where a person sees what their own agent sessions are doing
  * (docs/command-center.md). Agents push whole initiative records; the page only shows them.
  *
- * - Opt-in on both sides. The server stores nothing for a person whose switch is off
- *   (users.command_center_enabled_at), and only the person, signed in on the page, can flip it.
+ * - Opt-in is the plugin: a person who installs the command-center plugin opts in, and their
+ *   agent's first publish creates their Command Center. There is no switch on the page. Deleting,
+ *   exporting and export-app consent are tool actions, owner only (delete_all, export,
+ *   grant_export, revoke_export). The old users.command_center_enabled_at/disabled_at columns
+ *   are no longer read; existing rows stay.
  * - One record per initiative, owned by the caller's resolved identity, never by a body field.
  *   A publish is an upsert by `id`: a replay changes nothing.
  * - Strict: unknown fields, bad values and text that is too long are refused with one sentence
@@ -27,10 +30,9 @@ import { audit } from "./audit";
 import { sensitiveKind } from "./file-checks";
 import { assertBoundIdentity, type BoundCaller } from "./bound-identity";
 import { checkCommandCenterRateLimit, CC_RATE_LIMIT_BURST, CC_RATE_LIMIT_PER_MINUTE } from "./rate-limit";
-import { ApiError, ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from "./errors";
+import { ApiError, NotFoundError, TooManyRequestsError, ValidationError } from "./errors";
 import { ownerIdFor } from "./reminders-view";
 import { CC_LINK_MAX, isSessionLink } from "./command-center-link";
-import { getUser } from "./users";
 import type { AuditVia } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -76,14 +78,14 @@ export const CC_CLEARED_KEEP_MS = 7 * DAY_MS;
 export const CC_SILENT_MS = 14 * DAY_MS;
 /** The one live rule: a record with no write for this long is deleted. Its log entries stay. */
 export const CC_LIVE_KEEP_MS = 30 * DAY_MS;
-/** After the switch is turned off, data stays this long (restorable), then it is deleted. */
-export const CC_OFF_KEEP_MS = 30 * DAY_MS;
+/** How long an imported v2 snapshot file stays in place, so a rollback can still read it. */
+export const CC_SNAPSHOT_KEEP_MS = 30 * DAY_MS;
 /** Two sessions publishing one initiative within this window are flagged on the card. */
 export const CC_TWO_WRITERS_MS = HOUR_MS;
 /** How late a recurring initiative's health may be, by cadence. No cadence counts as daily. */
 export const CC_OVERDUE_MS: Record<Cadence, number> = { daily: 26 * HOUR_MS, weekly: 8 * DAY_MS, drain: 2 * HOUR_MS };
 
-export const CC_ACTIONS = ["publish", "list", "remove", "backfill_link"] as const;
+export const CC_ACTIONS = ["publish", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"] as const;
 export type CcAction = (typeof CC_ACTIONS)[number];
 /** v2 actions and what replaced them, so an agent on an old skill text is told the fix. */
 export const CC_RETIRED_ACTIONS: Record<string, string> = {
@@ -595,36 +597,7 @@ function deleteEverything(owner: string): { records: number; entries: number } {
 }
 
 // ---------------------------------------------------------------------------
-// The opt-in switch
-// ---------------------------------------------------------------------------
-
-export interface CcSwitch {
-  enabledAt: string | null;
-  disabledAt: string | null;
-}
-
-export function ccSwitch(ownerId: string): CcSwitch {
-  const row = getDb().prepare("SELECT command_center_enabled_at AS e, command_center_disabled_at AS d FROM users WHERE id = ?").get(ownerId) as
-    | { e: string | null; d: string | null }
-    | undefined;
-  return { enabledAt: row?.e ?? null, disabledAt: row?.d ?? null };
-}
-
-/** The exact refusal for a person whose switch is off. Nothing is stored before it. */
-export function ccOffMessage(ownerId: string, origin: string): string {
-  const name = getUser(ownerId)?.name || ownerId;
-  return `Command Center is off for ${name}. Ask them to open ${origin}/command-center and switch it on, then publish again. Nothing was stored.`;
-}
-
-/** Whether a person's data is still kept: on, or off for less than CC_OFF_KEEP_MS. */
-function kept(sw: CcSwitch, now: number): boolean {
-  if (sw.enabledAt) return true;
-  const off = ms(sw.disabledAt);
-  return Number.isFinite(off) && now - off < CC_OFF_KEEP_MS;
-}
-
-// ---------------------------------------------------------------------------
-// Retention: one rule each for the live view, the log and opt-out.
+// Retention: one rule each for the live view and the log.
 // ---------------------------------------------------------------------------
 
 /** On the page: active and not silent. Done, parked and silent ones stay in list and in the log. */
@@ -646,24 +619,13 @@ export interface CcSweepResult {
 }
 
 /**
- * Retention for everyone: live records with no write for CC_LIVE_KEEP_MS, log entries older than
- * BAB_COMMAND_CENTER_LOG_DAYS, and every row of people switched off for CC_OFF_KEEP_MS (or never on).
+ * Retention for everyone: live records with no write for CC_LIVE_KEEP_MS and log entries older
+ * than BAB_COMMAND_CENTER_LOG_DAYS. `people` stays 0: a person's data goes as a whole only by
+ * their own delete_all.
  */
 export function sweepCommandCenter(now: number = Date.now()): CcSweepResult {
   const db = getDb();
   const out: CcSweepResult = { records: 0, entries: 0, people: 0 };
-  const owners = db
-    .prepare(
-      `SELECT owner_id AS o FROM command_center_initiatives UNION SELECT owner_id FROM command_center_log UNION SELECT owner_id FROM command_center_export_grants`,
-    )
-    .all() as { o: string }[];
-  for (const { o } of owners) {
-    if (kept(ccSwitch(o), now)) continue;
-    const gone = deleteEverything(o);
-    out.records += gone.records;
-    out.entries += gone.entries;
-    out.people += 1;
-  }
   out.records += Number(db.prepare("DELETE FROM command_center_initiatives WHERE updated_at < ?").run(iso(now - CC_LIVE_KEEP_MS)).changes);
   retireImportedSnapshot(now);
   out.entries += Number(db.prepare("DELETE FROM command_center_log WHERE at < ?").run(iso(now - config().commandCenterLogDays * DAY_MS)).changes);
@@ -703,7 +665,7 @@ function deleteSnapshotFile(file: string): void {
 }
 
 /**
- * The v2 snapshot stays untouched CC_OFF_KEEP_MS after its import, so a rollback to v2.19 still
+ * The v2 snapshot stays untouched CC_SNAPSHOT_KEEP_MS after its import, so a rollback to v2.19 still
  * reads it, and is then deleted: it holds v2 records that Delete now and retention no longer reach.
  * It is deleted only while its sha256 is an imported one that is past the window. A file that a
  * rolled-back v2.19 rewrote has a new sha256, so it is kept; the next v3 start imports it and its
@@ -716,7 +678,7 @@ function retireImportedSnapshot(now: number): void {
   const hasFile = existsSync(file);
   const hasLegacy = existsSync(legacy);
   if (!hasFile && !hasLegacy) return;
-  const cutoff = iso(now - CC_OFF_KEEP_MS);
+  const cutoff = iso(now - CC_SNAPSHOT_KEEP_MS);
   try {
     const db = getDb();
     if (hasLegacy) {
@@ -892,10 +854,6 @@ export function importCommandCenterSnapshot(now: number = Date.now()): CcImportR
           out.dropped += Array.isArray(records) ? records.length : 1;
           continue;
         }
-        if (!kept(ccSwitch(owner), now)) {
-          out.dropped += records.length;
-          continue;
-        }
         const seen = new Set<string>();
         for (const item of records) {
           const checked = checkedRecord(item, now);
@@ -1069,10 +1027,6 @@ function assertRate(owner: string): void {
   if (!checkCommandCenterRateLimit(owner)) {
     throw new TooManyRequestsError(`Too many Command Center calls: at most ${CC_RATE_LIMIT_PER_MINUTE} a minute, ${CC_RATE_LIMIT_BURST} at once. Wait a few seconds, then publish the whole record once.`);
   }
-}
-
-function assertOptedIn(owner: string, origin: string): void {
-  if (!ccSwitch(owner).enabledAt) throw new ForbiddenError(ccOffMessage(owner, origin));
 }
 
 function auditCc(actor: string, op: string, id: string, result: string, via: AuditVia): void {
@@ -1425,20 +1379,20 @@ export function ccMcpArgs(args: Record<string, unknown>, depth: number = 0): Rec
   return out;
 }
 
-/** The gates every call passes, in order: switch, identity, pace, opt-in. Returns the owner. */
+/** The gates every call passes, in order: switch, identity, pace. Returns the owner. */
 function passGates(actor: CcActor, origin: string): string {
   assertCommandCenterEnabled();
   assertCommandCenterIdentity(actor);
   const owner = ownerOf(actor);
   assertRate(owner);
-  assertOptedIn(owner, origin);
   return owner;
 }
 
 /**
- * The one entry point for the REST routes and the MCP tool: switch, identity, pace, opt-in, then
- * the action. The owner is always the caller's resolved identity. `prepare` reshapes the args after
- * the gates (the MCP path), so a caller who is off gets the gate answer, not a 400 about the args.
+ * The one entry point for the REST routes and the MCP tool: switch, identity, pace, then the
+ * action. The owner is always the caller's resolved identity, so every action, delete_all and the
+ * export ones too, acts on the caller's own data only. `prepare` reshapes the args after the gates
+ * (the MCP path), so a caller who fails a gate gets the gate answer, not a 400 about the args.
  */
 export function runCommandCenter(
   actor: CcActor,
@@ -1475,6 +1429,21 @@ export function runCommandCenter(
     case "backfill_link":
       pick([]);
       return createBackfillLink(owner, origin, via);
+    case "delete_all":
+      // Every record, log entry, export grant and backfill link of the caller. Only on the
+      // person's own ask; the tool is marked destructive, so the client confirms the call too.
+      pick([]);
+      return ccDeleteAll(owner, via);
+    case "export":
+      pick([]);
+      return ccExportOwn(owner, via);
+    case "grant_export":
+      // id is the export app; level (aggregate, the default, or entries) may also come in record.
+      pick(["id", "level"]);
+      return ccGrantExport(owner, args.id, args.level, via);
+    case "revoke_export":
+      pick(["id"]);
+      return ccRevokeExport(owner, args.id, via);
   }
 }
 
@@ -1717,7 +1686,6 @@ export function ccBackfill(owner: string, body: unknown, via: AuditVia, origin: 
   if (rawCurrent.length > CC_BACKFILL_MAX_CURRENT) {
     throw new CcTooLargeError(`current: at most ${CC_BACKFILL_MAX_CURRENT} records per upload; you sent ${rawCurrent.length}. Upload the rest with a new link.`);
   }
-  assertOptedIn(owner, origin);
   const current = rawCurrent.map((raw, i) => checkCurrentRecord(raw, i));
   uniqueIds(current, "current");
   const out: CcBackfillResult = { accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 0, syncSkipped: 0, syncRefused: [] };
@@ -1895,12 +1863,7 @@ export interface CcExportGrant {
 }
 
 export interface CcView {
-  enabledAt: string | null;
-  disabledAt: string | null;
-  /** When off with data left: the day it is deleted. */
-  keptUntil: string | null;
-  /** On the page: active initiatives that are not silent. */
-  /** In page order: needs you, active, idle, finished, then priority, then newest. */
+  /** On the page, active initiatives that are not silent, in page order: needs you, active, idle, finished, then priority, then newest. */
   records: (CcRecord & CcFlags & { status: CcStatus; questionViews: CcQuestionView[]; log: CcLogEntry[] })[];
   /** Done, parked and silent initiatives: off the page, still in the log. */
   offPage: number;
@@ -1919,9 +1882,8 @@ export function ccGrantsOf(ownerId: string): CcExportGrant[] {
 }
 
 export function ccView(ownerId: string, now: number = Date.now()): CcView {
-  const sw = ccSwitch(ownerId);
   ready(now);
-  const all = kept(sw, now) ? sortRecords([...loadRecords(ownerId).values()]) : [];
+  const all = sortRecords([...loadRecords(ownerId).values()]);
   for (const r of all) pruneQuestions(r, now);
   const shown = all.filter((r) => onPage(r, now));
   const records = shown
@@ -1945,24 +1907,15 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
     .flatMap((r) => r.questionViews.filter((q) => !q.clearedAt).map((question) => ({ initiative: r as CcRecord, question })))
     .sort((a, b) => a.question.askedAt.localeCompare(b.question.askedAt));
   const lastPush = all.reduce<string | null>((m, r) => (m === null || r.updatedAt > m ? r.updatedAt : m), null);
-  const off = ms(sw.disabledAt);
-  const hasLog = !!getDb().prepare("SELECT 1 FROM command_center_log WHERE owner_id = ? LIMIT 1").get(ownerId);
-  const keptUntil = !sw.enabledAt && (all.length || hasLog) && Number.isFinite(off) ? iso(off + CC_OFF_KEEP_MS).slice(0, 10) : null;
-  const grants = new Map(ccGrantsOf(ownerId).map((g) => [g.app, g]));
-  const exportApps = [...config().commandCenterExportApps.keys()].sort().map((app) => ({ app, grant: grants.get(app) ?? null }));
+  const exportApps = exportAppsOf(ownerId);
   const logStamp = getDb().prepare("SELECT COUNT(*) AS n, MAX(at) AS m FROM command_center_log WHERE owner_id = ?").get(ownerId) as { n: number; m: string | null };
   const stamp = [
-    sw.enabledAt ?? "",
-    sw.disabledAt ?? "",
     `log:${logStamp.n}:${logStamp.m ?? ""}`,
     ...exportApps.map((a) => `${a.app}:${a.grant?.level ?? "-"}`),
     // The status rides along so a card crossing the 2 h active line refreshes the page.
     ...all.map((r) => `${r.id}:${r.seq}:${r.questions.filter((q) => !q.clearedAt).length}:${onPage(r, now) ? 1 : 0}:${statusOf.get(r.id) ?? "-"}`),
   ].join("|");
   return {
-    enabledAt: sw.enabledAt,
-    disabledAt: sw.disabledAt,
-    keptUntil,
     records,
     offPage: all.length - shown.length,
     needsYou,
@@ -1973,28 +1926,10 @@ export function ccView(ownerId: string, now: number = Date.now()): CcView {
   };
 }
 
-/** The viewer's switch. On keeps or restores their data; off keeps it CC_OFF_KEEP_MS. */
-export function ccSetSwitch(ownerId: string, on: boolean, now: number = Date.now()): CcSwitch {
-  const db = getDb();
-  if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(ownerId)) throw new NotFoundError("BAB does not know you yet");
-  const at = iso(now);
-  inTransaction(db, () => {
-    if (on) db.prepare("UPDATE users SET command_center_enabled_at = COALESCE(command_center_enabled_at, ?), command_center_disabled_at = NULL WHERE id = ?").run(at, ownerId);
-    else {
-      db.prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = COALESCE(command_center_disabled_at, ?) WHERE id = ?").run(at, ownerId);
-      // Off withdraws consent, in the same transaction: never off with a grant left behind.
-      // Switching on again never resumes sharing by itself.
-      db.prepare("DELETE FROM command_center_export_grants WHERE owner_id = ?").run(ownerId);
-    }
-    auditCc(ownerId, on ? "enable" : "disable", ownerId, on ? "on" : "off", "ui");
-  });
-  return ccSwitch(ownerId);
-}
-
-/** Delete now: every record, log entry and export grant of the viewer, at once. */
-export function ccDeleteAll(ownerId: string): { deleted: number; entries: number } {
+/** delete_all: every record, log entry, export grant and backfill link of the caller, at once. */
+export function ccDeleteAll(ownerId: string, via: AuditVia = "mcp"): { deleted: number; entries: number } {
   const gone = inTransaction(getDb(), () => {
-    auditCc(ownerId, "delete_all", ownerId, "deleted", "ui");
+    auditCc(ownerId, "delete_all", ownerId, "deleted", via);
     return deleteEverything(ownerId);
   });
   return { deleted: gone.records, entries: gone.entries };
@@ -2004,23 +1939,35 @@ export function ccDeleteAll(ownerId: string): { deleted: number; entries: number
 // Export: the person's own download, and export apps the person granted.
 // ---------------------------------------------------------------------------
 
-/** The viewer's own log, every entry, for the download on the page. Audited. */
-export function ccExportOwn(ownerId: string, now: number = Date.now()): { exportedAt: string; person: string; entries: CcLogEntry[] } {
+/**
+ * export: the caller's own log, every entry, and the configured export apps with what the caller
+ * granted each. Audited.
+ */
+export function ccExportOwn(
+  ownerId: string,
+  via: AuditVia = "mcp",
+  now: number = Date.now(),
+): { exportedAt: string; person: string; entries: CcLogEntry[]; exportApps: { app: string; grant: CcExportGrant | null }[] } {
   if (!config().commandCenter) throw new NotFoundError("Command Center is switched off on this BAB");
   ready(now);
-  auditCc(ownerId, "export_own", ownerId, "downloaded", "ui");
-  return { exportedAt: iso(now), person: ownerId, entries: ccLogOf(ownerId) };
+  auditCc(ownerId, "export_own", ownerId, "exported", via);
+  return { exportedAt: iso(now), person: ownerId, entries: ccLogOf(ownerId), exportApps: exportAppsOf(ownerId) };
 }
 
-/** The viewer grants (or changes) one configured export app. Audited. */
-export function ccGrantExport(ownerId: string, appRaw: unknown, levelRaw: unknown, now: number = Date.now()): CcExportGrant {
+/** The configured export apps and what this person granted each, by app name. */
+function exportAppsOf(ownerId: string): { app: string; grant: CcExportGrant | null }[] {
+  const grants = new Map(ccGrantsOf(ownerId).map((g) => [g.app, g]));
+  return [...config().commandCenterExportApps.keys()].sort().map((app) => ({ app, grant: grants.get(app) ?? null }));
+}
+
+/** grant_export: the caller grants (or changes) one configured export app. Audited. */
+export function ccGrantExport(ownerId: string, appRaw: unknown, levelRaw: unknown, via: AuditVia = "mcp", now: number = Date.now()): CcExportGrant {
   const app = slug(appRaw, "app");
   if (!config().commandCenterExportApps.has(app)) throw new NotFoundError(`No export app '${app}' on this BAB`);
   const level = levelRaw == null || levelRaw === "" ? "aggregate" : oneOf(levelRaw, CC_EXPORT_LEVELS, "level");
-  if (!ccSwitch(ownerId).enabledAt) throw new ForbiddenError("Switch Command Center on before you grant an export app");
   const at = iso(now);
   inTransaction(getDb(), () => {
-    auditCc(ownerId, "export_grant", app, level, "ui");
+    auditCc(ownerId, "export_grant", app, level, via);
     getDb()
       .prepare(
         `INSERT INTO command_center_export_grants (owner_id, app, level, granted_at) VALUES (?, ?, ?, ?)
@@ -2031,12 +1978,12 @@ export function ccGrantExport(ownerId: string, appRaw: unknown, levelRaw: unknow
   return { app, level, grantedAt: at };
 }
 
-/** The viewer revokes one export app. Audited, also when there was nothing to revoke. */
-export function ccRevokeExport(ownerId: string, appRaw: unknown): { revoked: boolean } {
+/** revoke_export: the caller revokes one export app. Audited, also when there was nothing to revoke. */
+export function ccRevokeExport(ownerId: string, appRaw: unknown, via: AuditVia = "mcp"): { revoked: boolean } {
   const app = slug(appRaw, "app");
   return inTransaction(getDb(), () => {
     const n = Number(getDb().prepare("DELETE FROM command_center_export_grants WHERE owner_id = ? AND app = ?").run(ownerId, app).changes);
-    auditCc(ownerId, "export_revoke", app, n ? "revoked" : "none", "ui");
+    auditCc(ownerId, "export_revoke", app, n ? "revoked" : "none", via);
     return { revoked: n > 0 };
   });
 }
@@ -2095,8 +2042,8 @@ export function aggregate(entries: CcLogEntry[]): CcAggregateRow[] {
 }
 
 /**
- * GET /api/command-center/export for an export app: only people who granted this app on their own
- * page and whose switch is on. Aggregated, unless the person allowed entries and the app asks for
+ * GET /api/command-center/export for an export app: only people who granted this app (their agent
+ * called grant_export at their ask). Aggregated, unless the person allowed entries and the app asks for
  * them (`detail=entries`). Range [from, to) in whole UTC days, at most 400 days. Audited per call.
  */
 export function ccExportForApp(app: string, query: { from?: string | null; to?: string | null; detail?: string | null }, now: number = Date.now()): CcAppExport {
@@ -2115,7 +2062,7 @@ export function ccExportForApp(app: string, query: { from?: string | null; to?: 
   const grants = getDb()
     .prepare(
       `SELECT g.owner_id AS owner, g.level AS level FROM command_center_export_grants g JOIN users u ON u.id = g.owner_id
-       WHERE g.app = ? AND u.command_center_enabled_at IS NOT NULL ORDER BY g.owner_id`,
+       WHERE g.app = ? ORDER BY g.owner_id`,
     )
     .all(app) as { owner: string; level: CcExportLevel }[];
   const people = grants.map((g) => {

@@ -4,7 +4,8 @@ import { getViewer } from "@/lib/notify-auth";
 import { auditRequest } from "@/lib/request-audit";
 import { config } from "@/lib/config";
 import { formatRelativeTime } from "@/lib/relative-time";
-import { CC_OFF_KEEP_MS, ccView, type CcView } from "@/lib/command-center";
+import { ccView, type CcView } from "@/lib/command-center";
+import { branding } from "@/lib/branding";
 import { ApiError } from "@/lib/errors";
 import { isSessionLink } from "@/lib/command-center-link";
 import CommandCenterPoll from "./CommandCenterPoll";
@@ -12,7 +13,7 @@ import CardDrawer from "./CardDrawer";
 import styles from "./command-center.module.css";
 
 export const dynamic = "force-dynamic";
-// The page posts forms to itself: keep the origin on same-origin requests (tests/referrer-policy.test.ts).
+// No forms on the page any more; same-origin stays the referrer policy (tests/referrer-policy.test.ts).
 export const metadata: Metadata = { title: "Command Center", referrer: "same-origin", robots: { index: false } };
 
 type Rec = CcView["records"][number];
@@ -26,6 +27,8 @@ const NEAR_DAYS = 7;
  * /command-center: what the viewer's own agent sessions publish (lib/command-center.ts). Hidden:
  * no nav or footer entry; the command-center skill gives the person the link. The signed-in viewer
  * only (getViewer), never anyone else's records. Every agent-written string is React text.
+ * View only: no switch, settings or forms. Installing the command-center plugin is the opt-in, and
+ * deleting, exporting and report-app sharing are bab_command_center actions the person's agent runs.
  */
 export default async function CommandCenterPage() {
   const viewer = await getViewer();
@@ -60,7 +63,9 @@ export default async function CommandCenterPage() {
   return (
     <Shell>
       <CommandCenterPoll stamp={view.stamp} />
-      <div className={styles.page}>{view.enabledAt ? <OnState view={view} /> : <OffState view={view} />}</div>
+      <div className={styles.page}>
+        <Board view={view} />
+      </div>
     </Shell>
   );
 }
@@ -75,97 +80,21 @@ function Notice({ children }: { children: React.ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Off
+// The page
 // ---------------------------------------------------------------------------
 
-function OffState({ view }: { view: CcView }) {
-  return (
-    <>
-      <header className={styles.top}>
-        <div className={styles.titleBlock}>
-          <span className={styles.kicker}>Private to you</span>
-          <div className={styles.titleLine}>
-            <h1 className={styles.h1}>Command Center</h1>
-            <span className={`${styles.status} ${styles.statusOff}`}>
-              <span className={styles.statusDot} aria-hidden="true" />
-              Off
-            </span>
-          </div>
-        </div>
-      </header>
-      <section className={`${styles.panel} ${styles.offHero}`} aria-labelledby="cc-off-title">
-        <OffArt />
-        <div className={styles.offBody}>
-          <h2 id="cc-off-title" className={styles.offTitle}>
-            One calm page for everything your agents are doing
-          </h2>
-          <p>Command Center is off. Switch it on to let your Claude sessions publish their initiatives here.</p>
-          <ul className={styles.offPoints}>
-            <li>Questions waiting for you, with their age</li>
-            <li>Initiatives with progress, deadlines and next steps</li>
-            <li>Health of recurring upkeep</li>
-          </ul>
-          <form method="post" action="/command-center/enable">
-            <button type="submit" className={`btn-primary ${styles.enable}`}>
-              Switch on
-            </button>
-          </form>
-          <p className={styles.hint}>
-            Then install the optional command-center skill for your agent. Its text is at{" "}
-            <a className={styles.inlineLink} href="/instructions/command-center.md">
-              /instructions/command-center.md
-            </a>
-            . Only you see this page. Nothing confidential goes in it.
-          </p>
-          {view.keptUntil ? (
-            <div className={styles.kept}>
-              <p>Your records are kept until {view.keptUntil}. Switch on again to restore them.</p>
-              <DeleteNow />
-            </div>
-          ) : null}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function DeleteNow() {
-  return (
-    <details className={styles.confirm}>
-      <summary className={styles.dangerLink}>Delete all my records now</summary>
-      <div className={styles.confirmBody}>
-        <p>This deletes every initiative, question and log entry, and stops all sharing, at once. It cannot be undone.</p>
-        <form method="post" action="/command-center/delete">
-          <button type="submit" className={styles.danger}>
-            Yes, delete all my records
-          </button>
-        </form>
-      </div>
-    </details>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// On
-// ---------------------------------------------------------------------------
-
-function OnState({ view }: { view: CcView }) {
+function Board({ view }: { view: CcView }) {
   const projects = view.records.filter((r) => r.kind !== "recurring");
   const upkeep = view.records.filter((r) => r.kind === "recurring");
   return (
     <>
-      {/* One quiet line: title, On, last push, data health only when something is off, the menu. */}
+      {/* One quiet line: title, last push, data health only when something is off. */}
       <header className={`${styles.top} ${styles.topOn}`}>
         <div className={styles.titleLine}>
           <h1 className={styles.h1}>Command Center</h1>
-          <span className={`${styles.status} ${styles.statusOn}`}>
-            <span className={styles.statusDot} aria-hidden="true" />
-            On
-          </span>
           <p className={styles.subline}>{view.lastPush ? <>Last push {formatRelativeTime(view.lastPush)}</> : <>Nothing published yet</>}</p>
         </div>
         <DataHealth h={view.dataHealth} />
-        <Settings />
       </header>
 
       {/* No separate questions section: open questions sit on their own card or upkeep row, and the
@@ -174,18 +103,7 @@ function OnState({ view }: { view: CcView }) {
         <h2 id="cc-initiatives" className={styles.srOnly}>
           Initiatives
         </h2>
-        {projects.length === 0 ? (
-          <p className={`${styles.panel} ${styles.empty}`} data-empty="">
-            No initiatives yet. Install the command-center skill (
-            <a className={styles.inlineLink} href="/instructions/command-center.md">
-              /instructions/command-center.md
-            </a>
-            ) and your agents fill this board.
-          </p>
-        ) : null}
-        {projects.length ? (
-<Board records={projects} />
-        ) : null}
+        {projects.length === 0 ? <Empty /> : <Columns records={projects} />}
         {view.offPage ? (
           <p className={styles.offPage}>
             {view.offPage} done, parked or silent {view.offPage === 1 ? "initiative is" : "initiatives are"} off this page. They stay in your log.
@@ -205,9 +123,20 @@ function OnState({ view }: { view: CcView }) {
           }))}
         />
       ) : null}
-
-      {view.exportApps.length ? <ReportApps view={view} /> : null}
     </>
+  );
+}
+
+/**
+ * No initiatives: installing the command-center plugin is the opt-in, and the first publish of the
+ * person's agent fills the board.
+ */
+function Empty() {
+  return (
+    <p className={`${styles.panel} ${styles.empty}`} data-empty="">
+      No initiatives yet. Install the command-center plugin (<code>/plugin install command-center@{branding().marketplaceName}</code>) and your agents fill this page as they
+      work.
+    </p>
   );
 }
 
@@ -222,32 +151,6 @@ function SectionHead({ id, title, count }: { id: string; title: string; count: n
         <span className={styles.srOnly}> {count === 1 ? "item" : "items"}</span>
       </span>
     </div>
-  );
-}
-
-function Settings() {
-  return (
-    <details className={styles.menu}>
-      <summary className={styles.menuButton} aria-label="Command Center settings">
-        <DotsIcon />
-      </summary>
-      <div className={styles.menuBody}>
-        <p className={styles.menuNote}>Private to you. Nothing confidential.</p>
-        <p className={styles.menuNote}>
-          Every publish adds a line to your log, kept for reporting after initiatives leave this page.{" "}
-          <a className={styles.inlineLink} href="/command-center/export" download>
-            Download my log
-          </a>
-        </p>
-        <p className={styles.menuNote}>Switching off stops agents from publishing. Your records are kept {CC_OFF_KEEP_MS / DAY_MS} days.</p>
-        <form method="post" action="/command-center/disable">
-          <button type="submit" className={styles.ghost}>
-            Switch off
-          </button>
-        </form>
-        <DeleteNow />
-      </div>
-    </details>
   );
 }
 
@@ -462,7 +365,7 @@ const FINISHED_SHOWN = 3;
  * and shows FINISHED_SHOWN, the rest folded under "+N more". Empty columns stay, so the board
  * keeps its shape; each column scrolls on its own.
  */
-function Board({ records }: { records: Rec[] }) {
+function Columns({ records }: { records: Rec[] }) {
   return (
     <div className={styles.board} data-cc-board="">
       {COLUMNS.map((s) => {
@@ -720,50 +623,6 @@ function LogList({ log }: { log: Rec["log"] }) {
   );
 }
 
-/** The report apps the person may share their log with; the download itself is in the menu. */
-function ReportApps({ view }: { view: CcView }) {
-  return (
-    <section className={styles.section} aria-labelledby="cc-apps">
-      <div className={styles.sectionHead}>
-        <h2 id="cc-apps" className={styles.h2}>
-          Report apps
-        </h2>
-      </div>
-      <div className={`${styles.panel} ${styles.logPanel}`}>
-        <p className={styles.muted}>
-          Report apps see nothing unless you share with them here. A shared app sees counts per initiative and day, with each initiative's title and key, but not your log lines, unless you allow entries. Sharing entries also shares the session and machine names on each line. You can
-          stop sharing at any time.
-        </p>
-        <ul className={styles.apps} aria-label="Report apps">
-          {view.exportApps.map(({ app, grant }) => (
-            <li key={app} className={styles.appRow} data-app={app}>
-              <span className={styles.appName}>{app}</span>
-              <span className={styles.tag}>{grant ? (grant.level === "entries" ? "shares entries" : "shares counts") : "not shared"}</span>
-              <form method="post" action="/command-center/export/grant" className={styles.appForm}>
-                <input type="hidden" name="app" value={app} />
-                <button type="submit" name="level" value="aggregate" className={styles.ghost}>
-                  Share counts
-                </button>
-                <button type="submit" name="level" value="entries" className={styles.ghost}>
-                  Share entries
-                </button>
-              </form>
-              {grant ? (
-                <form method="post" action="/command-center/export/revoke" className={styles.appForm}>
-                  <input type="hidden" name="app" value={app} />
-                  <button type="submit" className={styles.ghost}>
-                    Stop sharing
-                  </button>
-                </form>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
 function Links({ links }: { links: Rec["links"] }) {
   return (
     <ul className={styles.links} aria-label="Links">
@@ -888,34 +747,10 @@ function PauseIcon() {
   );
 }
 
-function DotsIcon() {
-  return (
-    <svg className={styles.iconLg} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <circle cx="4" cy="10" r="1.8" fill="currentColor" />
-      <circle cx="10" cy="10" r="1.8" fill="currentColor" />
-      <circle cx="16" cy="10" r="1.8" fill="currentColor" />
-    </svg>
-  );
-}
-
 function LinkIcon() {
   return (
     <svg className={styles.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function OffArt() {
-  return (
-    <svg className={styles.offArt} viewBox="0 0 160 120" aria-hidden="true" focusable="false">
-      <rect x="10" y="14" width="140" height="92" rx="14" className={styles.artBg} />
-      <rect x="24" y="30" width="54" height="8" rx="4" className={styles.artLine} />
-      <rect x="24" y="46" width="112" height="22" rx="8" className={styles.artCard} />
-      <rect x="24" y="76" width="52" height="18" rx="8" className={styles.artCard} />
-      <rect x="84" y="76" width="52" height="18" rx="8" className={styles.artCard} />
-      <circle cx="128" cy="34" r="6" className={styles.artSpark} />
-      <path d="M32 57h40" className={styles.artAccent} />
     </svg>
   );
 }

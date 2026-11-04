@@ -91,22 +91,6 @@
   margin: -8px 0 16px;
 }
 
-.titleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.kicker {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--c-accent-ink);
-}
-
 .titleLine {
   display: flex;
   align-items: center;
@@ -128,158 +112,6 @@
   color: var(--c-muted);
   font-size: 0.8125rem;
   white-space: nowrap;
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.75rem;
-  padding: 2px 9px 2px 8px;
-  border-radius: 999px;
-}
-
-.statusDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.statusOn {
-  background: var(--c-ok-wash);
-  color: var(--c-ok-ink);
-}
-
-.statusOn .statusDot {
-  background: var(--c-ok);
-  box-shadow: 0 0 0 3px var(--c-ok-wash);
-}
-
-.statusOff {
-  background: var(--c-plane);
-  color: var(--c-muted);
-  border: 1px solid var(--c-line);
-}
-
-/* Settings: a quiet "..." menu, no JS. */
-.menu {
-  position: relative;
-  flex: none;
-  margin-left: auto;
-}
-
-.menuButton {
-  list-style: none;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--c-line);
-  background: var(--c-surface);
-  color: var(--c-ink-2);
-  cursor: pointer;
-}
-
-.menuButton::-webkit-details-marker {
-  display: none;
-}
-
-.menuButton:hover,
-.menu[open] .menuButton {
-  background: var(--c-plane);
-}
-
-.menuBody {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 10;
-  width: 300px;
-  max-width: calc(100vw - 48px);
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  box-shadow: var(--c-shadow-hover);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.menuNote {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--c-muted);
-}
-
-.confirm summary {
-  list-style: none;
-}
-
-.confirm summary::-webkit-details-marker {
-  display: none;
-}
-
-.dangerLink {
-  display: inline-block;
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: var(--c-bad-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  padding: 4px 0;
-}
-
-.confirmBody {
-  margin-top: 6px;
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--c-bad-wash);
-}
-
-.confirmBody p {
-  margin: 0 0 8px;
-  font-size: 0.8125rem;
-}
-
-/* ------------------------------------------------------------------- buttons */
-
-.ghost,
-.danger {
-  min-height: 28px;
-  border-radius: 999px;
-  padding: 3px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.8125rem;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.ghost {
-  background: var(--c-surface);
-  color: var(--c-ink);
-  border: 1px solid var(--c-line-2);
-}
-
-.ghost:hover {
-  background: var(--c-plane);
-  border-color: var(--c-grey);
-}
-
-.danger {
-  background: var(--c-bad);
-  color: #fff;
-  border: 1px solid transparent;
-}
-
-:root[data-theme="dark"] .danger {
-  color: #1a0b07;
 }
 
 /* --------------------------------------------------------------- data health */
@@ -380,21 +212,6 @@
   background: var(--c-plane);
 }
 
-.muted {
-  color: var(--c-muted);
-}
-
-.hint {
-  color: var(--c-muted);
-  font-size: 0.8125rem;
-}
-
-.inlineLink {
-  color: var(--c-accent-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .icon {
   width: 13px;
   height: 13px;
@@ -402,15 +219,9 @@
   vertical-align: -2px;
 }
 
-.iconLg {
-  width: 18px;
-  height: 18px;
-}
-
 /* ---------------------------------------------------------------------- tags */
 
-.tag,
-.chip {
+.tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -423,18 +234,6 @@
   color: var(--c-ink-2);
   border: 1px solid var(--c-line);
   white-space: nowrap;
-}
-
-.chip {
-  display: inline-block;
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--c-accent-wash);
-  border-color: transparent;
-  color: var(--c-accent-ink);
-  font-weight: 600;
 }
 
 .tagWarn {
@@ -506,28 +305,6 @@
   box-shadow: var(--c-shadow);
 }
 
-.options {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
-.option {
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 18px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px dashed var(--c-line-2);
-  background: var(--c-plane);
-  color: var(--c-ink-2);
-  cursor: default;
-}
-
 .age {
   display: inline-flex;
   align-items: center;
@@ -535,30 +312,6 @@
   font-size: 0.75rem;
   color: var(--c-muted);
   white-space: nowrap;
-}
-
-.artBg {
-  fill: var(--c-accent-wash);
-}
-
-.artSpark {
-  fill: var(--c-warn);
-}
-
-.artLine {
-  fill: var(--c-line-2);
-}
-
-.artCard {
-  fill: var(--c-surface);
-  stroke: var(--c-line-2);
-  stroke-width: 1.5;
-}
-
-.artAccent {
-  stroke: var(--c-accent);
-  stroke-width: 5;
-  stroke-linecap: round;
 }
 
 .card {
@@ -779,8 +532,7 @@
   opacity: 0;
 }
 
-.greyed:not(:hover):not(:focus-within) .tag,
-.greyed:not(:hover):not(:focus-within) .chip {
+.greyed:not(:hover):not(:focus-within) .tag {
   background: var(--c-surface);
   border-color: var(--c-line-2);
   color: var(--c-ink-2);
@@ -979,17 +731,6 @@
   box-shadow: inset 3px 0 0 var(--c-warn);
 }
 
-.upAsks {
-  flex-basis: 100%;
-  padding: 2px 0 4px 19px;
-}
-
-.upAsks .askText {
-  display: block;
-  -webkit-line-clamp: unset;
-  overflow: visible;
-}
-
 /* Collapsed card is clickable: a hand cursor says so. */
 .card {
   cursor: pointer;
@@ -1098,15 +839,6 @@
   min-width: 0;
 }
 
-.upName {
-  font-weight: 600;
-  margin-right: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 .upReason {
   flex: 1;
   min-width: 0;
@@ -1131,58 +863,6 @@
   white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------------- off */
-
-.offHero {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 24px;
-  align-items: center;
-  padding: 22px 24px;
-  background: var(--c-wash);
-}
-
-.offArt {
-  width: 100%;
-  height: auto;
-}
-
-.offBody p {
-  margin: 0 0 10px;
-  color: var(--c-ink-2);
-}
-
-.offTitle {
-  font-size: 1.2rem;
-  letter-spacing: -0.01em;
-  margin: 0 0 8px;
-}
-
-.offPoints {
-  margin: 0 0 14px;
-  padding-left: 20px;
-  color: var(--c-ink-2);
-  font-size: 0.875rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.offPoints li::marker {
-  color: var(--c-accent);
-}
-
-.enable {
-  min-height: 40px;
-  margin-bottom: 12px;
-}
-
-.kept {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--c-line);
-}
-
 /* ------------------------------------------------------------------- mobile */
 
 @media (max-width: 640px) {
@@ -1201,31 +881,13 @@
     flex: 1 1 0;
   }
 
-  .topOn .menu {
-    order: -1;
-    margin-left: auto;
-  }
-
   .h1 {
     font-size: 1.25rem;
   }
 
-  .menuButton {
-    width: 36px;
-    height: 36px;
-  }
-
   /* Tap targets stay at least 32 px on touch screens. */
-  .ghost,
-  .danger,
-  .option,
   .linkPill {
     min-height: 32px;
-  }
-
-  .option {
-    display: inline-flex;
-    align-items: center;
   }
 
   .upRow {
@@ -1263,15 +925,6 @@
     width: 100%;
     padding-left: 19px;
   }
-
-  .offHero {
-    grid-template-columns: 1fr;
-    padding: 18px;
-  }
-
-  .offArt {
-    max-width: 140px;
-  }
 }
 
 /* v3: the per-initiative log, the off-page line and the person's own log section. */
@@ -1304,48 +957,8 @@
   color: var(--c-muted);
 }
 
-.logPanel {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.logPanel p {
-  margin: 0;
-}
-
-.apps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.appRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.appName {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.appForm {
-  display: inline-flex;
-  gap: 6px;
-  margin: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card,
-  .ghost,
-  .danger,
   .linkPill {
     transition: none;
   }

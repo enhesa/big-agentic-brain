@@ -145,5 +145,7 @@ describe("tool description size", () => {
 // description and shortening the format hint: the list is 24527, so the ceiling stays.
 // v3 (2026-11-02) cut its actions to publish, list and remove and shortened its text: the list is 24465.
 // Its backfill_link action (2026-11-03) added 16 characters, the enum value only: the list is 24481.
-const CEILING_FULL = 24486;
+// Its delete_all, export, grant_export and revoke_export actions (2026-11-04), which replace the page's
+// switch, delete and export controls, added 53 characters, the enum values only: the list is 24534.
+const CEILING_FULL = 24539;
 const CEILING_LEAN = 11200;

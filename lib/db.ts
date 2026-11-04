@@ -422,7 +422,7 @@ function runMigrationV54(database: DatabaseSync) {
 }
 
 function runMigrationV53(database: DatabaseSync) {
-  // Command Center opt-in (lib/command-center.ts): the person's own switch, set only from the page.
+  // The old Command Center opt-in switch. No longer read (the plugin is the opt-in); kept so nothing is lost.
   // A decision, not state, so it lives here and not in the in-memory snapshot. Guarded adds, so a
   // process that died before the version row can run this again.
   const cols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[];

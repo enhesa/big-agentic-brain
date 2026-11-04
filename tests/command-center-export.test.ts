@@ -6,7 +6,7 @@ import path from "node:path";
 
 /**
  * Command Center export (lib/command-center.ts ccExportOwn, ccGrantExport, ccExportForApp): the
- * person's own download, consent per report app from the page only, and the app route that reads
+ * person's own export and consent per report app (tool actions, owner only), and the app route that reads
  * only people who granted it, aggregated unless they allowed entries.
  */
 
@@ -52,24 +52,11 @@ afterEach(async () => {
   vi.resetModules();
 });
 
-function asViewer(email: string) {
-  current = { "x-auth-request-user": `proxy-${email}`, "x-auth-request-email": email, "x-auth-request-preferred-username": email };
-}
-
 const agent = (email: string) => ({ id: email, email, name: "Agent", roles: [], source: "device" as const, deviceId: "d1" });
 
 async function seed(email: string, worked: string, id = "billing-export") {
   const cc = await import("../lib/command-center");
-  cc.ccSetSwitch(email, true);
   cc.ccPublish(agent(email), email, { v: 1, id, title: "Billing export", key: "KEY-1", source: { machine: "m1", session: "sess-1" }, worked, size: "small" }, "mcp");
-}
-
-function form(pathname: string, fields: Record<string, string>, origin = ORIGIN) {
-  return new Request(ORIGIN + pathname, {
-    method: "POST",
-    headers: { origin, "content-type": "application/x-www-form-urlencoded", host: "localhost:4310" },
-    body: new URLSearchParams(fields).toString(),
-  });
 }
 
 function appGet(query = "", token: string | null = APP_TOKEN) {
@@ -81,88 +68,68 @@ async function auditActions(): Promise<{ actor_id: string; action: string; entit
   return getDb().prepare("SELECT actor_id, action, entity_id, details FROM audit_log WHERE action LIKE 'cc_%' ORDER BY id").all() as never;
 }
 
-describe("the person's own download", () => {
-  it("gives the viewer their own log as an attachment, never anyone else's", async () => {
+describe("the person's own export and grants, as tool actions", () => {
+  const run = async (email: string, args: Record<string, unknown>) => (await import("../lib/command-center")).runCommandCenter(agent(email), args, "mcp", ORIGIN) as Record<string, unknown>;
+
+  it("export gives the caller their own log and the report apps, never anyone else's, audited", async () => {
     await seed(ALICE, "Alice wrote the parser");
     await seed(BOB, "Bob fixed the build");
-    asViewer(ALICE);
-    const { GET } = await import("../app/command-center/export/route");
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-disposition")).toBe('attachment; filename="command-center-log-2026-03-02.json"');
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    const body = await res.json();
+    const body = await run(ALICE, { action: "export" });
     expect(body.person).toBe(ALICE);
-    expect(body.entries.map((e: { text: string }) => e.text)).toContain("Alice wrote the parser");
-    expect(body.entries.every((e: { source?: string }) => e.source === "live")).toBe(true);
+    expect((body.entries as { text: string }[]).map((e) => e.text)).toContain("Alice wrote the parser");
+    expect((body.entries as { source?: string }[]).every((e) => e.source === "live")).toBe(true);
+    expect(body.exportApps).toEqual([
+      { app: "other", grant: null },
+      { app: "reports", grant: null },
+    ]);
     expect(JSON.stringify(body)).not.toContain("Bob fixed the build");
     expect((await auditActions()).some((a) => a.action === "cc_export_own" && a.actor_id === ALICE)).toBe(true);
   });
 
-  it("is 401 without a viewer, and refuses an agent identity", async () => {
-    await seed(ALICE, "Alice wrote the parser");
-    const { GET } = await import("../app/command-center/export/route");
-    expect((await GET()).status).toBe(401);
-    current = { "x-bab-actor-email": ALICE, "x-bab-actor-name": "Alice A" };
-    expect((await GET()).status).toBe(401);
-  });
-
-  it("is 404 when Command Center is switched off on the server", async () => {
+  it("export is 404 when Command Center is switched off on the server", async () => {
     process.env.BAB_COMMAND_CENTER = "0";
     (await import("../lib/config"))._resetConfigForTests();
-    asViewer(ALICE);
-    const { GET } = await import("../app/command-center/export/route");
-    expect((await GET()).status).toBe(404);
+    await expect(run(ALICE, { action: "export" })).rejects.toMatchObject({ status: 404 });
   });
-});
 
-describe("grants from the page", () => {
-  it("grants and revokes with a 303, audited, for the viewer only", async () => {
+  it("grant_export and revoke_export act for the caller only, audited, with no opt-in first", async () => {
     const cc = await import("../lib/command-center");
-    cc.ccSetSwitch(ALICE, true);
-    asViewer(ALICE);
-    const grant = await (await import("../app/command-center/export/grant/route")).POST(form("/command-center/export/grant", { app: "reports", level: "entries" }));
-    expect(grant.status).toBe(303);
+    expect(await run(ALICE, { action: "grant_export", id: "reports", level: "entries" })).toMatchObject({ app: "reports", level: "entries" });
     expect(cc.ccGrantsOf(ALICE)).toMatchObject([{ app: "reports", level: "entries" }]);
     expect(cc.ccGrantsOf(BOB)).toEqual([]);
-    const revoke = await (await import("../app/command-center/export/revoke/route")).POST(form("/command-center/export/revoke", { app: "reports" }));
-    expect(revoke.status).toBe(303);
+    expect(await run(BOB, { action: "revoke_export", id: "reports" })).toEqual({ revoked: false });
+    expect(cc.ccGrantsOf(ALICE)).toHaveLength(1);
+    expect(await run(ALICE, { action: "revoke_export", id: "reports" })).toEqual({ revoked: true });
     expect(cc.ccGrantsOf(ALICE)).toEqual([]);
     const actions = (await auditActions()).map((a) => `${a.action}:${a.entity_id}`);
     expect(actions).toContain("cc_export_grant:reports");
     expect(actions).toContain("cc_export_revoke:reports");
   });
 
-  it("defaults the level to aggregate", async () => {
+  it("grant_export defaults the level to aggregate and takes it from record on the MCP path", async () => {
     const cc = await import("../lib/command-center");
-    cc.ccSetSwitch(ALICE, true);
-    expect(cc.ccGrantExport(ALICE, "reports", undefined).level).toBe("aggregate");
+    expect(await run(ALICE, { action: "grant_export", id: "reports" })).toMatchObject({ level: "aggregate" });
+    const { findTool } = await import("../lib/mcp");
+    const out = JSON.parse(String(await findTool("bab_command_center")!.run(agent(ALICE), { action: "grant_export", id: "reports", record: { level: "entries" } }, { origin: ORIGIN })));
+    expect(out).toMatchObject({ app: "reports", level: "entries" });
+    expect(cc.ccGrantsOf(ALICE)).toMatchObject([{ app: "reports", level: "entries" }]);
   });
 
-  it("refuses a cross-site post, an unknown app, a bad level and a person who is switched off", async () => {
+  it("refuses an unknown app, a bad level and unknown fields", async () => {
     const cc = await import("../lib/command-center");
-    asViewer(ALICE);
-    const { POST } = await import("../app/command-center/export/grant/route");
-    const json = (fields: Record<string, string>, origin = ORIGIN) =>
-      new Request(ORIGIN + "/command-center/export/grant", { method: "POST", headers: { origin, "content-type": "application/json", host: "localhost:4310" }, body: JSON.stringify(fields) });
-    // Switched off: no consent can be given.
-    expect((await POST(json({ app: "reports" }))).status).toBe(403);
-    cc.ccSetSwitch(ALICE, true);
-    expect((await POST(json({ app: "reports" }, "https://evil.example.com"))).status).toBe(403);
-    expect((await POST(json({ app: "nope" }))).status).toBe(404);
-    expect((await POST(json({ app: "reports", level: "everything" }))).status).toBe(400);
+    await expect(run(ALICE, { action: "grant_export", id: "nope" })).rejects.toMatchObject({ status: 404 });
+    await expect(run(ALICE, { action: "grant_export", id: "reports", level: "everything" })).rejects.toMatchObject({ status: 400 });
+    await expect(run(ALICE, { action: "grant_export" })).rejects.toMatchObject({ status: 400 });
+    await expect(run(ALICE, { action: "export", id: "x" })).rejects.toThrow(/unknown field 'id' for export/);
+    await expect(run(ALICE, { action: "revoke_export", id: "reports", level: "entries" })).rejects.toThrow(/unknown field 'level' for revoke_export/);
     expect(cc.ccGrantsOf(ALICE)).toEqual([]);
-    const revoke = await (await import("../app/command-center/export/revoke/route")).POST(
-      new Request(ORIGIN + "/command-center/export/revoke", { method: "POST", headers: { origin: "https://evil.example.com", "content-type": "application/json", host: "localhost:4310" }, body: "{}" }),
-    );
-    expect(revoke.status).toBe(403);
   });
 
-  it("delete now also removes the grants", async () => {
+  it("delete_all also removes the grants", async () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");
     cc.ccGrantExport(ALICE, "reports", "aggregate");
-    cc.ccDeleteAll(ALICE);
+    await run(ALICE, { action: "delete_all" });
     expect(cc.ccGrantsOf(ALICE)).toEqual([]);
     expect(cc.ccLogOf(ALICE)).toEqual([]);
   });
@@ -190,7 +157,7 @@ describe("GET /api/command-center/export for a report app", () => {
     expect(isPublicPath("/api/command-center/billing-export")).toBe(false);
   });
 
-  it("sees only people who granted this app and are switched on, aggregated by default", async () => {
+  it("sees only people who granted this app, aggregated by default", async () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");
     await seed(BOB, "Bob fixed the build");
@@ -198,7 +165,7 @@ describe("GET /api/command-center/export for a report app", () => {
     cc.ccGrantExport(ALICE, "reports", "aggregate");
     cc.ccGrantExport(BOB, "other", "entries");
     cc.ccGrantExport(CAROL, "reports", "entries");
-    cc.ccSetSwitch(CAROL, false);
+    cc.ccRevokeExport(CAROL, "reports");
     const { GET } = await import("../app/api/command-center/export/route");
     const res = await GET(appGet());
     expect(res.status).toBe(200);
@@ -236,25 +203,24 @@ describe("GET /api/command-center/export for a report app", () => {
     expect(JSON.stringify(bob)).not.toContain("Bob fixed the build");
   });
 
-  it("switching off withdraws every grant; switching on again does not bring them back", async () => {
+  it("delete_all withdraws every grant: the app sees nobody", async () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");
     cc.ccGrantExport(ALICE, "reports", "entries");
-    cc.ccSetSwitch(ALICE, false);
-    cc.ccSetSwitch(ALICE, true);
+    cc.ccDeleteAll(ALICE);
     expect(cc.ccGrantsOf(ALICE)).toEqual([]);
     const { GET } = await import("../app/api/command-center/export/route");
     expect((await (await GET(appGet())).json()).people).toEqual([]);
   });
 
-  it("switching off is one transaction: when the grants cannot be deleted, the switch stays on", async () => {
+  it("serves a grant whose person never had the old switch on", async () => {
     const cc = await import("../lib/command-center");
+    await seed(ALICE, "Alice wrote the parser");
     const { getDb } = await import("../lib/db");
-    cc.ccSetSwitch(ALICE, true);
-    getDb().exec("DROP TABLE command_center_export_grants");
-    expect(() => cc.ccSetSwitch(ALICE, false)).toThrow();
-    expect(cc.ccSwitch(ALICE)).toMatchObject({ disabledAt: null });
-    expect(cc.ccSwitch(ALICE).enabledAt).not.toBeNull();
+    getDb().prepare("UPDATE users SET command_center_enabled_at = NULL WHERE id = ?").run(ALICE);
+    cc.ccGrantExport(ALICE, "reports", "aggregate");
+    const { GET } = await import("../app/api/command-center/export/route");
+    expect((await (await GET(appGet())).json()).people.map((p: { person: string }) => p.person)).toEqual([ALICE]);
   });
 
   it("limits each address before the token is checked, with a 429 that says how long to wait", async () => {

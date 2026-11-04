@@ -1,15 +1,12 @@
 // Command Center helpers shared by the contract eval (evals/cc-contract.mjs) and the LLM suites
-// (evals/lib/cc-suite.mjs): a throwaway BAB with Command Center on, a person who switches it on
-// through the sign-in proxy (the page, never an agent), and an agent MCP client bound to a device.
+// (evals/lib/cc-suite.mjs): a throwaway BAB with Command Center on and an agent MCP client bound
+// to a device. There is no per-person switch: the first publish creates the person's Command Center.
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { startBab } from "./bab-server.mjs";
 import { McpClient } from "./mcp.mjs";
 
-/**
- * BAB with Command Center on and the proxy identity headers trusted, so the harness can act as the
- * signed-in viewer on /command-center/enable and /disable. Nothing but the harness reaches it.
- */
+/** BAB with Command Center on and the proxy identity headers trusted. Nothing but the harness reaches it. */
 export function startCcBab(dir) {
   return startBab({
     dataDir: path.join(dir, "bab-data"),
@@ -39,29 +36,6 @@ export async function pace(person) {
     await new Promise((r) => setTimeout(r, Math.ceil((1 - b.tokens) / PER_MS) + 20));
   }
   b.tokens -= 1;
-}
-
-function viewerHeaders(origin, person) {
-  return {
-    origin,
-    "content-type": "application/json",
-    "x-auth-request-user": `eval-${person.email}`,
-    "x-auth-request-email": person.email,
-    "x-auth-request-preferred-username": person.name,
-  };
-}
-
-/** The person flips their own switch on the page (POST /command-center/enable|disable as the viewer). */
-export async function setSwitch(origin, person, on) {
-  const res = await fetch(`${origin}/command-center/${on ? "enable" : "disable"}`, {
-    method: "POST",
-    headers: viewerHeaders(origin, person),
-    body: "{}",
-    signal: AbortSignal.timeout(30_000),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`/command-center/${on ? "enable" : "disable"} ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
-  return body;
 }
 
 /**

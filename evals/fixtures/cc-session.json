@@ -2,13 +2,7 @@
   "_about": "A typical Command Center session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). A step with \"http\" { url, body, method } sends a plain HTTP request instead (as the backfill tool posts to a backfill link; expect.status is the HTTP status), with the same expect handling. Checks: [path, op, value], ops eq, len, set, unset, match.",
   "steps": [
     {
-      "name": "publish before the person switched it on is a 403 that stores nothing",
-      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "worked": "Started the billing export" } },
-      "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
-    },
-    { "name": "the person switches it on (the page, never the agent)", "switch": "on" },
-    {
-      "name": "first publish of the turn, with worked and size",
+      "name": "first publish of the turn needs no opt-in, with worked and size",
       "call": {
         "action": "publish",
         "id": "billing-export",
@@ -453,25 +447,25 @@
       "call": { "action": "remove", "id": "payments-retry" },
       "expect": { "answer": { "removed": true } }
     },
-    { "name": "the person switches it off", "switch": "off" },
     {
-      "name": "publish while off: the 403 sentence, nothing stored",
-      "call": { "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export after off", "state": "done", "worked": "Finished" } },
-      "expect": { "error": "^Command Center is off for [^.]+\\. Ask them to open {{origin}}/command-center and switch it on, then publish again\\. Nothing was stored\\.$" }
+      "name": "export gives the person's own log and the report apps",
+      "call": { "action": "export" },
+      "expect": { "answerChecks": [["person", "eq", "cc.person.1@example.com"], ["exportApps", "len", 0]] }
     },
     {
-      "name": "list while off is the same 403",
-      "call": { "action": "list" },
-      "expect": { "error": "^Command Center is off for [^.]+\\." }
+      "name": "grant_export to an app this BAB does not have is refused",
+      "call": { "action": "grant_export", "id": "no-such-app" },
+      "expect": { "error": "." }
     },
-    { "name": "the person switches it on again", "switch": "on" },
     {
-      "name": "the records came back unchanged by the refused publish",
+      "name": "delete_all empties the person's Command Center",
+      "call": { "action": "delete_all" },
+      "expect": { "answerChecks": [["deleted", "eq", 1]] }
+    },
+    {
+      "name": "list after delete_all is empty",
       "call": { "action": "list" },
-      "expect": {
-        "answer": { "initiatives": [{ "id": "billing-export", "seq": 5 }] },
-        "state": { "billing-export": [["title", "eq", "Billing export"], ["state", "eq", "active"]] }
-      }
+      "expect": { "answerChecks": [["initiatives", "len", 0]] }
     }
   ]
 }

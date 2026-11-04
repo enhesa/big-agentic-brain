@@ -4,26 +4,23 @@ Command Center is a private page, `/command-center`, where a person sees what th
 sessions are doing: initiatives with progress, open questions with their age, the health of
 recurring upkeep, links, and a short log of what was worked on. Agents push the state; the page
 only shows it. The log is the person's own record of effort per initiative: what each turn did,
-with the server's time, which the person can download.
+with the server's time, which the person can export.
 
 The page is hidden: it has no navbar or footer entry. The command-center skill gives the person
 the link.
 
-## Opt-in on both sides
+## Opt-in is the plugin
 
-- The person switches it on and off on the page, signed in through the sign-in proxy. No agent can
-  flip the switch: the page routes take the viewer only, and `POST /api/me` ignores a
-  `commandCenter` field.
-- The server stores nothing for a person whose switch is off. A write or read answers 403:
-  "Command Center is off for <name>. Ask them to open <origin>/command-center and switch it on,
-  then publish again. Nothing was stored."
-- Agents publish only when the optional `command-center` skill is installed (the
-  `plugins/command-center` plugin, also served at `/instructions/command-center.md`). The BAB
-  plugin's own skill only names the tool.
-- Turning it off keeps the records and the log 30 days (switch on again to restore them), then
-  deletes them. It also withdraws every export grant at once. "Delete all my records now" deletes
-  records, log and export grants at once.
+- There is no switch in BAB. Installing the optional `command-center` plugin
+  (`plugins/command-center`, its skill also served at `/instructions/command-center.md`) is the
+  opt-in: agents publish only with that skill, and the first publish creates the person's Command
+  Center. The BAB plugin's own skill only names the tool.
+- The page has no settings. Deleting, exporting and report-app grants are tool actions the agent
+  runs on the person's ask, on the person's own data only (see API).
 - `BAB_COMMAND_CENTER=false` switches the feature off for the whole deployment.
+- Migration: the old per-person switch columns (`command_center_enabled_at`,
+  `command_center_disabled_at` on `users`) stay but are no longer read. Nothing is deleted for
+  them: a person who had switched off keeps their data until the normal retention rules apply.
 
 ## API
 
@@ -36,8 +33,13 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
 | `backfill_link` (a single-use upload link, see Backfill) | `POST /api/command-center/backfill/<token>` takes the upload |
+| `delete_all` (records, log and export grants, cannot be undone) | `POST /api/command-center` `{"action":"delete_all"}` |
+| `export` (the person's own log and report apps as JSON) | `POST /api/command-center` `{"action":"export"}` |
+| `grant_export` (`id` the app, `level` `aggregate` or `entries`; on MCP in `record`) | `POST /api/command-center` `{"action":"grant_export","id":"<app>","level":"aggregate"}` |
+| `revoke_export` (`id` the app) | `POST /api/command-center` `{"action":"revoke_export","id":"<app>"}` |
 
-`POST .../actions` takes an `Idempotency-Key`. A `PUT` is idempotent by nature.
+`POST .../actions` and `POST /api/command-center` take an `Idempotency-Key`. A `PUT` is idempotent
+by nature. Every action acts on the caller's own data only, and refuses unknown fields.
 
 The v2 actions `comment`, `health` and `clear_question` are gone for agents. Each answers a 400
 that names the fix: `worked` on the next publish, `health` as a field of the recurring record, and
@@ -165,7 +167,7 @@ summaries go to BAB, never transcript text. `--no-llm` sends nothing to any mode
 
 The link:
 
-- is made only for a bound identity whose switch is on, and only the sha256 of its token is
+- is made only for a bound identity, and only the sha256 of its token is
   stored. Entries always land in the log of the person who made it; the upload carries no identity.
 - works once, within 15 minutes. It is spent before the body is read, so a refused upload needs a
   new link. At most 20 unused links per person.
@@ -251,18 +253,17 @@ new initiatives per upload (so a `--max` over 20 needs a second link for the res
 
 ## Export
 
-- The person downloads their own log on the page (`GET /command-center/export`, the signed-in
-  viewer only, audited `cc_export_own`).
+- The person's agent exports their own log with the `export` action (audited `cc_export_own`).
 - `BAB_COMMAND_CENTER_EXPORT_APPS` lists report apps as `app=token`; the token carries the export
   scope and nothing else. An app reads `GET /api/command-center/export` with that token as a
-  bearer, only for people who granted that app on their own page and whose switch is on. The
-  person grants or revokes each app on the page (same-origin viewer posts, audited
-  `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
+  bearer, only for people who granted that app. The person's agent grants or revokes each app
+  with `grant_export` and `revoke_export` (audited `cc_export_grant` and `cc_export_revoke`);
+  `delete_all` withdraws every grant. Every app read is audited (`cc_export_app`).
 - Aggregated by default: counts per initiative and UTC day (`entries`: all log entries; `worked`:
   worked lines only, not imported notes; `backfilled`: entries from a backfill upload; sizes) with
   the initiative's title and key, but no log lines and no session. `detail=entries` returns the
   entries only for people who granted the `entries` level. Every entry, in that export and in the
-  person's own download, carries its `source` (`live`, `import` or `backfill`); the page tags
+  person's own export, carries its `source` (`live`, `import` or `backfill`); the page tags
   backfilled lines in each initiative's log. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
@@ -308,21 +309,20 @@ one, so a file rewritten by a rolled-back v2.19 is never deleted before v3 has i
 rollback after that starts empty. A `command-center-snapshot.imported.json` left by an earlier v3
 build is deleted after the same 30 days.
 
-The opt-in switch is two columns on `users`.
+The old opt-in switch is two columns on `users`, kept and no longer read.
 
 Retention, one rule each: the page shows active initiatives that are not silent; done, parked and
 silent ones stay in `list` and in the log. A live record goes 30 days after its last write. The log
-is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). People switched off for 30 days lose
-records, log and grants. Cleared questions stay 7 days. Writes are audited (`cc_publish`,
-`cc_clear`, `cc_remove`, `cc_enable`, `cc_disable`, `cc_delete_all`, and the export rows above)
+is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). Cleared questions stay 7 days. Writes
+are audited (`cc_publish`, `cc_clear`, `cc_remove`, `cc_delete_all`, and the export rows above)
 with the person, the initiative id and the result, never the text.
 
 ## The page
 
 `app/command-center/page.tsx` renders for the signed-in viewer only, at the app's standard content
-width like every other page. The header is one quiet line: title, the On pill, the last push, the
-data-health chips only when one is not 0 (amber or red), and a settings menu with the privacy
-note, the log download, Switch off and Delete (Delete asks for a confirm first).
+width like every other page. The header is one quiet line: title, the last push, and the
+data-health chips only when one is not 0 (amber or red). The page has no controls but Open in
+Claude and the drawer: no switch, menu, delete, download or report-app grants.
 
 - There is no separate questions section. An open question sits on its own card or upkeep row.
 - Initiatives: a kanban board of four light columns by status, left to right Needs you, Active,
@@ -354,9 +354,9 @@ note, the log download, Switch off and Delete (Delete asks for a confirm first).
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
   keeps the drawer open with fresh content. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
   keeps full contrast.
-- With no initiatives yet, one line says to install the command-center skill, with its link.
+- With no initiatives yet, one line says to install the command-center plugin, with the
+  `/plugin install command-center@<marketplace>` command.
 - A line counts the done, parked and silent initiatives that left the page.
-- Report apps, only when export apps are configured: each app with Grant or Revoke.
 - Recurring upkeep, a slim section under the board: rows that need a look (not green, overdue,
   silent or asking something), one line each: health dot, name, one label (Needs you when it
   asks something, else the health label), the reason (cut short, full text in its tooltip;

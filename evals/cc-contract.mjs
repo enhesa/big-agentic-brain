@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { assertBuilt } from "./lib/bab-server.mjs";
-import { ccAgent, ccPerson, fakeSecret, getRecord, otherDevice, parseJson, setSwitch, startCcBab } from "./lib/cc.mjs";
+import { ccAgent, ccPerson, fakeSecret, getRecord, otherDevice, parseJson, startCcBab } from "./lib/cc.mjs";
 import { FIXTURES_DIR, scratchRoot } from "./lib/paths.mjs";
 
 const { values: opt } = parseArgs({
@@ -80,7 +80,7 @@ async function main() {
     const tool = (await agents.agent.listTools()).find((t) => t.name === "bab_command_center");
     const props = Object.keys(tool?.inputSchema?.properties ?? {}).sort();
     const actions = tool?.inputSchema?.properties?.action?.enum ?? [];
-    const wantActions = ["publish", "list", "remove", "backfill_link"];
+    const wantActions = ["publish", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"];
     if (!tool) fail("tool schema", "bab_command_center is not in tools/list");
     else if (props.join(",") !== "action,id,record") fail("tool schema", `properties are ${props.join(",")}, want action,id,record`);
     else if ([...actions].sort().join(",") !== [...wantActions].sort().join(",")) fail("tool schema", `action enum is ${actions.join(",")}, want exactly ${wantActions.join(",")}`);
@@ -103,15 +103,6 @@ async function main() {
     };
 
     for (const step of fixture.steps) {
-      if (step.switch) {
-        try {
-          await setSwitch(bab.origin, person, step.switch === "on");
-          pass(step.name);
-        } catch (e) {
-          fail(step.name, e.message);
-        }
-        continue;
-      }
       const errs = [];
       let text;
       let isError;

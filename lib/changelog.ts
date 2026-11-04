@@ -31,6 +31,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Offline evals now run only on pull requests that change search, tools or Command Center logic.",
       "Command Center is now a kanban board by status; click a card for its details in a side drawer.",
       "Command Center cards are calmer, and a card that needs you has an Open in Claude button.",
+      "Command Center needs no switch: installing its plugin turns it on; delete or export through your agent.",
     ],
   },
   {

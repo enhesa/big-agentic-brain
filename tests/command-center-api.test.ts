@@ -29,7 +29,6 @@ beforeEach(async () => {
   const d = await import("../lib/devices");
   d.bindDevice(d.hashSecret(secret("a"))!, OWNER, "Test device", null);
   d.bindDevice(d.hashSecret(secret("b"))!, OTHER, "Test device", null);
-  (await import("../lib/command-center")).ccSetSwitch(OWNER, true);
 });
 
 afterEach(async () => {
@@ -105,16 +104,50 @@ describe("/api/command-center", () => {
     expect((await put("billing", RECORD, headers)).status).toBe(200);
   });
 
-  it("is 403 with the exact sentence for a person who is off, and stores nothing", async () => {
+  it("needs no opt-in: another person's first PUT creates their Command Center", async () => {
     headers = asDevice("b");
-    const res = await put("billing", RECORD);
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe(
-      "Command Center is off for Other Two. Ask them to open https://bab.example.com/command-center and switch it on, then publish again. Nothing was stored.",
-    );
-    const { ccSetSwitch, ccView } = await import("../lib/command-center");
-    ccSetSwitch(OTHER, true);
-    expect(ccView(OTHER).records).toEqual([]);
+    expect((await put("billing", RECORD)).status).toBe(200);
+    const { ccView } = await import("../lib/command-center");
+    expect(ccView(OTHER).records.map((r) => r.id)).toEqual(["billing"]);
+    expect(ccView(OWNER).records).toEqual([]);
+  });
+
+  it("serves delete_all, export, grant_export and revoke_export on POST /api/command-center, own data only", async () => {
+    process.env.BAB_COMMAND_CENTER_EXPORT_APPS = "reports=" + "r".repeat(40);
+    (await import("../lib/config"))._resetConfigForTests();
+    try {
+      headers = asDevice("b");
+      expect((await put("theirs", RECORD)).status).toBe(200);
+      headers = asDevice();
+      expect((await put("billing", { ...RECORD, worked: "did it" })).status).toBe(200);
+      const { POST } = await import("../app/api/command-center/route");
+      const post = async (body: unknown) => {
+        const res = await POST(req("/api/command-center", "POST", body) as never);
+        return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+      };
+      // An export is never stored under an Idempotency-Key: a repeat with the same key is fresh.
+      const keyed = async () => (await (await POST(req("/api/command-center", "POST", { action: "export" }, { "idempotency-key": "same-key" })) as never as Response).json()) as { entries: { text: string }[] };
+      expect((await keyed()).entries.some((e) => e.text === "later")).toBe(false);
+      expect((await put("billing", { ...RECORD, worked: "later" })).status).toBe(200);
+      expect((await keyed()).entries.some((e) => e.text === "later")).toBe(true);
+      const exported = await post({ action: "export" });
+      expect(exported.status).toBe(200);
+      expect(exported.json.person).toBe(OWNER);
+      expect((exported.json.entries as { text: string }[]).some((e) => e.text === "did it")).toBe(true);
+      expect(exported.json.exportApps).toEqual([{ app: "reports", grant: null }]);
+      expect((await post({ action: "grant_export", id: "reports", level: "entries" })).json).toMatchObject({ app: "reports", level: "entries" });
+      expect((await post({ action: "grant_export", id: "nope" })).status).toBe(404);
+      expect((await post({ action: "grant_export", id: "reports", level: "all" })).status).toBe(400);
+      expect((await post({ action: "revoke_export", id: "reports" })).json).toEqual({ revoked: true });
+      expect((await post({ action: "publish", id: "x" })).status).toBe(400);
+      expect((await post({ action: "delete_all" })).json).toMatchObject({ deleted: 1 });
+      const { ccView } = await import("../lib/command-center");
+      expect(ccView(OWNER).records).toEqual([]);
+      expect(ccView(OTHER).records.map((r) => r.id)).toEqual(["theirs"]);
+    } finally {
+      delete process.env.BAB_COMMAND_CENTER_EXPORT_APPS;
+      (await import("../lib/config"))._resetConfigForTests();
+    }
   });
 
   it("refuses a body over 256 KB with 413", async () => {
@@ -168,7 +201,7 @@ describe("bab_command_center", () => {
     expect(LEAN_TOOL_NAMES).not.toContain("bab_command_center");
     const tool = findTool("bab_command_center")!;
     expect(tool.description).toMatch(/^Needs the command-center skill/);
-    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove", "backfill_link"]);
+    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"]);
     expect(tool.description).not.toContain("<origin>");
     expect(tool.inputSchema.required).toEqual(["action"]);
     const actor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };
@@ -295,8 +328,6 @@ describe("bab_command_center", () => {
     const missing = await mcpRefusal({ action: "list", id: "missing" });
     expect(missing.status).toBe(404);
     expect(missing.message).toMatch(/No initiative 'missing' in your Command Center/);
-    const { ccSetSwitch } = await import("../lib/command-center");
-    ccSetSwitch(OTHER, true);
     const { findTool } = await import("../lib/mcp");
     const otherActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
     await findTool("bab_command_center")!.run(otherActor, { action: "publish", id: "theirs", record: RECORD }, { origin: "https://bab.example.com" });
@@ -339,7 +370,7 @@ describe("bab_command_center", () => {
     expect(((await mcp({ action: "list", id: "billing" })).tasks as unknown[]).length).toBe(0);
   });
 
-  it("answers the gates before reading MCP args: off on the server, off for the person, rate", async () => {
+  it("answers the gates before reading MCP args: off on the server, identity, rate", async () => {
     const offActor = { id: OTHER, email: OTHER, name: "Other Two", roles: [], source: "device" as const, deviceId: "d2" };
     const { findTool } = await import("../lib/mcp");
     const tool = findTool("bab_command_center")!;
@@ -353,13 +384,7 @@ describe("bab_command_center", () => {
       throw new Error("expected a refusal");
     };
     const badText = { action: "publish", id: "billing", record: "[{oops" };
-    // Off for the person: the opt-in sentence, not a JSON 400, with record and with bad JSON text.
-    const off = await refuse(offActor, badText);
-    expect(off.status).toBe(403);
-    expect(off.message).toMatch(/^Command Center is off for Other Two/);
-    expect((await refuse(offActor, { action: "publish", id: "billing", record: RECORD })).status).toBe(403);
-    expect((await refuse(offActor, { action: "publish", id: "billing", record: [RECORD] })).status).toBe(403);
-    // Off on the server wins over the person being off and over bad JSON text.
+    // Off on the server wins over bad JSON text.
     process.env.BAB_COMMAND_CENTER = "0";
     (await import("../lib/config"))._resetConfigForTests();
     try {
@@ -404,7 +429,7 @@ describe("POST /api/me", () => {
     const { POST } = await import("../app/api/me/route");
     const res = await POST(req("/api/me", "POST", { name: "Other Two", commandCenter: true }) as never);
     expect(res.status).toBe(200);
-    const { ccSwitch } = await import("../lib/command-center");
-    expect(ccSwitch(OTHER).enabledAt).toBeNull();
+    const { getDb } = await import("../lib/db");
+    expect((getDb().prepare("SELECT command_center_enabled_at AS e FROM users WHERE id = ?").get(OTHER) as { e: string | null }).e).toBeNull();
   });
 });
