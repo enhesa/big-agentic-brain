@@ -3,16 +3,16 @@
 }
 
 .page {
-  --gutter: 24px;
   overflow-x: hidden;
   background: #fff;
 }
 
+/* Same box as the inner pages' .container: the shared tokens in app/globals.css. */
 .wrap {
   width: 100%;
-  max-width: 1180px;
+  max-width: var(--shell-max-width);
   margin: 0 auto;
-  padding: 0 var(--gutter);
+  padding: 0 var(--shell-gutter);
 }
 
 .eyebrow {
@@ -145,6 +145,21 @@
   color: var(--steel);
   transition: color 0.18s ease;
   white-space: nowrap;
+}
+
+/* Reserve the bold width of every label, so marking the current page (font-weight 600)
+   never widens the nav and nudges the other links. The same rule is in both bars. */
+.navLink {
+  display: inline-block;
+}
+
+.navLink::before {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 600;
 }
 
 .navLink:hover {
@@ -1305,40 +1320,6 @@
   }
 }
 
-/* ----------------------------------------------------------------- footer */
-
-.footer {
-  background: var(--mist);
-  padding: 36px 0;
-}
-
-.footerInner {
-  display: flex;
-  align-items: center;
-  gap: 16px 28px;
-  flex-wrap: wrap;
-}
-
-.footerMark {
-  height: 22px;
-  width: auto;
-  display: block;
-}
-
-.footerLinks {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  flex-wrap: wrap;
-  font-size: 0.88rem;
-  color: var(--steel);
-}
-
-.footerLinks a:hover {
-  color: var(--navy);
-}
-
 /* ----------------------------------------------------------- scroll reveal */
 
 .reveal {
@@ -1409,10 +1390,6 @@
     white-space: normal;
   }
 
-  .page {
-    --gutter: 18px;
-  }
-
   .rules,
   .essentials4 {
     grid-template-columns: minmax(0, 1fr);
@@ -1440,11 +1417,6 @@
   .graphPanel {
     padding: 10px;
     border-radius: 20px;
-  }
-
-  .footerLinks {
-    margin-left: 0;
-    width: 100%;
   }
 }
 

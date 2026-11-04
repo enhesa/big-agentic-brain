@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-04",
+    title: "One footer and one page width everywhere",
+    changes: [
+      "Every page now has the home page footer, and the top bar no longer shifts between pages.",
+    ],
+  },
+  {
     date: "2026-11-03",
     title: "Command Center work log, clearer link notice, honest search share",
     changes: [
