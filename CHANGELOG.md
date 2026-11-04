@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.21.0](https://github.com/enhesa/big-agentic-brain/compare/v2.20.2...v2.21.0) (2026-11-04)
+
+
+### Features
+
+* Command Center backfill from old sessions ([#116](https://github.com/enhesa/big-agentic-brain/issues/116)) ([7d94721](https://github.com/enhesa/big-agentic-brain/commit/7d947210ad41b7ecec7158fee1b7f7ecf9f936eb))
+
 ## [2.20.2](https://github.com/enhesa/big-agentic-brain/compare/v2.20.1...v2.20.2) (2026-11-03)
 
 
