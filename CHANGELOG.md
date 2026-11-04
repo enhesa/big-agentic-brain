@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.21.1](https://github.com/enhesa/big-agentic-brain/compare/v2.21.0...v2.21.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* Command Center sync drafts only plan sessions with real progress ([#124](https://github.com/enhesa/big-agentic-brain/issues/124)) ([5644421](https://github.com/enhesa/big-agentic-brain/commit/5644421f812166c1f10dc695acc904b958d2b77f))
+* compact Command Center cards with status, progress and details on click ([#122](https://github.com/enhesa/big-agentic-brain/issues/122)) ([928c35b](https://github.com/enhesa/big-agentic-brain/commit/928c35b6860cae91e2e6c4843e38c740c3fde516))
+* shared footer and one page width on every BAB page ([#121](https://github.com/enhesa/big-agentic-brain/issues/121)) ([2a1166b](https://github.com/enhesa/big-agentic-brain/commit/2a1166ba6e0ecbf0d8ca0568e2b04c306fdafc33))
+
 ## [2.21.0](https://github.com/enhesa/big-agentic-brain/compare/v2.20.2...v2.21.0) (2026-11-04)
 
 
