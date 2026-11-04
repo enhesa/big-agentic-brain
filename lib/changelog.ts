@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Every page now has the home page footer, and the top bar no longer shifts between pages.",
       "Command Center questions now sit on their own card, and cards show a compact progress ring.",
       "Offline evals now run only on pull requests that change search, tools or Command Center logic.",
+      "Command Center is now a kanban board by status; click a card for its details in a side drawer.",
     ],
   },
   {

@@ -30,6 +30,8 @@
   --c-done-ink: #2a55ad;
   --c-done-wash: rgba(59, 111, 216, 0.1);
   --c-radius: 10px;
+  --c-col: #f4f5f7;
+  --c-card-line: #e6e9ee;
 
   color: var(--c-ink);
   font-size: 0.875rem;
@@ -62,6 +64,8 @@
   --c-done: #6e9bff;
   --c-done-ink: #9dbcff;
   --c-done-wash: rgba(110, 155, 255, 0.14);
+  --c-col: #111722;
+  --c-card-line: #2a3446;
 }
 
 .srOnly {
@@ -492,13 +496,14 @@
 .card {
   position: relative;
   background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: var(--c-radius);
-  box-shadow: var(--c-shadow);
+  border: 1px solid var(--c-card-line);
+  border-radius: 8px;
+  box-shadow: 0 1px 1px rgba(26, 51, 96, 0.04);
   overflow: hidden;
-  transition: box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
+/* The left edge: yellow on a Needs you card, nothing on the rest. */
 .card::before {
   content: "";
   position: absolute;
@@ -506,26 +511,17 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--c-accent);
-  opacity: 0.55;
-}
-
-.card::before {
+  background: var(--c-warn);
   opacity: 0;
 }
 
-.urgent::before {
-  background: var(--c-bad);
-  opacity: 1;
-}
-
-.high::before {
-  background: var(--c-warn);
+.status_needs_you::before {
   opacity: 1;
 }
 
 .card:hover {
-  box-shadow: var(--c-shadow-hover);
+  border-color: var(--c-line-2);
+  box-shadow: var(--c-shadow);
 }
 
 .options {
@@ -583,34 +579,12 @@
   stroke-linecap: round;
 }
 
-/* --------------------------------------------------------------- initiatives */
-
-.flow {
-  /* CSS-columns masonry: cards keep their own height and flow on, so no holes and no
-     stretched neighbours when one card opens. Reading order runs down each column. */
-  columns: 1;
-  column-gap: 10px;
-}
-
-@media (min-width: 700px) {
-  .flow {
-    columns: 2;
-  }
-}
-
-@media (min-width: 1024px) {
-  .flow {
-    columns: 3;
-  }
-}
-
 .card {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 8px 10px 6px 10px;
-  margin-bottom: 8px;
-  break-inside: avoid;
+  gap: 4px;
+  padding: 9px 10px 9px 12px;
+  flex: none;
 }
 
 .cardHead {
@@ -620,27 +594,40 @@
   gap: 8px;
 }
 
-.cardHead .cardTitle {
-  padding-top: 2px;
-}
-
-/* Ring and badge, side by side at the right of the title. */
-.headSide {
-  flex: none;
+.cardMain {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
 }
 
 .cardTitle {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
   margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.3;
+  font-family: var(--font-body, inherit);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
   min-width: 0;
+  padding-top: 1px;
+}
+
+/* The title is the card's keyboard opener; it looks like plain text. */
+.cardOpen {
+  all: unset;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  cursor: pointer;
+  color: var(--c-ink);
+  border-radius: 4px;
+}
+
+.cardOpen:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 .chips {
@@ -648,36 +635,6 @@
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
-}
-
-.next {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: var(--c-plane);
-  font-size: 0.8125rem;
-  line-height: 20px;
-  min-width: 0;
-}
-
-.nextLabel {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--c-accent-ink);
-  flex: none;
-}
-
-.nextText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .taskIcon {
@@ -864,17 +821,9 @@
   stroke: var(--c-grey);
 }
 
-.greyed:not(:hover):not(:focus-within) .next {
-  background: var(--c-surface);
-}
-
-.greyed:not(:hover):not(:focus-within) .nextLabel {
-  color: var(--c-ink-2);
-}
-
 /* ------------------------------------------------- compact cards: status, bar */
 
-/* One colour set per status; the badge, its filter button and the card accent read it. */
+/* One colour set per status; the badge and the column header read it. */
 .badge_needs_you {
   --b: var(--c-warn);
   --b-ink: var(--c-warn-ink);
@@ -940,48 +889,34 @@
   color: var(--c-muted);
 }
 
-/* A thin status line along the top of the card, so the state reads at a glance. */
-.status_needs_you,
-.status_active,
-.status_idle,
-.status_finished {
-  border-top: 3px solid var(--b, var(--c-line));
-}
-
-.status_needs_you {
-  --b: var(--c-warn);
-}
-
-.status_active {
-  --b: var(--c-ok);
-}
-
-.status_idle {
-  --b: var(--c-line-2);
-}
-
-.status_finished {
-  --b: var(--c-done);
-}
-
 /* Progress ring: the percent inside, done/total under it. */
 .ring {
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 42px;
+  width: 32px;
 }
 
 .ringSvg {
   display: block;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
+}
+
+.ringLg,
+.ringLg .ringSvg {
+  width: 48px;
+}
+
+.ringLg .ringSvg {
+  height: 48px;
 }
 
 .ringBg,
 .ringFill {
   fill: none;
-  stroke-width: 4.5;
+  stroke-width: 4;
 }
 
 .ringBg {
@@ -1001,8 +936,8 @@
   fill: var(--c-ink);
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: 11px;
-  letter-spacing: -0.03em;
+  font-size: 13px;
+  letter-spacing: -0.04em;
 }
 
 .isDone .ringText {
@@ -1047,12 +982,6 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.card:has(> details[open]) .askText {
-  display: block;
-  -webkit-line-clamp: unset;
-  overflow: visible;
 }
 
 .askMeta {
@@ -1107,179 +1036,14 @@
   overflow: visible;
 }
 
-/* The main task, larger than the rest. */
-.card .next {
-  align-items: flex-start;
-  padding: 4px 8px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  line-height: 20px;
-}
-
-.card .next .taskIcon {
-  margin-top: 3px;
-}
-
-.card .nextLabel {
-  line-height: 20px;
-}
-
-.card .nextText {
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow-wrap: anywhere;
-}
-
-.subtasks {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 9px;
-  display: flex;
-  flex-direction: column;
-  font-size: 0.8125rem;
-  line-height: 18px;
-}
-
-.subtasks li {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  padding: 1px 0;
-  min-width: 0;
-}
-
-.subtasks li > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subtasks .taskIcon {
-  margin-top: 2px;
-}
-
-.subtasks .moreTasks {
-  padding-left: 20px;
-  color: var(--c-muted);
-  font-size: 0.75rem;
-}
-
 /* Collapsed card is clickable: a hand cursor says so. */
 .card {
   cursor: pointer;
 }
 
-.card .moreBody,
-.card a {
+.card a,
+.card form {
   cursor: auto;
-}
-
-.more summary {
-  list-style: none;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--c-accent-ink);
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.more summary::-webkit-details-marker {
-  display: none;
-}
-
-.more summary::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease;
-}
-
-.more[open] summary::before {
-  transform: rotate(45deg);
-}
-
-.moreBody {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--c-line-2);
-  font-size: 0.75rem;
-}
-
-.moreBody .cardFoot {
-  margin: 0;
-  white-space: normal;
-}
-
-/* Status counts and filter */
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 10px;
-}
-
-.filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--c-line);
-  background: var(--c-surface);
-  color: var(--c-ink-2);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.filter:hover:not(:disabled) {
-  border-color: var(--b, var(--c-accent));
-}
-
-.filter[aria-pressed="true"] {
-  background: var(--b-wash, var(--c-accent-wash));
-  border-color: var(--b, var(--c-accent));
-  color: var(--b-ink, var(--c-accent-ink));
-}
-
-.filter:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.filter:focus-visible {
-  outline: 3px solid var(--teal);
-  outline-offset: 2px;
-}
-
-.filterCount {
-  font-family: var(--font-head);
-  font-weight: 800;
-  color: var(--c-ink);
-}
-
-.flow[data-filter="needs_you"] > .card:not([data-status="needs_you"]),
-.flow[data-filter="active"] > .card:not([data-status="active"]),
-.flow[data-filter="idle"] > .card:not([data-status="idle"]),
-.flow[data-filter="finished"] > .card:not([data-status="finished"]) {
-  display: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1505,9 +1269,7 @@
   .ghost,
   .danger,
   .option,
-  .linkPill,
-  .more summary,
-  .filter {
+  .linkPill {
     min-height: 32px;
   }
 
@@ -1634,8 +1396,301 @@
   .card,
   .ghost,
   .danger,
-  .linkPill,
-  .more summary::before {
+  .linkPill {
     transition: none;
+  }
+}
+
+/* -------------------------------------------------------------------- board */
+
+/* Four light columns by status, like a kanban board. Each column scrolls on its own, so a long
+   column never pushes the upkeep and log sections far down. */
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--c-col);
+  border-radius: 12px;
+  padding: 4px 6px 6px;
+}
+
+.colHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 6px 8px;
+  font-family: var(--font-body, inherit);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--c-ink);
+}
+
+.colHead .badgeDot {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 2px var(--b-wash);
+}
+
+.colCount {
+  font-weight: 500;
+  color: var(--c-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.colBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 230px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* Room for the card shadow and focus ring inside the scroll box. */
+  padding: 1px 1px 2px;
+  margin: -1px -1px 0;
+}
+
+.colEmpty {
+  margin: 0;
+  padding: 2px 6px 14px;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+
+/* One muted line under the title: the task in progress, else the next one. */
+.line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 16px;
+  color: var(--c-muted);
+  min-width: 0;
+}
+
+.line .taskIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.lineText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.cardChips .tag {
+  font-size: 0.6875rem;
+  line-height: 14px;
+  padding: 1px 6px;
+}
+
+/* A question on the card face: smaller, no second yellow edge (the card has one). */
+.card .asks {
+  margin-top: 4px;
+}
+
+.card .ask {
+  border-left: 0;
+  padding: 5px 7px;
+  gap: 3px;
+}
+
+.card .age {
+  font-size: 0.6875rem;
+}
+
+.card .askText {
+  font-family: var(--font-body, inherit);
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.card .option {
+  font-size: 0.6875rem;
+  line-height: 16px;
+  padding: 1px 8px;
+}
+
+.card .moreAsks {
+  padding-left: 2px;
+}
+
+.askFull .askText {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* ------------------------------------------------------------------- drawer */
+
+/* A native <dialog> shown with showModal(): Esc closes it, the page behind is inert. */
+.drawer {
+  margin: 0 0 0 auto;
+  padding: 0;
+  width: min(480px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  box-shadow: -12px 0 40px rgba(26, 51, 96, 0.16);
+  font-size: 0.875rem;
+  overscroll-behavior: contain;
+}
+
+.drawer::backdrop {
+  background: rgba(16, 26, 46, 0.28);
+}
+
+.drawerPanel {
+  min-height: 100%;
+  outline: none;
+  box-sizing: border-box;
+  padding: 16px 20px 24px;
+}
+
+.drawerHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.drawerTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.drawerClose {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -6px 0 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--c-ink-2);
+  cursor: pointer;
+}
+
+.drawerClose svg {
+  width: 16px;
+  height: 16px;
+}
+
+.drawerClose:hover {
+  background: var(--c-plane);
+}
+
+.drawerClose:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detailTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.detailBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail .cardFoot {
+  margin: 0;
+  white-space: normal;
+  border-top: 1px solid var(--c-line);
+  padding-top: 8px;
+}
+
+.detail .log {
+  margin-top: 0;
+}
+
+/* ------------------------------------------------------------ board, phones */
+
+@media (max-width: 900px) and (min-width: 641px) {
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phones: the columns stack, empty ones fold to their header, and nothing scrolls inside. */
+@media (max-width: 640px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .colBody {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .col[data-empty] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .col[data-empty] .colEmpty {
+    padding: 0 6px;
+  }
+
+  .drawerPanel {
+    padding: 14px 16px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drawer[open] {
+    animation: cc-slide 0.18s ease-out;
+  }
+}
+
+@keyframes cc-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
   }
 }
