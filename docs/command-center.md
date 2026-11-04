@@ -117,10 +117,10 @@ summaries go to BAB, never transcript text. `--no-llm` sends nothing to any mode
    skipped. The request allows 1024 output tokens, so a model that thinks first still has room.
    An answer with no text block (for example only thinking, stopped at `max_tokens`) is asked
    once more with 4096; if that fails too, the entry gets an `error` naming the stop reason and
-   the block types, never any text. An empty answer is not an error: the entry gets `skipped`
-   with the reason and is left out. To redo only the failed blocks later, run the same command
+   the block types, never any text. An empty answer (the model ended its turn with no text, or
+   only blank text) is not an error: the entry gets `skipped` with the reason and is left out. To redo only the failed blocks later, run the same command
    with `--retry-errors` and the same `--out`: it reads that draft, drafts again only the entries
-   with an `error` (mapping them with the current rules), and keeps every other entry exactly
+   with an `error` and no line or `include: true` you set by hand (mapping them with the current rules), and keeps every other entry exactly
    as it is, also ones you edited. It does not take `--since`, `--until` or `--settle-hours`.
 3. Map. Each block goes to an initiative by the rules in the map file you edit. A rule names an
    `initiative` (and optionally a `title` and `key`) and one or more match fields; it matches when
@@ -139,7 +139,10 @@ summaries go to BAB, never transcript text. `--no-llm` sends nothing to any mode
    wins. (Before 2026-11-04 the first matching rule in file order won, so a `keys` rule above a
    `branch` rule now loses to it.) `--map-from-sync sync.json` adds one last step: a block no
    rule matched goes to the initiative id its session got in a reviewed sync draft (records with
-   `include: true` only), with that record's title and key. A block nothing matches goes to
+   `include: true` only), with that record's title and key. Sync lists one session per title, so
+   a session it left out as a same-titled one is matched by its title (compared as a slug) instead.
+   Sync only reads the last `--days` and includes at most `--max`, so for mapping a long backfill
+   run it with, for example, `--days 365 --max 100`. A block nothing matches goes to
    `unassigned`; nothing is guessed. The draft also writes `backfill.map-template.json` with the
    folders and branches of unmapped blocks, the keys in those branch names (never keys from
    transcript text) and their session titles, masked like sync text (a title that was masked or
@@ -223,7 +226,8 @@ once. From a checkout of this repository, on each machine:
    (as in "Done: ...") and no plan call came after it. A `TodoWrite` list keeps its own statuses.
 2. Initiatives: sessions with the same title (compared as a slug) count once (the most recent,
    preferring one with a plan; the others are only counted, before `--map` and grouping). Sessions sharing a Jira-style key, or the same repo and a non-trunk branch, merge into
-   one. A `--map` file (the same rules as for `draft`) wins and names the id. Any other id is the
+   one. A `--map` file (the same rules and precedence as for `draft`, with the session title for
+   `titleMatch`) wins and names the id. Any other id is the
    slug of the title, as an agent makes a publish id (a-z, 0-9, `-`, at most 40), so a later
    publish by that session with the same id is the same initiative. A clash gets `-2`, `-3`.
 3. Review `sync.json` and `sync.md`. Every record is listed with `include` true or false, and

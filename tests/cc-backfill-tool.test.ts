@@ -42,6 +42,8 @@ import {
   dedupeByTitle,
   uploadCurrent,
   uploadBody,
+  answerText,
+  ModelAnswerError,
 } from "../scripts/cc-backfill.mjs";
 
 /** scripts/cc-backfill.mjs: drafts worked lines from transcripts in a temp dir, uploads to a fake fetch. Never the network. */
@@ -1645,6 +1647,26 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
   });
   const onlyThinking = () => ({ content: [{ type: "thinking", thinking: THINKING, signature: "sig" }], stop_reason: "max_tokens" });
 
+  it("answerText: first non-blank text block; no content list is an error, an empty list or blank text a skip", () => {
+    expect(answerText({ content: [{ type: "thinking", thinking: "t" }, { type: "text", text: " " }, { type: "text", text: "Line" }] })).toBe("Line");
+    const err = (body: unknown) => {
+      try {
+        answerText(body);
+      } catch (e) {
+        return e as ModelAnswerError;
+      }
+      throw new Error("no error");
+    };
+    expect(err({ error: { type: "overloaded" } })).toMatchObject({ empty: false, message: "model answer has no text block (stop_reason: none; blocks: none)" });
+    expect(err(null).empty).toBe(false);
+    expect(err({ content: [], stop_reason: "end_turn" }).empty).toBe(true);
+    expect(err({ content: [{ type: "text", text: "" }] }).empty).toBe(true);
+    expect(err({ content: [{ type: "thinking" }], stop_reason: "max_tokens" }).empty).toBe(false);
+    // An empty list cut short is retried, not skipped.
+    expect(err({ content: [], stop_reason: "max_tokens" }).empty).toBe(false);
+    expect(err({ content: [], stop_reason: "refusal" }).empty).toBe(false);
+  });
+
   it("takes the first text block after a thinking block", async () => {
     writeTranscript(pair(NOW - 10 * HOUR, 5));
     const m = fakeModel([thinkingThenText("Fixed the build pipeline")]);
@@ -1739,6 +1761,14 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
     const none = vi.fn(async () => "x");
     expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...capture().deps, provider: none })).toBe(0);
     expect(none).not.toHaveBeenCalled();
+    // An errored entry the person fixed by hand (a line typed, error left in) is not redone.
+    const handFixed = JSON.parse(JSON.stringify(after));
+    const restored = { ...bySession(before, "b"), worked: "Typed by hand", include: true };
+    handFixed.entries[handFixed.entries.findIndex((e: Entry) => e.session === "b")] = restored;
+    writeFileSync(out, JSON.stringify(handFixed));
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...capture().deps, provider: none })).toBe(0);
+    expect(none).not.toHaveBeenCalled();
+    expect(bySession(JSON.parse(readFileSync(out, "utf8")), "b")).toEqual(restored);
     // An errored entry whose block is gone stays as it is.
     const gone = { ...after, entries: [...after.entries, { ...bySession(before, "b"), id: "gone:1", session: "gone" }] };
     writeFileSync(out, JSON.stringify(gone));
@@ -1810,6 +1840,8 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
     expect(() => validateMap({ rules: [{ initiative: "x", titleMatch: "" }] })).toThrow(/titleMatch/);
     expect(() => validateMap({ rules: [{ initiative: "x", sessionId: [] }] })).toThrow(/sessionId/);
     expect(() => validateMap({ rules: [{ initiative: "x", sessionId: "bad id!" }] })).toThrow(/sessionId/);
+    expect(() => validateMap({ rules: [{ initiative: "x", sessionId: ["ok", 5] }] })).toThrow(/sessionId/);
+    expect(() => validateMap({ rules: [{ initiative: "x", titleMatch: "/login/i" }] })).toThrow(/takes no flags/);
   });
 
   it("draft maps blocks by session title from the transcript and lists masked titles of unmapped sessions in the template, never a raw one", async () => {
@@ -1861,7 +1893,12 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
 
   it("--map-from-sync assigns blocks of a session to its initiative in the sync draft when no --map rule matched", async () => {
     const t0 = NOW - 10 * HOUR;
-    writeTranscript(["a", "b", "c", "d"].flatMap((s) => pair(t0, 5, { session: s })));
+    writeTranscript([
+      ...["a", "b", "c", "d"].flatMap((s) => pair(t0, 5, { session: s })),
+      // e is not in the sync draft (sync kept one session per title), but its title matches a record's.
+      ...pair(t0, 5, { session: "e" }),
+      titleLine("e", "ai-title", "login  REWORK!"),
+    ]);
     const sync = path.join(dir, "sync.json");
     writeFileSync(
       sync,
@@ -1884,8 +1921,13 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
     expect(bySession.get("b")).toMatchObject({ initiative: "pinned", mappedBy: "rule 1 (sessionId)" });
     expect(bySession.get("c")).toMatchObject({ initiative: "unassigned", mappedBy: "none" });
     expect(bySession.get("d")).toMatchObject({ initiative: "unassigned" });
-    // A file that is not a sync draft, or a reserved id, is refused before anything is drafted.
-    for (const bad of [{ v: 1, kind: "bab-cc-backfill-draft", entries: [] }, { v: 1, kind: "bab-cc-backfill-draft", current: [{ id: "unassigned", include: true, sessions: ["a"] }] }]) {
+    expect(bySession.get("e")).toMatchObject({ initiative: "login-rework", mappedBy: "sync login-rework (title)" });
+    // A file that is not a sync draft, a reserved id, or a bad session id is refused before anything is drafted.
+    for (const bad of [
+      { v: 1, kind: "bab-cc-backfill-draft", entries: [] },
+      { v: 1, kind: "bab-cc-backfill-draft", current: [{ id: "unassigned", include: true, sessions: ["a"] }] },
+      { v: 1, kind: "bab-cc-backfill-draft", current: [{ id: "ok", include: true, sessions: [5] }] },
+    ]) {
       writeFileSync(sync, JSON.stringify(bad));
       const c = capture();
       expect(await run(["draft", "--projects-dir", projects, "--out", out, "--map-from-sync", sync, "--no-llm"], c.deps)).toBe(2);

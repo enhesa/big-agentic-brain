@@ -40,10 +40,11 @@ draft options:
                           file order within each
   --map-from-sync <sync.json>
                           a reviewed sync draft: a block no --map rule matched goes to the initiative
-                          its session got there (records with include: true only)
+                          its session got there (records with include: true only), else by its
+                          session title. Run sync with a long --days and --max 100 for this
   --retry-errors          read the draft at --out and draft again only its entries with an error;
                           every other entry stays as it is (not with --since, --until, --settle-hours)
-  --since <date>         only blocks starting at or after this date or ISO time (a date is UTC midnight)
+  --since <date>          only blocks starting at or after this date or ISO time (a date is UTC midnight)
   --until <date>          only blocks starting before the end of this date, or before this ISO time
   --settle-hours <n>      skip blocks that ended less than n hours ago (default 2)
   --machine <name>        machine name sent with each entry: 1 to 20 of A-Z a-z 0-9 . _ -
@@ -325,6 +326,7 @@ export function validateMap(raw) {
     let titleRe;
     if (r.titleMatch !== undefined) {
       if (typeof r.titleMatch !== "string" || !r.titleMatch.trim()) throw new CliError(`${at}: titleMatch must be a non-empty string`);
+      if (/^\/.+\/[a-z]+$/s.test(r.titleMatch)) throw new CliError(`${at}: titleMatch /.../ takes no flags (it is always case-insensitive)`);
       const m = /^\/(.+)\/$/s.exec(r.titleMatch);
       if (m) {
         try {
@@ -374,6 +376,9 @@ export function keysOf(block) {
   return new Set([...(block.branch.match(KEY_FIND_RE) ?? []), ...(block.text.match(KEY_FIND_RE) ?? [])]);
 }
 
+/** A rule list sorted by precedence, cached per list (validateMap's lists are never changed). */
+const ORDERED_RULES = new WeakMap();
+
 /**
  * The rule for a block (or a sync session state), or null. A rule matches when all its given
  * fields match. Rules are tried by precedence, then in file order: rules with sessionId, then
@@ -385,7 +390,11 @@ export function matchRule(block, rules) {
   const title = String(block.title ?? "");
   const session = String(block.session ?? "").slice(0, SESSION_MAX);
   let keys;
-  const ordered = [...rules].sort((a, b) => (a.tier ?? 2) - (b.tier ?? 2) || a.index - b.index);
+  let ordered = ORDERED_RULES.get(rules);
+  if (!ordered) {
+    ordered = [...rules].sort((a, b) => (a.tier ?? 2) - (b.tier ?? 2) || a.index - b.index);
+    ORDERED_RULES.set(rules, ordered);
+  }
   for (const r of ordered) {
     const hit = [];
     if (r.sessionIds !== undefined) {
@@ -641,13 +650,17 @@ function answerName(v) {
  * and other blocks are skipped). Throws ModelAnswerError when there is none.
  */
 export function answerText(body) {
-  const content = Array.isArray(body?.content) ? body.content : [];
+  const hasContent = Array.isArray(body?.content);
+  const content = hasContent ? body.content : [];
   const stopReason = answerName(body?.stop_reason);
   const types = [...new Set(content.map((b) => answerName(b?.type) || "unknown"))].slice(0, 10);
   const texts = content.filter((b) => b && b.type === "text" && typeof b.text === "string");
   const block = texts.find((b) => b.text.trim());
   if (block) return block.text;
-  throw new ModelAnswerError(texts.length > 0 || !content.length, stopReason, types);
+  // No content list at all is not an answer: an error (retried). An empty list is an empty answer
+  // only when the model ended its turn; one cut short (max_tokens, refusal, ...) is retried too.
+  const finished = ["", "end_turn", "stop_sequence"].includes(stopReason);
+  throw new ModelAnswerError(hasContent && (texts.length > 0 || (!content.length && finished)), stopReason, types);
 }
 
 /**
@@ -700,9 +713,14 @@ export function mapBlock(b, rules = [], syncMap = null) {
     if (m.rule.key) out.key = m.rule.key;
     return out;
   }
-  const s = syncMap?.get(b.session.slice(0, SESSION_MAX));
+  let s = syncMap?.bySession.get(b.session.slice(0, SESSION_MAX));
+  let how = "";
+  if (!s && syncMap && b.title) {
+    s = syncMap.byTitle.get(titleKey(b.title));
+    how = " (title)";
+  }
   if (s) {
-    const out = { initiative: s.id, mappedBy: `sync ${s.id}` };
+    const out = { initiative: s.id, mappedBy: `sync ${s.id}${how}` };
     if (s.title) out.title = s.title;
     if (s.key) out.key = s.key;
     return out;
@@ -802,7 +820,8 @@ export async function retryDraft(existing, blocks, { rules = [], syncMap = null,
   const todo = [];
   let missing = 0;
   existing.entries.forEach((e, i) => {
-    if (e.error === undefined) return;
+    // An entry the person fixed by hand (a line, or include: true) stays, even with its error left in.
+    if (!e.error || e.worked || e.include === true) return;
     const b = byId.get(e.id);
     if (b) todo.push({ i, b });
     else missing++;
@@ -820,16 +839,24 @@ export async function retryDraft(existing, blocks, { rules = [], syncMap = null,
   };
 }
 
+/** A title compared as sync's dedupe compares it: masked, then its whole slug. "" for no title. */
+function titleKey(title) {
+  return title ? titleSlug(maskField(title, TITLE_MAX), Infinity) : "";
+}
+
 /**
- * The session to initiative map from a sync draft (--map-from-sync): each session of a record with
- * include: true goes to that record's id, with its title and key. Records left out are skipped, so
- * their work stays unassigned rather than creating initiatives the person did not choose.
+ * The map from a sync draft (--map-from-sync): each session of a record with include: true goes
+ * to that record's id, with its title and key (`bySession`). Sync keeps one session per title, so
+ * a session it dropped as a same-titled one is found by its title (`byTitle`, compared as a slug).
+ * Records left out are skipped, so their work stays unassigned rather than creating initiatives
+ * the person did not choose.
  */
 export function syncSessionMap(raw) {
   if (!raw || typeof raw !== "object" || raw.v !== 1 || raw.kind !== DRAFT_KIND || !Array.isArray(raw.current)) {
     throw new CliError(`the sync draft must be { v: 1, kind: "${DRAFT_KIND}", current: [...] } (from the sync mode)`);
   }
   const map = new Map();
+  const byTitle = new Map();
   for (const [i, r] of raw.current.entries()) {
     const at = `sync draft current[${i}]`;
     if (!r || typeof r !== "object") throw new CliError(`${at} must be an object`);
@@ -844,8 +871,10 @@ export function syncSessionMap(raw) {
       // The first record wins: the sync draft lists each session once, but an edited one may not.
       if (!map.has(id)) map.set(id, { id: r.id, title, key });
     }
+    const t = titleKey(title);
+    if (t && !byTitle.has(t)) byTitle.set(t, { id: r.id, title, key });
   }
-  return map;
+  return { bySession: map, byTitle };
 }
 
 /** Text for a table cell or list item: Markdown syntax and HTML escaped, so it shows as written. */
