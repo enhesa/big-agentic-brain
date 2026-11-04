@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-04",
+    title: "Command Center backfill and first-use sync",
+    changes: [
+      "Command Center can fill your page from your recent sessions and backfill your log, after you review a draft.",
+    ],
+  },
+  {
     date: "2026-11-03",
     title: "Command Center work log, clearer link notice, honest search share",
     changes: [
