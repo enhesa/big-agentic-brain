@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Command Center backfill and first-use sync",
     changes: [
       "Command Center can fill your page from your recent sessions and backfill your log, after you review a draft.",
+      "Command Center sync drafts only sessions with a plan, at most 20, with true progress and title ids.",
     ],
   },
   {

@@ -93,8 +93,8 @@ sync tool reads their recent local sessions, writes a draft of current initiativ
 open questions, and uploads it only after they have read the draft and said yes. When they accept,
 call `backfill_link` for the upload link and hand it over; never upload yourself and never read
 their transcripts. The sync only creates initiatives that are not on the page yet; it never changes
-one you published. It gives a title only for a session that has no plan, shows each session as of
-its last turn, and has to run once per machine.
+one you published. It includes only sessions with a plan (at most 20, the person can change any
+`include`), shows each session as of its last turn, and has to run once per machine.
 
 The command, from a checkout of the BAB repository: `node <repo>/scripts/cc-backfill.mjs sync --out sync.json`, then `node <repo>/scripts/cc-backfill.mjs upload --draft sync.json --url "<link>"` after review (details in docs/command-center.md).
 

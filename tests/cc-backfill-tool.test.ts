@@ -38,6 +38,8 @@ import {
   syncMarkdown,
   draftMarkdown,
   syncSlug,
+  titleSlug,
+  dedupeByTitle,
   uploadCurrent,
   uploadBody,
 } from "../scripts/cc-backfill.mjs";
@@ -806,7 +808,7 @@ describe("sync: plan and todo state", () => {
     expect(applyPlanOp(null, { items: Array.from({ length: 60 }, (_, i) => ({ content: `s${i}` })) })).toHaveLength(50);
   });
 
-  it("takes the latest of update_plan and TodoWrite, maps statuses, and a wrap_up checks the plan off", () => {
+  it("takes the latest of update_plan and TodoWrite, maps statuses; a wrap_up leaves a TodoWrite list as written", () => {
     const t0 = NOW - 5 * HOUR;
     const base = [
       sline({ at: t0, content: "start please" }),
@@ -834,8 +836,9 @@ describe("sync: plan and todo state", () => {
     ]);
     // An update_plan increment after a TodoWrite applies to that list.
     expect((stateOf([...todo, asst({ at: t0 + 4 * MIN }, PLAN, { start: 3 })]).plan as Plan).map((x) => x.status)).toEqual(["done", "pending", "in_progress"]);
-    const wrapped = stateOf([...todo, asst({ at: t0 + 5 * MIN }, WRAP, { recap: "done" })]);
-    expect((wrapped.plan as Plan).every((x) => x.status === "done")).toBe(true);
+    const wrapped = stateOf([...todo, asst({ at: t0 + 5 * MIN }, WRAP, { recap: "Done: all of it" })]);
+    expect((wrapped.plan as Plan).map((x) => x.status)).toEqual(["done", "in_progress", "pending"]);
+    expect(wrapped.finished).toBe(false);
   });
 });
 
@@ -899,14 +902,16 @@ describe("sync: grouping, window and ids", () => {
     const states = collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW });
     const { draft } = buildSyncDraft(states, { now: NOW });
     const byId = new Map<string, Entry>(draft.current.map((r: Entry) => [String(r.id), r]));
-    expect(byId.get("acme-12")).toMatchObject({ key: "ACME-12", title: "Follow up on ACME-12", mappedBy: "key ACME-12", state: "active", include: true });
-    expect([...(byId.get("acme-12")!.sessions as string[])].sort()).toEqual(["a", "b"]);
+    // Ids are the slug of the title; these sessions have no plan, so none is included.
+    expect(byId.get("follow-up-on-acme-12")).toMatchObject({ key: "ACME-12", title: "Follow up on ACME-12", mappedBy: "key ACME-12", state: "active", include: false, leftOut: "no plan" });
+    expect([...(byId.get("follow-up-on-acme-12")!.sessions as string[])].sort()).toEqual(["a", "b"]);
     expect(byId.get("acme-api-fix-cache")).toMatchObject({ mappedBy: "repo+branch", title: "acme-api fix/cache", area: "acme-api" });
     expect([...(byId.get("acme-api-fix-cache")!.sessions as string[])].sort()).toEqual(["c", "d"]);
-    expect(byId.get("session-e")).toMatchObject({ mappedBy: "session" });
-    expect(byId.get("session-f")).toMatchObject({ mappedBy: "session" });
+    // Two untitled trunk sessions share the fallback title "acme-api main": the newer gets the slug, the older -2.
+    expect(byId.get("acme-api-main")).toMatchObject({ mappedBy: "session", sessions: ["f"] });
+    expect(byId.get("acme-api-main-2")).toMatchObject({ mappedBy: "session", sessions: ["e"] });
     expect(draft.current).toHaveLength(4);
-    expect(draft.current[0].id).toBe("session-f"); // newest first
+    expect(draft.current[0].id).toBe("acme-api-main"); // newest first
     for (const r of draft.current) expect(String(r.id)).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
     // Stable across reruns.
     const again = buildSyncDraft(collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW }), { now: NOW }).draft;
@@ -932,6 +937,15 @@ describe("sync: grouping, window and ids", () => {
     expect(groups).toHaveLength(2);
     const { draft } = buildSyncDraft(states, { rules, now: NOW });
     expect(draft.current.find((r: Entry) => r.id === "api-work")).toMatchObject({ title: "API work", key: "KEY-9", mappedBy: "rule 1 (repo)" });
+    // A title slug never takes a rule's id or a reserved one: it gets -2.
+    const other = { cwd: "/home/user/work/other", content: "go" };
+    const titled = [
+      stateOf([sline({ ...other, session: "z", at: t0 }), titleLine("z", "custom-title", "API work")]),
+      stateOf([sline({ ...other, session: "y", at: t0 }), titleLine("y", "custom-title", "Export")]),
+    ];
+    const withTitled = buildSyncDraft([...states, ...titled], { rules, now: NOW }).draft.current;
+    expect(withTitled.find((r: Entry) => r.title === "API work" && r.mappedBy === "session")).toMatchObject({ id: "api-work-2" });
+    expect(withTitled.find((r: Entry) => r.title === "Export")).toMatchObject({ id: "export-2" });
     const ids = draft.current.map((r: Entry) => String(r.id));
     expect(ids).not.toContain("backfill");
     expect(ids.some((id: string) => id.startsWith("backfill-"))).toBe(true);
@@ -966,12 +980,13 @@ describe("sync: grouping, window and ids", () => {
     expect(await run(["sync", "--projects-dir", projects], capture().deps)).toBe(2);
   });
 
-  it("caps a draft at 100 records, newest first", () => {
+  it("lists every record, also over 100, newest first, each with its own id", () => {
     const states = Array.from({ length: 105 }, (_, i) => sessionState([parseSyncLine(sline({ session: `s${String(i).padStart(3, "0")}`, at: NOW - (i + 1) * MIN, content: "go" }))]));
-    const { draft, dropped } = buildSyncDraft(states, { now: NOW });
-    expect(draft.current).toHaveLength(100);
-    expect(dropped).toBe(5);
+    const { draft } = buildSyncDraft(states, { now: NOW });
+    expect(draft.current).toHaveLength(105);
     expect(draft.current[0].sessions).toEqual(["s000"]);
+    expect(new Set(draft.current.map((r: Entry) => r.id)).size).toBe(105);
+    for (const r of draft.current) expect(String(r.id)).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
   });
 });
 
@@ -1000,18 +1015,18 @@ describe("sync: draft output and masking", () => {
     if (process.platform !== "win32") for (const f of [out, md]) expect(statSync(f).mode & 0o777).toBe(0o600);
     const draft = JSON.parse(readFileSync(out, "utf8"));
     expect(draft).toMatchObject({ v: 1, kind: "bab-cc-backfill-draft", entries: [] });
-    // The wrap_up checks off the plan, as the app does.
+    // The wrap_up does not check off the plan: it has no recap starting with "Done".
     expect(draft.current).toEqual([
       {
-        id: "key-5",
+        id: "login-page",
         title: "Login page",
         area: "acme-api",
         key: "KEY-5",
         state: "active",
         tasks: [
           { id: "step-1", text: "Write the form", status: "done" },
-          { id: "step-2", text: "Add tests", status: "done" },
-          { id: "step-3", text: "Open the PR", status: "done" },
+          { id: "step-2", text: "Add tests", status: "in_progress" },
+          { id: "step-3", text: "Open the PR", status: "pending" },
         ],
         questions: [{ id: expect.stringMatching(/^ask-[0-9a-f]{8}$/), text: "Open the PR against main?", options: ["Open it", "Not yet"] }],
         include: true,
@@ -1024,7 +1039,8 @@ describe("sync: draft output and masking", () => {
     ]);
     const mdText = readFileSync(md, "utf8");
     expect(mdText).toContain("## Login page");
-    expect(mdText).toContain("- [x] Add tests");
+    expect(mdText).toContain("- [~] Add tests");
+    expect(mdText).toContain("Include: true.");
     expect(mdText).toContain("Question: Open the PR against main? (options: Open it / Not yet)");
     expect(c.out.join("\n")).toContain("1 included, 0 flagged, 1 open questions");
     expect(c.out.join("\n")).toContain("Nothing was uploaded");
@@ -1099,16 +1115,15 @@ describe("sync and draft: masking review fixes", () => {
   const one = (o: Partial<SyncOpts> & { session: string }, title?: string) =>
     stateOf([sline({ at: t0, content: "go", ...o }), ...(title ? [titleLine(o.session, "custom-title", title)] : [])]);
 
-  it("checks the repo and branch an id is made from, and leaves the record out when they flag; ids stay the same across runs", () => {
+  it("makes ids from the masked title, never from the repo or branch; ids stay the same across runs", () => {
     const pat = ["ghp", randomBytes(18).toString("hex")].join("_");
-    const states = [one({ session: "a", branch: "feature/token-rotation" }, "Rotate things"), one({ session: "b", branch: `fix/${pat}` }, "Other thing")];
+    const states = [one({ session: "a", branch: `fix/${pat}` }, "Other thing"), one({ session: "b", branch: "fix/x" }, `Rotate ${pat}`)];
     const first = buildSyncDraft(states, { now: NOW }).draft.current;
-    const byTitle = new Map<string, Entry>(first.map((r: Entry) => [String(r.title), r]));
-    expect(byTitle.get("Rotate things")).toMatchObject({ id: "acme-api-feature-token-rotation", include: false, flagged: "id: token" });
-    expect(byTitle.get("Other thing")).toMatchObject({ include: false, flagged: "id: masked token" });
+    expect(JSON.stringify(first.map((r: Entry) => r.id))).not.toContain(pat.slice(4));
+    const byId = new Map<string, Entry>(first.map((r: Entry) => [String(r.id), r]));
+    expect(byId.get("other-thing")).toMatchObject({ title: "Other thing" });
+    expect(byId.get("rotate-redacted-token")).toMatchObject({ include: false, flagged: "title: masked token" });
     expect(buildSyncDraft(states, { now: NOW }).draft.current.map((r: Entry) => r.id)).toEqual(first.map((r: Entry) => r.id));
-    // A plain repo and branch do not flag.
-    expect(buildSyncDraft([one({ session: "c", branch: "fix/cache" }, "Cache")], { now: NOW }).draft.current[0]).toMatchObject({ include: true });
     expect(uploadCurrent(buildSyncDraft(states, { now: NOW }).draft).records).toEqual([]);
   });
 
@@ -1428,5 +1443,181 @@ describe("sync: upload of current records", () => {
     expect(batchEntries([], { current })).toEqual([[]]);
     expect(() => batchEntries([], { maxBytes: 100, current })).toThrow(/current records alone/);
     expect(USAGE).toContain("sync --out");
+  });
+});
+
+describe("sync: selection quality (plan state, plan-only, dedupe, cap, title ids)", () => {
+  const t0 = NOW - 6 * HOUR;
+  const planned = (session: string, at: number, title: string, items: unknown[] = [{ content: "Step one", status: "in_progress" }, { content: "Step two" }]) => [
+    sline({ session, at, content: "go" }),
+    titleLine(session, "custom-title", title),
+    asst({ session, at: at + MIN }, PLAN, { items }),
+  ];
+  const draftOf = (lines: string[], opts: { max?: number } = {}) => {
+    writeTranscript(lines);
+    return buildSyncDraft(collectSessionStates(readSyncTranscripts(projects).sessions, { now: NOW }), { now: NOW, ...opts });
+  };
+
+  it("wrap_up implicit completion: a wrap_up without a Done recap keeps the statuses of the last explicit plan call", () => {
+    const s = stateOf([
+      sline({ at: t0, content: "go" }),
+      asst({ at: t0 + MIN }, PLAN, { items: [{ content: "a", status: "in_progress" }, { content: "b" }, { content: "c" }] }),
+      asst({ at: t0 + 2 * MIN }, PLAN, { advance: true }),
+      asst({ at: t0 + 3 * MIN }, WRAP, { recap: "Pushed the branch; review next." }),
+      sline({ at: t0 + 4 * MIN, content: "go on" }),
+      asst({ at: t0 + 5 * MIN }, PLAN, { done: [2] }),
+      asst({ at: t0 + 6 * MIN }, WRAP, { recap: "Step b finished" }),
+    ]);
+    expect((s.plan as Plan).map((x) => x.status)).toEqual(["done", "done", "pending"]);
+    expect(s.finished).toBe(false);
+    // No recap at all: the same.
+    const bare = stateOf([sline({ at: t0, content: "go" }), asst({ at: t0 + MIN }, PLAN, { items: [{ content: "a" }] }), asst({ at: t0 + 2 * MIN }, WRAP, {})]);
+    expect((bare.plan as Plan)[0].status).toBe("pending");
+  });
+
+  it("Done: recap: the plan reads finished only when the last wrap_up says Done and came after the last plan call", () => {
+    const base = [sline({ at: t0, content: "go" }), asst({ at: t0 + MIN }, PLAN, { items: [{ content: "a", status: "in_progress" }, { content: "b" }] })];
+    for (const recap of ["Done: shipped it", "  done. all good", "DONE - merged"]) {
+      const s = stateOf([...base, asst({ at: t0 + 2 * MIN }, WRAP, { recap })]);
+      expect(s.finished).toBe(true);
+      expect((s.plan as Plan).map((x) => x.status)).toEqual(["done", "done"]);
+    }
+    // Not the done word: "Donetsk", "Not done", a non-string recap.
+    for (const recap of ["Donetsk office set up", "Not done: tests fail", 5]) {
+      expect(stateOf([...base, asst({ at: t0 + 2 * MIN }, WRAP, { recap })]).finished).toBe(false);
+    }
+    // An earlier Done, then a later wrap_up that is not: not finished.
+    expect(stateOf([...base, asst({ at: t0 + 2 * MIN }, WRAP, { recap: "Done: a" }), asst({ at: t0 + 3 * MIN }, WRAP, { recap: "Asked about b" })]).finished).toBe(false);
+    // A plan call after the Done wrap_up is newer work: not finished, its own statuses.
+    const after = stateOf([...base, asst({ at: t0 + 2 * MIN }, WRAP, { recap: "Done: a" }), asst({ at: t0 + 3 * MIN }, PLAN, { items: [{ content: "c", status: "in_progress" }] })]);
+    expect(after.finished).toBe(false);
+    expect(after.plan).toEqual([{ text: "c", status: "in_progress" }]);
+    // The plan call and the Done wrap_up in the same message, plan first: finished.
+    const same = sline({ at: t0 + 2 * MIN, type: "assistant", content: [...tool(PLAN, { advance: true }), ...tool(WRAP, { recap: "Done: both" })] });
+    expect(stateOf([...base, same]).finished).toBe(true);
+    // The recap never reaches the state.
+    expect(JSON.stringify(stateOf([...base, asst({ at: t0 + 2 * MIN }, WRAP, { recap: "Done: secret-recap-text" })]))).not.toContain("secret-recap-text");
+  });
+
+  it("no-plan sessions: listed with include false and left out (no plan); plan sessions (update_plan or TodoWrite) included", () => {
+    const { draft, noPlan } = draftOf([
+      ...planned("p", t0, "Build the login"),
+      sline({ session: "t", at: t0 + 2 * MIN, content: "go" }),
+      titleLine("t", "custom-title", "Todo work"),
+      asst({ session: "t", at: t0 + 3 * MIN }, "TodoWrite", { todos: [{ content: "One", status: "pending" }] }),
+      sline({ session: "h", at: t0 + 4 * MIN, content: "heartbeat" }),
+      titleLine("h", "custom-title", "Heartbeat check"),
+    ]);
+    expect(noPlan).toBe(1);
+    const byId = new Map<string, Entry>(draft.current.map((r: Entry) => [String(r.id), r]));
+    expect(byId.get("build-the-login")).toMatchObject({ include: true });
+    expect(byId.get("build-the-login")!.leftOut).toBeUndefined();
+    expect(byId.get("todo-work")).toMatchObject({ include: true });
+    expect(byId.get("heartbeat-check")).toMatchObject({ include: false, leftOut: "no plan" });
+    // Included first, then the left-out ones.
+    expect(draft.current.map((r: Entry) => r.include)).toEqual([true, true, false]);
+    const md = syncMarkdown(draft);
+    expect(md).toContain("## Heartbeat check");
+    expect(md).toContain("Include: false, left out (no plan).");
+    expect(md).toContain("Include: true.");
+    expect(uploadCurrent(draft).records.map((r: Entry) => r.id).sort()).toEqual(["build-the-login", "todo-work"]);
+  });
+
+  it("dedupe: one session per title (case and spacing folded), the most recent, a plan session over one without", () => {
+    const states = [
+      stateOf(planned("old", t0, "Fix the cache", [{ content: "Old step" }])),
+      stateOf(planned("new", t0 + 10 * MIN, "fix  the CACHE ", [{ content: "New step" }])),
+      stateOf([sline({ session: "chat", at: t0 + 20 * MIN, content: "hi" }), titleLine("chat", "custom-title", "Fix the cache")]),
+      stateOf(planned("punct", t0 + 5 * MIN, "Fix: the cache!", [{ content: "Punct step" }])), // the same slug: one title
+      stateOf([sline({ session: "u1", at: t0 + 30 * MIN, content: "hi" })]),
+      stateOf([sline({ session: "u2", at: t0 + 31 * MIN, content: "hi" })]),
+    ];
+    const { states: kept, dropped } = dedupeByTitle(states);
+    expect(dropped).toBe(3);
+    expect(kept.map((s: { session: string }) => s.session).sort()).toEqual(["new", "u1", "u2"]);
+    const { draft, deduped } = buildSyncDraft(states, { now: NOW });
+    expect(deduped).toBe(3);
+    expect(draft.current.find((r: Entry) => (r.sessions as string[]).includes("new"))).toMatchObject({ id: "fix-the-cache", sessions: ["new"], tasks: [{ text: "New step" }] });
+  });
+
+  it("cap: at most 20 included by default, the most recent; --max changes it; the rest are left out (over --max)", async () => {
+    const lines = Array.from({ length: 25 }, (_, i) => planned(`s${String(i).padStart(2, "0")}`, t0 + i * MIN * 2, `Task ${i}`)).flat();
+    const { draft, overMax } = draftOf(lines);
+    expect(overMax).toBe(5);
+    const inc = draft.current.filter((r: Entry) => r.include);
+    expect(inc).toHaveLength(20);
+    expect(inc[0].title).toBe("Task 24");
+    const out = draft.current.filter((r: Entry) => !r.include);
+    expect(out.map((r: Entry) => r.title)).toEqual(["Task 4", "Task 3", "Task 2", "Task 1", "Task 0"]);
+    for (const r of out) expect(r.leftOut).toBe("over --max 20");
+    expect(syncMarkdown(draft)).toContain("Include: false, left out (over --max 20).");
+    expect(draftOf(lines, { max: 3 }).draft.current.filter((r: Entry) => r.include)).toHaveLength(3);
+    // The CLI flag.
+    const o = path.join(dir, "cap.json");
+    const c = capture();
+    expect(await run(["sync", "--projects-dir", projects, "--out", o, "--max", "7"], c.deps)).toBe(0);
+    expect(JSON.parse(readFileSync(o, "utf8")).current.filter((r: Entry) => r.include)).toHaveLength(7);
+    expect(c.out.join("\n")).toContain("Left out: 0 with no plan, 18 over --max 7");
+    expect(await run(["sync", "--projects-dir", projects, "--out", o], capture().deps)).toBe(0);
+    expect(JSON.parse(readFileSync(o, "utf8")).current.filter((r: Entry) => r.include)).toHaveLength(20);
+    for (const bad of ["0", "101", "x"]) {
+      const e = capture();
+      expect(await run(["sync", "--projects-dir", projects, "--out", o, "--max", bad], e.deps)).toBe(2);
+      expect(e.err.join("\n")).toMatch(/--max must be a number from 1 to 100/);
+    }
+    expect(await run(["draft", "--projects-dir", projects, "--out", o, "--max", "3", "--no-llm"], capture().deps)).toBe(2);
+    expect(await run(["upload", "--draft", o, "--max", "3", "--dry-run"], capture().deps)).toBe(2);
+  });
+
+  it("slug ids: the title's slug like a publish id (a-z, 0-9, -, max 40), stable; clashes get -2, -3, the newest keeps the plain slug", () => {
+    expect(titleSlug("Billing export")).toBe("billing-export");
+    expect(titleSlug("  Fix: KEY-12 / login (v2)!  ")).toBe("fix-key-12-login-v2");
+    expect(titleSlug("Ünïcode ☃")).toBe("n-code");
+    expect(titleSlug("☃☃")).toBe("");
+    const long = "A very long session title that keeps going and going past forty";
+    expect(titleSlug(long)).toBe("a-very-long-session-title-that-keeps-goi");
+    expect(titleSlug("x".repeat(39) + " y")).toBe("x".repeat(39)); // no trailing -
+    const states = [
+      stateOf(planned("a", t0, "Export")), // a reserved route: -2
+      stateOf(planned("b", t0 + 10 * MIN, "Login rework")),
+      stateOf(planned("c", t0 + 20 * MIN, "Login rework 2")), // its slug is what b's clash would be
+      stateOf(planned("d", t0 + 30 * MIN, long + " one")),
+      stateOf(planned("e", t0 + 40 * MIN, long + " two")),
+      stateOf(planned("f", t0 + 50 * MIN, "☃")),
+    ];
+    const ids = (d: { draft: { current: Entry[] } }) => new Map<string, string>(d.draft.current.map((r: Entry) => [(r.sessions as string[])[0], String(r.id)]));
+    const first = ids(buildSyncDraft(states, { now: NOW }));
+    expect(first.get("a")).toBe("export-2");
+    expect(first.get("b")).toBe("login-rework");
+    expect(first.get("c")).toBe("login-rework-2");
+    expect(first.get("e")).toBe("a-very-long-session-title-that-keeps-goi");
+    expect(first.get("d")).toBe("a-very-long-session-title-that-keeps-g-2");
+    expect(first.get("f")).toBe("session-f"); // nothing left of the title: the session id
+    for (const id of first.values()) expect(id).toMatch(/^[a-z0-9][a-z0-9-]{0,39}$/);
+    expect(ids(buildSyncDraft([...states].reverse(), { now: NOW }))).toEqual(first);
+  });
+
+  it("a TodoWrite list stays as written, also after update_plan increments and a Done recap", () => {
+    const s = stateOf([
+      sline({ at: t0, content: "go" }),
+      asst({ at: t0 + MIN }, "TodoWrite", { todos: [{ content: "One", status: "in_progress" }, { content: "Two", status: "pending" }] }),
+      asst({ at: t0 + 2 * MIN }, PLAN, { advance: true }),
+      asst({ at: t0 + 3 * MIN }, WRAP, { recap: "Done: all" }),
+    ]);
+    expect(s.finished).toBe(false);
+    expect((s.plan as Plan).map((x) => x.status)).toEqual(["done", "in_progress"]);
+  });
+
+  it("a --map rule group without a plan is left out too; a left-out flagged record shows both reasons; upload takes only included ones of a long list", () => {
+    const email = `person.${randomUUID().slice(0, 6)}@example.com`;
+    const ruled = stateOf([sline({ session: "m", at: t0, content: "go", cwd: "/home/user/work/acme-web" })]);
+    const flagged = stateOf([sline({ session: "x", at: t0 + MIN, content: "go" }), titleLine("x", "custom-title", `Mail ${email}`)]);
+    const { draft } = buildSyncDraft([ruled, flagged], { rules: validateMap({ rules: [{ initiative: "web-work", repo: "acme-web" }] }), now: NOW });
+    expect(draft.current.find((r: Entry) => r.id === "web-work")).toMatchObject({ include: false, leftOut: "no plan" });
+    expect(syncMarkdown(draft)).toContain("Include: false, left out (no plan), flagged: title: masked email.");
+    const many = Array.from({ length: 130 }, (_, i) => stateOf(planned(`s${String(i).padStart(3, "0")}`, t0 + i * MIN, `Work ${i}`)));
+    const big = buildSyncDraft(many, { now: NOW, max: 100 }).draft;
+    expect(big.current).toHaveLength(130);
+    expect(uploadCurrent(big).records).toHaveLength(100);
   });
 });

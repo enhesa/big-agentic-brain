@@ -27,7 +27,7 @@ import { pathToFileURL } from "node:url";
 
 export const USAGE = `Usage:
   node scripts/cc-backfill.mjs draft --out <draft.json> [options]
-  node scripts/cc-backfill.mjs sync --out <draft.json> [--projects-dir <dir>] [--map <file.json>] [--days <n>]
+  node scripts/cc-backfill.mjs sync --out <draft.json> [--projects-dir <dir>] [--map <file.json>] [--days <n>] [--max <n>]
   node scripts/cc-backfill.mjs upload --draft <draft.json> [--url <link> ...] [--from <n>] [--dry-run]
 
 draft options:
@@ -51,11 +51,16 @@ sync options (the current state of recent sessions as initiatives, for a fresh C
   --map <file.json>       as for draft; a matching rule names the initiative, and a rule with
                           initiative "unassigned" leaves its sessions out
   --days <n>              sessions active in the last n days, 1 to 365 (default 14)
+  --max <n>               include at most n initiatives, the most recent, 1 to 100 (default 20;
+                          the server creates at most 20 new initiatives per upload)
 
   Per session: its last plan (update_plan or TodoWrite), its open blocked question (the last
-  wrap_up, if no later user turn answered it), its title, repo and branch. Sessions sharing a
-  ticket key (in branch or title), or the same repo and non-trunk branch, are one initiative.
-  Text is masked; a record with masked or secret-shaped text is flagged and set include: false.
+  wrap_up, if no later user turn answered it), its title, repo and branch. A plan reads finished
+  only when the last wrap_up recap starts with "Done"; the wrap_up's own check-off is ignored.
+  Sessions with the same title count once (the most recent). Sessions sharing a ticket key (in
+  branch or title), or the same repo and non-trunk branch, are one initiative; its id is the slug
+  of its title. Every record is listed; only ones with a plan are include: true. Text is masked;
+  a record with masked or secret-shaped text is flagged and set include: false.
 
 upload options:
   --draft <file.json>     the reviewed draft; only entries with include: true and a worked line are sent,
@@ -774,15 +779,29 @@ export function applyPlanOp(items, input) {
   return out;
 }
 
+// A recap that says the work is finished, as the agent-board dashboard reads it (the `done` word of
+// its delivery rule, on the trimmed recap): "Done: ...", "Done.", "done -". Not "Donetsk".
+const DONE_RECAP_RE = /^done(?![a-z])/i;
+
 /**
- * The latest state of one session: its last plan (update_plan or TodoWrite, whichever came last;
- * a wrap_up checks the whole plan off, as the app does), its open blocked question (the last
- * wrap_up, blocked, with an ask, and no real user turn after it), its title (custom over ai),
- * repo and branch. `rawTitle` stays in memory for key and rule matching only.
+ * The latest state of one session: its last plan (update_plan or TodoWrite, whichever came last),
+ * its open blocked question (the last wrap_up, blocked, with an ask, and no real user turn after
+ * it), its title (custom over ai), repo and branch. `rawTitle` stays in memory for key and rule
+ * matching only.
+ *
+ * The desktop app's wrap_up checks off the whole update_plan list at the end of every turn, so a
+ * wrap_up says nothing about progress. A plan from update_plan reads finished (every step done)
+ * only when the last wrap_up came after the last plan call and its recap starts with "Done"
+ * (DONE_RECAP_RE); otherwise its steps keep the statuses of the last explicit plan call. A
+ * TodoWrite list keeps the statuses it was written with. The recap itself is never kept.
  */
 export function sessionState(events) {
   const sorted = [...events].sort((a, b) => a.ms - b.ms);
   let plan = null;
+  let planFrom = "";
+  let planSeq = -1;
+  let lastWrap = null;
+  let seq = 0;
   let wrap = null;
   let custom = "";
   let ai = "";
@@ -806,12 +825,22 @@ export function sessionState(events) {
       if (wrap) wrap.answered = true;
     }
     for (const t of e.tools ?? []) {
+      seq++;
       if (t.name === "TodoWrite") {
-        if (Array.isArray(t.input.todos)) plan = planItems(t.input.todos);
+        if (Array.isArray(t.input.todos)) {
+          plan = planItems(t.input.todos);
+          planFrom = "todo";
+          planSeq = seq;
+        }
       } else if (t.name.endsWith("update_plan")) {
-        plan = applyPlanOp(plan, t.input);
+        const next = applyPlanOp(plan, t.input);
+        if (next !== plan) {
+          if (Array.isArray(t.input.items)) planFrom = "plan";
+          plan = next;
+          planSeq = seq;
+        }
       } else if (t.name.endsWith("wrap_up")) {
-        if (plan) plan = plan.map((x) => ({ ...x, status: "done" }));
+        lastWrap = { seq, done: typeof t.input.recap === "string" && DONE_RECAP_RE.test(t.input.recap.trim()) };
         const actions = Array.isArray(t.input.actions) ? t.input.actions : [];
         wrap = {
           ms: e.ms,
@@ -823,9 +852,11 @@ export function sessionState(events) {
       }
     }
   }
+  const finished = Boolean(plan?.length && planFrom === "plan" && lastWrap?.done && lastWrap.seq > planSeq);
+  if (finished) plan = plan.map((x) => ({ ...x, status: "done" }));
   const question = wrap && wrap.blocked && !wrap.answered && wrap.ask.trim() ? { ms: wrap.ms, ask: wrap.ask, options: wrap.options } : null;
   const session = sorted[0]?.session ?? "";
-  return { session, firstMs, lastMs, cwd, repo: repoOf(cwd), branch, rawTitle: custom || ai, plan, question, userTurns };
+  return { session, firstMs, lastMs, cwd, repo: repoOf(cwd), branch, rawTitle: custom || ai, plan, finished, question, userTurns };
 }
 
 /** The states of sessions last active in the `days` before `now`, skipping ones with no turn, plan or question. */
@@ -955,39 +986,67 @@ export function groupSessions(states, rules = []) {
     if (!roots.has(r)) roots.set(r, []);
     roots.get(r).push(i);
   }
-  const used = new Set(groups.map((g) => g.id));
   const free_groups = [];
   for (const idx of roots.values()) {
     const keys = [...new Set(idx.flatMap((i) => keysOfState[i]))].sort();
     const first = states[idx[0]];
     let label;
-    let source;
     let mappedBy;
     if (keys.length) {
       label = `key:${keys[0]}`;
-      source = keys[0];
       mappedBy = `key ${keys[0]}`;
     } else if (idx.length > 1 || (first.repo && first.branch && !TRUNK_BRANCHES.has(first.branch.toLowerCase()))) {
       label = `rb:${first.repo}\n${first.branch}`;
-      source = `${first.repo}-${first.branch}`;
       mappedBy = "repo+branch";
     } else {
       label = `session:${first.session}`;
-      source = `session-${first.session.slice(0, 12)}`;
       mappedBy = "session";
     }
-    // The id is sent too. A repo and branch can hold anything, so buildSyncRecord checks them
-    // (`idSource`); a key is KEY-1 shaped and a session id is the agent's own.
-    free_groups.push({ label, base: syncSlug(source), idSource: mappedBy === "repo+branch" ? `${first.repo} ${first.branch}` : undefined, mappedBy, keys, states: idx.map((i) => states[i]) });
+    // No id yet: buildSyncDraft gives each one the slug of its record's (masked) title.
+    free_groups.push({ label, mappedBy, keys, states: idx.map((i) => states[i]) });
   }
   free_groups.sort((a, b) => a.label.localeCompare(b.label));
-  for (const g of free_groups) {
-    let id = g.base;
-    if (used.has(id)) id = `${id.slice(0, 33).replace(/-+$/, "")}-${shortHash(g.label)}`;
-    used.add(id);
-    groups.push({ id, label: g.label, idSource: g.idSource, mappedBy: g.mappedBy, keys: g.keys, states: g.states });
-  }
+  groups.push(...free_groups);
   return { groups, left };
+}
+
+/**
+ * The slug of a title, as an agent makes a publish id from it: lower case, runs of anything but
+ * a-z and 0-9 become one -, no - at either end, cut to `max` (40), "" when nothing is left.
+ */
+export function titleSlug(raw, max = 40) {
+  const s = String(raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s.slice(0, max).replace(/-+$/, "");
+}
+
+/** `base`, or base-2, base-3, ... (cut to fit 40) when taken; marks the result as taken. */
+function uniqueSlug(base, used) {
+  let id = base;
+  for (let n = 2; used.has(id) || !SLUG_RE.test(id); n++) {
+    const suffix = `-${n}`;
+    id = `${titleSlug(base, 40 - suffix.length) || "cc"}${suffix}`;
+  }
+  used.add(id);
+  return id;
+}
+
+/**
+ * Sessions sharing a title (compared by its whole slug, so case, spacing and punctuation fold, else by the
+ * trimmed lower-case text): keeps one per title, a session with a plan over one without, then the
+ * most recent. Untitled sessions all stay. Two titles with one slug would otherwise make ids that
+ * swap between reruns.
+ */
+export function dedupeByTitle(states) {
+  const order = [...states].sort((a, b) => Number(Boolean(b.plan?.length)) - Number(Boolean(a.plan?.length)) || b.lastMs - a.lastMs || a.session.localeCompare(b.session));
+  const seen = new Set();
+  const kept = [];
+  for (const s of order) {
+    const t = titleSlug(s.rawTitle, Infinity) || s.rawTitle.trim().toLowerCase().replace(/\s+/g, " ");
+    if (t && seen.has(t)) continue;
+    if (t) seen.add(t);
+    kept.push(s);
+  }
+  return { states: kept, dropped: states.length - kept.length };
 }
 
 /** One draft record for a group, with review fields; flagged records are left out (include: false) until reviewed. */
@@ -1002,8 +1061,6 @@ export function buildSyncRecord(group) {
     else if (cut) flags.push(`${where}: cut (over ${4 * max} characters)`);
     return v;
   };
-  // The id is derived from the repo and branch for these groups: check that source like a field.
-  if (group.idSource) field(group.idSource, 200, "id");
   const key = group.rule?.key ?? group.keys.find((k) => KEY_RE.test(k));
   let title = group.rule?.title ?? "";
   if (!title) {
@@ -1035,15 +1092,17 @@ export function buildSyncRecord(group) {
     questions.push(q);
   }
   /** @type {Record<string, any>} */
-  const record = { id: group.id, title };
+  const record = { id: group.id ?? "", title };
   const area = latest.repo ? maskFieldInfo(latest.repo, AREA_MAX) : { text: "", cut: false };
   if (area.text && !area.cut && !flagField(area.text)) record.area = area.text;
   if (key) record.key = key;
   record.state = "active";
   if (tasks.length) record.tasks = tasks;
   if (questions.length) record.questions = questions;
+  const hasPlan = Boolean(planned);
   Object.assign(record, {
-    include: !flags.length,
+    include: hasPlan && !flags.length,
+    ...(hasPlan ? {} : { leftOut: "no plan" }),
     mappedBy: group.mappedBy,
     lastActiveAt: new Date(latest.lastMs).toISOString(),
     sessions: states.map((s) => s.session.slice(0, SESSION_MAX)),
@@ -1054,14 +1113,42 @@ export function buildSyncRecord(group) {
   return record;
 }
 
-/** The sync draft: `current` records, newest first, at most 100. */
-export function buildSyncDraft(states, { rules = [], now }) {
-  const { groups, left } = groupSessions(states, rules);
-  const records = groups.map(buildSyncRecord).sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt) || a.id.localeCompare(b.id));
+export const SYNC_MAX_DEFAULT = 20;
+
+/**
+ * The sync draft: one `current` record per initiative, every one listed for review. Sessions
+ * sharing a title are deduped first (dedupeByTitle). A --map rule's initiative is its id; any
+ * other record's id is the slug of its title (titleSlug), so a later publish by that session with
+ * the same id is the same initiative; a taken or reserved slug gets -2, -3 (most recent first).
+ * Only records with a plan are included, at most `max` (the most recent); the rest have
+ * include: false and a `leftOut` reason. Included records come first, each part newest first.
+ */
+export function buildSyncDraft(states, { rules = [], now, max = SYNC_MAX_DEFAULT }) {
+  const deduped = dedupeByTitle(states);
+  const { groups, left } = groupSessions(deduped.states, rules);
+  const records = groups.map(buildSyncRecord);
+  const newest = (a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt) || a.sessions[0].localeCompare(b.sessions[0]);
+  const used = new Set(RESERVED_IDS);
+  for (const r of records) if (r.id) used.add(r.id);
+  for (const r of [...records].sort(newest)) if (!r.id) r.id = uniqueSlug(titleSlug(r.title) || titleSlug(`session ${r.sessions[0]}`) || "cc", used);
+  let included = 0;
+  let overMax = 0;
+  for (const r of [...records].sort(newest)) {
+    if (!r.include) continue;
+    if (included < max) included++;
+    else {
+      r.include = false;
+      r.leftOut = `over --max ${max}`;
+      overMax++;
+    }
+  }
+  records.sort((a, b) => Number(b.include) - Number(a.include) || newest(a, b) || a.id.localeCompare(b.id));
   return {
-    draft: { v: 1, kind: DRAFT_KIND, generatedAt: new Date(now).toISOString(), entries: [], current: records.slice(0, MAX_CURRENT) },
-    dropped: Math.max(0, records.length - MAX_CURRENT),
+    draft: { v: 1, kind: DRAFT_KIND, generatedAt: new Date(now).toISOString(), entries: [], current: records },
     left,
+    deduped: deduped.dropped,
+    noPlan: records.filter((r) => r.leftOut === "no plan").length,
+    overMax,
   };
 }
 
@@ -1071,11 +1158,11 @@ export function syncMarkdown(draft) {
   const lines = [
     "# Command Center sync draft",
     "",
-    `Generated ${draft.generatedAt}. ${draft.current.length} initiatives. Edit the .json file (title, tasks, questions, include), then run upload.`,
+    `Generated ${draft.generatedAt}. ${draft.current.length} initiatives, ${draft.current.filter((r) => r.include === true).length} included. Every record is listed: set include to true or false in the .json file (and edit title, tasks, questions), then run upload. Only include: true records are sent.`,
     "",
   ];
   for (const r of draft.current) {
-    const inc = r.include ? "yes" : `no${r.flagged ? ` (flagged: ${r.flagged})` : ""}`;
+    const inc = [r.include === true ? "true" : "false", r.leftOut ? `left out (${r.leftOut})` : "", r.flagged ? `flagged: ${r.flagged}` : ""].filter(Boolean).join(", ");
     lines.push(`## ${cell(r.title)}`, "", `id ${cell(r.id)}${r.key ? `, key ${cell(r.key)}` : ""}${r.area ? `, area ${cell(r.area)}` : ""}. Include: ${cell(inc)}. Last active ${r.lastActiveAt.slice(0, 16).replace("T", " ")} UTC.`, "");
     for (const t of r.tasks ?? []) lines.push(`- ${mark[t.status] ?? "[ ]"} ${cell(t.text)}`);
     for (const q of r.questions ?? []) lines.push(`- Question: ${cell(q.text)}${q.options?.length ? ` (options: ${q.options.map(cell).join(" / ")})` : ""}`);
@@ -1235,7 +1322,7 @@ export function maskUrl(raw) {
 
 function parseArgs(args) {
   const flags = { url: [] };
-  const valued = new Set(["--out", "--projects-dir", "--map", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from", "--days"]);
+  const valued = new Set(["--out", "--projects-dir", "--map", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from", "--days", "--max"]);
   const bare = new Set(["--no-llm", "--dry-run"]);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -1298,7 +1385,7 @@ async function runDraft(flags, deps) {
   const { stdout } = deps;
   if (!flags.out) throw new CliError("draft needs --out <file.json>");
   if (flags.url.length || flags.draft || flags["dry-run"] || flags.from) throw new CliError("--url, --draft, --from and --dry-run are for upload");
-  if (flags.days !== undefined) throw new CliError("--days is for sync");
+  if (flags.days !== undefined || flags.max !== undefined) throw new CliError("--days and --max are for sync");
   const settleHours = intFlag(flags["settle-hours"], "--settle-hours", 0, 24 * 365, 2);
   const concurrency = Math.floor(intFlag(flags.concurrency, "--concurrency", 1, 4, 2));
   const since = flags.since !== undefined ? parseBound(flags.since, "--since") : undefined;
@@ -1352,11 +1439,12 @@ async function runSync(flags, deps) {
     if (flags[f] !== undefined) throw new CliError(`--${f} is for draft`);
   }
   const days = Math.floor(intFlag(flags.days, "--days", 1, 365, 14));
+  const max = Math.floor(intFlag(flags.max, "--max", 1, MAX_CURRENT, SYNC_MAX_DEFAULT));
   const rules = readMapRules(flags.map);
   const dir = flags["projects-dir"] ?? defaultProjectsDir();
   const { sessions, files } = readSyncTranscripts(dir);
   const states = collectSessionStates(sessions, { now: deps.now(), days });
-  const { draft, dropped, left } = buildSyncDraft(states, { rules, now: deps.now() });
+  const { draft, left, deduped, noPlan, overMax } = buildSyncDraft(states, { rules, now: deps.now(), max });
   const p = outputPaths(flags.out);
   fs.mkdirSync(path.dirname(path.resolve(p.json)), { recursive: true });
   writePrivate(p.json, `${JSON.stringify(draft, null, 2)}\n`);
@@ -1365,7 +1453,8 @@ async function runSync(flags, deps) {
   const flagged = draft.current.filter((r) => r.flagged).length;
   const questions = draft.current.reduce((n, r) => n + (r.questions?.length ?? 0), 0);
   stdout(`${files} transcript files, ${states.length} sessions active in the last ${days} days, ${draft.current.length} initiatives.`);
-  stdout(`${included} included, ${flagged} flagged, ${questions} open questions${left ? `, ${left} sessions left out by the map` : ""}${dropped ? `, ${dropped} older initiatives cut (at most ${MAX_CURRENT})` : ""}.`);
+  stdout(`${included} included, ${flagged} flagged, ${questions} open questions.`);
+  stdout(`Left out: ${noPlan} with no plan, ${overMax} over --max ${max}${deduped ? `, ${deduped} sessions with the title of another` : ""}${left ? `, ${left} sessions left out by the map` : ""}.`);
   stdout(`Draft: ${p.json}`);
   stdout(`Readable: ${p.md}`);
   stdout("Nothing was uploaded. Review the draft, then run upload with a backfill link.");
@@ -1396,7 +1485,7 @@ function plain(v) {
 async function runUpload(flags, deps) {
   const { stdout, stderr } = deps;
   if (!flags.draft) throw new CliError("upload needs --draft <file.json>");
-  if (flags.out || flags.map || flags["no-llm"] || flags.days !== undefined) throw new CliError("--out, --map, --no-llm and --days are for draft and sync");
+  if (flags.out || flags.map || flags["no-llm"] || flags.days !== undefined || flags.max !== undefined) throw new CliError("--out, --map, --no-llm, --days and --max are for draft and sync");
   // The link from the environment keeps it off the command line (shell history, process lists).
   if (!flags.url.length && deps.env.BAB_BACKFILL_LINK) flags.url.push(deps.env.BAB_BACKFILL_LINK);
   if (!flags["dry-run"] && !flags.url.length) throw new CliError("upload needs --url <link> or BAB_BACKFILL_LINK (or --dry-run)");
