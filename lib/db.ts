@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 54;
+export const CURRENT_VERSION = 55;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -347,6 +347,27 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(54);
     appliedVersion = 54;
   }
+  if (appliedVersion < 55) {
+    runMigrationV55(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(55);
+    appliedVersion = 55;
+  }
+}
+
+function runMigrationV55(database: DatabaseSync) {
+  // Command Center backfill links (lib/command-center.ts createBackfillLink): a single-use URL a
+  // person's local backfill tool uploads historic worked lines to. The owner is fixed when the link
+  // is made; only the sha256 of the token is stored. used_at is set before the body is read.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS command_center_backfill_links (
+      token_hash TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_command_center_backfill_links_owner ON command_center_backfill_links(owner_id, used_at, expires_at);
+  `);
 }
 
 function runMigrationV54(database: DatabaseSync) {

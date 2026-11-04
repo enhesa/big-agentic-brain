@@ -503,6 +503,7 @@ const LOG_KIND_LABEL: Record<string, string> = {
   question_cleared: "cleared",
   health: "health",
   state: "state",
+  synced: "synced",
 };
 
 /** The newest log entries of one initiative, newest first. Every string is React text. */
@@ -518,6 +519,7 @@ function LogList({ log }: { log: Rec["log"] }) {
               {LOG_KIND_LABEL[e.kind] ? <span className={styles.logKind}>{LOG_KIND_LABEL[e.kind]}</span> : null}
               {e.text ?? ""}
               {e.size ? <span className={`${styles.tag} ${styles.logSize}`}>{e.size}</span> : null}
+              {e.source === "backfill" ? <span className={`${styles.tag} ${styles.logSize}`} data-source="backfill">backfill</span> : null}
             </span>
           </li>
         ))}

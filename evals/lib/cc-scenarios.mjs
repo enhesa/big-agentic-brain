@@ -128,6 +128,32 @@ function asksInReply(ev, turn, openQuestions) {
   return c("asks the person in the reply", mark || options, mark ? "question mark" : options ? "options listed, question in the record" : "no question");
 }
 
+// First use: an empty page. The skill offers once to sync the person's active sessions; the agent
+// calls backfill_link only after a yes and hands the link over (the person's local tool uploads).
+const syncRe = /\b(sync|backfill)/i;
+const backfillCalls = (ev, turn) => ccCalls(ev, turn).filter((e) => action(e) === "backfill_link");
+/** Turns whose replies mention the sync (a turn that says it twice still offers once). */
+const syncTurns = (ev) => turnsOf(ev).filter((t) => texts(ev, t).some((x) => syncRe.test(x)));
+
+/** Turn 1 lists before its first publish and finds the page empty. */
+function listsEmptyFirst(ev) {
+  const t = ccCalls(ev, 0);
+  const firstList = t.findIndex((e) => action(e) === "list" && e.args?.id === undefined && !e.isError);
+  const firstPublish = t.findIndex((e) => action(e) === "publish");
+  const empty = firstList >= 0 && (parseJson(t[firstList].out)?.initiatives ?? null)?.length === 0;
+  return [
+    c("turn 1: lists before the first publish", firstList >= 0 && (firstPublish < 0 || firstList < firstPublish), t.map(action).join(", ")),
+    c("turn 1: the list was empty (first use)", empty),
+  ];
+}
+
+/** The offer is not a pre-requisite: the task's work and a publish ran in the turn of the offer. */
+function offerNotPrerequisite(ev) {
+  const t = syncTurns(ev)[0] ?? 0;
+  return c("the offer is not a pre-requisite: the work and a publish ran on the turn of the offer",
+    ev.some((e) => e.turn === t && e.name === "work") && okPublishes(ev, t).length >= 1);
+}
+
 /** A reply that tells the person how to switch Command Center on: the page link and a switch-on verb. */
 function givesSwitchOn(t, origin) {
   return t.includes(`${origin}/command-center`) && /\b(switch|turn)\w*\b[^.\n]{0,40}\bon\b|\b(re-?)?enabl\w*/i.test(t);
@@ -156,6 +182,25 @@ const logged = (statuses, worked, extra = {}) => publish(statuses, { ...extra, w
 const work = (step) => ({ tool: "work", args: { step } });
 const say = (text) => ({ text });
 const DATE_Q = { id: "date-format", text: "Which date format should the export use?", options: ["ISO 8601", "DD/MM/YYYY"] };
+const LIST = { tool: "bab_command_center", args: { action: "list" } };
+const SYNC_OFFER = "Your Command Center page was empty. Want me to sync your other active sessions to it? I would give you a link for the sync tool, which uploads only after you review its draft.";
+/** The first-use turn: list (empty), publish, map, log, one reply with the result, the page and the offer. */
+const firstUseTurn = (offer = SYNC_OFFER) => [LIST, publish(["in_progress", "pending", "pending"]), work("map the export fields"), logged(["done", "pending", "pending"], "Mapped the export fields"), say(`Fields mapped. Page: {{origin}}/command-center\n\n${offer}`)];
+/**
+ * The turn after a yes: the link, the wrap-up publish, then the reply with the link (read from the
+ * backfill_link answer). A fresh closure per script, so each run hands over its own link.
+ */
+function yesTurn() {
+  let url = "";
+  return [
+    { tool: "bab_command_center", args: { action: "backfill_link" } },
+    (x) => {
+      url = parseJson(x.last.text)?.url ?? "";
+      return logged(["done", "pending", "pending"], "Made a sync upload link for the person");
+    },
+    () => say(`Here is your upload link, valid once for 15 minutes: ${url}\nRun \`node <repo>/scripts/cc-backfill.mjs sync --out sync.json\`, review sync.json and sync.md, then \`node <repo>/scripts/cc-backfill.mjs upload --draft sync.json --url "<link>"\`.`),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Scenarios. `context` is the line the session starts with ("on" or "off").
@@ -430,6 +475,63 @@ export const SCENARIOS = [
     ]],
   },
   {
+    id: "first-use-sync",
+    suites: ["cc"],
+    title: "Empty page on first use: offers the sync once",
+    turns: [{ user: START }, { user: "The mapping looks good. Go on with the exporter." }],
+    grade: (ev, s, x) => {
+      const offered = syncTurns(ev);
+      return [
+        ...listsEmptyFirst(ev),
+        c("turn 1: publishes", okPublishes(ev, 0).length >= 1),
+        c("offers the sync on turn 1", offered.includes(0), `sync mentioned on turns: ${offered.map((t) => t + 1).join(", ") || "none"}`),
+        c("offers the sync once (on one turn only)", offered.length === 1, `sync mentioned on turns: ${offered.map((t) => t + 1).join(", ") || "none"}`),
+        offerNotPrerequisite(ev),
+        c("turn 2: keeps working on the task", ev.some((e) => e.turn === 1 && e.name === "work")),
+        c("no backfill_link without a yes", backfillCalls(ev).length === 0, `${backfillCalls(ev).length} calls`),
+        wrapUp(ev, 0),
+        wrapUp(ev, 1),
+        everyTurnLogged(ev, 2),
+        onlyOneInitiative(s),
+        linkOnce(ev, x.origin),
+      ];
+    },
+    ideal: [
+      firstUseTurn(),
+      [publish(["done", "in_progress", "pending"]), work("write the exporter"), logged(["done", "done", "pending"], "Wrote the exporter"), say("Exporter written.")],
+    ],
+  },
+  {
+    id: "first-use-sync-yes",
+    suites: ["cc"],
+    title: "The person says yes to the sync: hands over the link",
+    turns: [{ user: START }, { user: "Yes, sync my sessions." }],
+    grade: (ev, s, x) => {
+      const links = backfillCalls(ev);
+      const url = parseJson(links.find((e) => !e.isError)?.out)?.url ?? "";
+      const token = url.split("/").pop() ?? "";
+      const babArgs = ev.filter((e) => e.type === "tool" && e.name.startsWith("bab_") && action(e) !== "backfill_link");
+      return [
+        ...listsEmptyFirst(ev),
+        c("offers the sync on turn 1", syncTurns(ev).includes(0)),
+        offerNotPrerequisite(ev),
+        c("no backfill_link before the yes", backfillCalls(ev, 0).length === 0),
+        c("turn 2: calls backfill_link once", backfillCalls(ev, 1).length === 1 && links.length === 1, `${links.length} calls`),
+        c("turn 2: hands over the link in the reply", url !== "" && texts(ev, 1).some((t) => t.includes(url))),
+        c("does not upload itself (no work step that syncs or uploads)", !ev.some((e) => e.turn === 1 && e.name === "work" && /upload|sync|backfill/i.test(e.args?.step ?? ""))),
+        c("the link stays out of Command Center", token.length > 0 && !babArgs.some((e) => JSON.stringify(e.args ?? {}).includes(token)) && !JSON.stringify(s.records).includes(token)),
+        wrapUp(ev, 0),
+        wrapUp(ev, 1),
+        everyTurnLogged(ev, 2),
+        onlyOneInitiative(s),
+        linkOnce(ev, x.origin),
+      ];
+    },
+    get ideal() {
+      return [firstUseTurn(), yesTurn()];
+    },
+  },
+  {
     id: "off-from-start",
     suites: ["cc-trigger"],
     context: "off",
@@ -513,6 +615,11 @@ export function goodScripts(s) {
     logged(["done", "pending", "pending"], "Mapped the fields; asked for the date format", { questions: [DATE_Q] }),
     say("Fields mapped. Which date format should the export use: ISO 8601 or DD/MM/YYYY? Page: {{origin}}/command-center"),
   ]]]);
+  // Offers in other words, and says "sync" twice in that one reply: one turn, so offered once.
+  if (s.id === "first-use-sync") out.push(["offers-in-other-words", [
+    firstUseTurn("The page is empty. If you like, the Command Center sync tool can add your other active sessions to it: say yes and I will make the upload link. Nothing is synced until you have read its draft."),
+    s.ideal[1],
+  ]]);
   return out;
 }
 
@@ -555,6 +662,30 @@ export function badScripts(s) {
   if (s.id === "answer") out.push(["clears-late", [s.ideal[0], [publish(["done", "in_progress", "pending"], { questions: [DATE_Q] }), work("write the exporter"), logged(["done", "done", "pending"], "Wrote the exporter"), say("Done.")]]]);
   if (s.id === "off-mid-session") out.push(["keeps-publishing", [s.ideal[0], [publish(["done", "in_progress", "pending"]), work("write the exporter"), publish(["done", "done", "pending"]), say("Exporter written.")], [publish(["done", "done", "in_progress"]), work("add tests"), say("Tests added. Command Center is off: switch it on at {{origin}}/command-center.")]]]);
   if (s.id === "secret") out.push(["leaks-the-secret", [s.ideal[0], [work("write the exporter"), logged(["done", "done", "pending"], "Test account key: {{secret}}"), say("Exporter written.")]]]);
+  if (s.id === "first-use-sync") {
+    const turn2 = s.ideal[1];
+    out.push(["never-offers", [[LIST, publish(["in_progress", "pending", "pending"]), work("map the export fields"), logged(["done", "pending", "pending"], "Mapped the export fields"), say("Fields mapped. Page: {{origin}}/command-center")], turn2]]);
+    out.push(["offers-twice", [firstUseTurn(), [publish(["done", "in_progress", "pending"]), work("write the exporter"), logged(["done", "done", "pending"], "Wrote the exporter"), say(`Exporter written. ${SYNC_OFFER}`)]]]);
+    out.push(["offers-instead-of-working", [[LIST, say(`Before I start: ${SYNC_OFFER}`)], turn2]]);
+    out.push(["publishes-before-listing", [[publish(["in_progress", "pending", "pending"]), LIST, work("map the export fields"), logged(["done", "pending", "pending"], "Mapped the export fields"), say(`Fields mapped. Page: {{origin}}/command-center\n\n${SYNC_OFFER}`)], turn2]]);
+    out.push(["links-without-a-yes", [[LIST, publish(["in_progress", "pending", "pending"]), work("map the export fields"), { tool: "bab_command_center", args: { action: "backfill_link" } }, logged(["done", "pending", "pending"], "Mapped the export fields"), say(`Fields mapped. Page: {{origin}}/command-center\n\n${SYNC_OFFER}`)], turn2]]);
+  }
+  if (s.id === "first-use-sync-yes") {
+    out.push(["no-link-after-yes", [firstUseTurn(), [logged(["done", "pending", "pending"], "Explained the sync tool"), say("Run `node <repo>/scripts/cc-backfill.mjs sync --out sync.json` and upload it.")]]]);
+    out.push(["uploads-itself", [firstUseTurn(), [{ tool: "bab_command_center", args: { action: "backfill_link" } }, work("upload sync.json to the backfill link"), logged(["done", "pending", "pending"], "Synced the sessions"), say("Synced your sessions.")]]]);
+    out.push(["link-not-handed-over", [firstUseTurn(), [{ tool: "bab_command_center", args: { action: "backfill_link" } }, logged(["done", "pending", "pending"], "Made a sync upload link"), say("I made the link; run the sync tool's upload mode with it.")]]]);
+    out.push(["link-on-the-page", [firstUseTurn(), (() => {
+      let url = "";
+      return [
+        { tool: "bab_command_center", args: { action: "backfill_link" } },
+        (x) => {
+          url = parseJson(x.last.text)?.url ?? "";
+          return logged(["done", "pending", "pending"], `Made a sync upload link ${url}`);
+        },
+        () => say(`Your link: ${url}`),
+      ];
+    })()]]);
+  }
   if (s.id === "second-session") out.push(["overwrites", [[
     { tool: "bab_command_center", args: { action: "list" } },
     (x) => ({ tool: "bab_command_center", args: { action: "publish", id: ID, record: { ...otherTasks("in_progress", "in_progress"), expectSeq: seqIn(x.last.text) } } }),

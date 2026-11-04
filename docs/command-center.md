@@ -35,6 +35,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `list` | `GET /api/command-center` |
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
+| `backfill_link` (a single-use upload link, see Backfill) | `POST /api/command-center/backfill/<token>` takes the upload |
 
 `POST .../actions` takes an `Idempotency-Key`. A `PUT` is idempotent by nature.
 
@@ -85,13 +86,125 @@ In short:
 optional `small`, `medium` or `large` beside it, never a time estimate. Neither is stored in the
 record. The server writes each `worked` line to the log with its own time, the initiative id, title
 and key, and the `source` machine and session. It also logs what it sees by itself: a task started
-or done, a question asked or cleared (also by the person's Dismiss), a health level change and a
-state change.
+or done, a question asked or cleared (also by the person's Dismiss), a health level change, a
+state change, and `synced` when a backfill upload created the initiative from its `current` state.
 
 Entry ids are stable, so a retry is a no-op. The `worked` entry of a publish is fixed by the `seq`
 it produced. On an unchanged record, a line that repeats the session's newest line for that
 initiative is not logged again, and the answer gives the same `logged` id. Derived entries are
 fixed by their task, question or health and its server time. A 409 logs nothing.
+
+## Backfill from old sessions
+
+A person can fill their log with work done before they used Command Center, from the agent
+session transcripts on their own machines. To draft the lines, a masked excerpt of each work block
+(at most 4000 characters, with secret-shaped strings, email addresses and backfill links replaced
+by `[redacted:<kind>]`) goes to the model endpoint the person configures. Only the one-line
+summaries go to BAB, never transcript text. `--no-llm` sends nothing to any model.
+
+1. Keep history. Claude Code deletes transcripts after `cleanupPeriodDays` (default 30). Raise it
+   in its settings (for example to 400) now, so there is history to backfill later.
+2. Draft, on each machine: `node scripts/cc-backfill.mjs draft --out backfill.json --map map.json`
+   from a checkout of this repository. It reads `~/.claude/projects/*/*.jsonl` (timestamps, working
+   folder, git branch and the user and assistant text), splits each session into work blocks at
+   gaps of more than 30 minutes, and leaves out blocks that ended less than 2 hours ago. It asks
+   your own model endpoint for one `worked` line per block: set `BAB_BACKFILL_BASE_URL` (an
+   Anthropic Messages compatible endpoint), `BAB_BACKFILL_MODEL`, and `BAB_BACKFILL_API_KEY_ENV`,
+   the name of the variable that holds the key. The key is read from that variable only and never
+   printed or written. `--no-llm` writes a plain line from the folder name and branch instead.
+   Nothing is uploaded in this step.
+3. Map. Each block goes to an initiative by the rules in the map file you edit: a working folder
+   (substring), a repository folder name, a branch pattern or a ticket-style key such as `KEY-1`
+   in the branch or the text. The first rule that matches wins. A block no rule matches goes to
+   `unassigned`; nothing is guessed. The draft also writes `backfill.map-template.json` with the
+   folders and branches of unmapped blocks and the keys in those branch names (never keys from
+   transcript text), so you can add rules and draft again. The draft, the table and the template
+   are written for you only (mode 0600, where the file system has modes).
+4. Review `backfill.json` and the readable `backfill.md`. Set `include` to false for a line
+   you do not want, or edit it. Lines that look like a secret are already set to false with the
+   reason in `flagged`.
+5. Upload: ask your agent for a backfill link (`bab_command_center` action `backfill_link`), then
+   run `node scripts/cc-backfill.mjs upload --draft backfill.json --url "<link>"`, or set the link
+   in `BAB_BACKFILL_LINK` and leave out `--url`, which keeps it off the command line and out of
+   shell history. `--dry-run` shows what would be sent. The tool refuses redirects on every
+   request. Only `id`, `initiative`, `title`, `key`, `worked`, `size`, `at`, `session`
+   and `machine` of included lines are sent.
+
+The link:
+
+- is made only for a bound identity whose switch is on, and only the sha256 of its token is
+  stored. Entries always land in the log of the person who made it; the upload carries no identity.
+- works once, within 15 minutes. It is spent before the body is read, so a refused upload needs a
+  new link. At most 20 unused links per person.
+- takes at most 2000 entries and 1 MB. The tool sends one batch per link and prints the `--from`
+  value to continue with a new link (or pass `--url` more than once).
+- is a public path for BAB's API token gate (the token in the path is the credential). A sign-in
+  proxy in front of BAB needs `/api/command-center/backfill/` on its own public-path list too. A
+  reverse proxy may log the path, so the link is short-lived and single use.
+
+The import:
+
+- Each entry is checked like a `worked` line on publish: one line, at most 200 characters, and
+  text that looks like a secret or personal data is refused, naming the field. `at` needs a time
+  zone, may be at most 5 minutes in the future and no older than `BAB_COMMAND_CENTER_LOG_DAYS`.
+- The server sets `source: "backfill"` and kind `worked`; an entry that sends `source`, `kind` or
+  any other field is refused.
+- It is idempotent: the stored entry id comes from the entry's own `id` (the tool uses the session
+  id and the block start), so uploading the same draft again adds nothing.
+- An entry for an initiative you do not have creates a minimal parked record with the entry's
+  `title`, within the usual 100 initiative limit. One upload creates at most 20 initiatives.
+  Without a title, or over either limit, the entry goes to `unassigned` with the reason in
+  `reassigned`. The answer lists accepted, duplicate, refused (with the reason) and created ids.
+  A refused entry does not stop the others.
+- At most 20000 backfill entries per person. Minting a link is audited (`cc_backfill_link`), and
+  so is spending one, with the verified client address, before the body is read
+  (`cc_backfill_link_used`), so a spent link whose upload then fails still shows. The import
+  itself is audited (`cc_backfill`) with counts only.
+
+Current state (`current`, optional, at most 100 records per upload; a body with only `current`
+is valid):
+
+- Each record is `{ id, title, area?, key?, state: "active", tasks?, questions? }`,
+  checked exactly like a publish (same id rules, limits and secret checks; ids `backfill`,
+  `export` and `unassigned` are reserved; only state `active`). Any field outside that list
+  (also `links`), or any invalid record, refuses the whole upload (400).
+- Create only: a record whose `id` you already have, or had (it has log entries, or its removal
+  is in the audit log), is skipped and counted in `syncSkipped`, so a stale session cannot bring
+  back a removed initiative. The live record is never changed. The insert is conditional inside
+  the upload's transaction, so a publish racing it is never overwritten.
+- A new record is an active project with server times (task `startedAt`/`finishedAt`, question
+  `askedAt`, `updatedAt`); client times are not taken. It gets one log entry of kind `synced`
+  (source `backfill`) and counts in `syncCreated`. New records share the 20 new initiatives per
+  upload with the entries' and the usual 100 initiative and size limits; one over a limit is
+  listed in `syncRefused` with the reason. Records are handled before entries, so an entry for a
+  synced initiative lands under it. The audit row adds `syncCreated`, `syncSkipped` and
+  `syncRefused` counts.
+
+### Sync current sessions
+
+Right after installing the plugin, the page can show what your sessions are doing now, without each
+session publishing by hand. On first use, when `list` returns no initiatives, the skill offers this
+once. From a checkout of this repository, on each machine:
+
+1. `node scripts/cc-backfill.mjs sync --out sync.json [--days 14] [--map map.json]`. It reads the
+   sessions active in the last `--days` days (default 14) from `~/.claude/projects` (or
+   `--projects-dir`). Per session it takes the latest state: the last plan (from the plan tool or
+   `TodoWrite`: step text and status), the open question of the last `wrap_up` when it was blocked
+   and nothing was answered after it (its ask, with the action labels as options), the session
+   title, the repo folder name and the git branch. It writes `sync.json` and a readable `sync.md`
+   (mode 0600). It sends nothing and calls no model.
+2. Initiatives: one per session, except that sessions sharing a Jira-style key, or the same repo
+   and a non-trunk branch, merge into one. A `--map` file (the same rules as for `draft`) wins.
+   The `id` is a stable slug, so a rerun gives the same ids.
+3. Review `sync.json` and `sync.md`. Task and question text goes through the same masking and
+   secret checks as the log draft; a record that was masked or looks like a secret has
+   `include: false` until you review it. Set `include` to false for any record you do not want.
+4. Upload with a backfill link as in step 5 above (`upload --draft sync.json`). Only `id`, `title`,
+   `area`, `key`, `state`, `tasks` and `questions` of included records are sent. The server only
+   creates: an initiative that already exists on your page is skipped and counted, never changed.
+
+Limits: a session without a plan tool gives a title only; the state is as of each session's last
+turn; the tool runs per machine; at most 100 records and 20 new initiatives per upload.
 
 ## Export
 
@@ -103,9 +216,11 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
   person grants or revokes each app on the page (same-origin viewer posts, audited
   `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
 - Aggregated by default: counts per initiative and UTC day (`entries`: all log entries; `worked`:
-  worked lines only, not imported notes; sizes) with the initiative's title and key, but no log
-  lines and no session. `detail=entries` returns the entries only for people who granted the
-  `entries` level. `from` and `to` are dates, at most 400 days apart; the default is the last 92
+  worked lines only, not imported notes; `backfilled`: entries from a backfill upload; sizes) with
+  the initiative's title and key, but no log lines and no session. `detail=entries` returns the
+  entries only for people who granted the `entries` level. Every entry, in that export and in the
+  person's own download, carries its `source` (`live`, `import` or `backfill`); the page tags
+  backfilled lines in each initiative's log. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
   is the credential. A sign-in proxy in front of BAB has its own public-path list: add the path
@@ -129,7 +244,8 @@ fixed by their task, question or health and its server time. A 409 logs nothing.
 ## Storage
 
 SQLite is the one store (migration 54): `command_center_initiatives` holds the live records,
-`command_center_log` the log, `command_center_export_grants` the person's consent per app. Every
+`command_center_log` the log, `command_center_export_grants` the person's consent per app, and
+`command_center_backfill_links` (migration 55) the sha256 of each backfill link's token. Every
 query is keyed by the owner. Each write runs in one transaction from its first read to its last
 write, so there is no lease, no snapshot and no need to republish after a restart.
 

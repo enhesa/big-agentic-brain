@@ -24,6 +24,8 @@ export const PUBLIC_PATHS = [
   "/api/files/up/",
   // Command Center export for report apps: the app's own export token is the credential (lib/command-center.ts exportAppFor), and it reads only people who granted that app.
   "/api/command-center/export",
+  // Single-use Command Center backfill links: the 256-bit single-use token in the path is the credential (lib/command-center.ts createBackfillLink).
+  "/api/command-center/backfill/",
 ];
 
 /** Exact match, or prefix match for entries that end with "/". */

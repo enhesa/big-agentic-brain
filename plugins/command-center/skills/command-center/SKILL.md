@@ -81,6 +81,22 @@ short. The server sets every time itself, so send none except `health.checkedAt`
 - `list`: your initiatives with `seq`, open questions and a data-health summary. With `id`: that
   initiative's full record, with its `seq`.
 - `remove` with `id`: when an initiative should not be shown any more. Its log stays.
+- `backfill_link`: only when the person asks to backfill their log from old sessions. It returns
+  a link for one upload within 15 minutes. Give it to the person for the backfill tool's upload
+  step; never upload yourself and never read their transcripts.
+
+## First use: sync current sessions
+
+On first use, if `list` returns no initiatives, offer the person once (never again in the same
+session, and not if they decline) to sync their active sessions to the page: the Command Center
+sync tool reads their recent local sessions, writes a draft of current initiatives with tasks and
+open questions, and uploads it only after they have read the draft and said yes. When they accept,
+call `backfill_link` for the upload link and hand it over; never upload yourself and never read
+their transcripts. The sync only creates initiatives that are not on the page yet; it never changes
+one you published. It gives a title only for a session that has no plan, shows each session as of
+its last turn, and has to run once per machine.
+
+The command, from a checkout of the BAB repository: `node <repo>/scripts/cc-backfill.mjs sync --out sync.json`, then `node <repo>/scripts/cc-backfill.mjs upload --draft sync.json --url "<link>"` after review (details in docs/command-center.md).
 
 ## Keeping it true
 

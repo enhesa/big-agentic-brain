@@ -144,5 +144,6 @@ describe("tool description size", () => {
 // Its `record` property (2026-11-02) added 121 characters, paid for by dropping the action list and the id
 // description and shortening the format hint: the list is 24527, so the ceiling stays.
 // v3 (2026-11-02) cut its actions to publish, list and remove and shortened its text: the list is 24465.
-const CEILING_FULL = 24470;
+// Its backfill_link action (2026-11-03) added 16 characters, the enum value only: the list is 24481.
+const CEILING_FULL = 24486;
 const CEILING_LEAN = 11200;
