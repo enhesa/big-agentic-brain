@@ -16,9 +16,9 @@
   --c-accent: var(--teal);
   --c-accent-ink: #00665d;
   --c-accent-wash: rgba(0, 176, 161, 0.1);
-  --c-warn: var(--amber);
-  --c-warn-ink: #7a5600;
-  --c-warn-wash: rgba(255, 183, 0, 0.14);
+  --c-warn: #f2780c;
+  --c-warn-ink: #9a4300;
+  --c-warn-wash: rgba(242, 120, 12, 0.1);
   --c-bad: #d93a1f;
   --c-bad-ink: #a3260f;
   --c-bad-wash: rgba(255, 68, 35, 0.1);
@@ -52,8 +52,8 @@
   --c-accent: #13c2b2;
   --c-accent-ink: #4fd8c9;
   --c-accent-wash: rgba(19, 194, 178, 0.14);
-  --c-warn-ink: #ffcf5c;
-  --c-warn-wash: rgba(255, 183, 0, 0.14);
+  --c-warn-ink: #ffa65c;
+  --c-warn-wash: rgba(242, 120, 12, 0.16);
   --c-bad: #ff6a4d;
   --c-bad-ink: #ff9a85;
   --c-bad-wash: rgba(255, 106, 77, 0.14);
@@ -503,7 +503,7 @@
   transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
-/* The left edge: yellow on a Needs you card, nothing on the rest. */
+/* The left edge: orange on a Needs you card, nothing on the rest. */
 .card::before {
   content: "";
   position: absolute;
@@ -951,7 +951,7 @@
   white-space: nowrap;
 }
 
-/* Open questions on the card face: yellow wash, text clamped to 2 lines until the card opens. */
+/* Open questions on the card face: orange wash, text clamped to 2 lines until the card opens. */
 .asks {
   list-style: none;
   margin: 0;
@@ -1019,7 +1019,7 @@
   font-weight: 600;
 }
 
-/* An upkeep row with a question: yellow edge, questions on their own line under it. */
+/* An upkeep row with a question: orange edge, questions on their own line under it. */
 .upAsk {
   flex-wrap: wrap;
   box-shadow: inset 3px 0 0 var(--c-warn);
@@ -1503,7 +1503,7 @@
   padding: 1px 6px;
 }
 
-/* A question on the card face: smaller, no second yellow edge (the card has one). */
+/* A question on the card face: smaller, no second orange edge (the card has one). */
 .card .asks {
   margin-top: 4px;
 }
