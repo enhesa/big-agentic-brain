@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.21.2](https://github.com/enhesa/big-agentic-brain/compare/v2.21.1...v2.21.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* backfill tool reads text blocks, retries errors, maps by session ([#126](https://github.com/enhesa/big-agentic-brain/issues/126)) ([c4083fd](https://github.com/enhesa/big-agentic-brain/commit/c4083fd36949ac32d5f99d10798e1e89e7cfe703))
+* Command Center questions on the cards and a progress ring ([#125](https://github.com/enhesa/big-agentic-brain/issues/125)) ([6310832](https://github.com/enhesa/big-agentic-brain/commit/6310832c5cb6954b08c821b3fdf84c458e2b2e62))
+
 ## [2.21.1](https://github.com/enhesa/big-agentic-brain/compare/v2.21.0...v2.21.1) (2026-11-04)
 
 
