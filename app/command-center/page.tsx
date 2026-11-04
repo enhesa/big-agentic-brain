@@ -608,7 +608,7 @@ function Detail({ r }: { r: Rec }) {
 
       {openQs.length ? (
         <div className={styles.detailBlock}>
-          <h5 className={styles.logHead}>Questions</h5>
+          <h3 className={styles.logHead}>Questions</h3>
           <ul className={styles.asks} aria-label="All open questions">
             {openQs.map((q) => (
               <QuestionItem key={q.id} id={r.id} q={q} full />
@@ -619,7 +619,7 @@ function Detail({ r }: { r: Rec }) {
 
       {r.tasks.length ? (
         <div className={styles.detailBlock}>
-          <h5 className={styles.logHead}>Tasks</h5>
+          <h3 className={styles.logHead}>Tasks</h3>
           <ul className={styles.tasks} aria-label="All tasks">
             {r.tasks.map((t) => (
               <TaskItem key={t.id} t={t} />
@@ -630,7 +630,7 @@ function Detail({ r }: { r: Rec }) {
 
       {r.links.length ? (
         <div className={styles.detailBlock}>
-          <h5 className={styles.logHead}>Links</h5>
+          <h3 className={styles.logHead}>Links</h3>
           <Links links={r.links} />
         </div>
       ) : null}
@@ -662,7 +662,7 @@ const LOG_KIND_LABEL: Record<string, string> = {
 function LogList({ log }: { log: Rec["log"] }) {
   return (
     <div className={styles.log}>
-      <h5 className={styles.logHead}>Log</h5>
+      <h3 className={styles.logHead}>Log</h3>
       <ol className={styles.timeline} aria-label="Log, newest first">
         {log.map((e) => (
           <li key={e.id} data-kind={e.kind}>

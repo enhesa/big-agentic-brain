@@ -15,6 +15,7 @@ type Panel = { id: string; title: string; body: React.ReactNode };
 export default function CardDrawer({ panels }: { panels: Panel[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const ref = useRef<HTMLDialogElement>(null);
+  const downOnBackdrop = useRef(false);
   const openPanel = openId ? panels.find((p) => p.id === openId) : undefined;
 
   useEffect(() => {
@@ -59,9 +60,13 @@ export default function CardDrawer({ panels }: { panels: Panel[] }) {
       className={styles.drawer}
       aria-labelledby={openPanel ? `cc-d-${openPanel.id}` : undefined}
       onClose={onClose}
-      // A click on the backdrop (the dialog box itself, outside the panel) closes it.
+      // A click on the backdrop (the dialog box itself, outside the panel) closes it; a drag that
+      // only ends there (a text selection started in the panel) does not.
+      onMouseDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) e.currentTarget.close();
+        if (e.target === e.currentTarget && downOnBackdrop.current) e.currentTarget.close();
       }}
       data-drawer=""
     >

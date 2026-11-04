@@ -340,7 +340,8 @@ settings menu; Delete asks for a confirm first.
   icon, links as pills with their host, the Log, when it was updated and who pushed last. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
-  keeps the drawer open with fresh content. Paused and silent cards have grey chrome; their text
+  keeps the drawer open with fresh content; a Dismiss posts the form and reloads the page, which
+  closes it. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
   keeps full contrast.
 - A line counts the done, parked and silent initiatives that left the page.
 - Your log: the download link for the person's own log, and each configured export app with
