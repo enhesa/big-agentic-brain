@@ -7,6 +7,8 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { CC_OFF_KEEP_MS, ccView, type CcView } from "@/lib/command-center";
 import { ApiError } from "@/lib/errors";
 import CommandCenterPoll from "./CommandCenterPoll";
+import CardToggle from "./CardToggle";
+import StatusFilter from "./StatusFilter";
 import styles from "./command-center.module.css";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +60,7 @@ export default async function CommandCenterPage() {
   return (
     <Shell>
       <CommandCenterPoll stamp={view.stamp} />
+      <CardToggle />
       <div className={styles.page}>{view.enabledAt ? <OnState view={view} /> : <OffState view={view} />}</div>
     </Shell>
   );
@@ -227,12 +230,15 @@ function OnState({ view }: { view: CcView }) {
           </p>
         ) : null}
         {projects.length ? (
-          // One flat masonry flow, already in page order (priority, then most recently updated).
-          <div className={styles.flow}>
-            {projects.map((r) => (
-              <Initiative key={r.id} r={r} />
-            ))}
-          </div>
+          // One flat masonry flow, already in page order (status, then priority, then most recently updated).
+          <>
+            <StatusCounts records={projects} />
+            <div className={styles.flow} data-cc-flow="">
+              {projects.map((r) => (
+                <Initiative key={r.id} r={r} />
+              ))}
+            </div>
+          </>
         ) : null}
         {view.offPage ? (
           <p className={styles.offPage}>
@@ -382,22 +388,6 @@ function Deadline({ r }: { r: Rec }) {
   return <span className={styles.tag}>due {r.deadline}</span>;
 }
 
-function Progress({ r }: { r: Rec }) {
-  if (r.progress === null) return null;
-  const c = 2 * Math.PI * 17;
-  return (
-    <div className={styles.progress}>
-      <div className={styles.ringWrap}>
-        <svg className={styles.ring} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-          <circle cx="20" cy="20" r="17" className={styles.ringTrack} />
-          <circle cx="20" cy="20" r="17" className={styles.ringFill} strokeDasharray={c} strokeDashoffset={c * (1 - r.progress / 100)} />
-        </svg>
-        <span className={styles.percent}>{r.progress}%</span>
-      </div>
-    </div>
-  );
-}
-
 function TaskIcon({ status }: { status: Task["status"] }) {
   if (status === "done")
     return (
@@ -422,76 +412,162 @@ function TaskIcon({ status }: { status: Task["status"] }) {
 
 const TASK_LABEL: Record<Task["status"], string> = { done: "Done", in_progress: "In progress", pending: "To do" };
 
+/** Up to this many subtasks show on a collapsed card; the rest sit behind "+N more" in the details. */
+const SUBTASKS_SHOWN = 5;
+
+const STATUS_LABEL: Record<Rec["status"], string> = { needs_you: "Needs you", active: "Active", idle: "Idle", finished: "Finished" };
+const STATUS_HINT: Record<Rec["status"], string> = {
+  needs_you: "An open question waits for you",
+  active: "Published in the last 2 hours",
+  idle: "No publish for 2 hours or more",
+  finished: "Done, or every task is done",
+};
+
+function StatusBadge({ status, paused }: { status: Rec["status"]; paused: boolean }) {
+  return (
+    <span className={`${styles.badge} ${styles[`badge_${status}`] ?? ""}`} data-badge={status} title={STATUS_HINT[status]}>
+      <span className={styles.badgeDot} aria-hidden="true" />
+      {STATUS_LABEL[status]}
+      {paused ? (
+        <span className={styles.badgePaused}>
+          <PauseIcon />
+          paused
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A flat bar with the percent beside it. SVG attributes, no inline style. */
+function ProgressBar({ r, done }: { r: Rec; done: number }) {
+  if (r.progress === null) return null;
+  return (
+    <div className={styles.bar}>
+      <svg className={styles.barTrack} role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.progress} focusable="false">
+        <rect x="0" y="0" width="100%" height="100%" rx="4" className={styles.barBg} />
+        {r.progress > 0 ? <rect x="0" y="0" width={`${r.progress}%`} height="100%" rx="4" className={styles.barFill} /> : null}
+      </svg>
+      <span className={styles.barPercent}>{r.progress}%</span>
+      {r.tasks.length ? <span className={styles.barCount}>{`${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}`}</span> : null}
+    </div>
+  );
+}
+
+function TaskItem({ t }: { t: Task }) {
+  return (
+    <li className={styles[`task_${t.status}`] ?? ""}>
+      <TaskIcon status={t.status} />
+      <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
+      <span>{t.text}</span>
+    </li>
+  );
+}
+
+/**
+ * One initiative card. Collapsed: title, status badge, progress bar, the main task and a few
+ * subtasks. Everything else (chips, key, deadline, questions, links, log, who pushed) sits in a
+ * closed <details>; its Details toggle or a click on the card opens it (CardToggle).
+ */
 function Initiative({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
-  const next = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
+  const main = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
   const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
   const done = r.tasks.filter((t) => t.status === "done").length;
   const log = paused ? r.log.filter((e) => e.kind !== "question_asked" && e.kind !== "question_cleared") : r.log;
-  const cls = [styles.card, urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.state === "done" ? styles.isDone : ""].join(" ");
+  // Subtasks other than the main one: open work first, then done, each in the agent's order.
+  const rest = r.tasks.filter((t) => t !== main);
+  const ordered = [...rest.filter((t) => t.status !== "done"), ...rest.filter((t) => t.status === "done")];
+  // A finished card needs no task list on its face: the full bar says it.
+  const shown = r.status === "finished" ? [] : ordered.slice(0, SUBTASKS_SHOWN);
+  const more = ordered.length - shown.length;
+  const openQs = paused ? [] : r.questionViews.filter((q) => !q.clearedAt);
+  const cls = [styles.card, styles[`status_${r.status}`] ?? "", urgencyClass(r.priority), r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
   return (
-    <article className={cls} data-initiative={r.id} aria-labelledby={`cc-i-${r.id}`}>
+    <article className={cls} data-initiative={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
       <div className={styles.cardHead}>
         <h3 id={`cc-i-${r.id}`} className={styles.cardTitle}>
-          {paused ? <PauseIcon /> : null}
           {r.title}
         </h3>
-        <Progress r={r} />
-      </div>
-      <div className={styles.chips}>
-        <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
-        <PriorityTag p={r.priority} />
-        {r.key ? <span className={styles.tag}>{r.key}</span> : null}
-        <Deadline r={r} />
-        {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
-        {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
-        {r.openQuestions ? (
-          <span className={`${styles.tag} ${styles.tagInfo}`}>
-            {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
-          </span>
-        ) : null}
+        <StatusBadge status={r.status} paused={paused} />
       </div>
 
-      {next && r.state !== "done" ? (
+      <ProgressBar r={r} done={done} />
+
+      {main && r.status !== "finished" ? (
         <p className={styles.next}>
-          <TaskIcon status={next.status} />
-          <span className={styles.nextLabel}>{next.status === "in_progress" ? "Now" : "Next up"}</span>
-          <span className={styles.nextText} title={next.text}>
-            {next.text}
+          <TaskIcon status={main.status} />
+          <span className={styles.nextLabel}>{main.status === "in_progress" ? "Now" : "Next up"}</span>
+          <span className={styles.nextText} title={main.text}>
+            {main.text}
           </span>
         </p>
       ) : null}
 
-      {/* A paused initiative hides its questions, in the log too. */}
-      {log.length ? <LogList log={log} /> : null}
+      {shown.length ? (
+        <ul className={styles.subtasks} aria-label="Subtasks">
+          {shown.map((t) => (
+            <TaskItem key={t.id} t={t} />
+          ))}
+          {more > 0 ? <li className={styles.moreTasks}>+{more} more</li> : null}
+        </ul>
+      ) : null}
 
-      {/* One meta line: tasks behind a toggle, links, then who pushed last. An opened toggle
-          takes the full width and pushes the links and footer below its list. */}
-      <div className={styles.meta}>
-        {r.tasks.length ? (
-          <details className={styles.details}>
-            <summary>{`${done}/${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}`}</summary>
-            <ul className={styles.tasks} aria-label="Tasks">
-              {r.tasks.map((t) => (
-                <li key={t.id} className={styles[`task_${t.status}`] ?? ""}>
-                  <TaskIcon status={t.status} />
-                  <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
-                  <span>{t.text}</span>
+      <details className={styles.more} data-more="">
+        <summary>Details</summary>
+        <div className={styles.moreBody}>
+          <div className={styles.chips}>
+            <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
+            <PriorityTag p={r.priority} />
+            {r.key ? <span className={styles.tag}>{r.key}</span> : null}
+            <Deadline r={r} />
+            {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
+            {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
+            {r.openQuestions ? (
+              <span className={`${styles.tag} ${styles.tagInfo}`}>
+                {r.openQuestions} {r.openQuestions === 1 ? "question" : "questions"}
+              </span>
+            ) : null}
+          </div>
+
+          {openQs.length ? (
+            <ul className={styles.qList} aria-label="Open questions">
+              {openQs.map((q) => (
+                <li key={q.id}>
+                  {q.text}
+                  <span className={styles.when}> asked {formatRelativeTime(q.askedAt)}</span>
                 </li>
               ))}
             </ul>
-          </details>
-        ) : null}
+          ) : null}
 
-        {r.links.length ? <Links links={r.links} /> : null}
+          {more > 0 || (r.status === "finished" && r.tasks.length) ? (
+            <ul className={styles.tasks} aria-label="All tasks">
+              {r.tasks.map((t) => (
+                <TaskItem key={t.id} t={t} />
+              ))}
+            </ul>
+          ) : null}
 
-        <p className={styles.cardFoot} title={who ? `Last pushed by ${who}` : undefined}>
-          Updated {formatRelativeTime(r.updatedAt)}
-          {who ? <> · {who}</> : null}
-        </p>
-      </div>
+          {r.links.length ? <Links links={r.links} /> : null}
+
+          {/* A paused initiative hides its questions, in the log too. */}
+          {log.length ? <LogList log={log} /> : null}
+
+          <p className={styles.cardFoot}>
+            Updated {formatRelativeTime(r.updatedAt)}
+            {who ? <> · last pushed by {who}</> : null}
+          </p>
+        </div>
+      </details>
     </article>
   );
+}
+
+/** Counts per status, rendered by the server; StatusFilter makes each one a filter button. */
+function StatusCounts({ records }: { records: Rec[] }) {
+  const counts: Record<Rec["status"], number> = { needs_you: 0, active: 0, idle: 0, finished: 0 };
+  for (const r of records) counts[r.status] += 1;
+  return <StatusFilter counts={(Object.keys(counts) as Rec["status"][]).map((s) => ({ status: s, label: STATUS_LABEL[s], n: counts[s] }))} />;
 }
 
 /** Short labels for the entries the server writes itself; a `worked` line needs none. */
