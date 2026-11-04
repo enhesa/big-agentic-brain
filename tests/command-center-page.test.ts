@@ -219,7 +219,9 @@ describe("/command-center page", () => {
     expect(card).not.toContain("<p");
     expect(card).not.toContain("Build");
     expect(card).not.toContain("Design");
-    expect(panelOf(html, "billing-export")).toMatch(/aria-label="All tasks"><li[^>]*>.*?Done: <\/span><span>Design</);
+    // Open tasks first; the done ones fold under "N done".
+    expect(panelOf(html, "billing-export")).toMatch(/aria-label="Open tasks"><li[^>]*>.*?In progress: <\/span><span>Build</);
+    expect(panelOf(html, "billing-export")).toMatch(/<details[^>]*data-done-tasks="1"><summary[^>]*>1 done<\/summary><ul[^>]*aria-label="Done tasks"><li[^>]*>.*?Done: <\/span><span>Design</);
     expect(html).not.toMatch(/<(svg|circle|text)[^>]*style=/);
   });
 
@@ -236,7 +238,7 @@ describe("/command-center page", () => {
     expect(card).not.toContain("data-badge");
     expect(card).not.toContain("<form");
     expect(card).not.toMatch(/class="[^"]*\btag\b/);
-    for (const gone of ["Build", "KEY-1", "Which months?", 'data-question="q1"', "asked just now", 'aria-label="Options your agent offered"', "due 2026-03-20", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question<"]) {
+    for (const gone of ["Build", "KEY-1", "Which months?", 'data-question="q1"', "asked just now", "Options: ", "due 2026-03-20", "git.example.com", 'aria-label="Log, newest first"', "Wrote the parser", "Updated ", "last pushed by", "1 question<"]) {
       expect(card).not.toContain(gone);
       expect(panel).toContain(gone);
     }
@@ -249,7 +251,7 @@ describe("/command-center page", () => {
     expect(panel).toContain('aria-label="Close details"');
     expect(panel).not.toContain("<form");
     expect(panel).not.toContain("Dismiss");
-    expect(panel).toContain('aria-label="All tasks"');
+    expect(panel).toContain('aria-label="Open tasks"');
   });
 
   it("keeps deadlines in the drawer and marks an overdue card with one red dot", async () => {
@@ -269,7 +271,7 @@ describe("/command-center page", () => {
     expect(panelOf(html, "late")).toContain("overdue by 2 days");
   });
 
-  it("shows a recurring upkeep row's questions on the row, marked needs you, with Open in Claude and no form", async () => {
+  it("shows an upkeep row with a question as one needs-you line with Open in Claude; the question opens in the drawer", async () => {
     const cc = await import("../lib/command-center");
     cc.ccSetSwitch(ALICE, true);
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate <b>keys</b>?", options: ["Now"] }] }, "mcp");
@@ -277,13 +279,21 @@ describe("/command-center page", () => {
     const html = await render();
     const start = html.indexOf('data-initiative="backup"');
     expect(start).toBeGreaterThan(0);
-    const row = html.slice(html.lastIndexOf("<li", start), html.indexOf("Open in Claude", start) + 200);
+    const row = html.slice(html.lastIndexOf("<li", start), html.indexOf("</li>", start));
     expect(row).toMatch(/class="[^"]*upAsk/);
+    expect(row).toContain('data-card="backup"');
+    expect(row).toMatch(/<button type="button"[^>]*data-open-card="backup"[^>]*>Backup check<\/button>/);
+    // One label: Needs you replaces the health label; no cadence or other tags on the row.
     expect(row).toContain('data-badge="needs_you"');
-    expect(row).toContain("Rotate &lt;b&gt;keys&lt;/b&gt;?");
-    expect(row).toContain('data-question="u1"');
+    expect(row).not.toContain("No health yet");
+    expect(row).not.toContain("daily");
     expect(row).toMatch(/disabled=""[^>]*title="No session link"/);
-    expect(row).not.toContain("<form");
+    for (const gone of ["Rotate", "data-question", "asked ", "Now", "<form"]) expect(row).not.toContain(gone);
+    const panel = panelOf(html, "backup");
+    expect(panel).toContain("Rotate &lt;b&gt;keys&lt;/b&gt;?");
+    expect(panel).toContain("Options: Now");
+    expect(panel).toContain("No health yet");
+    expect(panel).toContain("daily");
     expect(html).not.toContain("<b>keys</b>");
   });
 
@@ -306,7 +316,8 @@ describe("/command-center page", () => {
     for (const gone of ["First ask", "Second ask", "+2", "asked 4 days ago", "possibly stale", ">Yes<"]) expect(card).not.toContain(gone);
     expect(card).toContain('data-status="needs_you"');
     const panel = panelOf(html, "many");
-    for (const shown of ["asked 4 days ago", "possibly stale", ">Yes<"]) expect(panel).toContain(shown);
+    for (const shown of ["asked 4 days ago", "possibly stale", "Options: Yes · No"]) expect(panel).toContain(shown);
+    expect(panel).not.toContain(">Yes<");
     expect(panel.indexOf("First ask")).toBeLessThan(panel.indexOf("Second ask"));
     expect(panel.indexOf("Second ask")).toBeLessThan(panel.indexOf("Third ask"));
     expect(panel.match(/data-question="/g)).toHaveLength(3);
@@ -479,7 +490,7 @@ describe("/command-center page", () => {
     expect(html.slice(confirmOpen, html.indexOf(">", confirmOpen))).not.toMatch(/open/);
     expect(html.indexOf("</details>", confirmOpen)).toBeGreaterThan(del);
     expect(html).not.toMatch(/aria-label="\d+ items?"/);
-    expect(html).toContain("No initiatives yet");
+    expect(html).toMatch(/data-empty="">No initiatives yet\. Install the command-center skill \(<a[^>]*href="\/instructions\/command-center\.md"/);
     // Health chips show only when something is off.
     expect(html).not.toContain('data-testid="data-health"');
     expect(html).not.toMatch(/chip(Warn|Bad)/);
@@ -624,9 +635,9 @@ describe("/command-center page", () => {
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate?", options: ["Now"] }] }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
-    // From the board to the end of the upkeep section (the drawer sits between them).
-    const board = html.slice(html.indexOf('id="cc-initiatives"'), html.indexOf("</ul>", html.indexOf('data-initiative="backup"')));
-    expect(board).toContain("</dialog>");
+    // From the board through the upkeep section to the end of the drawer.
+    const board = html.slice(html.indexOf('id="cc-initiatives"'), html.indexOf("</dialog>") + 9);
+    expect(board).toContain('data-initiative="backup"');
     expect(board).not.toContain("<form");
     expect(board).not.toContain("<input");
     expect(board).not.toContain("Dismiss");

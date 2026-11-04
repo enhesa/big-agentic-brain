@@ -343,24 +343,27 @@ note, the log download, Switch off and Delete (Delete asks for a confirm first).
   question text. The button is the record's `source.link`, checked again on the page with the
   server's rule (`lib/command-center-link.ts`) before it becomes an href, opened in the same tab
   with `rel="noopener noreferrer"`; without a valid link it is a disabled button titled "No
-  session link". The questions, their ages, stale tags and options (display only) are in the
-  drawer.
+  session link". The questions, their ages, stale tags and options (plain text, "Options: a ·
+  b") are in the drawer.
 - A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
   status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
-  dates), the ring with done/total, every open question, every task with its status
-  icon, links as pills with their host, the Log, when it was updated and who pushed last, and a
+  dates), the ring with done/total, every open question, the open tasks with their status icon
+  and the done ones folded under "N done", links as pills with their host, the Log, when it was updated and who pushed last, and a
   small Open in Claude button on every card. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
   keeps the drawer open with fresh content. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
   keeps full contrast.
+- With no initiatives yet, one line says to install the command-center skill, with its link.
 - A line counts the done, parked and silent initiatives that left the page.
 - Report apps, only when export apps are configured: each app with Grant or Revoke.
 - Recurring upkeep, a slim section under the board: rows that need a look (not green, overdue,
-  silent or asking something), one line each with a health dot and label, the reason (cut short,
-  full text in its tooltip; wrapped on phones), when it was checked and an overdue tag; then the
-  green rows folded under "N healthy". A row with open questions gets a yellow edge, a Needs you
-  badge, all its questions under it and a small Open in Claude button.
+  silent or asking something), one line each: health dot, name, one label (Needs you when it
+  asks something, else the health label), the reason (cut short, full text in its tooltip;
+  wrapped on phones) and when it was checked; then the green rows folded under "N healthy". A row
+  that asks something gets the coloured edge and a small Open in Claude button. A click on a row
+  opens the same drawer as a card: health, cadence and overdue tags, the reason, the questions,
+  links and log.
 
 Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours

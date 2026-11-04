@@ -1738,16 +1738,58 @@ a.openClaude:hover {
   }
 }
 
-/* An upkeep row's questions, then its Open in Claude button. */
-.upAskBody {
-  flex-basis: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
+/* A question's options, as plain text: the person answers in the Claude session. */
+.askOptions {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-ink-2);
 }
 
-.upAskBody > .openClaude {
-  margin: 0 0 4px 19px;
+/* Upkeep: the name opens the drawer like a card title; the row is clickable too. */
+.upRow {
+  cursor: pointer;
+}
+
+.upRow .openClaude {
+  flex: none;
+}
+
+.detailReason {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--c-ink-2);
+}
+
+/* Drawer tasks: the done ones folded under "N done". */
+.doneFold {
+  margin-top: 4px;
+}
+
+.doneSummary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+  width: fit-content;
+}
+
+.doneFold > .tasks {
+  margin-top: 6px;
+}
+
+.upOpen {
+  all: unset;
+  font-weight: 600;
+  margin-right: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--c-ink);
+  border-radius: 4px;
+}
+
+.upOpen:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }

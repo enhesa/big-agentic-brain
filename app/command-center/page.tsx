@@ -175,25 +175,16 @@ function OnState({ view }: { view: CcView }) {
           Initiatives
         </h2>
         {projects.length === 0 ? (
-          <p className={`${styles.panel} ${styles.empty}`}>
-            No initiatives yet. Your agent publishes them with the command-center skill. Its text is at{" "}
+          <p className={`${styles.panel} ${styles.empty}`} data-empty="">
+            No initiatives yet. Install the command-center skill (
             <a className={styles.inlineLink} href="/instructions/command-center.md">
               /instructions/command-center.md
             </a>
-            .
+            ) and your agents fill this board.
           </p>
         ) : null}
         {projects.length ? (
-          <>
-            <Board records={projects} />
-            <CardDrawer
-              panels={projects.map((r) => ({
-                id: r.id,
-                title: r.title,
-                body: <Detail r={r} />,
-              }))}
-            />
-          </>
+<Board records={projects} />
         ) : null}
         {view.offPage ? (
           <p className={styles.offPage}>
@@ -203,6 +194,17 @@ function OnState({ view }: { view: CcView }) {
       </section>
 
       {upkeep.length ? <UpkeepSection upkeep={upkeep} /> : null}
+
+      {/* One drawer for board cards and upkeep rows: a click on either opens its details. */}
+      {projects.length || upkeep.length ? (
+        <CardDrawer
+          panels={[...projects, ...upkeep].map((r) => ({
+            id: r.id,
+            title: r.title,
+            body: <Detail r={r} />,
+          }))}
+        />
+      ) : null}
 
       {view.exportApps.length ? <ReportApps view={view} /> : null}
     </>
@@ -425,13 +427,9 @@ function QuestionItem({ q }: { q: Rec["questionViews"][number] }) {
         {q.stale ? <span className={`${styles.tag} ${styles.tagWarn}`}>possibly stale</span> : null}
       </div>
       {q.options.length ? (
-        <ul className={styles.options} aria-label="Options your agent offered">
-          {q.options.map((o, i) => (
-            <li key={i} className={styles.option}>
-              {o}
-            </li>
-          ))}
-        </ul>
+        <p className={styles.askOptions} data-options="">
+          Options: {q.options.join(" · ")}
+        </p>
       ) : null}
     </li>
   );
@@ -589,14 +587,17 @@ function Initiative({ r }: { r: Rec }) {
 }
 
 /**
- * The drawer body of one initiative: status, ring, every chip, all open questions (display
- * only), every task with its status icon, links, the log, and when it was updated and by whom.
+ * The drawer body of one initiative or upkeep row: status, ring, every chip (health, cadence and
+ * overdue for upkeep), all open questions with their options as plain text, the open tasks with
+ * the done ones folded under "N done", links, the log, and when it was updated and by whom.
  */
 function Detail({ r }: { r: Rec }) {
   const paused = r.priority === "paused";
   const who = r.source ? [r.source.machine, r.source.session].filter(Boolean).join(" / ") : "";
   const log = paused ? r.log.filter((e) => e.kind !== "question_asked" && e.kind !== "question_cleared") : r.log;
   const openQs = openQuestionsOf(r);
+  const doneTasks = r.tasks.filter((t) => t.status === "done");
+  const openTasks = r.tasks.filter((t) => t.status !== "done");
   return (
     <div className={`${styles.detail} ${r.status === "finished" ? styles.isDone : ""}`} data-detail-body={r.id}>
       <div className={styles.detailTop}>
@@ -605,6 +606,13 @@ function Detail({ r }: { r: Rec }) {
           <span className={`${styles.tag} ${styles[`state_${r.state}`] ?? ""}`}>{r.state}</span>
           <PriorityTag p={r.priority} />
           {r.key ? <span className={styles.tag}>{r.key}</span> : null}
+          {r.kind === "recurring" ? (
+            <>
+              <span className={`${styles.tag} ${styles[`ht_${r.health?.level ?? "unknown"}`] ?? ""}`}>{r.health ? HEALTH_LABEL[r.health.level] : "No health yet"}</span>
+              {r.cadence ? <span className={styles.tag}>{r.cadence}</span> : null}
+              {r.overdue ? <span className={`${styles.tag} ${styles.tagBad}`}>overdue</span> : null}
+            </>
+          ) : null}
           <Deadline r={r} />
           {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent: no push for 14+ days</span> : null}
           {r.twoWriters ? <span className={`${styles.tag} ${styles.tagWarn}`}>two sessions this hour</span> : null}
@@ -620,6 +628,12 @@ function Detail({ r }: { r: Rec }) {
         <OpenInClaude r={r} small />
       </div>
 
+      {r.health?.reason ? (
+        <p className={styles.detailReason} title={r.health ? `Agent time ${r.health.checkedAt}` : undefined}>
+          {r.health.reason}
+        </p>
+      ) : null}
+
       {openQs.length ? (
         <div className={styles.detailBlock}>
           <h3 className={styles.logHead}>Questions</h3>
@@ -634,11 +648,23 @@ function Detail({ r }: { r: Rec }) {
       {r.tasks.length ? (
         <div className={styles.detailBlock}>
           <h3 className={styles.logHead}>Tasks</h3>
-          <ul className={styles.tasks} aria-label="All tasks">
-            {r.tasks.map((t) => (
-              <TaskItem key={t.id} t={t} />
-            ))}
-          </ul>
+          {openTasks.length ? (
+            <ul className={styles.tasks} aria-label="Open tasks">
+              {openTasks.map((t) => (
+                <TaskItem key={t.id} t={t} />
+              ))}
+            </ul>
+          ) : null}
+          {doneTasks.length ? (
+            <details className={styles.doneFold} data-done-tasks={doneTasks.length}>
+              <summary className={styles.doneSummary}>{doneTasks.length} done</summary>
+              <ul className={styles.tasks} aria-label="Done tasks">
+                {doneTasks.map((t) => (
+                  <TaskItem key={t.id} t={t} />
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
       ) : null}
 
@@ -807,48 +833,35 @@ const HEALTH_LABEL: Record<string, string> = { green: "Healthy", amber: "Needs a
 function Upkeep({ r }: { r: Rec }) {
   const level = r.health?.level ?? "unknown";
   const paused = r.priority === "paused";
-  // A row has no details to open, so every open question shows on it.
-  const openQs = openQuestionsOf(r);
+  const needs = openQuestionsOf(r).length > 0;
   return (
-    <li className={`${styles.upRow} ${openQs.length ? styles.upAsk : ""} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id}>
+    <li className={`${styles.upRow} ${needs ? styles.upAsk : ""} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id} data-card={r.id}>
       <span className={`${styles.hDot} ${styles[`h_${level}`] ?? ""}`} aria-hidden="true" />
       <div className={styles.upMain}>
         <span className={styles.upTitle}>
           {paused ? <PauseIcon /> : null}
-          <span className={styles.upName}>{r.title}</span>
-          <span className={`${styles.tag} ${styles[`ht_${level}`] ?? ""}`}>{r.health ? HEALTH_LABEL[level] : "No health yet"}</span>
-          {r.cadence ? <span className={styles.tag}>{r.cadence}</span> : null}
-          {r.overdue ? <span className={`${styles.tag} ${styles.tagBad}`}>overdue</span> : null}
-          {r.silent ? <span className={`${styles.tag} ${styles.tagWarn}`}>silent</span> : null}
-          <PriorityTag p={r.priority === "paused" ? null : r.priority} />
-          {paused ? <span className={`${styles.tag} ${styles.tagPaused}`}>paused</span> : null}
-          {openQs.length ? (
+          <button type="button" className={styles.upOpen} data-open-card={r.id} aria-haspopup="dialog">
+            {r.title}
+          </button>
+          {needs ? (
             <span className={`${styles.badge} ${styles.badge_needs_you}`} data-badge="needs_you">
               <span className={styles.badgeDot} aria-hidden="true" />
               Needs you
             </span>
-          ) : null}
+          ) : (
+            <span className={`${styles.tag} ${styles[`ht_${level}`] ?? ""}`}>{r.health ? HEALTH_LABEL[level] : "No health yet"}</span>
+          )}
         </span>
         {r.health?.reason ? (
           <p className={styles.upReason} title={r.health.reason}>
             {r.health.reason}
           </p>
         ) : null}
-        {r.links.length ? <Links links={r.links} /> : null}
       </div>
       <span className={styles.upWhen} title={r.health ? `Agent time ${r.health.checkedAt}` : undefined}>
         {r.health ? <>checked {formatRelativeTime(r.health.receivedAt)}</> : <>updated {formatRelativeTime(r.updatedAt)}</>}
       </span>
-      {openQs.length ? (
-        <div className={styles.upAskBody}>
-          <ul className={`${styles.asks} ${styles.upAsks}`} aria-label="Open questions">
-            {openQs.map((q) => (
-              <QuestionItem key={q.id} q={q} />
-            ))}
-          </ul>
-          <OpenInClaude r={r} small />
-        </div>
-      ) : null}
+      {needs ? <OpenInClaude r={r} small /> : null}
     </li>
   );
 }
