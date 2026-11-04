@@ -559,6 +559,10 @@
   white-space: nowrap;
 }
 
+.artBg {
+  fill: var(--c-accent-wash);
+}
+
 .artSpark {
   fill: var(--c-warn);
 }
@@ -1070,10 +1074,13 @@
   flex: none;
 }
 
-.askFoot .ghost {
-  min-height: 24px;
-  padding-top: 2px;
-  padding-bottom: 2px;
+/* Smaller Dismiss on wide screens; phones keep the 32 px tap target below. */
+@media (min-width: 641px) {
+  .askFoot .ghost {
+    min-height: 24px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
 }
 
 .moreAsks {
@@ -1096,6 +1103,7 @@
 
 .upAsks .askText {
   display: block;
+  -webkit-line-clamp: unset;
   overflow: visible;
 }
 

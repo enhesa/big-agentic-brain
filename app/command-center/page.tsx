@@ -713,7 +713,7 @@ function Upkeep({ r }: { r: Rec }) {
   // A row has no details to open, so every open question shows on it.
   const openQs = openQuestionsOf(r);
   return (
-    <li className={`${styles.upRow} ${openQs.length ? styles.upAsk : ""} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id} data-status={r.status}>
+    <li className={`${styles.upRow} ${openQs.length ? styles.upAsk : ""} ${r.silent || paused ? styles.greyed : ""}`} data-initiative={r.id}>
       <span className={`${styles.hDot} ${styles[`h_${level}`] ?? ""}`} aria-hidden="true" />
       <div className={styles.upMain}>
         <span className={styles.upTitle}>

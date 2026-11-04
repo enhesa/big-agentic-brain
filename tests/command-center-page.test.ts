@@ -106,6 +106,8 @@ describe("/command-center page", () => {
     expect(html).toContain("Command Center is off. Switch it on to let your Claude sessions publish their initiatives here.");
     expect(html).toContain('action="/command-center/enable"');
     expect(html).toContain("/instructions/command-center.md");
+    // The off art keeps its styled background (a missing CSS module class would render it black).
+    expect(html).toMatch(/<rect[^>]*class="[^"]*artBg/);
   });
 
   it("shows the on-state: no separate needs-you section, the question on its card, percent and links", async () => {
