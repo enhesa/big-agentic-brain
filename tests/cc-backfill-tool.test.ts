@@ -42,6 +42,8 @@ import {
   dedupeByTitle,
   uploadCurrent,
   uploadBody,
+  answerText,
+  ModelAnswerError,
 } from "../scripts/cc-backfill.mjs";
 
 /** scripts/cc-backfill.mjs: drafts worked lines from transcripts in a temp dir, uploads to a fake fetch. Never the network. */
@@ -276,7 +278,9 @@ describe("mapping", () => {
       ],
     });
     expect(matchRule(block({ branch: "release/1.0" }), rules)).toMatchObject({ rule: { initiative: "both" }, mappedBy: "rule 1 (repo, branch)" });
-    expect(matchRule(block({ branch: "feature/KEY-7-x", cwd: "/x/other", repo: "other" }), rules)?.rule.initiative).toBe("by-key");
+    // A branch rule outranks a keys-only rule, whatever the file order (precedence by tier).
+    expect(matchRule(block({ branch: "feature/KEY-7-x", cwd: "/x/other", repo: "other" }), rules)?.rule.initiative).toBe("by-branch");
+    expect(matchRule(block({ branch: "bug/KEY-7-x", cwd: "/x/other", repo: "other" }), rules)?.rule.initiative).toBe("by-key");
     expect(matchRule(block({ cwd: "/x/other", repo: "other", text: "User: look at KEY-7 please" }), rules)?.rule.initiative).toBe("by-key");
     expect(matchRule(block({ cwd: "/home/user/work/acme-web", repo: "acme-web" }), rules)?.rule.initiative).toBe("by-glob");
     expect(matchRule(block({ cwd: "C:\\Users\\user\\work\\acme-api" }), rules)?.rule).toMatchObject({ initiative: "by-cwd", title: "Acme API", key: "KEY-1" });
@@ -465,7 +469,7 @@ describe("drafting", () => {
     expect(calls[0].init.redirect).toBe("error");
     expect(calls[0].init.headers).toEqual({ "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" });
     const body = JSON.parse(calls[0].init.body);
-    expect(body).toMatchObject({ model: "acme-model", max_tokens: 100, messages: [{ role: "user" }] });
+    expect(body).toMatchObject({ model: "acme-model", max_tokens: 1024, messages: [{ role: "user" }] });
     expect(body.messages[0].content).toContain("please fix the build");
     expect(JSON.parse(readFileSync(out, "utf8")).entries[0].worked).toBe("Fixed the build");
     expect(c.out.join("\n") + c.err.join("\n") + allFilesText(dir)).not.toContain(key);
@@ -1619,5 +1623,315 @@ describe("sync: selection quality (plan state, plan-only, dedupe, cap, title ids
     const big = buildSyncDraft(many, { now: NOW, max: 100 }).draft;
     expect(big.current).toHaveLength(130);
     expect(uploadCurrent(big).records).toHaveLength(100);
+  });
+});
+
+describe("real run fixes: model answers, retry-errors, title and session mapping, map-from-sync", () => {
+  const llmEnv = { BAB_BACKFILL_BASE_URL: "https://llm.example.com", BAB_BACKFILL_MODEL: "acme-model", BAB_BACKFILL_API_KEY_ENV: "ACME_LLM_KEY", ACME_LLM_KEY: "k-test" };
+  type Init = { body: string };
+  /** A fake Messages API server: answers each request with the next fixture body (the last one repeats), records max_tokens and the prompt. */
+  function fakeModel(answers: Array<() => unknown>) {
+    const calls: Array<{ maxTokens: number; prompt: string }> = [];
+    const fetch = async (_url: string, init: Init) => {
+      const body = JSON.parse(init.body);
+      calls.push({ maxTokens: body.max_tokens, prompt: body.messages[0].content as string });
+      const answer = answers[Math.min(calls.length - 1, answers.length - 1)]();
+      return new Response(JSON.stringify(answer), { status: 200 });
+    };
+    return { calls, fetch };
+  }
+  const THINKING = `thinking-${randomUUID()}`;
+  const thinkingThenText = (text: string) => () => ({
+    content: [{ type: "thinking", thinking: THINKING, signature: "sig" }, { type: "text", text }],
+    stop_reason: "end_turn",
+  });
+  const onlyThinking = () => ({ content: [{ type: "thinking", thinking: THINKING, signature: "sig" }], stop_reason: "max_tokens" });
+
+  it("answerText: first non-blank text block; no content list is an error, an empty list or blank text a skip", () => {
+    expect(answerText({ content: [{ type: "thinking", thinking: "t" }, { type: "text", text: " " }, { type: "text", text: "Line" }] })).toBe("Line");
+    const err = (body: unknown) => {
+      try {
+        answerText(body);
+      } catch (e) {
+        return e as ModelAnswerError;
+      }
+      throw new Error("no error");
+    };
+    expect(err({ error: { type: "overloaded" } })).toMatchObject({ empty: false, message: "model answer has no text block (stop_reason: none; blocks: none)" });
+    expect(err(null).empty).toBe(false);
+    expect(err({ content: [], stop_reason: "end_turn" }).empty).toBe(true);
+    expect(err({ content: [{ type: "text", text: "" }] }).empty).toBe(true);
+    expect(err({ content: [{ type: "thinking" }], stop_reason: "max_tokens" }).empty).toBe(false);
+    // An empty list cut short is retried, not skipped.
+    expect(err({ content: [], stop_reason: "max_tokens" }).empty).toBe(false);
+    expect(err({ content: [], stop_reason: "refusal" }).empty).toBe(false);
+  });
+
+  it("takes the first text block after a thinking block", async () => {
+    writeTranscript(pair(NOW - 10 * HOUR, 5));
+    const m = fakeModel([thinkingThenText("Fixed the build pipeline")]);
+    const out = path.join(dir, "d.json");
+    expect(await run(["draft", "--projects-dir", projects, "--out", out], { ...capture().deps, env: llmEnv, fetch: m.fetch })).toBe(0);
+    expect(m.calls).toHaveLength(1);
+    expect(JSON.parse(readFileSync(out, "utf8")).entries[0]).toMatchObject({ worked: "Fixed the build pipeline", include: true });
+    expect(allFilesText(dir)).not.toContain(THINKING);
+  });
+
+  it("retries a block once with a larger budget when the answer has no text block, then records stop_reason and block types only", async () => {
+    const S = `sentinel-${randomUUID()}`;
+    writeTranscript(pair(NOW - 10 * HOUR, 5, { session: "a" }, `fix it ${S}`));
+    const out = path.join(dir, "d.json");
+    // Thinking only, twice: an error naming the stop reason and the block types, never any text.
+    const m = fakeModel([onlyThinking]);
+    const c = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out], { ...c.deps, env: llmEnv, fetch: m.fetch })).toBe(0);
+    expect(m.calls.map((x) => x.maxTokens)).toEqual([1024, 4096]);
+    expect(m.calls[1].prompt).toBe(m.calls[0].prompt);
+    const [e] = JSON.parse(readFileSync(out, "utf8")).entries;
+    expect(e).toMatchObject({ worked: "", include: false, error: "model answer has no text block (stop_reason: max_tokens; blocks: thinking), also on retry" });
+    expect(allFilesText(dir) + c.out.join("\n") + c.err.join("\n")).not.toContain(S);
+    expect(allFilesText(dir)).not.toContain(THINKING);
+    expect(c.out.join("\n")).toContain("--retry-errors");
+    // Thinking only, then a text answer on the retry: the line is kept.
+    const m2 = fakeModel([onlyThinking, thinkingThenText("Fixed it on the retry")]);
+    expect(await run(["draft", "--projects-dir", projects, "--out", out], { ...capture().deps, env: llmEnv, fetch: m2.fetch })).toBe(0);
+    expect(m2.calls).toHaveLength(2);
+    const [e2] = JSON.parse(readFileSync(out, "utf8")).entries;
+    expect(e2).toMatchObject({ worked: "Fixed it on the retry", include: true });
+    expect(e2.error).toBeUndefined();
+  });
+
+  it("treats an empty answer as a skip with a reason, not an error, and does not retry it", async () => {
+    writeTranscript([...pair(NOW - 10 * HOUR, 5, { session: "a" }), ...pair(NOW - 10 * HOUR, 5, { session: "b" })]);
+    const out = path.join(dir, "d.json");
+    const m = fakeModel([() => ({ content: [], stop_reason: "end_turn" }), () => ({ content: [{ type: "text", text: "  \n " }], stop_reason: "end_turn" })]);
+    const c = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--concurrency", "1"], { ...c.deps, env: llmEnv, fetch: m.fetch })).toBe(0);
+    expect(m.calls).toHaveLength(2);
+    const entries = JSON.parse(readFileSync(out, "utf8")).entries as Entry[];
+    expect(entries[0]).toMatchObject({ worked: "", include: false, skipped: "model returned an empty answer (stop_reason: end_turn; blocks: none)" });
+    expect(entries[1]).toMatchObject({ worked: "", include: false, skipped: "model returned an empty answer (stop_reason: end_turn; blocks: text)" });
+    for (const e of entries) expect(e.error).toBeUndefined();
+    expect(c.out.join("\n")).toContain("0 drafting errors, 2 skipped (empty answer)");
+    expect(readFileSync(path.join(dir, "d.md"), "utf8")).toContain("no (skipped: model returned an empty answer");
+    // Odd answer fields are reduced to short names: no text of the answer reaches the error.
+    const m2 = fakeModel([() => ({ content: [{ type: "Weird Type! secret" }], stop_reason: "stop: secret words here and more and more" })]);
+    await run(["draft", "--projects-dir", projects, "--out", out, "--concurrency", "1"], { ...capture().deps, env: llmEnv, fetch: m2.fetch });
+    const err = (JSON.parse(readFileSync(out, "utf8")).entries[0] as Entry).error as string;
+    expect(err).toMatch(/^model answer has no text block \(stop_reason: [a-z0-9_]{1,30}; blocks: [a-z0-9_]+\), also on retry$/);
+    expect(err).not.toContain(" secret");
+  });
+
+  it("--retry-errors drafts only errored entries again and keeps included, edited, flagged and skipped entries exactly", async () => {
+    const t0 = NOW - 10 * HOUR;
+    writeTranscript(["a", "b", "c", "d"].flatMap((s) => pair(t0, 5, { session: s }, `work on ${s}`)));
+    const out = path.join(dir, "d.json");
+    const provider1 = async (p: string) => {
+      if (p.includes("work on a")) return "Worked on a";
+      if (p.includes("work on b")) throw new Error("model request failed: HTTP 529");
+      if (p.includes("work on c")) return "Rotated the token";
+      return "";
+    };
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--concurrency", "1"], { ...capture().deps, provider: provider1 })).toBe(0);
+    const before = JSON.parse(readFileSync(out, "utf8"));
+    const bySession = (d: { entries: Entry[] }, s: string) => d.entries.find((e) => e.session === s)!;
+    expect(bySession(before, "b")).toMatchObject({ error: "model request failed: HTTP 529" });
+    expect(bySession(before, "c")).toMatchObject({ flagged: "token" });
+    expect(bySession(before, "d")).toMatchObject({ skipped: "model returned an empty line" });
+    // The person edits an included line and its initiative.
+    bySession(before, "a").worked = "Edited by hand";
+    bySession(before, "a").initiative = "my-work";
+    writeFileSync(out, JSON.stringify(before, null, 2));
+    const prompts: string[] = [];
+    const provider2 = async (p: string) => {
+      prompts.push(p);
+      return "Worked on b now";
+    };
+    const c = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...c.deps, provider: provider2 })).toBe(0);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("work on b");
+    const after = JSON.parse(readFileSync(out, "utf8"));
+    expect(after.entries.map((e: Entry) => e.id)).toEqual(before.entries.map((e: Entry) => e.id));
+    for (const s of ["a", "c", "d"]) expect(bySession(after, s)).toEqual(bySession(before, s));
+    expect(bySession(after, "b")).toMatchObject({ worked: "Worked on b now", include: true });
+    expect(bySession(after, "b").error).toBeUndefined();
+    expect(c.out.join("\n")).toContain("1 errored blocks drafted again");
+    // Nothing errored now: a second retry asks the model nothing.
+    const none = vi.fn(async () => "x");
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...capture().deps, provider: none })).toBe(0);
+    expect(none).not.toHaveBeenCalled();
+    // An errored entry the person fixed by hand (a line typed, error left in) is not redone.
+    const handFixed = JSON.parse(JSON.stringify(after));
+    const restored = { ...bySession(before, "b"), worked: "Typed by hand", include: true };
+    handFixed.entries[handFixed.entries.findIndex((e: Entry) => e.session === "b")] = restored;
+    writeFileSync(out, JSON.stringify(handFixed));
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...capture().deps, provider: none })).toBe(0);
+    expect(none).not.toHaveBeenCalled();
+    expect(bySession(JSON.parse(readFileSync(out, "utf8")), "b")).toEqual(restored);
+    // An errored entry whose block is gone stays as it is.
+    const gone = { ...after, entries: [...after.entries, { ...bySession(before, "b"), id: "gone:1", session: "gone" }] };
+    writeFileSync(out, JSON.stringify(gone));
+    const c3 = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors"], { ...c3.deps, provider: none })).toBe(0);
+    expect(JSON.parse(readFileSync(out, "utf8")).entries.at(-1)).toMatchObject({ id: "gone:1", error: "model request failed: HTTP 529" });
+    expect(c3.out.join("\n")).toContain("1 errored entries whose block is no longer in the transcripts");
+  });
+
+  it("--retry-errors maps the redone entries with the current rules", async () => {
+    writeTranscript([...pair(NOW - 10 * HOUR, 5, { session: "a" }), titleLine("a", "ai-title", "Command Center")]);
+    const out = path.join(dir, "d.json");
+    const failing = async (): Promise<string> => {
+      throw new Error("model request failed (network)");
+    };
+    await run(["draft", "--projects-dir", projects, "--out", out], { ...capture().deps, provider: failing });
+    expect(JSON.parse(readFileSync(out, "utf8")).entries[0]).toMatchObject({ initiative: "unassigned", error: "model request failed (network)" });
+    const map = path.join(dir, "map.json");
+    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "command center" }] }));
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors", "--map", map], { ...capture().deps, provider: async () => "Built it" })).toBe(0);
+    expect(JSON.parse(readFileSync(out, "utf8")).entries[0]).toMatchObject({ initiative: "cc", worked: "Built it", include: true });
+  });
+
+  it("--retry-errors refuses a missing or foreign draft and the window flags; the new flags are refused outside draft", async () => {
+    writeTranscript(pair(NOW - 10 * HOUR, 5));
+    const out = path.join(dir, "d.json");
+    const c = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors", "--no-llm"], c.deps)).toBe(2);
+    expect(c.err.join("\n")).toMatch(/cannot read the draft to retry/);
+    writeFileSync(out, JSON.stringify({ v: 1, kind: "other", entries: [] }));
+    const c2 = capture();
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors", "--no-llm"], c2.deps)).toBe(2);
+    expect(c2.err.join("\n")).toMatch(/the draft to retry must be/);
+    for (const extra of [["--since", "2026-01-01"], ["--settle-hours", "1"]]) {
+      const c3 = capture();
+      expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors", "--no-llm", ...extra], c3.deps)).toBe(2);
+      expect(c3.err.join("\n")).toMatch(/do not apply/);
+    }
+    const c4 = capture();
+    expect(await run(["sync", "--projects-dir", projects, "--out", out, "--retry-errors"], c4.deps)).toBe(2);
+    expect(c4.err.join("\n")).toMatch(/--retry-errors is for draft/);
+    const c5 = capture();
+    expect(await run(["upload", "--draft", out, "--dry-run", "--map-from-sync", out], c5.deps)).toBe(2);
+    expect(c5.err.join("\n")).toMatch(/are for draft/);
+  });
+
+  it("maps by titleMatch (substring or /regex/, case-insensitive) and sessionId, with precedence sessionId > titleMatch > cwd/repo/branch > keys", () => {
+    const rules = validateMap({
+      rules: [
+        { initiative: "by-keys", keys: ["KEY-1"] },
+        { initiative: "by-repo", repo: "acme-api" },
+        { initiative: "by-title", titleMatch: "Login REWORK" },
+        { initiative: "by-title-re", titleMatch: "/^export\\b.*csv$/" },
+        { initiative: "by-session", sessionId: ["s-pinned", "s-other"] },
+        { initiative: "title-and-repo", titleMatch: "billing", repo: "acme-web" },
+      ],
+    });
+    const b = (o: Partial<{ session: string; title: string; repo: string; branch: string; text: string }>) => ({ session: "s1", title: "", cwd: "/home/user/work", repo: "acme-api", branch: "feature/KEY-1", text: "", ...o });
+    expect(matchRule(b({}), rules)).toMatchObject({ rule: { initiative: "by-repo" } });
+    expect(matchRule(b({ repo: "work" }), rules)).toMatchObject({ rule: { initiative: "by-keys" } });
+    expect(matchRule(b({ title: "the login rework, part 2" }), rules)).toMatchObject({ rule: { initiative: "by-title" }, mappedBy: "rule 3 (titleMatch)" });
+    expect(matchRule(b({ title: "EXPORT to CSV" }), rules)?.rule.initiative).toBe("by-title-re");
+    expect(matchRule(b({ title: "not an export to csv" }), rules)?.rule.initiative).toBe("by-repo");
+    expect(matchRule(b({ session: "s-pinned", title: "login rework" }), rules)).toMatchObject({ rule: { initiative: "by-session" }, mappedBy: "rule 5 (sessionId)" });
+    // All given fields of a rule must match: a title rule with a repo needs both.
+    expect(matchRule(b({ title: "Billing fixes", repo: "acme-web" }), rules)?.rule.initiative).toBe("title-and-repo");
+    expect(matchRule(b({ title: "Billing fixes" }), rules)?.rule.initiative).toBe("by-repo");
+    expect(() => validateMap({ rules: [{ initiative: "x", titleMatch: "/(/" }] })).toThrow(/regular expression/);
+    expect(() => validateMap({ rules: [{ initiative: "x", titleMatch: "" }] })).toThrow(/titleMatch/);
+    expect(() => validateMap({ rules: [{ initiative: "x", sessionId: [] }] })).toThrow(/sessionId/);
+    expect(() => validateMap({ rules: [{ initiative: "x", sessionId: "bad id!" }] })).toThrow(/sessionId/);
+    expect(() => validateMap({ rules: [{ initiative: "x", sessionId: ["ok", 5] }] })).toThrow(/sessionId/);
+    expect(() => validateMap({ rules: [{ initiative: "x", titleMatch: "/login/i" }] })).toThrow(/takes no flags/);
+  });
+
+  it("draft maps blocks by session title from the transcript and lists masked titles of unmapped sessions in the template, never a raw one", async () => {
+    const t0 = NOW - 10 * HOUR;
+    const generic = { cwd: "C:\\Users\\person\\work" };
+    const S = `sentinel-${randomUUID()}`;
+    writeTranscript([
+      ...pair(t0, 5, { ...generic, session: "a" }),
+      titleLine("a", "ai-title", "Ai said something"),
+      titleLine("a", "custom-title", "Command Center rollout zq"),
+      ...pair(t0, 5, { ...generic, session: "b" }),
+      titleLine("b", "ai-title", "Fix flaky login tests"),
+      ...pair(t0, 5, { ...generic, session: "c" }),
+      titleLine("c", "ai-title", `Look at C:\\Users\\person\\secret ${S}`),
+      ...pair(t0, 5, { ...generic, session: "d" }),
+    ]);
+    const map = path.join(dir, "map.json");
+    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "command center" }, { initiative: "pinned", sessionId: "d" }] }));
+    const out = path.join(dir, "out", "d.json");
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--map", map, "--no-llm"], capture().deps)).toBe(0);
+    const entries = JSON.parse(readFileSync(out, "utf8")).entries as Entry[];
+    const bySession = new Map(entries.map((e) => [e.session, e]));
+    expect(bySession.get("a")).toMatchObject({ initiative: "cc", mappedBy: "rule 1 (titleMatch)" });
+    expect(bySession.get("d")).toMatchObject({ initiative: "pinned", mappedBy: "rule 2 (sessionId)" });
+    expect(bySession.get("b")).toMatchObject({ initiative: "unassigned" });
+    const tpl = JSON.parse(readFileSync(path.join(dir, "out", "d.map-template.json"), "utf8"));
+    // c's title had a path, so it was masked and left out of the list.
+    expect(tpl.titles).toEqual(["Fix flaky login tests"]);
+    const all = allFilesText(dir);
+    expect(all).not.toContain(S);
+    expect(all).not.toContain("rollout zq");
+    expect(all).not.toContain("Ai said something");
+  });
+
+  it("sync rules match by title and sessionId too", () => {
+    const t0 = NOW - 2 * HOUR;
+    const rules = validateMap({ rules: [{ initiative: "cc", titleMatch: "/command\\s+center/" }, { initiative: "pin", sessionId: "s9" }] });
+    const base = { firstMs: t0, lastMs: t0, cwd: "/w", repo: "w", branch: "main", finished: false, question: null, userTurns: 1 };
+    const states = [
+      { ...base, session: "s1", rawTitle: "Command  Center work", plan: [{ text: "x", status: "pending" }] },
+      { ...base, session: "s9", rawTitle: "Other", plan: null },
+    ];
+    const { groups } = groupSessions(states, rules);
+    expect(groups.map((g) => [g.id, g.mappedBy])).toEqual([
+      ["cc", "rule 1 (titleMatch)"],
+      ["pin", "rule 2 (sessionId)"],
+    ]);
+  });
+
+  it("--map-from-sync assigns blocks of a session to its initiative in the sync draft when no --map rule matched", async () => {
+    const t0 = NOW - 10 * HOUR;
+    writeTranscript([
+      ...["a", "b", "c", "d"].flatMap((s) => pair(t0, 5, { session: s })),
+      // e is not in the sync draft (sync kept one session per title), but its title matches a record's.
+      ...pair(t0, 5, { session: "e" }),
+      titleLine("e", "ai-title", "login  REWORK!"),
+    ]);
+    const sync = path.join(dir, "sync.json");
+    writeFileSync(
+      sync,
+      JSON.stringify({
+        v: 1,
+        kind: "bab-cc-backfill-draft",
+        entries: [],
+        current: [
+          { id: "login-rework", title: "Login rework", key: "KEY-4", include: true, sessions: ["a", "b"] },
+          { id: "left-out", title: "Not chosen", include: false, sessions: ["c"] },
+        ],
+      }),
+    );
+    const map = path.join(dir, "map.json");
+    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "pinned", sessionId: "b" }] }));
+    const out = path.join(dir, "d.json");
+    expect(await run(["draft", "--projects-dir", projects, "--out", out, "--map", map, "--map-from-sync", sync, "--no-llm"], capture().deps)).toBe(0);
+    const bySession = new Map((JSON.parse(readFileSync(out, "utf8")).entries as Entry[]).map((e) => [e.session, e]));
+    expect(bySession.get("a")).toMatchObject({ initiative: "login-rework", title: "Login rework", key: "KEY-4", mappedBy: "sync login-rework" });
+    expect(bySession.get("b")).toMatchObject({ initiative: "pinned", mappedBy: "rule 1 (sessionId)" });
+    expect(bySession.get("c")).toMatchObject({ initiative: "unassigned", mappedBy: "none" });
+    expect(bySession.get("d")).toMatchObject({ initiative: "unassigned" });
+    expect(bySession.get("e")).toMatchObject({ initiative: "login-rework", mappedBy: "sync login-rework (title)" });
+    // A file that is not a sync draft, a reserved id, or a bad session id is refused before anything is drafted.
+    for (const bad of [
+      { v: 1, kind: "bab-cc-backfill-draft", entries: [] },
+      { v: 1, kind: "bab-cc-backfill-draft", current: [{ id: "unassigned", include: true, sessions: ["a"] }] },
+      { v: 1, kind: "bab-cc-backfill-draft", current: [{ id: "ok", include: true, sessions: [5] }] },
+    ]) {
+      writeFileSync(sync, JSON.stringify(bad));
+      const c = capture();
+      expect(await run(["draft", "--projects-dir", projects, "--out", out, "--map-from-sync", sync, "--no-llm"], c.deps)).toBe(2);
+      expect(c.err.join("\n")).toMatch(/sync draft/);
+    }
   });
 });

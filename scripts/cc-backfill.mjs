@@ -33,7 +33,17 @@ export const USAGE = `Usage:
 draft options:
   --out <file.json>       draft to write; also writes <file>.md and <file>.map-template.json
   --projects-dir <dir>    transcripts folder, reads <dir>/*/*.jsonl (default: ~/.claude/projects)
-  --map <file.json>       mapping rules { "rules": [ { "initiative", "title", "key", "cwd", "repo", "branch", "keys" } ] }
+  --map <file.json>       mapping rules { "rules": [ { "initiative", "title", "key", "sessionId", "titleMatch",
+                          "cwd", "repo", "branch", "keys" } ] }. A rule matches when all its given fields
+                          match. Precedence: rules with sessionId, then titleMatch (session title,
+                          case-insensitive substring, or /regex/), then cwd/repo/branch, then keys only;
+                          file order within each
+  --map-from-sync <sync.json>
+                          a reviewed sync draft: a block no --map rule matched goes to the initiative
+                          its session got there (records with include: true only), else by its
+                          session title. Run sync with a long --days and --max 100 for this
+  --retry-errors          read the draft at --out and draft again only its entries with an error;
+                          every other entry stays as it is (not with --since, --until, --settle-hours)
   --since <date>          only blocks starting at or after this date or ISO time (a date is UTC midnight)
   --until <date>          only blocks starting before the end of this date, or before this ISO time
   --settle-hours <n>      skip blocks that ended less than n hours ago (default 2)
@@ -102,7 +112,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f\u0085\u2028\u2029]/g;
 const DRAFT_KIND = "bab-cc-backfill-draft";
 const UPLOAD_FIELDS = ["id", "initiative", "title", "key", "worked", "size", "at", "session", "machine"];
-const RULE_MATCH_FIELDS = ["cwd", "repo", "branch", "keys"];
+const RULE_MATCH_FIELDS = ["sessionId", "titleMatch", "cwd", "repo", "branch", "keys"];
 const RULE_FIELDS = ["initiative", "title", "key", ...RULE_MATCH_FIELDS];
 
 /** A usage or input error: printed as is, exit code 2. Never holds a secret value. */
@@ -177,18 +187,30 @@ function walkTranscripts(dir, onFile) {
   return files;
 }
 
-/** Reads <dir>/*\/*.jsonl (one level) and returns events grouped by session. */
+/**
+ * Reads <dir>/*\/*.jsonl (one level) and returns events grouped by session, plus each session's
+ * title as sync reads it (the last custom title, else the last AI title; in memory only).
+ */
 export function readTranscripts(dir) {
   const sessions = new Map();
+  const named = new Map();
   const files = walkTranscripts(dir, (lines) => {
     for (const line of lines) {
       const e = parseLine(line);
-      if (!e) continue;
-      if (!sessions.has(e.session)) sessions.set(e.session, []);
-      sessions.get(e.session).push(e);
+      if (e) {
+        if (!sessions.has(e.session)) sessions.set(e.session, []);
+        sessions.get(e.session).push(e);
+        continue;
+      }
+      if (!line.includes("-title")) continue;
+      const t = parseSyncLine(line);
+      if (t?.role !== "title") continue;
+      if (!named.has(t.session)) named.set(t.session, { custom: "", ai: "" });
+      named.get(t.session)[t.title.source] = t.title.text;
     }
   });
-  return { sessions, files };
+  const titles = new Map([...named].map(([s, n]) => [s, n.custom || n.ai]));
+  return { sessions, files, titles };
 }
 
 /** Splits one session's events into blocks at gaps over 30 minutes. Drops blocks without a user and an assistant turn. */
@@ -259,7 +281,7 @@ export function parseBound(value, flag, endOfDay = false) {
  * @param {Map<string, any[]>} sessions
  * @param {{ now: number, settleHours?: number, since?: number, until?: number }} opts
  */
-export function collectBlocks(sessions, { now, settleHours = 2, since, until }) {
+export function collectBlocks(sessions, { now, settleHours = 2, since, until, titles }) {
   const settleMs = settleHours * 60 * 60 * 1000;
   const out = [];
   for (const events of sessions.values()) {
@@ -267,6 +289,8 @@ export function collectBlocks(sessions, { now, settleHours = 2, since, until }) 
       if (now - b.endMs < settleMs) continue;
       if (since !== undefined && b.startMs < since) continue;
       if (until !== undefined && b.startMs >= until) continue;
+      // The session title, in memory only: for titleMatch rules and the masked template list.
+      b.title = titles?.get(b.session) ?? "";
       out.push(b);
     }
   }
@@ -290,7 +314,28 @@ export function validateMap(raw) {
       throw new CliError(`${at}: title must be text of 1 to ${TITLE_MAX} characters`);
     }
     if (r.key !== undefined && (typeof r.key !== "string" || !KEY_RE.test(r.key))) throw new CliError(`${at}: key must look like KEY-1`);
-    if (!RULE_MATCH_FIELDS.some((f) => r[f] !== undefined)) throw new CliError(`${at}: give at least one of cwd, repo, branch, keys`);
+    if (!RULE_MATCH_FIELDS.some((f) => r[f] !== undefined)) throw new CliError(`${at}: give at least one of ${RULE_MATCH_FIELDS.join(", ")}`);
+    let sessionIds;
+    if (r.sessionId !== undefined) {
+      const list = Array.isArray(r.sessionId) ? r.sessionId : [r.sessionId];
+      if (!list.length || list.some((s) => typeof s !== "string" || !SESSION_RE.test(s))) {
+        throw new CliError(`${at}: sessionId must be a session id or a non-empty list of them`);
+      }
+      sessionIds = new Set(list.map((s) => s.slice(0, SESSION_MAX)));
+    }
+    let titleRe;
+    if (r.titleMatch !== undefined) {
+      if (typeof r.titleMatch !== "string" || !r.titleMatch.trim()) throw new CliError(`${at}: titleMatch must be a non-empty string`);
+      if (/^\/.+\/[a-z]+$/s.test(r.titleMatch)) throw new CliError(`${at}: titleMatch /.../ takes no flags (it is always case-insensitive)`);
+      const m = /^\/(.+)\/$/s.exec(r.titleMatch);
+      if (m) {
+        try {
+          titleRe = new RegExp(m[1], "i");
+        } catch {
+          throw new CliError(`${at}: titleMatch /.../ is not a valid regular expression`);
+        }
+      }
+    }
     for (const f of ["cwd", "repo", "branch"]) {
       if (r[f] !== undefined && (typeof r[f] !== "string" || !r[f])) throw new CliError(`${at}: ${f} must be a non-empty string`);
     }
@@ -305,7 +350,8 @@ export function validateMap(raw) {
     if (r.keys !== undefined && (!Array.isArray(r.keys) || !r.keys.length || r.keys.some((k) => typeof k !== "string" || !KEY_RE.test(k)))) {
       throw new CliError(`${at}: keys must be a non-empty list of keys like KEY-1`);
     }
-    return { ...r, index: i, branchRe, cwdRe: r.cwd !== undefined && /[*?]/.test(r.cwd) ? globToRe(r.cwd) : undefined };
+    const tier = sessionIds ? 0 : r.titleMatch !== undefined ? 1 : r.cwd !== undefined || r.repo !== undefined || r.branch !== undefined ? 2 : 3;
+    return { ...r, index: i, tier, sessionIds, titleRe, branchRe, cwdRe: r.cwd !== undefined && /[*?]/.test(r.cwd) ? globToRe(r.cwd) : undefined };
   });
 }
 
@@ -330,12 +376,36 @@ export function keysOf(block) {
   return new Set([...(block.branch.match(KEY_FIND_RE) ?? []), ...(block.text.match(KEY_FIND_RE) ?? [])]);
 }
 
-/** The first rule whose given match fields all match, or null. */
+/** A rule list sorted by precedence, cached per list (validateMap's lists are never changed). */
+const ORDERED_RULES = new WeakMap();
+
+/**
+ * The rule for a block (or a sync session state), or null. A rule matches when all its given
+ * fields match. Rules are tried by precedence, then in file order: rules with sessionId, then
+ * with titleMatch, then with cwd, repo or branch, then keys-only rules. `block` has { session,
+ * title, cwd, repo, branch, text }; title and text stay in memory only.
+ */
 export function matchRule(block, rules) {
-  const cwd = block.cwd.replace(/\\/g, "/");
+  const cwd = String(block.cwd ?? "").replace(/\\/g, "/");
+  const title = String(block.title ?? "");
+  const session = String(block.session ?? "").slice(0, SESSION_MAX);
   let keys;
-  for (const r of rules) {
+  let ordered = ORDERED_RULES.get(rules);
+  if (!ordered) {
+    ordered = [...rules].sort((a, b) => (a.tier ?? 2) - (b.tier ?? 2) || a.index - b.index);
+    ORDERED_RULES.set(rules, ordered);
+  }
+  for (const r of ordered) {
     const hit = [];
+    if (r.sessionIds !== undefined) {
+      if (!r.sessionIds.has(session)) continue;
+      hit.push("sessionId");
+    }
+    if (r.titleMatch !== undefined) {
+      const ok = r.titleRe ? r.titleRe.test(title) : title.toLowerCase().includes(r.titleMatch.toLowerCase());
+      if (!title || !ok) continue;
+      hit.push("titleMatch");
+    }
     if (r.cwd !== undefined) {
       const ok = r.cwdRe ? r.cwdRe.test(cwd) : cwd.toLowerCase().includes(r.cwd.replace(/\\/g, "/").toLowerCase());
       if (!ok) continue;
@@ -367,19 +437,28 @@ export function mapTemplate(unmapped) {
   const repos = new Set();
   const branches = new Set();
   const keys = new Set();
+  const titles = new Set();
   for (const b of unmapped) {
     if (b.repo) repos.add(b.repo);
     if (b.branch) branches.add(b.branch);
     for (const k of b.branch.match(KEY_FIND_RE) ?? []) keys.add(k);
+    // Session titles, masked as sync masks them; one that was masked or looks like a secret is left out.
+    if (b.title && titles.size < TEMPLATE_TITLES_MAX) {
+      const t = maskFieldInfo(b.title, TITLE_MAX);
+      if (t.text && !t.cut && !flagField(t.text)) titles.add(t.text);
+    }
   }
   return {
-    note: "Distinct repos, branches and the keys in those branch names, of unmapped blocks. Add rules, then pass this file as --map.",
+    note: "Distinct repos, branches, the keys in those branch names and the masked session titles, of unmapped blocks. Add rules (titleMatch is a case-insensitive substring, or /regex/), then pass this file as --map.",
     repos: [...repos].sort(),
     branches: [...branches].sort(),
     keys: [...keys].sort(),
+    titles: [...titles].sort(),
     rules: [],
   };
 }
+
+const TEMPLATE_TITLES_MAX = 500;
 
 // ---------------------------------------------------------------------------------------------
 // Drafting
@@ -528,8 +607,13 @@ export function llmSettings(env) {
   return { url: `${base.href.replace(/\/+$/, "")}/v1/messages`, model: env.BAB_BACKFILL_MODEL, keyVar };
 }
 
+// The answer is one line of at most 200 characters (about 60 tokens), but a model that thinks first
+// spends output tokens on its thinking block: room for both, and more on the one retry.
+export const MAX_TOKENS = 1024;
+export const RETRY_MAX_TOKENS = 4096;
+
 /** The request for one prompt. The key is read from the named variable at call time. */
-export function buildLlmRequest(prompt, settings, env) {
+export function buildLlmRequest(prompt, settings, env, maxTokens = MAX_TOKENS) {
   return {
     url: settings.url,
     init: {
@@ -537,16 +621,56 @@ export function buildLlmRequest(prompt, settings, env) {
       // A redirect could carry the key and the excerpt to another host: refuse it.
       redirect: "error",
       headers: { "x-api-key": env[settings.keyVar], "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: settings.model, max_tokens: 100, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: settings.model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
     },
   };
 }
 
-/** The default provider: a Messages API compatible endpoint. Errors name the status only. */
+/**
+ * A model answer with no usable text. `empty` is true for an answer with no content or only blank
+ * text (a skip, not retried); false for an answer with no text block at all (e.g. only a thinking
+ * block when max_tokens ran out), which is retried once. The message names the stop reason and
+ * the block types only, never any text of the prompt or the answer.
+ */
+export class ModelAnswerError extends Error {
+  constructor(empty, stopReason, blockTypes) {
+    const why = `stop_reason: ${stopReason || "none"}; blocks: ${blockTypes.length ? blockTypes.join(", ") : "none"}`;
+    super(empty ? `model returned an empty answer (${why})` : `model answer has no text block (${why})`);
+    this.empty = empty;
+  }
+}
+
+/** A value from the model's answer reduced to a short name: a-z, 0-9 and _ only, at most 30. */
+function answerName(v) {
+  return typeof v === "string" ? v.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30) : "";
+}
+
+/**
+ * The text of a Messages API answer: the first block of type "text" with non-blank text (thinking
+ * and other blocks are skipped). Throws ModelAnswerError when there is none.
+ */
+export function answerText(body) {
+  const hasContent = Array.isArray(body?.content);
+  const content = hasContent ? body.content : [];
+  const stopReason = answerName(body?.stop_reason);
+  const types = [...new Set(content.map((b) => answerName(b?.type) || "unknown"))].slice(0, 10);
+  const texts = content.filter((b) => b && b.type === "text" && typeof b.text === "string");
+  const block = texts.find((b) => b.text.trim());
+  if (block) return block.text;
+  // No content list at all is not an answer: an error (retried). An empty list is an empty answer
+  // only when the model ended its turn; one cut short (max_tokens, refusal, ...) is retried too.
+  const finished = ["", "end_turn", "stop_sequence"].includes(stopReason);
+  throw new ModelAnswerError(hasContent && (texts.length > 0 || (!content.length && finished)), stopReason, types);
+}
+
+/**
+ * The default provider: a Messages API compatible endpoint. Errors name the status only.
+ * `opts.retry` asks for the larger output budget.
+ */
 export function makeLlmProvider(env, fetchImpl) {
   const settings = llmSettings(env);
-  return async (prompt) => {
-    const { url, init } = buildLlmRequest(prompt, settings, env);
+  return async (prompt, opts = {}) => {
+    const { url, init } = buildLlmRequest(prompt, settings, env, opts.retry ? RETRY_MAX_TOKENS : MAX_TOKENS);
     let res;
     try {
       res = await fetchImpl(url, init);
@@ -560,9 +684,7 @@ export function makeLlmProvider(env, fetchImpl) {
     } catch {
       throw new Error("model answer is not JSON");
     }
-    const text = body?.content?.[0]?.text;
-    if (typeof text !== "string") throw new Error("model answer has no content[0].text");
-    return text;
+    return answerText(body);
   };
 }
 
@@ -579,49 +701,180 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-/** Builds the draft object. `provider` is null for --no-llm. */
-export async function buildDraft(blocks, { rules = [], provider = null, machine, now, concurrency = 2 }) {
+/**
+ * The initiative for a block: a --map rule (by precedence), else the initiative its session got
+ * in the sync draft (--map-from-sync), else none. Returns { initiative, title?, key?, mappedBy } or null.
+ */
+export function mapBlock(b, rules = [], syncMap = null) {
+  const m = matchRule(b, rules);
+  if (m) {
+    const out = { initiative: m.rule.initiative, mappedBy: m.mappedBy };
+    if (m.rule.title) out.title = m.rule.title;
+    if (m.rule.key) out.key = m.rule.key;
+    return out;
+  }
+  let s = syncMap?.bySession.get(b.session.slice(0, SESSION_MAX));
+  let how = "";
+  if (!s && syncMap && b.title) {
+    s = syncMap.byTitle.get(titleKey(b.title));
+    how = " (title)";
+  }
+  if (s) {
+    const out = { initiative: s.id, mappedBy: `sync ${s.id}${how}` };
+    if (s.title) out.title = s.title;
+    if (s.key) out.key = s.key;
+    return out;
+  }
+  return null;
+}
+
+/**
+ * The drafted line for one block: { worked, error?, skipped? }. A model answer without a text
+ * block is asked once more (with a larger output budget); an empty answer is a skip, not an error.
+ */
+async function draftLine(b, provider) {
+  if (!provider) return { worked: templateLine(b) };
+  const prompt = buildPrompt(b);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const worked = postProcess(await provider(prompt, { retry: attempt > 0 }));
+      if (!worked) return { worked: "", skipped: "model returned an empty line" };
+      return { worked };
+    } catch (e) {
+      if (e instanceof ModelAnswerError) {
+        if (e.empty) return { worked: "", skipped: e.message };
+        if (attempt === 0) continue;
+        return { worked: "", error: `${e.message}, also on retry` };
+      }
+      return { worked: "", error: e instanceof Error ? e.message : "model request failed" };
+    }
+  }
+}
+
+/** Sets an entry's line fields from a drafted line; include only for a clean, unflagged line. */
+function applyLine(entry, line) {
+  const flagged = line.worked ? flagLine(line.worked) : null;
+  entry.worked = line.worked;
+  entry.include = Boolean(line.worked) && !flagged && !line.error && !line.skipped;
+  if (flagged) entry.flagged = flagged;
+  if (line.error) entry.error = line.error;
+  if (line.skipped) entry.skipped = line.skipped;
+  return entry;
+}
+
+/** A full draft entry for a block, in the draft file's field order. */
+function blockEntry(b, m, line, machine) {
+  const entry = { id: b.id, initiative: m ? m.initiative : "unassigned" };
+  if (m?.title) entry.title = m.title;
+  if (m?.key) entry.key = m.key;
+  Object.assign(entry, {
+    worked: "",
+    size: sizeOf(b.minutes),
+    at: new Date(b.endMs).toISOString(),
+    session: b.session.slice(0, SESSION_MAX),
+    machine,
+    include: false,
+    mappedBy: m ? m.mappedBy : "none",
+    repo: b.repo,
+    branch: b.branch,
+    turns: b.turns,
+    minutes: b.minutes,
+  });
+  return applyLine(entry, line);
+}
+
+/** Builds the draft object. `provider` is null for --no-llm. `syncMap` comes from --map-from-sync. */
+export async function buildDraft(blocks, { rules = [], syncMap = null, provider = null, machine, now, concurrency = 2 }) {
   const unmapped = [];
   const entries = await mapLimit(blocks, Math.max(1, Math.min(4, concurrency)), async (b) => {
-    const m = matchRule(b, rules);
+    const m = mapBlock(b, rules, syncMap);
     if (!m) unmapped.push(b);
-    let worked = "";
-    let error;
-    if (provider) {
-      try {
-        worked = postProcess(await provider(buildPrompt(b)));
-        if (!worked) error = "model returned an empty line";
-      } catch (e) {
-        error = e instanceof Error ? e.message : "model request failed";
-      }
-    } else {
-      worked = templateLine(b);
-    }
-    const flagged = worked ? flagLine(worked) : null;
-    const entry = { id: b.id, initiative: m ? m.rule.initiative : "unassigned" };
-    if (m?.rule.title) entry.title = m.rule.title;
-    if (m?.rule.key) entry.key = m.rule.key;
-    Object.assign(entry, {
-      worked,
-      size: sizeOf(b.minutes),
-      at: new Date(b.endMs).toISOString(),
-      session: b.session.slice(0, SESSION_MAX),
-      machine,
-      include: Boolean(worked) && !flagged && !error,
-      mappedBy: m ? m.mappedBy : "none",
-      repo: b.repo,
-      branch: b.branch,
-      turns: b.turns,
-      minutes: b.minutes,
-    });
-    if (flagged) entry.flagged = flagged;
-    if (error) entry.error = error;
-    return entry;
+    return blockEntry(b, m, await draftLine(b, provider), machine);
   });
   return {
     draft: { v: 1, kind: DRAFT_KIND, generatedAt: new Date(now).toISOString(), entries },
     template: mapTemplate(unmapped),
   };
+}
+
+/** Checks that `raw` is a log draft this tool wrote (or the person edited). */
+function checkDraft(raw, what) {
+  if (!raw || typeof raw !== "object" || raw.v !== 1 || raw.kind !== DRAFT_KIND || !Array.isArray(raw.entries)) {
+    throw new CliError(`${what} must be { v: 1, kind: "${DRAFT_KIND}", entries: [...] }`);
+  }
+  for (const [i, e] of raw.entries.entries()) {
+    if (!e || typeof e !== "object" || typeof e.id !== "string") throw new CliError(`${what}: entries[${i}] needs an id`);
+  }
+  return raw;
+}
+
+/**
+ * Redoes only the entries of an existing draft that have an `error`: each is drafted again from its
+ * block (found by id) and mapped again with the current rules. Every other entry, included, edited,
+ * flagged or skipped, stays exactly as it is, in its place. An errored entry whose block is gone
+ * stays too. Returns { draft, template, retried, missing }.
+ */
+export async function retryDraft(existing, blocks, { rules = [], syncMap = null, provider = null, machine, now, concurrency = 2 }) {
+  checkDraft(existing, "the draft");
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const todo = [];
+  let missing = 0;
+  existing.entries.forEach((e, i) => {
+    // An entry the person fixed by hand (a line, or include: true) stays, even with its error left in.
+    if (!e.error || e.worked || e.include === true) return;
+    const b = byId.get(e.id);
+    if (b) todo.push({ i, b });
+    else missing++;
+  });
+  const entries = [...existing.entries];
+  await mapLimit(todo, Math.max(1, Math.min(4, concurrency)), async ({ i, b }) => {
+    entries[i] = blockEntry(b, mapBlock(b, rules, syncMap), await draftLine(b, provider), entries[i].machine ?? machine);
+  });
+  const unmapped = entries.filter((e) => e.initiative === "unassigned").map((e) => byId.get(e.id)).filter(Boolean);
+  return {
+    draft: { ...existing, generatedAt: new Date(now).toISOString(), entries },
+    template: mapTemplate(unmapped),
+    retried: todo.length,
+    missing,
+  };
+}
+
+/** A title compared as sync's dedupe compares it: masked, then its whole slug. "" for no title. */
+function titleKey(title) {
+  return title ? titleSlug(maskField(title, TITLE_MAX), Infinity) : "";
+}
+
+/**
+ * The map from a sync draft (--map-from-sync): each session of a record with include: true goes
+ * to that record's id, with its title and key (`bySession`). Sync keeps one session per title, so
+ * a session it dropped as a same-titled one is found by its title (`byTitle`, compared as a slug).
+ * Records left out are skipped, so their work stays unassigned rather than creating initiatives
+ * the person did not choose.
+ */
+export function syncSessionMap(raw) {
+  if (!raw || typeof raw !== "object" || raw.v !== 1 || raw.kind !== DRAFT_KIND || !Array.isArray(raw.current)) {
+    throw new CliError(`the sync draft must be { v: 1, kind: "${DRAFT_KIND}", current: [...] } (from the sync mode)`);
+  }
+  const map = new Map();
+  const byTitle = new Map();
+  for (const [i, r] of raw.current.entries()) {
+    const at = `sync draft current[${i}]`;
+    if (!r || typeof r !== "object") throw new CliError(`${at} must be an object`);
+    if (r.include !== true) continue;
+    if (typeof r.id !== "string" || !SLUG_RE.test(r.id) || RESERVED_IDS.includes(r.id)) throw new CliError(`${at}: id must be a slug (a-z, 0-9, -), not a reserved one`);
+    if (!Array.isArray(r.sessions)) throw new CliError(`${at}: sessions must be a list`);
+    const title = typeof r.title === "string" && r.title.trim() && r.title.length <= TITLE_MAX ? r.title : undefined;
+    const key = typeof r.key === "string" && KEY_RE.test(r.key) ? r.key : undefined;
+    for (const s of r.sessions) {
+      if (typeof s !== "string" || !SESSION_RE.test(s)) throw new CliError(`${at}: sessions must be session ids`);
+      const id = s.slice(0, SESSION_MAX);
+      // The first record wins: the sync draft lists each session once, but an edited one may not.
+      if (!map.has(id)) map.set(id, { id: r.id, title, key });
+    }
+    const t = titleKey(title);
+    if (t && !byTitle.has(t)) byTitle.set(t, { id: r.id, title, key });
+  }
+  return { bySession: map, byTitle };
 }
 
 /** Text for a table cell or list item: Markdown syntax and HTML escaped, so it shows as written. */
@@ -632,7 +885,7 @@ function cell(s) {
 /** A readable table of the draft. */
 export function draftMarkdown(draft) {
   const rows = draft.entries.map((e) => {
-    const inc = e.include ? "yes" : `no${e.flagged ? ` (flagged: ${e.flagged})` : e.error ? ` (error: ${e.error})` : ""}`;
+    const inc = e.include ? "yes" : `no${e.flagged ? ` (flagged: ${e.flagged})` : e.error ? ` (error: ${e.error})` : e.skipped ? ` (skipped: ${e.skipped})` : ""}`;
     return `| ${e.at.slice(0, 16).replace("T", " ")} | ${cell(e.initiative)} | ${cell(e.worked)} | ${e.size} | ${cell(inc)} |`;
   });
   return [
@@ -954,7 +1207,7 @@ export function groupSessions(states, rules = []) {
   let left = 0;
   states.forEach((s, i) => {
     // The rule sees the title, never the transcript text.
-    const m = matchRule({ cwd: s.cwd, repo: s.repo, branch: s.branch, text: s.rawTitle }, rules);
+    const m = matchRule({ session: s.session, title: s.rawTitle, cwd: s.cwd, repo: s.repo, branch: s.branch, text: s.rawTitle }, rules);
     if (m && m.rule.initiative === "unassigned") {
       left++;
       return;
@@ -1322,8 +1575,8 @@ export function maskUrl(raw) {
 
 function parseArgs(args) {
   const flags = { url: [] };
-  const valued = new Set(["--out", "--projects-dir", "--map", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from", "--days", "--max"]);
-  const bare = new Set(["--no-llm", "--dry-run"]);
+  const valued = new Set(["--out", "--projects-dir", "--map", "--map-from-sync", "--since", "--until", "--settle-hours", "--machine", "--concurrency", "--draft", "--url", "--from", "--days", "--max"]);
+  const bare = new Set(["--no-llm", "--dry-run", "--retry-errors"]);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (bare.has(a)) flags[a.slice(2)] = true;
@@ -1395,13 +1648,31 @@ async function runDraft(flags, deps) {
   }
   const machine = flags.machine ?? reduceMachine(deps.hostname());
   if (!machine) throw new CliError("this host name has none of A-Z a-z 0-9 . _ -; pass --machine");
+  const retry = Boolean(flags["retry-errors"]);
+  if (retry && (since !== undefined || until !== undefined || flags["settle-hours"] !== undefined)) {
+    throw new CliError("--retry-errors redoes the errored blocks of the draft at --out; --since, --until and --settle-hours do not apply");
+  }
   const rules = readMapRules(flags.map);
+  const syncMap = flags["map-from-sync"] ? syncSessionMap(readJson(flags["map-from-sync"], "the sync draft")) : null;
+  const existing = retry ? readJson(flags.out, "the draft to retry") : null;
+  if (existing) checkDraft(existing, "the draft to retry");
   // Settings first: a missing variable fails before any transcript is read.
   const provider = flags["no-llm"] ? null : (deps.provider ?? makeLlmProvider(deps.env, deps.fetch));
   const dir = flags["projects-dir"] ?? defaultProjectsDir();
-  const { sessions, files } = readTranscripts(dir);
-  const blocks = collectBlocks(sessions, { now: deps.now(), settleHours, since, until });
-  const { draft, template } = await buildDraft(blocks, { rules, provider, machine, now: deps.now(), concurrency });
+  const { sessions, files, titles } = readTranscripts(dir);
+  const opts = { rules, syncMap, provider, machine, now: deps.now(), concurrency };
+  let draft;
+  let template;
+  if (existing) {
+    // Every block, whatever its age: the draft's own entries decide which ones are redone.
+    const blocks = collectBlocks(sessions, { now: deps.now(), settleHours: 0, titles });
+    const r = await retryDraft(existing, blocks, opts);
+    ({ draft, template } = r);
+    stdout(`${r.retried} errored blocks drafted again${r.missing ? `, ${r.missing} errored entries whose block is no longer in the transcripts kept as they were` : ""}; every other entry kept as it was.`);
+  } else {
+    const blocks = collectBlocks(sessions, { now: deps.now(), settleHours, since, until, titles });
+    ({ draft, template } = await buildDraft(blocks, opts));
+  }
   const p = outputPaths(flags.out);
   fs.mkdirSync(path.dirname(path.resolve(p.json)), { recursive: true });
   writePrivate(p.json, `${JSON.stringify(draft, null, 2)}\n`);
@@ -1410,9 +1681,11 @@ async function runDraft(flags, deps) {
   const included = draft.entries.filter((e) => e.include).length;
   const flagged = draft.entries.filter((e) => e.flagged).length;
   const errors = draft.entries.filter((e) => e.error).length;
+  const skipped = draft.entries.filter((e) => e.skipped).length;
   const unassigned = draft.entries.filter((e) => e.initiative === "unassigned").length;
-  stdout(`${files} transcript files, ${sessions.size} sessions, ${draft.entries.length} blocks drafted.`);
-  stdout(`${included} included, ${flagged} flagged, ${errors} drafting errors, ${unassigned} unassigned.`);
+  stdout(`${files} transcript files, ${sessions.size} sessions, ${draft.entries.length} blocks in the draft.`);
+  stdout(`${included} included, ${flagged} flagged, ${errors} drafting errors, ${skipped} skipped (empty answer), ${unassigned} unassigned.`);
+  if (errors) stdout(`To draft only the errored blocks again: rerun with --retry-errors and the same --out.`);
   stdout(`Draft: ${p.json}`);
   stdout(`Table: ${p.md}`);
   stdout(`Map template: ${p.template}`);
@@ -1420,22 +1693,24 @@ async function runDraft(flags, deps) {
   return 0;
 }
 
+function readJson(file, what) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    throw new CliError(`cannot read ${what} as JSON: ${file}`);
+  }
+}
+
 function readMapRules(file) {
   if (!file) return [];
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    throw new CliError(`cannot read the map file as JSON: ${file}`);
-  }
-  return validateMap(raw);
+  return validateMap(readJson(file, "the map file"));
 }
 
 async function runSync(flags, deps) {
   const { stdout } = deps;
   if (!flags.out) throw new CliError("sync needs --out <file.json>");
   if (flags.url.length || flags.draft || flags["dry-run"] || flags.from) throw new CliError("--url, --draft, --from and --dry-run are for upload");
-  for (const f of ["since", "until", "settle-hours", "machine", "concurrency", "no-llm"]) {
+  for (const f of ["since", "until", "settle-hours", "machine", "concurrency", "no-llm", "retry-errors", "map-from-sync"]) {
     if (flags[f] !== undefined) throw new CliError(`--${f} is for draft`);
   }
   const days = Math.floor(intFlag(flags.days, "--days", 1, 365, 14));
@@ -1486,6 +1761,7 @@ async function runUpload(flags, deps) {
   const { stdout, stderr } = deps;
   if (!flags.draft) throw new CliError("upload needs --draft <file.json>");
   if (flags.out || flags.map || flags["no-llm"] || flags.days !== undefined || flags.max !== undefined) throw new CliError("--out, --map, --no-llm, --days and --max are for draft and sync");
+  if (flags["retry-errors"] || flags["map-from-sync"]) throw new CliError("--retry-errors and --map-from-sync are for draft");
   // The link from the environment keeps it off the command line (shell history, process lists).
   if (!flags.url.length && deps.env.BAB_BACKFILL_LINK) flags.url.push(deps.env.BAB_BACKFILL_LINK);
   if (!flags["dry-run"] && !flags.url.length) throw new CliError("upload needs --url <link> or BAB_BACKFILL_LINK (or --dry-run)");
