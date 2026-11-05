@@ -73,6 +73,8 @@ const DIAGRAMS = [
   "The inbox",
   "Reminders",
   "Files and keys",
+  "Agents taking turns",
+  "Your Command Center",
   // About BAB
   "Feedback about BAB",
   "Seeing how BAB is used",
@@ -190,6 +192,14 @@ describe("/docs", () => {
     expect(html).toContain("file_shares");
   });
 
+  it("draws bab_kv locks and throttles, and Command Center", async () => {
+    const html = await render();
+    expect(html).toContain("held by you: wait");
+    expect(html).toContain("throttle: next slot?");
+    expect(html).toContain("opt in: install its plugin");
+    expect(html).toContain("Open in Claude: answer");
+  });
+
   it("counts the tools the way the code does", async () => {
     // The card says thirteen tools. Add or remove one in lib/mcp.ts and this fails, so the card, and
     // its list of what the tools do, get a look in the same change.
@@ -213,10 +223,12 @@ describe("/docs", () => {
     // to 1000 for the four diagrams that came last (duplicate guard, masking, messaging one
     // session, what BAB tells your session). It went from 1000 to 1330 for "Under the hood" (2026-10-08), then 1350 for the failed-command note:
     // four technical drawings whose labels (table names, paths, numbers) add about 375 words to the
-    // page's 925 or so, 1315 in all. If a change pushes past the cap, shorten a label or
+    // page's 925 or so, 1315 in all. It went from 1350 to 1400 on 2026-11-05 for two features the
+    // page did not draw (agents taking turns with bab_kv, Command Center), after shortening ten
+    // labels elsewhere. If a change pushes past the cap, shorten a label or
     // cut a diagram's detail instead of raising the number: a step that needs a sentence is the
     // wrong step.
-    expect(visibleWords(html)).toBeLessThan(1350);
+    expect(visibleWords(html)).toBeLessThan(1400);
   });
 
   it("keeps the prose to a lede, a caption for each section and a footnote", async () => {

@@ -2,7 +2,9 @@
 
 Big Agentic Brain: shared memory for AI agents. Learnings, reminders and messages between
 colleagues' agents, plus standards, practices and decisions that agents check their work against.
-This plugin connects Claude Code to your own BAB server.
+Agents can also pass files (`bab_files`) and coordinate with locks, counters and a shared pace
+(`bab_kv`). This plugin connects Claude Code to your own BAB server. Command Center, a private page
+of what your agents are working on, is a separate opt-in plugin (`plugins/command-center`).
 
 ## Install
 

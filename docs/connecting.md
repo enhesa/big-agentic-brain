@@ -14,6 +14,6 @@ The full MCP surface adds about 5,400 input tokens to every request; the lean li
 
 - Add `?tools=lean` to the MCP URL, for example `https://bab.example.com/mcp?tools=lean`. The choice is per connection, and the value is not case-sensitive. Keep `?tools=lean` in the URL: every request is judged by its own URL, so a client that drops it gets the default list.
 - The operator can make lean the default for every connection with `BAB_MCP_TOOLS=lean` (default `full`; see [Configuration](configuration.md)). `?tools=full` then picks the full list again.
-- A lean session that calls a hidden tool (inbox, send, remind, feedback, people, link session) gets an error with the full URL, `/mcp?tools=full`.
+- A lean session that calls a hidden tool (inbox, send, remind, feedback, people, files, kv, Command Center, link session) gets an error with the full URL, `/mcp?tools=full`.
 - `bab_identify` is in the lean list, so a caller BAB does not know can still identify.
 - Any other `tools` value is refused.
