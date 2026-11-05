@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.24.0](https://github.com/enhesa/big-agentic-brain/compare/v2.23.0...v2.24.0) (2026-11-05)
+
+
+### Features
+
+* **command-center:** every publish carries the session link ([#136](https://github.com/enhesa/big-agentic-brain/issues/136)) ([cfa2fc6](https://github.com/enhesa/big-agentic-brain/commit/cfa2fc6e1548305a75a3937b2679d65607678b16))
+* **command-center:** every to-do and next step is a task ([#134](https://github.com/enhesa/big-agentic-brain/issues/134)) ([cebd7bd](https://github.com/enhesa/big-agentic-brain/commit/cebd7bd880fa8b942c89521024898951c2729cac))
+
 ## [2.23.0](https://github.com/enhesa/big-agentic-brain/compare/v2.22.0...v2.23.0) (2026-11-05)
 
 
