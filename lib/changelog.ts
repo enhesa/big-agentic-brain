@@ -19,6 +19,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-05",
+    title: "A fuller README and How it works page",
+    changes: [
+      "The README covers every feature and all thirteen tools, with a security model and a capability comparison.",
+      "How it works now draws agents taking turns with locks and a shared pace, and Command Center.",
+      "The docs name every tool a lean connection hides, and the plugin README mentions files, keys and Command Center.",
+    ],
+  },
+  {
     date: "2026-11-04",
     title: "Command Center backfill, calmer cards, one footer and width",
     changes: [

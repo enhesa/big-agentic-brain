@@ -98,8 +98,8 @@ const HOUSE_RULES: Flow = {
     { from: "maintainer", to: "brain", label: "pins a standard or practice" },
     { from: "session", to: "brain", label: "a new session's first prompt" },
     { from: "brain", to: "session", label: "company and project rules", back: true },
-    { at: "session", note: "followed unless you say otherwise" },
-    { from: "session", to: "brain", label: "after a compaction: asks again" },
+    { at: "session", note: "followed unless you object" },
+    { from: "session", to: "brain", label: "after compaction: again" },
   ],
 };
 
@@ -158,13 +158,13 @@ const TOLD: Flow = {
   title: "What BAB tells your session",
   lanes: [YOU, AGENT, BRAIN],
   steps: [
-    { from: "brain", to: "agent", label: "first prompt: rules, project titles", back: true },
+    { from: "brain", to: "agent", label: "first prompt: rules, titles", back: true },
     { from: "brain", to: "agent", label: "each prompt: unread, due, retired", back: true },
     { from: "brain", to: "agent", label: "new task: 3 titles", back: true },
     { from: "agent", to: "you", label: "BAB: 2 unread", back: true },
     { from: "brain", to: "agent", label: "Stop: a nudge to record", back: true },
-    { from: "brain", to: "agent", label: "after a compaction: re-read rules", back: true },
-    { at: "agent", note: "a command fails: search BAB first" },
+    { from: "brain", to: "agent", label: "after compaction: rules again", back: true },
+    { at: "agent", note: "failed command: search first" },
   ],
 };
 
@@ -173,7 +173,7 @@ const INBOX: Flow = {
   lanes: [BRAIN, YOU, AGENT],
   steps: [
     { at: "brain", note: "a colleague wrote to you" },
-    { from: "brain", to: "you", label: "unread count at your next prompt", back: true },
+    { from: "brain", to: "you", label: "unread count, next prompt", back: true },
     { from: "you", to: "brain", label: "Inbox page: your threads" },
     { from: "you", to: "agent", label: "Continue in Claude" },
     { from: "agent", to: "brain", label: "reads it, you approve a reply" },
@@ -187,10 +187,39 @@ const REMINDERS: Flow = {
   steps: [
     { from: "you", to: "agent", label: "remind me on Friday" },
     { from: "agent", to: "brain", label: "private reminder, due Friday" },
-    { at: "brain", note: "private, also on the Reminders page" },
-    { from: "brain", to: "agent", label: "due: told at your next prompt", back: true },
+    { at: "brain", note: "also on the Reminders page" },
+    { from: "brain", to: "agent", label: "due: told next prompt", back: true },
     { from: "agent", to: "you", label: "1 reminder due", back: true },
     { from: "you", to: "agent", label: "done, or snooze a week" },
+  ],
+};
+
+// bab_kv lock and throttle (docs/kv.md): a lock answers acquired:false with its holder, never
+// breaks; a throttle books one shared slot per interval, and the caller sleeps waitSeconds.
+const OTHER_AGENT: Lane = { id: "other", label: "Another agent" };
+const TAKING_TURNS: Flow = {
+  title: "Agents taking turns",
+  lanes: [AGENT, BRAIN, OTHER_AGENT],
+  steps: [
+    { from: "agent", to: "brain", label: "lock deploy, 10 min" },
+    { from: "brain", to: "agent", label: "yours, with a token", back: true },
+    { from: "other", to: "brain", label: "lock deploy" },
+    { from: "brain", to: "other", label: "held by you: wait" },
+    { from: "other", to: "brain", label: "throttle: next slot?" },
+    { from: "brain", to: "other", label: "wait 90 s, then go" },
+  ],
+};
+
+// Command Center (docs/command-center.md): opt-in by installing its plugin; agents publish, the
+// page only shows; a question card has Open in Claude; report apps read only what you grant.
+const COMMAND_CENTER: Flow = {
+  title: "Your Command Center",
+  lanes: [YOU, AGENT, BRAIN],
+  steps: [
+    { at: "you", note: "opt in: install its plugin" },
+    { from: "agent", to: "brain", label: "plans, questions, work log" },
+    { from: "brain", to: "you", label: "your private page", back: true },
+    { from: "you", to: "agent", label: "Open in Claude: answer" },
   ],
 };
 
@@ -416,6 +445,8 @@ export default async function DocsPage() {
           ]}
           footer={{ tone: "waiting", text: "Never secrets or customer data" }}
         />
+        <FlowDiagram {...TAKING_TURNS} />
+        <FlowDiagram {...COMMAND_CENTER} />
       </DocsSection>
 
       <DocsSection id="about" title="About BAB" caption="Feedback, usage and news.">
