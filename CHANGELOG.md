@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.23.0](https://github.com/enhesa/big-agentic-brain/compare/v2.22.0...v2.23.0) (2026-11-05)
+
+
+### Features
+
+* Command Center view-only page, plugin opt-in, Open in Claude ([#131](https://github.com/enhesa/big-agentic-brain/issues/131)) ([6095e28](https://github.com/enhesa/big-agentic-brain/commit/6095e280355a8a191327ac3786c4549e049460a4))
+
 ## [2.22.0](https://github.com/enhesa/big-agentic-brain/compare/v2.21.2...v2.22.0) (2026-11-04)
 
 
