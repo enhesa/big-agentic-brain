@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. The installed plugin means the person wants it; skip it only when they ask you to."
+description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, whenever you name next steps, to-dos or follow-ups (each one is a task there, never only in your reply), when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. The installed plugin means the person wants it; skip it only when they ask you to."
 ---
 
 # Command Center
@@ -21,6 +21,9 @@ or declined a task.
 If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
 of your first turn, with that step `in_progress`. Publish again after every task status change, and
 as the last call of every turn, after the work has returned.
+Every step you tell the person is still to do (next steps, to-dos, follow-ups, anything waiting on
+their go-ahead) is a task in that publish, without being asked. Never list remaining work in a reply
+that is not in `tasks`, and never publish `tasks: []` for a project with work left: it erases its progress.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
