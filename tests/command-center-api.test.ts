@@ -140,7 +140,7 @@ describe("/api/command-center", () => {
       expect((await post({ action: "grant_export", id: "reports", level: "all" })).status).toBe(400);
       expect((await post({ action: "revoke_export", id: "reports" })).json).toEqual({ revoked: true });
       expect((await post({ action: "publish", id: "x" })).status).toBe(400);
-      expect((await post({ action: "delete_all" })).json).toMatchObject({ deleted: 1 });
+      expect((await post({ action: "delete_all", confirm: true })).json).toMatchObject({ deleted: 1 });
       const { ccView } = await import("../lib/command-center");
       expect(ccView(OWNER).records).toEqual([]);
       expect(ccView(OTHER).records.map((r) => r.id)).toEqual(["theirs"]);
@@ -224,6 +224,11 @@ describe("bab_command_center", () => {
     }
     throw new Error("expected a refusal");
   }
+
+  it("delete_all over MCP takes confirm inside record and refuses without it", async () => {
+    expect((await mcpRefusal({ action: "delete_all" })).message).toMatch(/confirm: true/);
+    expect(await mcp({ action: "delete_all", record: { confirm: true } })).toMatchObject({ deleted: 0 });
+  });
 
   it("declares record as an object and merges it under the top-level action and id", async () => {
     const { findTool } = await import("../lib/mcp");

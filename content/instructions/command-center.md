@@ -40,7 +40,7 @@ is off on this BAB, stop calling it for the rest of the session and say nothing 
 
 Only when the person asks, and only for their own data (the page has no settings):
 
-- `delete_all` erases their records, log and report-app grants. It cannot be undone.
+- `delete_all` erases their records, log and report-app grants. It cannot be undone. Run it only when the person asks, with `"record": { "confirm": true }`.
 - `export` returns their log and the report apps, with what each may read, as JSON.
 - `grant_export` with `id` the app and `record: { "level": "aggregate" }` (or `"entries"`) lets a
   report app read their log; `revoke_export` with `id` withdraws it.

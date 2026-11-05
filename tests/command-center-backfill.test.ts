@@ -379,7 +379,7 @@ describe("POST /api/command-center/backfill/:token", () => {
 
   it("is 404 when the person ran delete_all after minting, and stores nothing", async () => {
     const link = mint();
-    cc.runCommandCenter(ME, { action: "delete_all" }, "mcp", ORIGIN);
+    cc.runCommandCenter(ME, { action: "delete_all", confirm: true }, "mcp", ORIGIN);
     const res = await post(link.url, upload([entry(1, { initiative: "unassigned" })]));
     expect(res.status).toBe(404);
     expect(backfilled()).toEqual([]);
@@ -697,7 +697,7 @@ describe("current: open initiatives to create if absent", () => {
 
   it("delete_all after minting spends the link: 404 and nothing is created", async () => {
     const link = mint();
-    cc.runCommandCenter(ME, { action: "delete_all" }, "mcp", ORIGIN);
+    cc.runCommandCenter(ME, { action: "delete_all", confirm: true }, "mcp", ORIGIN);
     const res = await post(link.url, syncUpload([record("alpha")]));
     expect(res.status).toBe(404);
     expect(cc.ccLogOf(OWNER)).toEqual([]);

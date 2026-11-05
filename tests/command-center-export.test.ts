@@ -129,7 +129,7 @@ describe("the person's own export and grants, as tool actions", () => {
     const cc = await import("../lib/command-center");
     await seed(ALICE, "Alice wrote the parser");
     cc.ccGrantExport(ALICE, "reports", "aggregate");
-    await run(ALICE, { action: "delete_all" });
+    await run(ALICE, { action: "delete_all", confirm: true });
     expect(cc.ccGrantsOf(ALICE)).toEqual([]);
     expect(cc.ccLogOf(ALICE)).toEqual([]);
   });

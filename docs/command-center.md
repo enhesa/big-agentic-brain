@@ -33,7 +33,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
 | `backfill_link` (a single-use upload link, see Backfill) | `POST /api/command-center/backfill/<token>` takes the upload |
-| `delete_all` (records, log and export grants, cannot be undone) | `POST /api/command-center` `{"action":"delete_all"}` |
+| `delete_all` (records, log and export grants, cannot be undone) | `POST /api/command-center` `{"action":"delete_all","confirm":true}` (MCP: `"record": {"confirm": true}`) |
 | `export` (the person's own log and report apps as JSON) | `POST /api/command-center` `{"action":"export"}` |
 | `grant_export` (`id` the app, `level` `aggregate` or `entries`; on MCP in `record`) | `POST /api/command-center` `{"action":"grant_export","id":"<app>","level":"aggregate"}` |
 | `revoke_export` (`id` the app) | `POST /api/command-center` `{"action":"revoke_export","id":"<app>"}` |

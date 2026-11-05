@@ -1431,8 +1431,12 @@ export function runCommandCenter(
       return createBackfillLink(owner, origin, via);
     case "delete_all":
       // Every record, log entry, export grant and backfill link of the caller. Only on the
-      // person's own ask; the tool is marked destructive, so the client confirms the call too.
-      pick([]);
+      // person's own ask; it needs confirm: true (over MCP inside record), and the tool is marked
+      // destructive, so the client confirms the call too.
+      pick(["confirm"]);
+      if (args.confirm !== true && args.confirm !== "true") {
+        throw new ValidationError(`delete_all erases all your Command Center data and cannot be undone; run it only on the person's own ask and send confirm: true (over MCP: "record": { "confirm": true })`);
+      }
       return ccDeleteAll(owner, via);
     case "export":
       pick([]);

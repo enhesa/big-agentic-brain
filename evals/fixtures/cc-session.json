@@ -458,8 +458,13 @@
       "expect": { "error": "." }
     },
     {
-      "name": "delete_all empties the person's Command Center",
+      "name": "delete_all without confirm is refused",
       "call": { "action": "delete_all" },
+      "expect": { "error": "confirm: true" }
+    },
+    {
+      "name": "delete_all empties the person's Command Center",
+      "call": { "action": "delete_all", "record": { "confirm": true } },
       "expect": { "answerChecks": [["deleted", "eq", 1]] }
     },
     {

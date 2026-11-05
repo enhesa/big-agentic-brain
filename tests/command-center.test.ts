@@ -523,13 +523,23 @@ describe("identity and opt-in", () => {
   it("delete_all empties the caller's records, log and grants only, and audits", async () => {
     publish({ worked: "mine" });
     publish({ worked: "theirs" }, device(OTHER, "dev-2"));
-    expect(run({ action: "delete_all" })).toMatchObject({ deleted: 1 });
+    expect(run({ action: "delete_all", confirm: true })).toMatchObject({ deleted: 1 });
     expect(run({ action: "list" }).initiatives).toEqual([]);
     expect(cc.ccLogOf(OWNER)).toEqual([]);
     expect(run({ action: "list" }, device(OTHER, "dev-2")).initiatives).toHaveLength(1);
     expect(cc.ccLogOf(OTHER).some((e) => e.text === "theirs")).toBe(true);
     expect(await auditRows("cc_delete_all")).toHaveLength(1);
     expect(refusal(() => run({ action: "delete_all", id: "billing-export" })).message).toMatch(/unknown field 'id' for delete_all/);
+  });
+
+  it("delete_all needs confirm: true and deletes nothing without it", () => {
+    publish({ worked: "mine" });
+    for (const extra of [{}, { confirm: false }, { confirm: "yes" }]) {
+      const r = refusal(() => run({ action: "delete_all", ...extra }));
+      expect(r.status).toBe(400);
+      expect(r.message).toMatch(/confirm: true/);
+    }
+    expect(run({ action: "list" }).initiatives).toHaveLength(1);
   });
 
   it("keeps people apart: the viewer's owner key is the agent's owner key", () => {
