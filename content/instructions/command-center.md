@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: "ALWAYS use, unasked, in every session and on every turn. The person's private BAB Command Center (<bab_url>/command-center) shows all their work. Publish to it with bab_command_center at the start of every session, whenever work starts, changes or finishes, and as the last call of every turn. Every to-do, next step, follow-up or question you mention MUST be on it in the same turn, never only in your reply. Skip it only when the person says so."
+description: "ALWAYS use, unasked, in every session and on every turn. The person's private BAB Command Center (<bab_url>/command-center) shows all their work. Publish to it with bab_command_center at the start of every session, whenever work starts, changes or finishes, and as the last call of every turn. Every to-do, next step, follow-up or question you mention MUST be on it in the same turn, never only in your reply, and every publish carries the link to this session. Skip it only when the person says so."
 ---
 
 # Command Center
@@ -17,6 +17,11 @@ do (next steps, to-dos, follow-ups, anything waiting on their go-ahead) MUST be 
 turn's publish, and every question you ask them MUST be in `questions`. If your reply lists remaining
 work that is not in the record, the turn is not finished: publish it first. Never publish `tasks: []`
 for a project with work left: it erases its progress. The person must never have to ask for this.
+
+**Every publish carries `source.link`, the link that opens this session.** Get it once at the start
+of the session and send it every time: in the Claude desktop app, call the session tool for this
+session (`get_session` with `"self"`) and use its `link`. Only when your app gives no link at all,
+leave it out. A card without a link cannot be opened, so check it on every publish.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task.
@@ -82,7 +87,7 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
 
-Put the link that opens this session in `source.link` when you know it (for example claude://claude.ai/epitaxy/<your session id>); the page shows an Open in Claude button.
+Always put the link that opens this session in `source.link` (for example claude://claude.ai/epitaxy/<your session id>, from `get_session` `"self"` in the Claude desktop app); the page shows an Open in Claude button.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
