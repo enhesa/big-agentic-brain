@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: "Publish and keep current the person's private BAB Command Center page ({{ORIGIN}}/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, whenever you name next steps, to-dos or follow-ups (each one is a task there, never only in your reply), when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. The installed plugin means the person wants it; skip it only when they ask you to."
+description: "ALWAYS use, unasked, in every session and on every turn. The person's private BAB Command Center (<bab_url>/command-center) shows all their work. Publish to it with bab_command_center at the start of every session, whenever work starts, changes or finishes, and as the last call of every turn. Every to-do, next step, follow-up or question you mention MUST be on it in the same turn, never only in your reply. Skip it only when the person says so."
 ---
 
 # Command Center
@@ -12,15 +12,18 @@ Nobody else sees it.
 
 ## The rule
 
+**Every to-do goes on Command Center, always, unasked.** Every step you tell the person is still to
+do (next steps, to-dos, follow-ups, anything waiting on their go-ahead) MUST be a task in the same
+turn's publish, and every question you ask them MUST be in `questions`. If your reply lists remaining
+work that is not in the record, the turn is not finished: publish it first. Never publish `tasks: []`
+for a project with work left: it erases its progress. The person must never have to ask for this.
+
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task.
 
 If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
 of your first turn, with that step `in_progress`. Publish again after every task status change, and
 as the last call of every turn, after the work has returned.
-Every step you tell the person is still to do (next steps, to-dos, follow-ups, anything waiting on
-their go-ahead) is a task in that publish, without being asked. Never list remaining work in a reply
-that is not in `tasks`, and never publish `tasks: []` for a project with work left: it erases its progress.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
