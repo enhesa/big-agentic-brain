@@ -4,26 +4,23 @@ Command Center is a private page, `/command-center`, where a person sees what th
 sessions are doing: initiatives with progress, open questions with their age, the health of
 recurring upkeep, links, and a short log of what was worked on. Agents push the state; the page
 only shows it. The log is the person's own record of effort per initiative: what each turn did,
-with the server's time, which the person can download.
+with the server's time, which the person can export.
 
 The page is hidden: it has no navbar or footer entry. The command-center skill gives the person
 the link.
 
-## Opt-in on both sides
+## Opt-in is the plugin
 
-- The person switches it on and off on the page, signed in through the sign-in proxy. No agent can
-  flip the switch: the page routes take the viewer only, and `POST /api/me` ignores a
-  `commandCenter` field.
-- The server stores nothing for a person whose switch is off. A write or read answers 403:
-  "Command Center is off for <name>. Ask them to open <origin>/command-center and switch it on,
-  then publish again. Nothing was stored."
-- Agents publish only when the optional `command-center` skill is installed (the
-  `plugins/command-center` plugin, also served at `/instructions/command-center.md`). The BAB
-  plugin's own skill only names the tool.
-- Turning it off keeps the records and the log 30 days (switch on again to restore them), then
-  deletes them. It also withdraws every export grant at once. "Delete all my records now" deletes
-  records, log and export grants at once.
+- There is no switch in BAB. Installing the optional `command-center` plugin
+  (`plugins/command-center`, its skill also served at `/instructions/command-center.md`) is the
+  opt-in: agents publish only with that skill, and the first publish creates the person's Command
+  Center. The BAB plugin's own skill only names the tool.
+- The page has no settings. Deleting, exporting and report-app grants are tool actions the agent
+  runs on the person's ask, on the person's own data only (see API).
 - `BAB_COMMAND_CENTER=false` switches the feature off for the whole deployment.
+- Migration: the old per-person switch columns (`command_center_enabled_at`,
+  `command_center_disabled_at` on `users`) stay but are no longer read. Nothing is deleted for
+  them: a person who had switched off keeps their data until the normal retention rules apply.
 
 ## API
 
@@ -36,12 +33,17 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
 | `backfill_link` (a single-use upload link, see Backfill) | `POST /api/command-center/backfill/<token>` takes the upload |
+| `delete_all` (records, log and export grants, cannot be undone) | `POST /api/command-center` `{"action":"delete_all","confirm":true}` (MCP: `"record": {"confirm": true}`) |
+| `export` (the person's own log and report apps as JSON) | `POST /api/command-center` `{"action":"export"}` |
+| `grant_export` (`id` the app, `level` `aggregate` or `entries`; on MCP in `record`) | `POST /api/command-center` `{"action":"grant_export","id":"<app>","level":"aggregate"}` |
+| `revoke_export` (`id` the app) | `POST /api/command-center` `{"action":"revoke_export","id":"<app>"}` |
 
-`POST .../actions` takes an `Idempotency-Key`. A `PUT` is idempotent by nature.
+`POST .../actions` and `POST /api/command-center` take an `Idempotency-Key`. A `PUT` is idempotent
+by nature. Every action acts on the caller's own data only, and refuses unknown fields.
 
 The v2 actions `comment`, `health` and `clear_question` are gone for agents. Each answers a 400
 that names the fix: `worked` on the next publish, `health` as a field of the recurring record, and
-leaving an answered question out of the next publish. The person's Dismiss on the page stays.
+leaving an answered question out of the next publish.
 
 The MCP tool declares only `action`, `id` and `record`. Agents send the record, with `worked`, as
 one object in `record`. `action` and `id` go beside `record`, not inside it; the ones inside are
@@ -74,9 +76,14 @@ In short:
   A new `worked` line on it is still logged, and the answer carries its id in `logged`.
 - Leaving out `health` on a recurring initiative keeps it; `null` clears it. A `comments` field is
   refused with a pointer to `worked`.
-- A question left out of a publish is cleared. A question the person dismissed on the page stays
-  cleared while the agent sends the same id and text; the answer lists it in `dismissed`. A
-  dismissal moves neither `seq` nor `updatedAt`.
+- A question left out of a publish is cleared. The page has no Dismiss any more; a question
+  dismissed there earlier stays cleared while the agent sends the same id and text (the answer
+  lists it in `dismissed`).
+- `source.link` (optional, at most 300) is the link that opens the session behind the initiative.
+  Only `https://` with a plain lowercase host or `claude://claude.ai`, then a path of letters,
+  digits and `/ _ - .`; no query, fragment, port, credentials, percent-encoding or other scheme
+  (`lib/command-center-link.ts`). Anything else is 400 naming `source.link`; the secret check
+  applies as on any text. The page checks it again before it renders the href.
 - Cleared questions are kept 7 days, at most 20 per initiative.
 - 60 calls a minute and 20 at once per person, on top of the general limit.
 
@@ -86,7 +93,7 @@ In short:
 optional `small`, `medium` or `large` beside it, never a time estimate. Neither is stored in the
 record. The server writes each `worked` line to the log with its own time, the initiative id, title
 and key, and the `source` machine and session. It also logs what it sees by itself: a task started
-or done, a question asked or cleared (also by the person's Dismiss), a health level change, a
+or done, a question asked or cleared, a health level change, a
 state change, and `synced` when a backfill upload created the initiative from its `current` state.
 
 Entry ids are stable, so a retry is a no-op. The `worked` entry of a publish is fixed by the `seq`
@@ -160,7 +167,7 @@ summaries go to BAB, never transcript text. `--no-llm` sends nothing to any mode
 
 The link:
 
-- is made only for a bound identity whose switch is on, and only the sha256 of its token is
+- is made only for a bound identity, and only the sha256 of its token is
   stored. Entries always land in the log of the person who made it; the upload carries no identity.
 - works once, within 15 minutes. It is spent before the body is read, so a refused upload needs a
   new link. At most 20 unused links per person.
@@ -246,18 +253,17 @@ new initiatives per upload (so a `--max` over 20 needs a second link for the res
 
 ## Export
 
-- The person downloads their own log on the page (`GET /command-center/export`, the signed-in
-  viewer only, audited `cc_export_own`).
+- The person's agent exports their own log with the `export` action (audited `cc_export_own`).
 - `BAB_COMMAND_CENTER_EXPORT_APPS` lists report apps as `app=token`; the token carries the export
   scope and nothing else. An app reads `GET /api/command-center/export` with that token as a
-  bearer, only for people who granted that app on their own page and whose switch is on. The
-  person grants or revokes each app on the page (same-origin viewer posts, audited
-  `cc_export_grant` and `cc_export_revoke`). Every app read is audited (`cc_export_app`).
+  bearer, only for people who granted that app. The person's agent grants or revokes each app
+  with `grant_export` and `revoke_export` (audited `cc_export_grant` and `cc_export_revoke`);
+  `delete_all` withdraws every grant. Every app read is audited (`cc_export_app`).
 - Aggregated by default: counts per initiative and UTC day (`entries`: all log entries; `worked`:
   worked lines only, not imported notes; `backfilled`: entries from a backfill upload; sizes) with
   the initiative's title and key, but no log lines and no session. `detail=entries` returns the
   entries only for people who granted the `entries` level. Every entry, in that export and in the
-  person's own download, carries its `source` (`live`, `import` or `backfill`); the page tags
+  person's own export, carries its `source` (`live`, `import` or `backfill`); the page tags
   backfilled lines in each initiative's log. `from` and `to` are dates, at most 400 days apart; the default is the last 92
   days.
 - `/api/command-center/export` is a public path for BAB's own API token gate, because the app token
@@ -303,52 +309,61 @@ one, so a file rewritten by a rolled-back v2.19 is never deleted before v3 has i
 rollback after that starts empty. A `command-center-snapshot.imported.json` left by an earlier v3
 build is deleted after the same 30 days.
 
-The opt-in switch is two columns on `users`.
+The old opt-in switch is two columns on `users`, kept and no longer read.
 
 Retention, one rule each: the page shows active initiatives that are not silent; done, parked and
 silent ones stay in `list` and in the log. A live record goes 30 days after its last write. The log
-is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). People switched off for 30 days lose
-records, log and grants. Cleared questions stay 7 days. Writes are audited (`cc_publish`,
-`cc_clear`, `cc_remove`, `cc_enable`, `cc_disable`, `cc_delete_all`, and the export rows above)
+is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). Cleared questions stay 7 days. Writes
+are audited (`cc_publish`, `cc_clear`, `cc_remove`, `cc_delete_all`, and the export rows above)
 with the person, the initiative id and the result, never the text.
 
 ## The page
 
 `app/command-center/page.tsx` renders for the signed-in viewer only, at the app's standard content
-width like every other page. The header is one line: title, the On pill, the last push and
-the data-health chips, which turn amber or red when not 0. Switch off and Delete sit in a
-settings menu; Delete asks for a confirm first.
+width like every other page. The header is one quiet line: title, the last push, and the
+data-health chips only when one is not 0 (amber or red). The page has no controls but Open in
+Claude and the drawer: no switch, menu, delete, download or report-app grants.
 
 - There is no separate questions section. An open question sits on its own card or upkeep row.
 - Initiatives: a kanban board of four light columns by status, left to right Needs you, Active,
-  Idle, Finished, each headed by its name and count. Empty columns stay. Each column scrolls on its
-  own; under 900 px the board has two columns, and on phones the columns stack (no inner scroll).
+  Idle, Finished, each headed by its name and count (no separate heading). Empty columns stay. Each
+  column scrolls on its own; under 900 px the board has two columns, and on phones the columns stack
+  (no inner scroll). Finished shows its 3 newest cards, then "+N more" folds the rest.
 - The status is derived on the server (`ccStatusOf`): Needs you (an open question), Finished
   (state done, or every task done), Active (a publish under 2 hours ago), else Idle. Paused and
   parked cards are Idle. Inside a column cards sort urgent, high, none, low, paused, then most
   recently updated. The status is part of the poll stamp, so a card that passes the 2 hour line
   moves on its own.
-- A card is compact: the title (2 lines at most, a button) with a small progress ring (percent
-  inside), one muted line with the main task (in progress, else the next pending; a finished card
-  says all tasks are done), and small key, priority and near or overdue deadline chips when set.
-- A Needs you card has a yellow left edge and shows its oldest open question (2 lines), its age,
-  a possibly-stale tag, the options as small pills (display only), Dismiss, then "+N more
-  questions".
+- A card face is the title (2 lines at most, a button), a small progress ring (percent inside)
+  and one line: the main task on Active and Idle cards (in progress, else the next pending), none
+  on Finished. An overdue deadline adds one small red dot with a tooltip. No chips, ages or lists.
+- The board has one action: Open in Claude. People only look; agents do the work, and the
+  person answers a question in the Claude session.
+- A Needs you card is the title, the ring, a coloured left edge and an Open in Claude button, no
+  question text. The button is the record's `source.link`, checked again on the page with the
+  server's rule (`lib/command-center-link.ts`) before it becomes an href, opened in the same tab
+  with `rel="noopener noreferrer"`; without a valid link it is a disabled button titled "No
+  session link". The questions, their ages, stale tags and options (plain text, "Options: a ·
+  b") are in the drawer.
 - A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
   status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
-  dates), the ring with done/total, every open question with Dismiss, every task with its status
-  icon, links as pills with their host, the Log, when it was updated and who pushed last. Esc,
+  dates), the ring with done/total, every open question, the open tasks with their status icon
+  and the done ones folded under "N done", links as pills with their host, the Log, when it was updated and who pushed last, and a
+  small Open in Claude button on every card. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
-  keeps the drawer open with fresh content; a Dismiss posts the form and reloads the page, which
-  closes it. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
+  keeps the drawer open with fresh content. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
   keeps full contrast.
+- With no initiatives yet, one line says to install the command-center plugin, with the
+  `/plugin install command-center@<marketplace>` command.
 - A line counts the done, parked and silent initiatives that left the page.
-- Your log: the download link for the person's own log, and each configured export app with
-  Grant or Revoke.
-- Recurring upkeep, a slim section under the board: one line each with a health dot and label, the reason (cut short, full text in
-  its tooltip; wrapped on phones), when it was checked and an overdue tag. A row with open
-  questions gets a yellow edge, a Needs you badge and all its questions under it, in the same form.
+- Recurring upkeep, a slim section under the board: rows that need a look (not green, overdue,
+  silent or asking something), one line each: health dot, name, one label (Needs you when it
+  asks something, else the health label), the reason (cut short, full text in its tooltip;
+  wrapped on phones) and when it was checked; then the green rows folded under "N healthy". A row
+  that asks something gets the coloured edge and a small Open in Claude button. A click on a row
+  opens the same drawer as a card: health, cadence and overdue tags, the reason, the questions,
+  links and log.
 
 Every agent string is React text, never HTML; a link shows its host, and its full URL is its title. Colours are tokens on
 the page, with dark values for `data-theme="dark"`, like /usage. Motion honours

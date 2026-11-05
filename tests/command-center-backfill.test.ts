@@ -38,7 +38,6 @@ beforeEach(async () => {
   const { upsertUser } = await import("../lib/users");
   upsertUser({ id: OWNER, email: OWNER, name: "Owner One", roles: [] });
   upsertUser({ id: OTHER, email: OTHER, name: "Other Two", roles: [] });
-  cc.ccSetSwitch(OWNER, true);
 });
 
 afterEach(async () => {
@@ -137,10 +136,10 @@ describe("backfill_link", () => {
     expect(() => cc.runCommandCenter(ME, { action: "backfill_link", id: "x" }, "mcp", ORIGIN)).toThrow(/unknown field 'id' for backfill_link/);
   });
 
-  it("refuses a header-only identity (403) and a person who is off (403)", () => {
+  it("refuses a header-only identity (403); anyone else with an identity may mint", () => {
     const declared = { id: OWNER, email: OWNER, name: "Owner One", source: "declared" as const };
     expect(() => mint(declared)).toThrow(/needs an identity BAB remembers or checks/);
-    expect(() => mint(device(OTHER))).toThrow(/Command Center is off for Other Two/);
+    expect(mint(device(OTHER)).url).toMatch(/\/api\/command-center\/backfill\/[0-9a-f]{64}$/);
   });
 
   it("caps unused, unexpired links per person (429)", () => {
@@ -210,7 +209,6 @@ describe("POST /api/command-center/backfill/:token", () => {
   });
 
   it("is bound to the person who minted it: another person's records and log are untouched", async () => {
-    cc.ccSetSwitch(OTHER, true);
     await storeRecord(OTHER, "billing-export", "Their billing");
     const link = mint();
     const res = await post(link.url, upload([entry(1)]), { "x-bab-actor-email": OTHER, "x-bab-actor-name": "Other Two" });
@@ -379,12 +377,11 @@ describe("POST /api/command-center/backfill/:token", () => {
     expect(() => cc.ccGet(OWNER, "nobody-knows")).toThrow(/No initiative/);
   });
 
-  it("is 403 when the person switched off after minting, and stores nothing", async () => {
+  it("is 404 when the person ran delete_all after minting, and stores nothing", async () => {
     const link = mint();
-    cc.ccSetSwitch(OWNER, false);
+    cc.runCommandCenter(ME, { action: "delete_all", confirm: true }, "mcp", ORIGIN);
     const res = await post(link.url, upload([entry(1, { initiative: "unassigned" })]));
-    expect(res.status).toBe(403);
-    expect(res.json.error).toMatch(/Command Center is off for Owner One/);
+    expect(res.status).toBe(404);
     expect(backfilled()).toEqual([]);
   });
 
@@ -533,7 +530,6 @@ describe("current: open initiatives to create if absent", () => {
     expect(() => cc.ccGet(OWNER, "beta")).toThrow(/No initiative/);
     expect(synced().map((e) => e.initiative)).toEqual(["gamma"]);
     // Another person's removal of the same id is no tombstone for this person.
-    cc.ccSetSwitch(OTHER, true);
     cc.ccPublish(device(OTHER), OTHER, { v: 1, id: "delta", title: "Theirs" }, "mcp");
     cc.ccRemove(OTHER, { id: "delta" }, "mcp");
     expect((await post(mint().url, syncUpload([record("delta")]))).json).toMatchObject({ syncCreated: 1, syncSkipped: 0 });
@@ -699,13 +695,12 @@ describe("current: open initiatives to create if absent", () => {
     for (const s of ["Title of alpha", "First task", "Which months?", "alpha", "example.com"]) expect(rows[0].details).not.toContain(s);
   });
 
-  it("keeps the opt-in gate: off after minting is 403 and nothing is created", async () => {
+  it("delete_all after minting spends the link: 404 and nothing is created", async () => {
     const link = mint();
-    cc.ccSetSwitch(OWNER, false);
+    cc.runCommandCenter(ME, { action: "delete_all", confirm: true }, "mcp", ORIGIN);
     const res = await post(link.url, syncUpload([record("alpha")]));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(cc.ccLogOf(OWNER)).toEqual([]);
-    cc.ccSetSwitch(OWNER, true);
     expect(() => cc.ccGet(OWNER, "alpha")).toThrow(/No initiative/);
   });
 

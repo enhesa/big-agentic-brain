@@ -31,7 +31,6 @@
   --c-done-wash: rgba(59, 111, 216, 0.1);
   --c-radius: 10px;
   --c-col: #f4f5f7;
-  --c-card-line: #e6e9ee;
 
   color: var(--c-ink);
   font-size: 0.875rem;
@@ -65,7 +64,6 @@
   --c-done-ink: #9dbcff;
   --c-done-wash: rgba(110, 155, 255, 0.14);
   --c-col: #111722;
-  --c-card-line: #2a3446;
 }
 
 .srOnly {
@@ -93,22 +91,6 @@
   margin: -8px 0 16px;
 }
 
-.titleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.kicker {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--c-accent-ink);
-}
-
 .titleLine {
   display: flex;
   align-items: center;
@@ -130,172 +112,6 @@
   color: var(--c-muted);
   font-size: 0.8125rem;
   white-space: nowrap;
-}
-
-/* Wraps to two short lines before it pushes the menu to a new row. */
-.privacy {
-  margin-left: auto;
-  flex: 0 1 140px;
-  font-size: 0.75rem;
-  line-height: 1.3;
-  text-align: right;
-  color: var(--c-muted);
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.75rem;
-  padding: 2px 9px 2px 8px;
-  border-radius: 999px;
-}
-
-.statusDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.statusOn {
-  background: var(--c-ok-wash);
-  color: var(--c-ok-ink);
-}
-
-.statusOn .statusDot {
-  background: var(--c-ok);
-  box-shadow: 0 0 0 3px var(--c-ok-wash);
-}
-
-.statusOff {
-  background: var(--c-plane);
-  color: var(--c-muted);
-  border: 1px solid var(--c-line);
-}
-
-/* Settings: a quiet "..." menu, no JS. */
-.menu {
-  position: relative;
-  flex: none;
-}
-
-.top:not(.topOn) .menu,
-.top:not(.topOn) .privacy {
-  margin-left: auto;
-}
-
-.menuButton {
-  list-style: none;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--c-line);
-  background: var(--c-surface);
-  color: var(--c-ink-2);
-  cursor: pointer;
-}
-
-.menuButton::-webkit-details-marker {
-  display: none;
-}
-
-.menuButton:hover,
-.menu[open] .menuButton {
-  background: var(--c-plane);
-}
-
-.menuBody {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 10;
-  width: 300px;
-  max-width: calc(100vw - 48px);
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  box-shadow: var(--c-shadow-hover);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.menuNote {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--c-muted);
-}
-
-.confirm summary {
-  list-style: none;
-}
-
-.confirm summary::-webkit-details-marker {
-  display: none;
-}
-
-.dangerLink {
-  display: inline-block;
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: var(--c-bad-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  padding: 4px 0;
-}
-
-.confirmBody {
-  margin-top: 6px;
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--c-bad-wash);
-}
-
-.confirmBody p {
-  margin: 0 0 8px;
-  font-size: 0.8125rem;
-}
-
-/* ------------------------------------------------------------------- buttons */
-
-.ghost,
-.danger {
-  min-height: 28px;
-  border-radius: 999px;
-  padding: 3px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.8125rem;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.ghost {
-  background: var(--c-surface);
-  color: var(--c-ink);
-  border: 1px solid var(--c-line-2);
-}
-
-.ghost:hover {
-  background: var(--c-plane);
-  border-color: var(--c-grey);
-}
-
-.danger {
-  background: var(--c-bad);
-  color: #fff;
-  border: 1px solid transparent;
-}
-
-:root[data-theme="dark"] .danger {
-  color: #1a0b07;
 }
 
 /* --------------------------------------------------------------- data health */
@@ -396,21 +212,6 @@
   background: var(--c-plane);
 }
 
-.muted {
-  color: var(--c-muted);
-}
-
-.hint {
-  color: var(--c-muted);
-  font-size: 0.8125rem;
-}
-
-.inlineLink {
-  color: var(--c-accent-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .icon {
   width: 13px;
   height: 13px;
@@ -418,15 +219,9 @@
   vertical-align: -2px;
 }
 
-.iconLg {
-  width: 18px;
-  height: 18px;
-}
-
 /* ---------------------------------------------------------------------- tags */
 
-.tag,
-.chip {
+.tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -439,18 +234,6 @@
   color: var(--c-ink-2);
   border: 1px solid var(--c-line);
   white-space: nowrap;
-}
-
-.chip {
-  display: inline-block;
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--c-accent-wash);
-  border-color: transparent;
-  color: var(--c-accent-ink);
-  font-weight: 600;
 }
 
 .tagWarn {
@@ -496,11 +279,10 @@
 .card {
   position: relative;
   background: var(--c-surface);
-  border: 1px solid var(--c-card-line);
   border-radius: 8px;
-  box-shadow: 0 1px 1px rgba(26, 51, 96, 0.04);
+  box-shadow: 0 1px 2px rgba(26, 51, 96, 0.08), 0 1px 6px rgba(26, 51, 96, 0.04);
   overflow: hidden;
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: box-shadow 0.18s ease;
 }
 
 /* The left edge: orange on a Needs you card, nothing on the rest. */
@@ -520,30 +302,7 @@
 }
 
 .card:hover {
-  border-color: var(--c-line-2);
   box-shadow: var(--c-shadow);
-}
-
-.options {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
-.option {
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 18px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px dashed var(--c-line-2);
-  background: var(--c-plane);
-  color: var(--c-ink-2);
-  cursor: default;
 }
 
 .age {
@@ -555,35 +314,11 @@
   white-space: nowrap;
 }
 
-.artBg {
-  fill: var(--c-accent-wash);
-}
-
-.artSpark {
-  fill: var(--c-warn);
-}
-
-.artLine {
-  fill: var(--c-line-2);
-}
-
-.artCard {
-  fill: var(--c-surface);
-  stroke: var(--c-line-2);
-  stroke-width: 1.5;
-}
-
-.artAccent {
-  stroke: var(--c-accent);
-  stroke-width: 5;
-  stroke-linecap: round;
-}
-
 .card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 9px 10px 9px 12px;
+  gap: 6px;
+  padding: 10px 10px 10px 12px;
   flex: none;
 }
 
@@ -797,8 +532,7 @@
   opacity: 0;
 }
 
-.greyed:not(:hover):not(:focus-within) .tag,
-.greyed:not(:hover):not(:focus-within) .chip {
+.greyed:not(:hover):not(:focus-within) .tag {
   background: var(--c-surface);
   border-color: var(--c-line-2);
   color: var(--c-ink-2);
@@ -991,49 +725,10 @@
   gap: 4px 6px;
 }
 
-.askFoot {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-}
-
-.askFoot form {
-  margin: 0 0 0 auto;
-  flex: none;
-}
-
-/* Smaller Dismiss on wide screens; phones keep the 32 px tap target below. */
-@media (min-width: 641px) {
-  .askFoot .ghost {
-    min-height: 24px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-  }
-}
-
-.moreAsks {
-  padding-left: 11px;
-  color: var(--c-warn-ink);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
 /* An upkeep row with a question: orange edge, questions on their own line under it. */
 .upAsk {
   flex-wrap: wrap;
   box-shadow: inset 3px 0 0 var(--c-warn);
-}
-
-.upAsks {
-  flex-basis: 100%;
-  padding: 2px 0 4px 19px;
-}
-
-.upAsks .askText {
-  display: block;
-  -webkit-line-clamp: unset;
-  overflow: visible;
 }
 
 /* Collapsed card is clickable: a hand cursor says so. */
@@ -1041,7 +736,6 @@
   cursor: pointer;
 }
 
-.card a,
 .card form {
   cursor: auto;
 }
@@ -1145,15 +839,6 @@
   min-width: 0;
 }
 
-.upName {
-  font-weight: 600;
-  margin-right: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 .upReason {
   flex: 1;
   min-width: 0;
@@ -1178,58 +863,6 @@
   white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------------- off */
-
-.offHero {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 24px;
-  align-items: center;
-  padding: 22px 24px;
-  background: var(--c-wash);
-}
-
-.offArt {
-  width: 100%;
-  height: auto;
-}
-
-.offBody p {
-  margin: 0 0 10px;
-  color: var(--c-ink-2);
-}
-
-.offTitle {
-  font-size: 1.2rem;
-  letter-spacing: -0.01em;
-  margin: 0 0 8px;
-}
-
-.offPoints {
-  margin: 0 0 14px;
-  padding-left: 20px;
-  color: var(--c-ink-2);
-  font-size: 0.875rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.offPoints li::marker {
-  color: var(--c-accent);
-}
-
-.enable {
-  min-height: 40px;
-  margin-bottom: 12px;
-}
-
-.kept {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--c-line);
-}
-
 /* ------------------------------------------------------------------- mobile */
 
 @media (max-width: 640px) {
@@ -1237,45 +870,24 @@
     margin-top: -4px;
   }
 
-  /* Title line and menu share the first row; health chips and the privacy note wrap below. */
+  .health {
+    order: 5;
+    flex-basis: 100%;
+  }
+
+  /* Title line and menu share the first row; health chips wrap below. */
   .topOn .titleLine {
     order: -2;
     flex: 1 1 0;
-  }
-
-  .topOn .menu {
-    order: -1;
-    margin-left: auto;
-  }
-
-  .privacy {
-    margin-left: 0;
-    flex: 1 1 100%;
-    text-align: left;
-    width: 100%;
-    order: 5;
   }
 
   .h1 {
     font-size: 1.25rem;
   }
 
-  .menuButton {
-    width: 36px;
-    height: 36px;
-  }
-
   /* Tap targets stay at least 32 px on touch screens. */
-  .ghost,
-  .danger,
-  .option,
   .linkPill {
     min-height: 32px;
-  }
-
-  .option {
-    display: inline-flex;
-    align-items: center;
   }
 
   .upRow {
@@ -1313,15 +925,6 @@
     width: 100%;
     padding-left: 19px;
   }
-
-  .offHero {
-    grid-template-columns: 1fr;
-    padding: 18px;
-  }
-
-  .offArt {
-    max-width: 140px;
-  }
 }
 
 /* v3: the per-initiative log, the off-page line and the person's own log section. */
@@ -1354,48 +957,8 @@
   color: var(--c-muted);
 }
 
-.logPanel {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.logPanel p {
-  margin: 0;
-}
-
-.apps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.appRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.appName {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.appForm {
-  display: inline-flex;
-  gap: 6px;
-  margin: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card,
-  .ghost,
-  .danger,
   .linkPill {
     transition: none;
   }
@@ -1490,48 +1053,141 @@
   white-space: nowrap;
 }
 
-.cardChips {
+.cardSide {
+  position: relative;
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* An overdue deadline: one small red dot; the tooltip says by how much. */
+.lateDot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-bad);
+  box-shadow: 0 0 0 2px var(--c-surface);
+}
+
+.cardSide:not(:has(.ring)) .lateDot {
+  position: static;
+  margin-top: 5px;
+}
+
+.cardAct {
+  display: flex;
+}
+
+/* Open in Claude: the one action on a Needs you card, small in the drawer. */
+.openClaude {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  margin-top: 2px;
-}
-
-.cardChips .tag {
-  font-size: 0.6875rem;
-  line-height: 14px;
-  padding: 1px 6px;
-}
-
-/* A question on the card face: smaller, no second orange edge (the card has one). */
-.card .asks {
-  margin-top: 4px;
-}
-
-.card .ask {
-  border-left: 0;
-  padding: 5px 7px;
-  gap: 3px;
-}
-
-.card .age {
-  font-size: 0.6875rem;
-}
-
-.card .askText {
-  font-family: var(--font-body, inherit);
+  font: inherit;
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 18px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--c-line-2);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+a.openClaude:hover {
+  background: var(--c-plane);
+  border-color: var(--c-grey);
+}
+
+.openClaude:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.openClaude:disabled {
+  cursor: not-allowed;
+  color: var(--c-muted);
+  background: var(--c-plane);
+  border-style: dashed;
+}
+
+.openClaudeSm {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+}
+
+.detailAct {
+  display: flex;
+  margin-top: -6px;
+}
+
+/* Finished: the newest few, then "+N more". */
+.colMore {
+  display: flex;
+  flex-direction: column;
+}
+
+.colMoreSummary {
+  list-style: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-muted);
+  border-radius: 4px;
+}
+
+.colMoreSummary::-webkit-details-marker {
+  display: none;
+}
+
+.colMoreSummary:hover {
+  color: var(--c-ink-2);
+}
+
+.colMore[open] .colMoreSummary {
+  display: none;
+}
+
+.colMoreBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Upkeep: green rows fold under "N healthy". */
+.healthy {
+  margin-top: 6px;
+}
+
+.healthySummary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 4px 6px;
   font-size: 0.8125rem;
+  color: var(--c-muted);
+  border-radius: 6px;
 }
 
-.card .option {
-  font-size: 0.6875rem;
-  line-height: 16px;
-  padding: 1px 8px;
+.healthySummary::-webkit-details-marker {
+  display: none;
 }
 
-.card .moreAsks {
-  padding-left: 2px;
+.healthySummary:hover {
+  color: var(--c-ink-2);
+}
+
+.healthy[open] .healthySummary {
+  margin-bottom: 6px;
 }
 
 .askFull .askText {
@@ -1693,4 +1349,60 @@
     transform: none;
     opacity: 1;
   }
+}
+
+/* A question's options, as plain text: the person answers in the Claude session. */
+.askOptions {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-ink-2);
+}
+
+/* Upkeep: the name opens the drawer like a card title; the row is clickable too. */
+.upRow {
+  cursor: pointer;
+}
+
+.upRow .openClaude {
+  flex: none;
+}
+
+.detailReason {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--c-ink-2);
+}
+
+/* Drawer tasks: the done ones folded under "N done". */
+.doneFold {
+  margin-top: 4px;
+}
+
+.doneSummary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+  width: fit-content;
+}
+
+.doneFold > .tasks {
+  margin-top: 6px;
+}
+
+.upOpen {
+  all: unset;
+  font-weight: 600;
+  margin-right: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--c-ink);
+  border-radius: 4px;
+}
+
+.upOpen:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }

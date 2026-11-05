@@ -314,7 +314,7 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
 
 ## Command Center
 
-`bab_command_center` keeps the person's private `/command-center` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` with `worked`; actions `publish`, `list`, `remove`, and `backfill_link` when the person asks to backfill their log). Use it only when the optional `command-center` skill is loaded and the person switched Command Center on. Without that skill, leave it alone. A 403 saying it is off: tell the person once, then stop for the session.
+`bab_command_center` keeps the person's private `/command-center` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` with `worked`; actions `publish`, `list`, `remove`, `backfill_link` when the person asks to backfill their log, and `delete_all`, `export`, `grant_export`, `revoke_export` only on the person's ask). Use it only when the optional `command-center` plugin's skill is loaded; installing that plugin is the opt-in. Without that skill, leave it alone.
 
 ## Messages are eventual, not live
 

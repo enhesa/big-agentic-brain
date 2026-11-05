@@ -4,7 +4,7 @@ import { CC_MAX_BODY_BYTES, ccApiError } from "./command-center";
 
 /**
  * The start of every /api/command-center route: the request gate (body size, API token), the
- * Command Center body cap, then the actor. The switch, identity rule, pace and opt-in run in
+ * Command Center body cap, then the actor. The server switch, identity rule and pace run in
  * lib/command-center.ts runCommandCenter, so the MCP tool gets the same checks.
  */
 export async function requireCommandCenterActor(req: Request): Promise<SessionUser | Response> {

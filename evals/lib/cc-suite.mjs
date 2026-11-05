@@ -1,13 +1,13 @@
 // The Command Center LLM suites: `pnpm eval --suite cc` (behaviour: the skill text is loaded) and
 // `pnpm eval --suite cc-trigger` (only the skill's frontmatter description is shown; the agent must
-// decide to load it). Each run gets a fresh BAB, a person who switched Command Center on through the
-// page, and an agent bound to a device, then plays one scenario from cc-scenarios.mjs turn by turn.
+// decide to load it). Each run gets a fresh BAB, a person with no Command Center yet (the first
+// publish creates it), and an agent bound to a device, then plays one scenario from cc-scenarios.mjs.
 // `--dry-run` swaps the LLM for each scenario's ideal script (no key, no cost) to prove the graders.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { assertBuilt } from "./bab-server.mjs";
-import { ccAgent, ccPerson, fakeSecret, otherDevice, setSwitch, skillText, splitSkill, startCcBab } from "./cc.mjs";
+import { ccAgent, ccPerson, fakeSecret, otherDevice, skillText, splitSkill, startCcBab } from "./cc.mjs";
 import { badScripts, goodScripts, readState, SCENARIOS, snapshot, stepKind, triggerChecks, workResult } from "./cc-scenarios.mjs";
 import { REPO_ROOT, scratchRoot } from "./paths.mjs";
 import { priceFor, PRICES_CHECKED } from "./prices.mjs";
@@ -90,18 +90,17 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
     const person = ccPerson(1);
     const x = { origin: bab.origin, person, secret, now: new Date(Date.now() - 60_000).toISOString() };
     const vars = { origin: x.origin, secret, now: x.now };
-    if (scenario.context !== "off") await setSwitch(bab.origin, person, true);
     const mcp = await ccAgent(bab.origin, person, "Eval laptop");
     x.other = await ccAgent(bab.origin, otherDevice(person), "Eval VM");
     if (scenario.setup) await scenario.setup(x);
-    // In the trigger suite the ideal agent loads the skill first whenever Command Center is on.
+    // In the trigger suite the ideal agent loads the skill first, unless asked to leave it alone.
     const ideal = script ?? (suite === "cc-trigger" && scenario.context !== "off"
       ? [[{ tool: "skill", args: { name: "command-center" } }, ...scenario.ideal[0]], ...scenario.ideal.slice(1)]
       : scenario.ideal);
     const prov = dryRun ? new Scripted(ideal, vars) : makeProvider(providerCfg);
     const skill = splitSkill(await skillText(bab.origin));
     // The harness clock, so the agent can fill health.checkedAt (a real session knows the date).
-    let sys = `${CC_SYSTEM}\n\nCurrent time (UTC): ${x.now}.\n\nCommand Center:${scenario.context === "off" ? "the person switched it off" : "the person switched it on"}.`;
+    let sys = `${CC_SYSTEM}\n\nCurrent time (UTC): ${x.now}.`;
     if (mcp.instructions) sys += `\n\n# MCP server instructions\n## bab (Big Agentic Brain)\n${mcp.instructions}`;
     if (suite === "cc") sys += `\n\n# Skill: command-center (loaded)\n${skill.body}`;
     const babTools = await mcp.listTools();
@@ -168,8 +167,6 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
       }
       byTurn.push(await snapshot(x));
     }
-    // Read the final state with the switch on, whatever the scenario did to it.
-    await setSwitch(bab.origin, person, true);
     const state = await readState(x, byTurn);
     checks = [...scenario.grade(events, state, x), ...(suite === "cc-trigger" ? triggerChecks(scenario, events) : [])];
   } catch (e) {

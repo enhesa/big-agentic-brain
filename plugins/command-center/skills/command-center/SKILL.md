@@ -1,6 +1,6 @@
 ---
 name: command-center
-description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. Skip it unless the person switched Command Center on."
+description: "Publish and keep current the person's private BAB Command Center page (<bab_url>/command-center) with the bab_command_center tool, and log what each turn did. Invoke it at the start of every session, whenever you create, change or finish an initiative, task or plan step, when you ask the person a question and when their answer arrives, after a recurring check, and at the end of every turn, also a turn that only answered a question or declined a task. The installed plugin means the person wants it; skip it only when they ask you to."
 ---
 
 # Command Center
@@ -18,15 +18,13 @@ Nobody else sees it.
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task.
 
-If this skill is loaded and the person switched Command Center on, call `bab_command_center`
-`publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
+If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
 of your first turn, with that step `in_progress`. Publish again after every task status change, and
 as the last call of every turn, after the work has returned.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
-Never put secrets, client names or customer data in any field. Never enable it, never publish for
-anyone else.
+Never put secrets, client names or customer data in any field. Never publish for anyone else.
 
 Your first reply after your first publish includes the full page link <bab_url>/command-center.
 Always paste the URL itself, never only say that Command Center is tracking the work. Later replies do
@@ -37,9 +35,18 @@ its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the
 after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
 `expectSeq` protects the other session.
 
-After a 403 (Command Center off), tell the person how to switch it on, with the link, in that one
-reply only. Then stop publishing. In every later reply say nothing about Command Center, not even
-that it is off or that you skipped a publish.
+There is no switch: installing the command-center plugin turns it on, and your first `publish`
+creates the person's page. If they ask you to leave it alone, or the tool answers that Command Center
+is off on this BAB, stop calling it for the rest of the session and say nothing more about it.
+
+## The person's data
+
+Only when the person asks, and only for their own data (the page has no settings):
+
+- `delete_all` erases their records, log and report-app grants. It cannot be undone. Run it only when the person asks, with `"record": { "confirm": true }`.
+- `export` returns their log and the report apps, with what each may read, as JSON.
+- `grant_export` with `id` the app and `record: { "level": "aggregate" }` (or `"entries"`) lets a
+  report app read their log; `revoke_export` with `id` withdraws it.
 
 ## The record
 
@@ -67,10 +74,12 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
 | `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after each run. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
-| `source` | Optional `{ machine (20), session (60) }`, shown as "last pushed by". |
+| `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
+
+Put the link that opens this session in `source.link` when you know it (for example claude://claude.ai/epitaxy/<your session id>); the page shows an Open in Claude button.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
@@ -102,8 +111,8 @@ The command, from a checkout of the BAB repository: `node <repo>/scripts/cc-back
 
 - The server logs your `worked` lines and what it sees itself: tasks started and done, questions
   asked and cleared, health and state changes. A retried publish logs nothing twice.
-- The person can dismiss a question on the page. It stays dismissed while you send the same id
-  and text (the answer lists it in `dismissed`): stop asking it. Reword it only if it is a new ask.
+- A question the answer lists in `dismissed` stays cleared while you send the same id and text:
+  stop asking it. Reword it only if it is a new ask.
 - A question older than 3 days, on a done or parked initiative, or kept by another session is
   shown as possibly stale. Leave answered ones out of the next publish.
 - The page shows active initiatives. Done, parked and silent ones (no publish for 14 days) leave

@@ -6,4 +6,4 @@ min: 0
 max: 0
 ---
 
-The agent does not load the command-center skill when the person says Command Center is off.
+The agent does not load the command-center skill when the person asks to leave Command Center alone.
