@@ -144,7 +144,7 @@ describe("/inbox the list", () => {
 });
 
 describe("/inbox a selected thread", () => {
-  it("shows the full text, the request card, mark as read and the two handoff actions", async () => {
+  it("shows the full text and the request card, read-only: no form, button or handoff link", async () => {
     const threadId = await bobGetsTwo();
     asViewer(BOB, "Bob B");
     const html = await render(threadId);
@@ -152,39 +152,14 @@ describe("/inbox a selected thread", () => {
     expect(html).toContain("Second message");
     expect(html).toContain("review-pr");
     expect(html).toContain("Please review");
-    expect(html).toMatch(/<form[^>]*action="\/inbox\/read"[^>]*method="post"|<form[^>]*method="post"[^>]*action="\/inbox\/read"/);
-    expect(html).toContain(`name="threadId" value="${threadId}"`);
-    expect(html).toContain("Mark as read");
-    expect(html).toContain("Continue in Claude app");
-    expect(html).toContain("Copy prompt");
-    expect(html).toContain("claude://code/new?q=");
-    // Kept to the app link and one copy: no CLI link, no separate CLI command.
-    expect(html).not.toContain("Continue in Claude CLI");
-    expect(html).not.toContain("Copy CLI command");
-    expect(html).not.toContain("claude-cli://");
-    expect(html).toContain("Nothing is sent until you press Enter in Claude.");
-  });
-
-  it("builds the deep link and the CLI command from the thread id only, never colleague text", async () => {
-    const threadId = await bobGetsTwo();
-    asViewer(BOB, "Bob B");
-    const html = await render(threadId);
-
-    const appHref = html.match(/href="(claude:\/\/code\/new\?q=[^"]+)"/)?.[1];
-    expect(appHref).toBeDefined();
-    const { buildHandoffLinks } = await import("../lib/handoff");
-    const expected = buildHandoffLinks({ id: threadId, repo: "acme/bab" }, "http://localhost:4310");
-    expect(appHref!.replaceAll("&amp;", "&")).toBe(expected.appUrl);
-    const prompt = decodeURIComponent(appHref!.split("q=")[1]);
-    expect(prompt).toContain(threadId);
-    for (const secret of ["SECRET-BODY-TEXT", "Review my PR", "Second message", "Please review"]) {
-      expect(prompt).not.toContain(secret);
-    }
-    // The copy-prompt button carries the same fixed prompt, nothing a colleague wrote.
-    expect(html).toContain(`data-command="${expected.prompt.replace(/"/g, "&quot;")}"`);
-    for (const secret of ["SECRET-BODY-TEXT", "Review my PR", "Second message", "Please review"]) {
-      expect(expected.prompt).not.toContain(secret);
-    }
+    expect(html).toContain("unread for you. Your agent marks messages read when it opens them.");
+    expect(html).toContain("Read-only.");
+    expect(html).not.toMatch(/<form[\s>]/);
+    expect(html).not.toMatch(/<button[\s>]/);
+    expect(html).not.toContain("/inbox/read");
+    expect(html).not.toContain("Mark as read");
+    expect(html).not.toContain("claude://");
+    expect(html).not.toContain("Copy prompt");
   });
 
   it("does not mark anything read just by opening it", async () => {
@@ -195,14 +170,14 @@ describe("/inbox a selected thread", () => {
     expect(unreadCountFor(BOB)).toBe(2);
   });
 
-  it("hides mark as read once there is nothing unread", async () => {
+  it("drops the unread note once there is nothing unread", async () => {
     const threadId = await bobGetsTwo();
     const { markRead } = await import("../lib/messages");
     markRead(threadId, BOB, "ui");
     asViewer(BOB, "Bob B");
     const html = await render(threadId);
-    expect(html).not.toContain("Mark as read");
-    expect(html).toContain("Continue in Claude app");
+    expect(html).not.toContain("unread for you");
+    expect(html).toContain("SECRET-BODY-TEXT please look");
   });
 
   it("does not show a thread to someone who is not in it", async () => {
@@ -380,14 +355,14 @@ describe("/inbox?thread=<id>&open=app", () => {
     return urls;
   }
 
-  it("renders AutoOpenApp for a participant and keeps every button as the fallback", async () => {
+  it("renders AutoOpenApp for a participant, with no button", async () => {
     const threadId = await bobGetsTwo();
     asViewer(BOB, "Bob B");
     const html = await render(threadId, "app");
     expect(html).toContain(OPENING);
-    expect(html).toContain("If nothing happens, use Continue in Claude app below.");
-    expect(html).toContain("Continue in Claude app");
-    expect(html).toContain("Copy prompt");
+    expect(html).toContain("If nothing happens, ask Claude to read this BAB thread.");
+    expect(html).not.toMatch(/<button[\s>]/);
+    expect(html).not.toContain("Copy prompt");
   });
 
   it("also works for the sender, who is a participant too", async () => {
@@ -425,7 +400,7 @@ describe("/inbox?thread=<id>&open=app", () => {
       const html = await render(threadId, open);
       expect(html).not.toContain("AUTO-OPEN-STUB");
       expect(html).not.toContain(OPENING);
-      expect(html).toContain("Continue in Claude app");
+      expect(html).not.toContain("claude://");
     }
     expect(urls).toEqual([]);
   });
@@ -437,7 +412,6 @@ describe("/inbox?thread=<id>&open=app", () => {
     const html = await render(threadId, "app");
     expect(html).toContain("was not found");
     expect(html).not.toContain("AUTO-OPEN-STUB");
-    expect(html).not.toContain("Continue in Claude app");
     expect(urls).toEqual([]);
   });
 
@@ -477,5 +451,62 @@ describe("/inbox?thread=<id>&open=app", () => {
     await render(threadId, "app");
     const { unreadCountFor } = await import("../lib/messages");
     expect(unreadCountFor(BOB)).toBe(2);
+  });
+});
+
+// A reply sent without a thread id starts a new "Re: ..." thread. The page shows the earlier
+// thread above it, so the original message is never hidden.
+describe("/inbox earlier threads of the same conversation", () => {
+  async function originalAndReply() {
+    await seed();
+    const { send } = await import("../lib/messages");
+    const original = send({ fromId: ALICE, to: BOB, subject: "Public version?", body: "ORIGINAL-QUESTION-TEXT" });
+    const reply = send({ fromId: BOB, to: ALICE, subject: "Re: Public version?", body: "REPLY-TEXT" });
+    return { original: original.thread.id, reply: reply.thread.id };
+  }
+
+  it("shows the original thread above the reply thread", async () => {
+    const { original, reply } = await originalAndReply();
+    asViewer(BOB, "Bob B");
+    const html = await render(reply);
+    expect(html).toContain("Earlier in this conversation");
+    expect(html).toContain("ORIGINAL-QUESTION-TEXT");
+    expect(html).toContain("REPLY-TEXT");
+    expect(html).toContain(`href="/inbox?thread=${original}"`);
+    const from = html.indexOf("Earlier in this conversation");
+    expect(html.indexOf("ORIGINAL-QUESTION-TEXT", from)).toBeLessThan(html.indexOf("REPLY-TEXT", from));
+  });
+
+  it("does not show later threads on the original", async () => {
+    const { original } = await originalAndReply();
+    asViewer(BOB, "Bob B");
+    const html = await render(original);
+    expect(html).toContain("ORIGINAL-QUESTION-TEXT");
+    // Only the list snippet of the reply thread, not its timeline.
+    expect(html.split("REPLY-TEXT").length - 1).toBe(1);
+    expect(html).not.toContain("Earlier in this conversation");
+  });
+
+  it("only links threads between the same people, and never someone else's", async () => {
+    await seed();
+    const { send } = await import("../lib/messages");
+    send({ fromId: CARL, to: ALICE, subject: "Public version?", body: "CARL-THREAD-TEXT" });
+    send({ fromId: ALICE, to: CARL, subject: "Public version?", body: "ALICE-CARL-TEXT" });
+    const reply = send({ fromId: BOB, to: ALICE, subject: "Re: Public version?", body: "REPLY-TEXT" });
+    asViewer(BOB, "Bob B");
+    const html = await render(reply.thread.id);
+    expect(html).not.toContain("CARL-THREAD-TEXT");
+    expect(html).not.toContain("ALICE-CARL-TEXT");
+    expect(html).not.toContain("Earlier in this conversation");
+  });
+});
+
+describe("normalizeSubject", () => {
+  it("strips reply and forward prefixes, case and extra spaces", async () => {
+    const { normalizeSubject } = await import("../lib/inbox-page");
+    expect(normalizeSubject("Re: RE:  Fwd: Hello   World")).toBe("hello world");
+    expect(normalizeSubject("fw:hello")).toBe("hello");
+    expect(normalizeSubject("Return of the API")).toBe("return of the api");
+    expect(normalizeSubject(null)).toBe("");
   });
 });

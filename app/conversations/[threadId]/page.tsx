@@ -65,7 +65,7 @@ export default async function ConversationDetailPage({ params }: { params: Promi
         </div>
 
         <p>
-          <Link href={`/inbox?thread=${encodeURIComponent(threadId)}`}>Continue in Claude</Link>
+          <Link href={`/inbox?thread=${encodeURIComponent(threadId)}`}>Open in Inbox</Link>
         </p>
 
         <ThreadTimeline thread={thread} messages={messages} />

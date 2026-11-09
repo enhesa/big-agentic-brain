@@ -78,6 +78,55 @@ export function threadForParticipant(
   return threadForViewer(threadId, viewerId);
 }
 
+/** "Re: Re: Subject" and "Subject" are one conversation: strip reply and forward prefixes, ignore case. */
+export function normalizeSubject(subject: string | null | undefined): string {
+  let s = (subject ?? "").trim();
+  for (;;) {
+    const next = s.replace(/^(re|fw|fwd)\s*:\s*/i, "");
+    if (next === s) break;
+    s = next;
+  }
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export const EARLIER_THREADS_MAX = 3;
+
+/**
+ * A reply sent without a thread id opens a new thread titled "Re: <subject>", which hides the
+ * original. These are the viewer's other threads with the same subject (reply prefixes stripped)
+ * and the same people, started earlier, oldest first, so the page can show the original above the
+ * reply. Participant-scoped like everything here; an empty subject never matches.
+ */
+export function earlierThreads(
+  threadId: string,
+  viewerId: string,
+): { thread: ThreadRow; messages: ViewerMessage[] }[] {
+  const current = threadForParticipant(threadId, viewerId);
+  if (!current) return [];
+  const key = normalizeSubject(current.thread.subject);
+  if (!key) return [];
+  const people = (msgs: ViewerMessage[]) => new Set(msgs.flatMap((m) => [m.from_id, m.to_id]));
+  const mine = people(current.messages);
+  // Insert order, not created_at: a reply often lands in the same second as the original.
+  const order = getDb().prepare("SELECT rowid AS n FROM threads WHERE id = ?");
+  const seq = (id: string) => (order.get(id) as { n: number } | undefined)?.n ?? Number.MAX_SAFE_INTEGER;
+  const currentSeq = seq(threadId);
+  const out: { thread: ThreadRow; messages: ViewerMessage[]; seq: number }[] = [];
+  for (const item of inboxFor(viewerId)) {
+    if (item.thread.id === threadId) continue;
+    const itemSeq = seq(item.thread.id);
+    if (itemSeq > currentSeq) continue;
+    if (normalizeSubject(item.thread.subject) !== key) continue;
+    const other = threadForParticipant(item.thread.id, viewerId);
+    if (!other) continue;
+    const theirs = people(other.messages);
+    if (theirs.size !== mine.size || [...theirs].some((id) => !mine.has(id))) continue;
+    out.push({ ...other, seq: itemSeq });
+  }
+  out.sort((a, b) => a.seq - b.seq);
+  return out.slice(-EARLIER_THREADS_MAX).map(({ thread, messages }) => ({ thread, messages }));
+}
+
 export interface InboxLiveEvent {
   threadId: string;
   kind: "message" | "read";

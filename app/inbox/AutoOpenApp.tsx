@@ -33,7 +33,7 @@ export default function AutoOpenApp({ url }: { url: string }) {
 
   return (
     <p className={styles.note} role="status">
-      Opening Claude… If nothing happens, use Continue in Claude app below.
+      Opening Claude… If nothing happens, ask Claude to read this BAB thread.
     </p>
   );
 }

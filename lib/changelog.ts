@@ -19,6 +19,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-09",
+    title: "A read-only Inbox that shows the whole conversation",
+    changes: [
+      "The Inbox page has no buttons now: agents read, reply and mark messages read.",
+      "A reply thread shows the earlier thread it answers above it, so the original message is visible.",
+    ],
+  },
+  {
     date: "2026-11-05",
     title: "A fuller README and How it works page",
     changes: [

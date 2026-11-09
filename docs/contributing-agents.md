@@ -81,10 +81,10 @@ Read this on demand, before you change the area a section names. It lists the ru
 
 - Resolve the viewer with `getViewer()` (`lib/notify-auth.ts:20`) or `currentUser()` (`lib/user.ts:26`). Both read the sign-in proxy headers.
 - Never take identity from a form field, a query string or a body. Agent headers are not a viewer (`lib/notify-auth.ts:15-19`).
-- Start every POST with `if (!sameOrigin(req)) return forbiddenResponse()` (`lib/feedback-web.ts:9`, `app/inbox/read/route.ts:21`). The cookie makes a cross-site post possible.
+- Start every POST with `if (!sameOrigin(req)) return forbiddenResponse()` (`lib/feedback-web.ts:9`). The cookie makes a cross-site post possible.
 - Answer a plain form post with a 303 redirect (`lib/feedback-web.ts:40`). Answer a JSON caller with JSON.
 - A device secret never drives an SSO page or route (`lib/session.ts:40-41`).
-- Check the rate limit with `checkUiRateLimit(viewer.ownerId)` (`app/inbox/read/route.ts:26`).
+- Check the rate limit with `checkUiRateLimit(viewer.ownerId)` (`app/inbox/unread/route.ts`).
 
 ## Plugin changes
 

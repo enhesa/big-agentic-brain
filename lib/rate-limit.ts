@@ -49,7 +49,7 @@ function pruneStaleBuckets(now: number) {
 /**
  * The same limit in a bucket of its own, for the browser routes under /inbox. The agent API
  * spends the plain bucket under the same person's id, so a busy agent session must not be able
- * to 429 that person's own "Mark as read" click (or the nav badge poll).
+ * to 429 that person's nav badge poll.
  */
 export function checkUiRateLimit(actorId: string): boolean {
   return checkRateLimit(`ui:${actorId}`, UI_RATE_LIMIT_PER_MINUTE);

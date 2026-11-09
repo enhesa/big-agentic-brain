@@ -175,7 +175,7 @@ const INBOX: Flow = {
     { at: "brain", note: "a colleague wrote to you" },
     { from: "brain", to: "you", label: "unread count, next prompt", back: true },
     { from: "you", to: "brain", label: "Inbox page: your threads" },
-    { from: "you", to: "agent", label: "Continue in Claude" },
+    { from: "you", to: "agent", label: "ask your agent" },
     { from: "agent", to: "brain", label: "reads it, you approve a reply" },
     { at: "you", note: "or the /bab panel in Claude" },
   ],

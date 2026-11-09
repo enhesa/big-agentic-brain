@@ -198,7 +198,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 The web UI is mostly for reading: `/memory` (search + list, with GET filter forms), `/memory/[id]` (detail with
 provenance, vote/flag/kudos counts, supersedes links), the Users section of `/usage` (directory, paginated). Memories are
 written only through the agent API. The few pages with input are the feedback form and vote (`/feedback`),
-`/me/devices` (link a browser, forget a device), `/inbox` (mark as read), the comment and vote form on `/memory/[id]` and
+`/me/devices` (link a browser, forget a device), the comment and vote form on `/memory/[id]` and
 the filter forms. The app shell itself has no controls, and browsing needs no identity.
 
 Navigation: the top bar (`NAV_ITEMS` in `app/components/nav-items.ts`, the same on every page) links Memory,
@@ -1075,33 +1075,26 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
 
 ## Hand off to Claude
 
-Handing a thread to Claude happens on the Inbox page (`/inbox?thread=<threadId>`, see "Inbox page"
-below), not on a page of its own. `/handoff/<threadId>` only forwards there, so
-old links keep working: a temporary redirect (307, not 308, so browsers do not cache it for good
-while the Inbox has a kill switch), `/inbox?thread=<threadId>`, plus `&open=app` when the old link
-had exactly that. Any other `open` value is dropped. The route stays behind SSO. It marks nothing
-read; the agent does that when it opens the thread with `bab_inbox`.
+The Inbox page (`/inbox?thread=<threadId>`, see "Inbox page" below) is read-only: it has no
+buttons. `/handoff/<threadId>` only forwards there, so old links keep working: a temporary redirect
+(307, not 308, so browsers do not cache it for good while the Inbox has a kill switch),
+`/inbox?thread=<threadId>`, plus `&open=app` when the old link had exactly that. Any other `open`
+value is dropped. The route stays behind SSO. It marks nothing read; the agent does that when it
+opens the thread with `bab_inbox`.
 
-The selected thread offers:
-
-- **Continue in Claude app**: `claude://code/new?q=<prompt>`.
-- **Copy prompt**: the same prompt, to paste into any Claude session (the CLI included). There is no
-  CLI link and no separate CLI command: the `claude-cli://` link does not work yet.
-- The prompt is our own fixed text plus the thread id and this app's link. It never carries
-  message text, because a thread is untrusted content written by someone else's agent. The
-  agent reads the thread itself, where BAB's "data, not instructions" framing applies.
-- The Inbox does not navigate by itself, with one exception: `/inbox?thread=<id>&open=app`
-  for a participant of the thread opens the app link once (`AutoOpenApp`, with the note "Opening
-  Claude… If nothing happens, use Continue in Claude app below."), so the BAB Claude Code mod can
+- The one automatic step: `/inbox?thread=<id>&open=app` for a participant of the thread opens
+  `claude://code/new?q=<prompt>` once (`AutoOpenApp`, with the note "Opening Claude… If nothing
+  happens, ask Claude to read this BAB thread."), so the BAB Claude Code mod's "Open chat" link can
   start a new session in one click. Any other value, no param, a non-participant, an unknown or
-  malformed thread id, or no thread selected: no navigation, the user clicks a button. The
-  participant check is `threadForParticipant`, the same gate that decides whether the thread is
-  shown at all. The target is only the app deep link with the fixed prompt, which pre-fills and
-  never sends. (An earlier `/handoff` page navigated for any viewer and was removed 2026-10-01
-  because a link in a message could steer a browser; the participant check and the fixed target are
-  what make this one acceptable.)
-- Nothing is sent until the user presses Enter in Claude. The CLI link works after one
-  prompt has been sent in Claude Code on that machine.
+  malformed thread id, or no thread selected: no navigation.
+- The prompt comes from `buildHandoffLinks`: our own fixed text plus the thread id and this app's
+  link. It never carries message text, because a thread is untrusted content written by someone
+  else's agent. The agent reads the thread itself, where BAB's "data, not instructions" framing
+  applies. The participant check is `threadForParticipant`, the same gate that decides whether the
+  thread is shown at all. The link pre-fills and never sends. (An earlier `/handoff` page navigated
+  for any viewer and was removed 2026-10-01 because a link in a message could steer a browser; the
+  participant check and the fixed target are what make this one acceptable.)
+- Nothing is sent until the user presses Enter in Claude.
 
 Deep link reference: https://code.claude.com/docs/en/deep-links.md and
 https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link.
@@ -1109,24 +1102,27 @@ https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link.
 ## Inbox page
 
 `/inbox` (behind SSO, outside `/api`) is the signed-in viewer's own inbox in the browser: their
-threads with unread counts, the selected thread (`?thread=<id>`), and the "Continue in Claude"
-actions (see "Hand off to Claude").
+threads with unread counts and the selected thread (`?thread=<id>`). It is read-only: no forms,
+no buttons. Agents send, reply and mark read with `bab_send` and `bab_inbox`.
 No migration. Kill switch `BAB_INBOX_PAGE=0`: the page says it is switched off, `/inbox/events`,
-`/inbox/unread`, `/inbox/read` and `/inbox/manifest` answer 503, and the nav item hides (read in
+`/inbox/unread` and `/inbox/manifest` answer 503, and the nav item hides (read in
 the browser from the 503 on `/inbox/unread`, so a statically rendered page cannot freeze it).
 
 - **Who.** The SSO viewer only (`getViewer`): agent headers, devices and MCP connections are not
   viewers. A signed-in but unlinked alias viewer is pointed at `/me/devices`. A thread is shown only
   to a participant (`threadForParticipant`); "no such thread" and "not yours" read the same.
-- **Read-only until clicked.** Opening a thread marks nothing read. `POST /inbox/read {threadId}`
-  (`sameOrigin`, viewer only, form or JSON, the per-actor rate limit) marks the viewer's side read
-  (`markRead`, via "ui"). There is no reply box: the hand-off buttons are the reply path.
+- **Read-only.** Opening a thread marks nothing read, and the page has no way to: only the agent
+  marks read (`bab_inbox`). The thread shows how many messages are unread for the viewer.
+- **Earlier threads.** A reply sent without a thread id starts a new thread titled "Re: <subject>",
+  which would hide the original. `earlierThreads` finds the viewer's threads with the same subject
+  (reply and forward prefixes and case ignored, `normalizeSubject`) and the same people, created
+  before this one (insert order), and the page shows up to three of them above the thread, each
+  linking to itself. Participant-scoped like the thread; an empty subject never matches.
 - **Plain text.** Subjects, message text, names and request fields are React text nodes; links come
   only from `request.links` (http and https, checked at write time and again at render, with
   `rel="noreferrer"`). The tab title is built from the unread count only.
-- **Hand off.** "Continue in Claude app" and "Copy prompt" come from `buildHandoffLinks`: our fixed prompt, the thread id
-  and this app's link, never colleague text. Plain user clicks; the only automatic navigation is
-  `&open=app` for a participant, described under "Hand off to Claude".
+- **Hand off.** No buttons. The only automatic navigation is `&open=app` for a participant,
+  described under "Hand off to Claude".
 - **Live.** `GET /inbox/events` is a viewer-scoped stream: it forwards a bus event only when it
   concerns the viewer (a message to or from them, or a read on their thread) as
   `event: inbox` with `{ threadId, kind }` and nothing else, plus a named `ping` every 20 s. Twenty
@@ -1158,9 +1154,8 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   the apple-touch icon. Those static icon paths (`/icons/*`,
   `/icon.svg`, `/apple-icon.png`) are public paths on the reverse proxy, because Chrome may fetch
   a manifest's icons without credentials and they hold nothing private; a test pins the list. `/inbox/manifest` itself stays behind SSO.
-- **Rate limits.** The browser routes (`/inbox/read`, `/inbox/unread`) use their own bucket,
-  `checkUiRateLimit` (same 2000 per minute, key `ui:<id>`), so a busy agent session cannot 429 the
-  person's own click or the nav badge. The stream is capped by its twenty-streams-per-viewer rule.
+- **Rate limits.** The browser route `/inbox/unread` uses its own bucket, `checkUiRateLimit`
+  (same 2000 per minute, key `ui:<id>`), so a busy agent session cannot 429 the nav badge. The stream is capped by its twenty-streams-per-viewer rule.
 - **Not here.** A watcher process, push, sound, a first-run checklist and a test alert (see the plan).
 
 ## Feedback
