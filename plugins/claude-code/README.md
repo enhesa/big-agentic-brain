@@ -137,7 +137,7 @@ message (or "Asks: ..." when it carries a request); a read thread is one line. A
 conversations show, unread ones always, with "N more" for the rest, and "Older" starts folded. It loads
 every unread thread (up to 100) and the 20 newest, and says "all caught up" only when BAB counts
 no unread thread. Click a row to read the conversation in place. Opening a row marks that thread
-read, as on the web, so it also lowers the unread count the BAB hook shows in your prompts. The
+read, as `bab_inbox` does, so it also lowers the unread count the BAB hook shows in your prompts. The
 row you open stays where it is until you close it, and a panel you closed starts from the list
 again. The conversation shows the last 8 messages grouped under each sender's name, your own
 marked "You"; a note with a link to the web says when older messages, or the end of a long one,

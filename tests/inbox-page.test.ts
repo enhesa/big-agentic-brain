@@ -487,19 +487,42 @@ describe("/inbox earlier threads of the same conversation", () => {
     expect(html).not.toContain("Earlier in this conversation");
   });
 
-  it("only links threads between the same people, and never someone else's", async () => {
+  it("only links threads between exactly the same people, and never someone else's", async () => {
     await seed();
     const { send } = await import("../lib/messages");
-    send({ fromId: CARL, to: ALICE, subject: "Public version?", body: "CARL-THREAD-TEXT" });
-    send({ fromId: ALICE, to: CARL, subject: "Public version?", body: "ALICE-CARL-TEXT" });
+    send({ fromId: CARL, to: ALICE, subject: "Public version?", body: "CARL-ALICE-TEXT" });
+    send({ fromId: CARL, to: BOB, subject: "Public version?", body: "CARL-BOB-TEXT" });
     const reply = send({ fromId: BOB, to: ALICE, subject: "Re: Public version?", body: "REPLY-TEXT" });
     asViewer(BOB, "Bob B");
     const html = await render(reply.thread.id);
-    expect(html).not.toContain("CARL-THREAD-TEXT");
-    expect(html).not.toContain("ALICE-CARL-TEXT");
+    expect(html).not.toContain("CARL-ALICE-TEXT");
+    // Bob is in the Carl thread, but it is a different pair of people: only its list snippet shows.
+    expect(html.split("CARL-BOB-TEXT").length - 1).toBe(1);
     expect(html).not.toContain("Earlier in this conversation");
   });
+
+  it("never links two threads that only share a plain subject", async () => {
+    await seed();
+    const { send } = await import("../lib/messages");
+    send({ fromId: ALICE, to: BOB, subject: "Status update", body: "FIRST-STATUS" });
+    const second = send({ fromId: ALICE, to: BOB, subject: "Status update", body: "SECOND-STATUS" });
+    asViewer(BOB, "Bob B");
+    const html = await render(second.thread.id);
+    expect(html).not.toContain("Earlier in this conversation");
+  });
+
+  it("shows at most the last three earlier threads, oldest first, even within one second", async () => {
+    await seed();
+    const { send } = await import("../lib/messages");
+    for (let i = 1; i <= 5; i++) send({ fromId: ALICE, to: BOB, subject: "Plan", body: `EARLIER-${i}-END` });
+    const reply = send({ fromId: BOB, to: ALICE, subject: "Re: Plan", body: "REPLY-TEXT" });
+    const { earlierThreads, threadForParticipant, EARLIER_THREADS_MAX } = await import("../lib/inbox-page");
+    const found = earlierThreads(threadForParticipant(reply.thread.id, BOB)!, BOB);
+    expect(found).toHaveLength(EARLIER_THREADS_MAX);
+    expect(found.map((t) => t.messages[0].body)).toEqual(["EARLIER-3-END", "EARLIER-4-END", "EARLIER-5-END"]);
+  });
 });
+
 
 describe("normalizeSubject", () => {
   it("strips reply and forward prefixes, case and extra spaces", async () => {

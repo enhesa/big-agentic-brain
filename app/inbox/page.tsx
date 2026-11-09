@@ -162,7 +162,7 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
   const { thread, messages } = result;
 
   const unread = messages.filter((m) => m.to_id === viewer.ownerId && !m.read_at).length;
-  const earlier = earlierThreads(thread.id, viewer.ownerId);
+  const earlier = earlierThreads(result, viewer.ownerId);
   // Only the Claude Code mod's "Open chat" link sets open=app. It is the one automatic step: no button.
   const appUrl = autoOpenApp
     ? buildHandoffLinks(

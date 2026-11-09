@@ -1114,10 +1114,12 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
 - **Read-only.** Opening a thread marks nothing read, and the page has no way to: only the agent
   marks read (`bab_inbox`). The thread shows how many messages are unread for the viewer.
 - **Earlier threads.** A reply sent without a thread id starts a new thread titled "Re: <subject>",
-  which would hide the original. `earlierThreads` finds the viewer's threads with the same subject
-  (reply and forward prefixes and case ignored, `normalizeSubject`) and the same people, created
-  before this one (insert order), and the page shows up to three of them above the thread, each
-  linking to itself. Participant-scoped like the thread; an empty subject never matches.
+  which would hide the original. Only when the current subject starts with a reply or forward
+  prefix, `earlierThreads` finds the viewer's threads with the same subject (prefixes and case
+  ignored, `normalizeSubject`) and exactly the same people, created before this one (insert order
+  breaks same-second ties), and the page shows up to three of them above the thread, each linking
+  to itself. Threads that only share a plain subject are never linked. Participant-scoped like the
+  thread; an empty subject never matches.
 - **Plain text.** Subjects, message text, names and request fields are React text nodes; links come
   only from `request.links` (http and https, checked at write time and again at render, with
   `rel="noreferrer"`). The tab title is built from the unread count only.

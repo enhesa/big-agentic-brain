@@ -130,7 +130,7 @@ describe("e2e: /inbox page", () => {
       headers: { "Content-Type": "application/json", Origin: origin(), ...sso(bob) },
       body: JSON.stringify({ threadId: thread.id }),
     });
-    expect(res.status).not.toBe(200);
+    expect([404, 405]).toContain(res.status);
     // Opening the page marked nothing read: that stays the agent's job.
     expect((await (await viewerGet("/inbox/unread", bob)).json()).unread).toBeGreaterThanOrEqual(1);
   });
