@@ -38,7 +38,7 @@
     "eval:cc-contract": "node evals/cc-contract.mjs"
   },
   "dependencies": {
-    "next": "16.4.3",
+    "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -46,8 +46,8 @@
     "@types/node": "^26",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "typescript": "5.9.2",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   }
 }
