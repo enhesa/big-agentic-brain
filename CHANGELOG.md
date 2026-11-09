@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.25.0](https://github.com/enhesa/big-agentic-brain/compare/v2.24.0...v2.25.0) (2026-11-09)
+
+
+### Features
+
+* read-only inbox that shows the earlier thread of a reply ([a72d56e](https://github.com/enhesa/big-agentic-brain/commit/a72d56e1c4f91be23986bf9c168a668f57f5d88e))
+* read-only inbox that shows the earlier thread of a reply ([ec56c98](https://github.com/enhesa/big-agentic-brain/commit/ec56c982eae29b897030ef1db1f862c9e1dcf134))
+
+
+### Bug Fixes
+
+* link earlier threads only for replies between the same people ([f5c68f4](https://github.com/enhesa/big-agentic-brain/commit/f5c68f47444bdfbcaf0bd4f0f3bda72e2d56cf50))
+
 ## [2.24.0](https://github.com/enhesa/big-agentic-brain/compare/v2.23.0...v2.24.0) (2026-11-05)
 
 
