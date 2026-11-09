@@ -55,11 +55,11 @@ describe("AutoOpenApp", () => {
     expect(assigned).toEqual([URL_OK]);
   });
 
-  it("says it is opening Claude and points at the Continue in Claude app button as the fallback", async () => {
+  it("says it is opening Claude and says what to do if nothing happens", async () => {
     const AutoOpenApp = await load();
     const html = renderToStaticMarkup(<AutoOpenApp url={URL_OK} />);
     expect(html).toContain("Opening Claude…");
-    expect(html).toContain("If nothing happens, use Continue in Claude app below.");
+    expect(html).toContain("If nothing happens, ask Claude to read this BAB thread.");
   });
 
   it("drops open=app from the address before opening, so a reload does not open another session", async () => {

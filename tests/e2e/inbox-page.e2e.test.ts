@@ -66,12 +66,11 @@ describe("e2e: /inbox page", () => {
     const carlHtml = await (await viewerGet("/inbox", carl)).text();
     expect(carlHtml).not.toContain(subject);
 
-    // Opening Bob's thread as Bob shows the text and the hand-off; as Carl it is just "not found".
+    // Opening Bob's thread as Bob shows the text, read-only; as Carl it is just "not found".
     const open = await (await viewerGet(`/inbox?thread=${thread.id}`, bob)).text();
     expect(open).toContain("Please look at this");
-    expect(open).toContain("Continue in Claude app");
-    expect(open).toContain("claude://code/new?q=");
-    expect(open).toContain("Mark as read");
+    expect(open).toContain("Read-only.");
+    expect(open).not.toContain("claude://code/new?q=");
 
     const stolen = await viewerGet(`/inbox?thread=${thread.id}`, carl);
     expect(stolen.status).toBe(200);
@@ -116,36 +115,24 @@ describe("e2e: /inbox page", () => {
     expect(html).toMatch(/<title>\(\d+\) Inbox<\/title>/);
   });
 
-  it("marks a thread read through POST /inbox/read, same origin only, viewer only", async () => {
+  it("is read-only: a thread has no form or button, and POST /inbox/read is gone", async () => {
     const alice = uniqueActor("Alice");
     const bob = uniqueActor("Bob");
     await registerActor(alice);
     await registerActor(bob);
-    const { thread } = await newThread(alice, bob, `Read me ${Date.now()}`, "hello");
-    const post = (headers: Record<string, string>, body: unknown = { threadId: thread.id }) =>
-      fetch(`${origin()}/inbox/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify(body),
-      });
-
-    expect((await post({ ...sso(bob) })).status).toBe(403); // no Origin
-    expect((await post({ ...sso(bob), Origin: "https://evil.example" })).status).toBe(403);
-    expect((await post({ ...actorHeaders(bob), Origin: origin() })).status).toBe(401); // an agent is not a viewer
-
-    const before = await (await viewerGet("/inbox/unread", bob)).json();
-    expect(before.unread).toBeGreaterThanOrEqual(1);
-
-    const other = uniqueActor("Carl");
-    await registerActor(other);
-    expect((await post({ ...sso(other), Origin: origin() })).status).toBe(404); // not their thread
-
-    const ok = await post({ ...sso(bob), Origin: origin() });
-    expect(ok.status).toBe(200);
-    expect((await ok.json()).unread).toBe(before.unread - 1);
-    // The agent side sees the same: nothing unread for Bob now.
-    const me = await (await api("/api/me", { actor: bob })).json();
-    expect(me.counts.unreadMessages).toBe(0);
+    const { thread } = await newThread(alice, bob, `Read only ${Date.now()}`, "hello");
+    const html = await (await viewerGet(`/inbox?thread=${thread.id}`, bob)).text();
+    expect(html).toContain("Read-only.");
+    expect(html).not.toMatch(/<form[\s>]/);
+    expect(html).not.toContain("Mark as read");
+    const res = await fetch(`${origin()}/inbox/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin(), ...sso(bob) },
+      body: JSON.stringify({ threadId: thread.id }),
+    });
+    expect([404, 405]).toContain(res.status);
+    // Opening the page marked nothing read: that stays the agent's job.
+    expect((await (await viewerGet("/inbox/unread", bob)).json()).unread).toBeGreaterThanOrEqual(1);
   });
 
   it("serves the manifest and the unread count to a viewer", async () => {
@@ -237,7 +224,7 @@ describe("e2e: /inbox page", () => {
 
     const asBob = await (await viewerGet(`/inbox?thread=${thread.id}&open=app`, bob)).text();
     expect(asBob).toContain("Opening Claude");
-    expect(asBob).toContain("Copy prompt");
+    expect(asBob).not.toMatch(/<button[\s>]/);
     expect(await (await viewerGet(`/inbox?thread=${thread.id}`, bob)).text()).not.toContain("Opening Claude");
     const asCarl = await (await viewerGet(`/inbox?thread=${thread.id}&open=app`, carl)).text();
     expect(asCarl).not.toContain("Opening Claude");

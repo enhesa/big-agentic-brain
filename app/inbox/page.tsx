@@ -16,8 +16,8 @@ import { inboxTitle } from "@/lib/inbox-live-state";
 import { unreadCountFor } from "@/lib/messages";
 import { deliveryFor, outgoingStatus } from "@/lib/delivery";
 import { getUser } from "@/lib/users";
-import { inboxEnabled, inboxSummary, threadForParticipant, type InboxListItem } from "@/lib/inbox-page";
-import HandoffButtons from "./HandoffButtons";
+import { earlierThreads, inboxEnabled, inboxSummary, threadForParticipant, type InboxListItem } from "@/lib/inbox-page";
+import AutoOpenApp from "./AutoOpenApp";
 import InboxLive from "./InboxLive";
 import styles from "./inbox.module.css";
 
@@ -36,12 +36,14 @@ export async function generateMetadata(): Promise<Metadata> {
  * SSO viewer only: getViewer refuses agent headers, devices and connections, so this page
  * can never be driven by anyone typing a header, and one person never sees another's
  * threads (the selected thread goes through threadForParticipant, a participant check).
- * Message text, subjects and names are rendered as React text, nothing else. Opening a thread
- * marks nothing read: that is the explicit "Mark as read" button or the agent opening it.
+ * Message text, subjects and names are rendered as React text, nothing else.
  *
- * `?thread=<id>&open=app` also opens the Claude app once (/handoff/<id> redirects
- * here). Only the exact value `app` counts, and the flag only reaches the buttons after
- * threadForParticipant passed, so a non-participant, a bad id and the plain list never trigger it.
+ * Read-only: no forms or buttons. Opening a thread marks nothing read; only the agent does that
+ * (bab_inbox). Earlier threads of the same conversation ("Re: ..." replies) show above the thread.
+ *
+ * `?thread=<id>&open=app` opens the Claude app once (the mod's "Open chat" link; /handoff/<id>
+ * redirects here). Only the exact value `app` counts, and only after threadForParticipant passed,
+ * so a non-participant, a bad id and the plain list never trigger it.
  */
 export default async function InboxPage({
   searchParams,
@@ -160,8 +162,14 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
   const { thread, messages } = result;
 
   const unread = messages.filter((m) => m.to_id === viewer.ownerId && !m.read_at).length;
-  const lastRequest = [...messages].reverse().find((m) => m.request)?.request ?? null;
-  const links = buildHandoffLinks({ id: thread.id, repo: lastRequest?.repo ?? null }, publicOrigin(await headers()));
+  const earlier = earlierThreads(result, viewer.ownerId);
+  // Only the Claude Code mod's "Open chat" link sets open=app. It is the one automatic step: no button.
+  const appUrl = autoOpenApp
+    ? buildHandoffLinks(
+        { id: thread.id, repo: [...messages].reverse().find((m) => m.request)?.request?.repo ?? null },
+        publicOrigin(await headers()),
+      ).appUrl
+    : null;
 
   const people = new Map<string, { name: string }>();
   for (const m of messages) {
@@ -195,15 +203,10 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
           ))}
         </div>
         {unread > 0 ? (
-          <form method="post" action="/inbox/read" className={styles.readForm}>
-            <input type="hidden" name="threadId" value={thread.id} />
-            <span className={styles.readText}>
-              {unread} unread {unread === 1 ? "message" : "messages"} for you.
-            </span>
-            <button type="submit" className={styles.btn}>
-              Mark as read
-            </button>
-          </form>
+          <p className={styles.unreadNote}>
+            <span className={styles.unreadDot} aria-hidden="true" />
+            {unread} unread for you. Your agent marks messages read when it opens them.
+          </p>
         ) : null}
         {delivery ? (
           <p className={styles.delivery} data-delivery>
@@ -212,8 +215,18 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
         ) : null}
       </div>
 
-      <HandoffButtons links={links} autoOpenApp={autoOpenApp} />
+      {appUrl ? <AutoOpenApp key={appUrl} url={appUrl} /> : null}
+      {earlier.map((e) => (
+        <section key={e.thread.id} className={styles.earlier} aria-label={`Earlier thread: ${e.thread.subject || "(no subject)"}`}>
+          <Link href={`/inbox?thread=${e.thread.id}`} className={styles.earlierHead}>
+            Earlier in this conversation: {e.thread.subject || "(no subject)"}
+          </Link>
+          <ThreadTimeline thread={e.thread} messages={e.messages} />
+        </section>
+      ))}
+      {earlier.length > 0 ? <p className={styles.thisThread}>This thread</p> : null}
       <ThreadTimeline thread={thread} messages={messages} />
+      <p className={styles.readOnly}>Read-only. Agents send, reply and manage messages with bab_send and bab_inbox.</p>
     </>
   );
 }
