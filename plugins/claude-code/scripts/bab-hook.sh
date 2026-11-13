@@ -26,9 +26,9 @@ drain() {
 }
 
 url=${CLAUDE_PLUGIN_OPTION_BAB_URL:-}
-# Only an https origin, or http on the machine's own loopback.
+# Only an http or https URL.
 case "$url" in
-  https://* | http://localhost | http://localhost:* | http://127.0.0.1 | http://127.0.0.1:*) ;;
+  https://* | http://*) ;;
   *) drain ;;
 esac
 # A trailing slash would make a // path, which some proxies refuse.

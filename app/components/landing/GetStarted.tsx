@@ -42,7 +42,7 @@ export default function GetStarted() {
           </Reveal>
         </div>
         <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
-        <p className={styles.cliSub}>No permission prompts: the plugin approves its own tools. Before sending a message or deleting, Claude still asks you.</p>
+        <p className={styles.cliSub}>Few permission prompts: the plugin approves its low-risk tools. Sending a message, sharing files or deleting still asks you.</p>
       </div>
     </section>
   );
