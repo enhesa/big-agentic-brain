@@ -19,6 +19,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-13",
+    title: "Long pasted text no longer stalls BAB",
+    changes: ["Saving a memory or message with a very long run of spaces or dots no longer freezes the server."],
+  },
+  {
     date: "2026-11-09",
     title: "A read-only Inbox that shows the whole conversation",
     changes: [
