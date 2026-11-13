@@ -4,12 +4,14 @@
  * kudos notes, display names) passes through `redact()` before it hits SQLite,
  * so secrets and personal data never persist and never reach another agent's
  * chat. The maintenance sweep (lib/maintenance.ts) re-applies it to existing
- * rows, so widening a pattern here also cleans history.
+ * rows whenever redactionFingerprint() changes, so widening a pattern here
+ * also cleans history.
  *
  * Secrets become `[redacted]`; personal data becomes `[redacted <kind>]`. The
  * patterns are deliberately conservative where prose collides (git SHAs, ISO
  * dates, Jira keys and version numbers must survive), see tests/redact*.test.ts.
  */
+import { createHash } from "node:crypto";
 import { config } from "./config";
 
 const REDACTED = "[redacted]";
@@ -278,6 +280,47 @@ export function redact(text: string, opts: { emails?: boolean } = {}): string {
   result = redactNationalIds(result);
   result = redactPhones(result);
   return result;
+}
+
+/**
+ * A sha256 over everything that decides what redact() returns: every pattern's source and flags,
+ * the text of every helper (so a logic change counts too, not only a new pattern) and the redaction
+ * settings. The stored-row sweep reruns only when this changes. A rebuilt bundle may change the
+ * helper text without a real change; that only costs one extra pass.
+ */
+export function redactionFingerprint(): string {
+  const patterns = [
+    KEY_VALUE_SECRET,
+    HEADER_STYLE_SECRET,
+    AWS_SECRET_KEY,
+    SPLUNK_TOKEN,
+    ...SECRET_PATTERNS,
+    EMAIL_RE,
+    PHONE_CANDIDATE_RE,
+    ISO_DATE_LIKE_RE,
+    PLAIN_NUMBER_RE,
+    CARD_CANDIDATE_RE,
+    IBAN_CANDIDATE_RE,
+    ...NATIONAL_ID_PATTERNS,
+  ].map((p) => `${p.source}/${p.flags}`);
+  const helpers = [
+    redact,
+    internalEmailDomains,
+    isKeyValueProse,
+    isPlaceholder,
+    holdsPlaceholder,
+    redactEmails,
+    looksLikePhone,
+    redactPhones,
+    luhnValid,
+    redactCards,
+    ibanValid,
+    redactIbans,
+    redactNationalIds,
+  ].map((f) => f.toString());
+  const markers = [REDACTED, EMAIL, PHONE, CARD, IBAN, ID];
+  const settings = { pii: config().redact.pii, domains: config().redact.domains };
+  return createHash("sha256").update(JSON.stringify({ patterns, helpers, markers, settings })).digest("hex");
 }
 
 /** True when `redact(text)` would change it: callers can warn the agent that something was masked. */

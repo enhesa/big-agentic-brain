@@ -1,7 +1,7 @@
 import { getDb, inTransaction } from "./db";
 import { config } from "./config";
 import { downvotedLive, downvotedSql, DOWNVOTE_UNREAD_DAYS } from "./swarm-gc";
-import { redact } from "./redact";
+import { redact, redactionFingerprint } from "./redact";
 import { sweepSessions } from "./sessions";
 import { todayUtc } from "./dates";
 import { audit } from "./audit";
@@ -42,7 +42,7 @@ let lastRunAt = 0;
 export interface MaintenanceResult {
   idempotencyDeleted: number;
   auditDeleted: number;
-  /** Rows whose text changed under the current redaction patterns. */
+  /** Rows whose text changed under the current redaction patterns (0 when the rules did not change since the last pass). */
   rowsRedacted: number;
   /** Sessions marked ended (no heartbeat for >24h). */
   sessionsEnded: number;
@@ -94,8 +94,8 @@ const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
 /**
  * Re-applies `redact()` to every stored free-text column. Writes are redacted
  * on the fly too (lib/learnings.ts etc.), so this only changes rows when a
- * pattern was added after they were written. Full scans, but the tables are
- * small (thousands of rows) and it runs at most hourly.
+ * pattern was added after they were written. Full scans, so the hourly sweep
+ * calls it through redactStoredRowsIfRulesChanged, only when the rules changed.
  */
 export function redactStoredRows(db: Db): number {
   let changed = 0;
@@ -123,6 +123,36 @@ export function redactStoredRows(db: Db): number {
       changed += 1;
     }
   }
+  return changed;
+}
+
+/**
+ * What the last full stored-row pass ran with: the redaction fingerprint, the email setting it
+ * used and the columns it covered. A change to any of them means stored rows may need it again.
+ */
+function storedRowsFingerprint(): string {
+  const emailMasking = config().redact.domains.length > 0;
+  return `${redactionFingerprint()}:${emailMasking}:${JSON.stringify(REDACTABLE)}`;
+}
+
+const REDACT_FINGERPRINT_KEY = "redact_fingerprint";
+
+/**
+ * Runs redactStoredRows only when the redaction rules changed since the last full pass. Every write
+ * is redacted when it lands, so a stored row can only change under new rules. The fingerprint is
+ * kept in maintenance_state and written after the pass succeeds, so a failed pass runs again next
+ * hour, and the first run on a database without it (a new deploy of this check, a restored copy)
+ * does the full pass. Returns the rows changed, 0 when the pass was skipped.
+ */
+export function redactStoredRowsIfRulesChanged(db: Db): number {
+  const current = storedRowsFingerprint();
+  const row = db.prepare("SELECT value FROM maintenance_state WHERE key = ?").get(REDACT_FINGERPRINT_KEY) as { value: string } | undefined;
+  if (row?.value === current) return 0;
+  const changed = redactStoredRows(db);
+  db.prepare(
+    `INSERT INTO maintenance_state (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).run(REDACT_FINGERPRINT_KEY, current);
   return changed;
 }
 
@@ -462,7 +492,7 @@ export function runMaintenance(force = false): MaintenanceResult | null {
 
     // Each sweep on its own: one step failing for good (a bad row, a schema surprise) must
     // not skip every later step on every run.
-    const rowsRedacted = step("redactStoredRows", () => redactStoredRows(db), 0);
+    const rowsRedacted = step("redactStoredRows", () => redactStoredRowsIfRulesChanged(db), 0);
     const sessionSweep = step("sweepSessions", () => sweepSessions(db), { ended: 0, deleted: 0 });
     const learningsExpired = step("sweepExpiry", () => sweepExpiry(db), 0);
     const unread = step("sweepUnread", () => sweepUnread(db), { inactive: 0, downvoted: 0 });

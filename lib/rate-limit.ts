@@ -83,6 +83,51 @@ export function checkRateLimit(actorId: string, limit: number = LIMIT, windowMs:
   return bucket.count <= limit;
 }
 
+/** Seconds until the fixed-window bucket `key` opens again, at least 1: the Retry-After of a 429. */
+export function retryAfterSeconds(key: string): number {
+  const bucket = buckets.get(key);
+  if (!bucket) return 1;
+  return Math.max(1, Math.ceil((bucket.windowStart + bucket.windowMs - clock()) / 1000));
+}
+
+function tooMany(key: string): Response {
+  return Response.json({ error: "Rate limit exceeded" }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds(key)) } });
+}
+
+/** The anonymous link routes, each with its own process-wide bucket for failed token lookups. */
+export type LinkRoute = "files-up" | "files-dl" | "cc-backfill";
+
+/**
+ * The anonymous link routes (upload, download, backfill), before the token lookup: only the
+ * per-address bucket, and only when the address is verified. A 429 Response, or null to go on.
+ * The process-wide bucket is not spent here, so a flood of wrong tokens cannot lock out a
+ * caller holding a good link.
+ */
+export function linkAddressLimit(ip: string | null): Response | null {
+  if (ip === null) return null;
+  const key = `anon:${ip}`;
+  return checkRateLimit(key, ANON_RATE_LIMIT_PER_MINUTE) ? null : tooMany(key);
+}
+
+/**
+ * After a failed token lookup on a link route: spends that route's process-wide bucket
+ * (ANON_GLOBAL_LIMIT_PER_MINUTE). A 429 Response once it is spent, or null to answer the 404.
+ */
+export function linkMissLimit(route: LinkRoute): Response | null {
+  const key = `anon-link-miss:${route}`;
+  return checkRateLimit(key, ANON_GLOBAL_LIMIT_PER_MINUTE) ? null : tooMany(key);
+}
+
+/**
+ * A download link is reusable for its hour, so a good one could be fetched without end when no
+ * client address is verified. Each file gets its own bucket of ANON_RATE_LIMIT_PER_MINUTE fetches
+ * through links. Keyed on the file id, never on the token. A 429 Response, or null to go on.
+ */
+export function linkFileLimit(fileId: string): Response | null {
+  const key = `anon-link-file:${fileId}`;
+  return checkRateLimit(key, ANON_RATE_LIMIT_PER_MINUTE) ? null : tooMany(key);
+}
+
 /** Key-value store calls a person may make a minute on average (lib/kv.ts), on top of the general limit. */
 export const KV_RATE_LIMIT_PER_MINUTE = 60;
 /** Key-value store calls a person may make at once before the per-minute pace applies. */

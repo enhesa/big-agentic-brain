@@ -26,6 +26,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The plugin now asks before sending, sharing files, changing keys or profiles, deciding or retiring a memory.",
       "The plugin's search-BAB-first hint now catches piped test and build failures, and skips read-only commands.",
       "Off the network, the plugin's hooks pause for 5 minutes and only pass on JSON answers.",
+      "Command Center keeps parked and paused initiatives 180 days, and list shows the days each one has left.",
+      "Wrong file and backfill link tokens no longer block good links; a refusal says when to retry.",
+      "The inbox and hook now count and page messages in the database instead of loading every thread.",
+      "The hourly sweep re-checks stored text for secrets only when the redaction rules change.",
     ],
   },
   {

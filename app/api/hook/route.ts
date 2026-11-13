@@ -1,6 +1,6 @@
 import { requireActorForApi } from "@/lib/session";
 import { hookMayServe } from "@/lib/gate";
-import { inboxFor } from "@/lib/messages";
+import { unreadCountFor } from "@/lib/messages";
 import { branding } from "@/lib/branding";
 import { getInstructions } from "@/lib/instructions";
 import { mintOrReuseLinkToken, sessionOwner } from "@/lib/session-links";
@@ -93,9 +93,9 @@ export async function GET(req: Request) {
   const origin = publicOrigin(req.headers);
 
   try {
-    const threads = inboxFor(user.id).filter((t) => t.unreadCount > 0);
-    if (threads.length > 0) {
-      const total = threads.reduce((n, t) => n + t.unreadCount, 0);
+    // One COUNT row: the hook needs the number only, never the threads or their bodies.
+    const total = unreadCountFor(user.id);
+    if (total > 0) {
       // Count only, never a sender or a body: this header-identified route (like the POST
       // form's digestFor) must not hand a colleague's mail to whoever types their email.
       lines.push(
@@ -470,7 +470,7 @@ const DOWNVOTE_NUDGE_MAX = 3;
  */
 function downvotedNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
   const db = getDb();
-  const mine = downvotedLive(db).filter((m) => m.author_id === ownerId && !m.protectedEntry);
+  const mine = downvotedLive(db, ownerId).filter((m) => !m.protectedEntry);
   if (mine.length === 0) return [];
 
   const told = new Set(

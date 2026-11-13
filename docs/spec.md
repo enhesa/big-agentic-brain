@@ -30,7 +30,7 @@ Browser ──(reverse-proxy SSO, identity headers)── Web UI (Next.js App Ro
                                                                                                  ▼
                                                      bab app (one pod): route handlers + server actions
                                                      ├─ identity: author = proxy user id header, client-supplied author ignored
-                                                     ├─ redaction on write (secrets by shape, external emails, phones, cards and IDs; client and person names are the model's responsibility) and hourly re-scan of stored rows, size caps, per-user rate limit
+                                                     ├─ redaction on write (secrets by shape, external emails, phones, cards and IDs; client and person names are the model's responsibility) and a re-scan of stored rows when the redaction rules change, size caps, per-user rate limit
                                                      ├─ SQLite /data/bab.db (learnings, todos, messages, users, votes, audit_log)
                                                      ├─ FTS5 full-text index
                                                      └─ in-app hourly maintenance: archive sweeps (valid-until, inactivity), purges; score is recomputed when a vote lands
@@ -578,7 +578,11 @@ learnings (and their votes) older than `DELETED_LEARNING_RETENTION_DAYS` (30, a 
 already-a-deliberate-admin-action grace window, not a tight one) via `sweepDeletedLearnings`; and
 deletes any `threads` left with zero messages via `sweepEmptyThreads` (belt-and-suspenders, `send()`
 now creates a thread and its first message in one transaction, so this shouldn't happen going
-forward). `messages`, ordinary `learnings` and `votes` on non-deleted learnings are never purged :
+forward). It re-applies `redact()` to every stored free-text column only when the redaction
+fingerprint (patterns, helper code, redaction settings and the column list) differs from the one
+stored in `maintenance_state` after the last full pass (`redactStoredRowsIfRulesChanged`). Writes
+are redacted when they land, so between rule changes the full scan would find nothing.
+`messages`, ordinary `learnings` and `votes` on non-deleted learnings are never purged :
 only `status='deleted'` learnings, their votes, and messageless threads are. Every bounded sweep
 (archive sweeps, learning purge, empty threads) selects at most `MAINTENANCE_BATCH_LIMIT` (500) matching ids
 and mutates exactly that set (`node:sqlite` has no `UPDATE`/`DELETE ... LIMIT`), so a large backlog
