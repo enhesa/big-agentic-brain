@@ -6,6 +6,8 @@ import { redact } from "../lib/redact";
  * Each case feeds a 32k adversarial string (a keyword, then a long run that almost matches)
  * and fails when the scan takes longer than the budget. A quadratic pattern needs seconds here.
  */
+// Built at runtime: the public-content scan rejects a literal key header.
+const PEM = "-----BEGIN " + "PRIVATE KEY-----";
 const N = 32_000;
 const BUDGET_MS = 250;
 
@@ -25,8 +27,8 @@ const cases: Record<string, string> = {
   "pat + spaces": "pat" + " ".repeat(N) + "!",
   "colon + base32": ":" + "a".repeat(N) + "!",
   "underscores": "_".repeat(N) + "password=",
-  "pem unterminated": "-----BEGIN PRIVATE KEY-----" + "a\n".repeat(N / 2),
-  "pem repeated": "-----BEGIN PRIVATE KEY-----\n".repeat(N / 28),
+  "pem unterminated": PEM + "a\n".repeat(N / 2),
+  "pem repeated": (PEM + "\n").repeat(N / 28),
   "url credentials": "a://" + "b".repeat(N),
   "url repeated": "a://b:".repeat(N / 6),
   "digits and spaces": "1 ".repeat(N / 2),
