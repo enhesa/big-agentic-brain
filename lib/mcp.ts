@@ -482,7 +482,8 @@ function runInbox(actor: SessionUser, args: Record<string, unknown>): string {
     INBOX_LIMIT_MAX,
   );
   const offsetRaw = Number(args.offset ?? 0);
-  const offset = Math.max(Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : 0, 0);
+  // Capped: SQLite rejects an OFFSET beyond a 64-bit integer, which the old array slice never did.
+  const offset = Math.min(Math.max(Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : 0, 0), Number.MAX_SAFE_INTEGER);
 
   // Counts and one page in SQL: a long inbox is never loaded whole to show `limit` threads.
   const counts = inboxCounts(actor.id);

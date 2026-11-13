@@ -650,7 +650,7 @@ export function sweepCommandCenter(now: number = Date.now()): CcSweepResult {
       .prepare(
         `DELETE FROM command_center_initiatives
          WHERE updated_at < ?
-           OR (updated_at < ? AND json_extract(record, '$.state') IS NOT 'parked' AND json_extract(record, '$.priority') IS NOT 'paused')`,
+           OR (updated_at < ? AND (NOT json_valid(record) OR (json_extract(record, '$.state') IS NOT 'parked' AND json_extract(record, '$.priority') IS NOT 'paused')))`,
       )
       .run(iso(now - CC_SET_ASIDE_KEEP_MS), iso(now - CC_LIVE_KEEP_MS)).changes,
   );

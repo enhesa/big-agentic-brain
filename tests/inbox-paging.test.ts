@@ -94,6 +94,18 @@ describe("inbox paging in SQL", () => {
     const readOnPage = page2.threads.filter((t: { unreadCount: number }) => t.unreadCount === 0).length;
     expect(page2.readThreads).toBe(4 - readOnPage);
   });
+
+  it("answers an empty page, not an error, for an offset beyond any row count", async () => {
+    await seedInbox();
+    const { findTool } = await import("../lib/mcp");
+    const actor = { id: ME, email: ME, name: "Pat", roles: [] } as never;
+    const inbox = findTool("bab_inbox")!;
+    for (const offset of [1e15, 1e20, 1e300]) {
+      const page = JSON.parse(await inbox.run(actor, { offset }));
+      expect(page.threads).toEqual([]);
+      expect(page.total).toBe(4);
+    }
+  });
 });
 
 describe("downvotedLive by author", () => {

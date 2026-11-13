@@ -317,7 +317,7 @@ build is deleted after the same 30 days.
 The old opt-in switch is two columns on `users`, kept and no longer read.
 
 Retention, one rule each: the page shows active initiatives that are not silent; done, parked and
-silent ones stay in `list` and in the log. An active or done record goes 30 days after its last
+silent ones stay in `list` and in the log. Any other record goes 30 days after its last
 write. A parked or paused one goes after 180 days: it was set aside on purpose, but a backfill also
 creates parked records nobody chose, so it is not kept forever. Each `list` item carries
 `expiresInDays`, the whole days left before the sweep deletes it. The log

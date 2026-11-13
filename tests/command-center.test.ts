@@ -645,6 +645,16 @@ describe("derived flags and the live view", () => {
     expect(cc.ccLogOf(OWNER).some((e) => e.text === "work on it")).toBe(true);
   });
 
+  it("a stored row with malformed JSON does not stop the retention sweep", async () => {
+    publish({ id: "plain-one", questions: [] });
+    publish({ id: "broken-one", questions: [] });
+    (await import("../lib/db")).getDb().prepare("UPDATE command_center_initiatives SET record = ? WHERE id = ?").run("{not json", "broken-one");
+    vi.setSystemTime(NOW + 31 * DAY);
+    expect(() => cc.sweepCommandCenter()).not.toThrow();
+    // Both are past the short keep time: the unreadable one is treated like a plain record.
+    expect((run({ action: "list" }).initiatives as unknown[]).length).toBe(0);
+  });
+
   it("counts recurring without health, sorts by priority", () => {
     publish({ id: "upkeep", kind: "recurring", tasks: [], questions: [] });
     publish({ id: "low-one", priority: "low", questions: [] });
