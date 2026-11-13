@@ -1192,7 +1192,7 @@ export const TOOLS: Tool[] = [
     annotations: { title: "BAB feedback", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
       "Files, lists and votes on feedback about BAB itself (bugs, ideas, improvements, questions) so it can fix and improve itself. " +
-      "Autopilot (no need to ask in the chat, though the host may still show its permission prompt): post a bug when a BAB tool fails unexpectedly, a hook message is wrong or two BAB instructions contradict; vote or comment instead when a matching item exists (search with list first). " +
+      "Autopilot: post a bug when a BAB tool fails unexpectedly, a hook message is wrong or two BAB instructions contradict; vote or comment instead when a matching item exists (search with list first). " +
       "Tell the user what you filed, with its link. status is for maintainers.",
     inputSchema: {
       type: "object",
