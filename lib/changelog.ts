@@ -21,7 +21,13 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-13",
     title: "Long pasted text no longer stalls BAB",
-    changes: ["Saving a memory or message with a very long run of spaces or dots no longer freezes the server."],
+    changes: [
+      "Saving a memory or message with a very long run of spaces or dots no longer freezes the server.",
+      "Command Center keeps parked and paused initiatives 180 days, and list shows the days each one has left.",
+      "Wrong file and backfill link tokens no longer block good links; a refusal says when to retry.",
+      "The inbox and hook now count and page messages in the database instead of loading every thread.",
+      "The hourly sweep re-checks stored text for secrets only when the redaction rules change.",
+    ],
   },
   {
     date: "2026-11-09",

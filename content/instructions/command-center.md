@@ -124,6 +124,7 @@ Run the Command Center sync tool from the BAB repository, as its documentation d
 - A question older than 3 days, on a done or parked initiative, or kept by another session is
   shown as possibly stale. Leave answered ones out of the next publish.
 - The page shows active initiatives. Done, parked and silent ones (no publish for 14 days) leave
-  the page but stay in `list` and in the log. A record goes 30 days after its last publish.
+  the page but stay in `list` and in the log. A record goes 30 days after its last publish, a
+  parked or paused one after 180 days. `list` gives each record's `expiresInDays`.
 - Recurring upkeep is overdue when its health is older than 26 hours (daily), 8 days (weekly) or
   2 hours (drain).

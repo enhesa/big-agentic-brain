@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 55;
+export const CURRENT_VERSION = 56;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -352,6 +352,24 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(55);
     appliedVersion = 55;
   }
+  if (appliedVersion < 56) {
+    runMigrationV56(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(56);
+    appliedVersion = 56;
+  }
+}
+
+function runMigrationV56(database: DatabaseSync) {
+  // Small named values the maintenance sweep keeps between runs and restarts (lib/maintenance.ts),
+  // such as the redaction fingerprint of the last full stored-row pass. In the database, so a
+  // restored older copy runs the pass again.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS maintenance_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 }
 
 function runMigrationV55(database: DatabaseSync) {

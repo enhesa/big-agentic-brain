@@ -272,6 +272,10 @@ new initiatives per upload (so a `--max` over 20 needs a second link for the res
 - Rate limits: before the token is checked, each client address gets `ANON_RATE_LIMIT_PER_MINUTE`
   (lib/rate-limit.ts) in a bucket of its own, counted only when `BAB_CLIENT_IP_HEADER` is set; then
   each app gets the Command Center token bucket. Over a limit the answer is 429 with `Retry-After: 60`.
+- The backfill upload route (`/api/command-center/backfill/<token>`) checks the same per-address
+  bucket before the token. Only a wrong or used token spends a process-wide bucket of its own
+  (`ANON_GLOBAL_LIMIT_PER_MINUTE`), so a flood of wrong tokens never blocks a good link. Its 429
+  carries `Retry-After`.
 - `detail=entries` also shares the session and machine name on each entry; the page says so.
 
 ## Derived flags
@@ -281,7 +285,8 @@ new initiatives per upload (so a `--max` over 20 needs a second link for the res
 - An active initiative with no write for 14 days is silent: it leaves the page.
 - Recurring upkeep is overdue when its health is older than 26 hours (daily, the default), 8 days
   (weekly) or 2 hours (drain). Unknown is never overdue.
-- `priority: paused` hides the initiative's questions and counts nothing as stale or silent.
+- `priority: paused` hides the initiative's questions and counts nothing as stale or silent. A
+  paused record is kept 180 days after its last write, like a parked one.
 - The list answer and the page header carry a data-health summary: stale questions, silent
   initiatives, upkeep without health, overdue upkeep.
 
@@ -312,7 +317,10 @@ build is deleted after the same 30 days.
 The old opt-in switch is two columns on `users`, kept and no longer read.
 
 Retention, one rule each: the page shows active initiatives that are not silent; done, parked and
-silent ones stay in `list` and in the log. A live record goes 30 days after its last write. The log
+silent ones stay in `list` and in the log. Any other record goes 30 days after its last
+write. A parked or paused one goes after 180 days: it was set aside on purpose, but a backfill also
+creates parked records nobody chose, so it is not kept forever. Each `list` item carries
+`expiresInDays`, the whole days left before the sweep deletes it. The log
 is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). Cleared questions stay 7 days. Writes
 are audited (`cc_publish`, `cc_clear`, `cc_remove`, `cc_delete_all`, and the export rows above)
 with the person, the initiative id and the result, never the text.

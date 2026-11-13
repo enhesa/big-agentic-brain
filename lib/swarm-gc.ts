@@ -75,8 +75,12 @@ export interface DownvotedMemory {
   protectedEntry: boolean;
 }
 
-/** Active memories that meet the downvote condition (downvotedSql), oldest first. */
-export function downvotedLive(db: DatabaseSync): DownvotedMemory[] {
+/**
+ * Active memories that meet the downvote condition (downvotedSql), oldest first. With `authorId`,
+ * only that person's, filtered in SQL so a per-person caller never scans every author's rows.
+ */
+export function downvotedLive(db: DatabaseSync, authorId?: string): DownvotedMemory[] {
+  const byAuthor = authorId === undefined ? "" : " AND l.author_id = ?";
   const rows = db
     .prepare(
       `SELECT l.id AS id, l.title AS title, l.kind AS kind, l.author_id AS author_id, l.pinned AS pinned,
@@ -84,10 +88,10 @@ export function downvotedLive(db: DatabaseSync): DownvotedMemory[] {
               (SELECT MAX(a.created_at) FROM votes a
                 WHERE a.learning_id = l.id AND a.kind IN ('keep', 'restore', 'confirm')) AS answeredAt
        FROM learnings l
-       WHERE l.status = 'active' AND ${downvotedSql("l")}
+       WHERE l.status = 'active' AND ${downvotedSql("l")}${byAuthor}
        ORDER BY l.created_at, l.id`,
     )
-    .all() as Array<{
+    .all(...(authorId === undefined ? [] : [authorId])) as Array<{
     id: string;
     title: string;
     kind: string;
