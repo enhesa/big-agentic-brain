@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.25.1](https://github.com/enhesa/big-agentic-brain/compare/v2.25.0...v2.25.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **plugin:** narrow tool auto-approval, fix the stuck hint, guard hook output ([#145](https://github.com/enhesa/big-agentic-brain/issues/145)) ([215055a](https://github.com/enhesa/big-agentic-brain/commit/215055a47444cc0b855b44880824048eae9d984a))
+* **redact:** keep redact() linear on long whitespace and dotted runs ([#142](https://github.com/enhesa/big-agentic-brain/issues/142)) ([6d30b1c](https://github.com/enhesa/big-agentic-brain/commit/6d30b1cefecf734bf16bd571e4dc00df1820335b))
+* **server:** Command Center retention, link rate limits, lighter inbox and sweep work ([#144](https://github.com/enhesa/big-agentic-brain/issues/144)) ([c07f558](https://github.com/enhesa/big-agentic-brain/commit/c07f558b02bf9a158035e04fd9a79ce7be33f4f9))
+
 ## [2.25.0](https://github.com/enhesa/big-agentic-brain/compare/v2.24.0...v2.25.0) (2026-11-09)
 
 
