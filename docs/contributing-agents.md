@@ -72,7 +72,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Wrap POST in `withIdempotency(req, user.id, fn)`. `fn` returns `{ status, body }` (`:46-73`). Map errors with `toApiError` (`:71`).
 - Do not make a route public to skip identity. `PUBLIC_PATHS` is a fixed list that configuration cannot widen (`lib/public-paths.ts:2-7`).
 - Keep `/api/hook` answering 200 with `{}` on every failure (`app/api/hook/route.ts:164-183`, `:296`). A hook must never break a session.
-- Pick the right rate-limit bucket (`lib/rate-limit.ts:11-22`). Agent API calls use the actor bucket. Browser routes use `checkUiRateLimit` (`:54`). Anonymous calls use the anon buckets (`app/mcp/route.ts:178-184`).
+- Pick the right rate-limit bucket (`lib/rate-limit.ts:11-22`). Agent API calls use the actor bucket. Browser routes use `checkUiRateLimit` (`:54`). Anonymous calls use the anon buckets (`app/mcp/route.ts:178-184`). Anonymous link routes (a token in the path) use `linkAddressLimit` before the lookup and `linkMissLimit` after a failed one (`lib/rate-limit.ts`).
 - Rate limits are constants, not settings, and each one has one source (`lib/rate-limit.ts:2-6`). Error texts build from them.
 - Call `emit()` after the write commits. Event payloads hold ids, titles and a kind only. `/api/events` is public (`lib/events.ts:21-26`).
 - Pass every new free-text write through `redact()` (`lib/redact.ts:229`). Reject a label or key that redaction would change (`lib/area-contacts.ts:57`).

@@ -329,10 +329,15 @@ export interface InboxThread {
  * Threads where the user is a participant (sent to or received), newest
  * activity first. Single set-based query (CTEs for "my threads", each
  * thread's last message by rowid, and per-thread unread counts) instead of
- * a per-thread round trip.
+ * a per-thread round trip. `unreadOnly`, `limit` and `offset` filter and page in SQL, so a
+ * caller that shows one page never loads the whole inbox.
  */
-export function inboxFor(userId: string): InboxThread[] {
+export function inboxFor(userId: string, opts: { unreadOnly?: boolean; limit?: number; offset?: number } = {}): InboxThread[] {
   const db = getDb();
+  const where = opts.unreadOnly ? " AND COALESCE(u.n, 0) > 0" : "";
+  const page = opts.limit == null ? "" : " LIMIT ? OFFSET ?";
+  const params: (string | number)[] = [userId, userId, userId];
+  if (opts.limit != null) params.push(Math.max(0, Math.trunc(opts.limit)), Math.max(0, Math.trunc(opts.offset ?? 0)));
 
   const rows = db
     .prepare(
@@ -365,10 +370,10 @@ export function inboxFor(userId: string): InboxThread[] {
        FROM threads t
        JOIN last_msg lm ON lm.thread_id = t.id
        LEFT JOIN unread u ON u.thread_id = t.id
-       WHERE t.id IN (SELECT thread_id FROM my_threads)
-       ORDER BY lm.created_at DESC, lm.rowid DESC`,
+       WHERE t.id IN (SELECT thread_id FROM my_threads)${where}
+       ORDER BY lm.created_at DESC, lm.rowid DESC${page}`,
     )
-    .all(userId, userId, userId) as unknown as {
+    .all(...params) as unknown as {
     thread_id: string;
     thread_subject: string | null;
     thread_created_by: string;
@@ -404,6 +409,29 @@ export function inboxFor(userId: string): InboxThread[] {
     } as MessageRow),
     unreadCount: r.unread_count,
   }));
+}
+
+/**
+ * How many threads inboxFor(userId) would list, and how many of them hold unread messages,
+ * without loading any message body. The same thread set as inboxFor: a thread row with a message
+ * the user sent or received.
+ */
+export function inboxCounts(userId: string): { threads: number; unreadThreads: number } {
+  const row = getDb()
+    .prepare(
+      `WITH my_threads AS (
+         SELECT DISTINCT thread_id FROM messages WHERE to_id = ? OR from_id = ?
+       ),
+       unread AS (
+         SELECT DISTINCT thread_id FROM messages WHERE to_id = ? AND read_at IS NULL
+       )
+       SELECT COUNT(*) AS threads,
+              COALESCE(SUM(CASE WHEN t.id IN (SELECT thread_id FROM unread) THEN 1 ELSE 0 END), 0) AS unread_threads
+       FROM threads t
+       WHERE t.id IN (SELECT thread_id FROM my_threads)`,
+    )
+    .get(userId, userId, userId) as unknown as { threads: number; unread_threads: number };
+  return { threads: Number(row.threads), unreadThreads: Number(row.unread_threads) };
 }
 
 export function unreadCountFor(userId: string): number {

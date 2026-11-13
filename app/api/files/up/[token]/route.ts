@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { toApiError } from "@/lib/errors";
 import { publicOrigin } from "@/lib/origin";
-import { checkRateLimit, ANON_RATE_LIMIT_PER_MINUTE, ANON_GLOBAL_LIMIT_PER_MINUTE } from "@/lib/rate-limit";
+import { linkAddressLimit, linkMissLimit } from "@/lib/rate-limit";
 import { clientIp, clientIpVerified } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
@@ -24,12 +24,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const refused = gate(req);
   if (refused) return refused;
   const ip = clientIpVerified() ? clientIp(req.headers) : null;
-  if (!checkRateLimit("anon-global", ANON_GLOBAL_LIMIT_PER_MINUTE) || (ip && !checkRateLimit(`anon:${ip}`, ANON_RATE_LIMIT_PER_MINUTE))) {
-    return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
-  }
+  const limited = linkAddressLimit(ip);
+  if (limited) return limited;
   const { token } = await ctx.params;
   const link = consumeUploadLink(token);
-  if (!link) return Response.json({ error: NOT_FOUND }, { status: 404 });
+  // Only a failed lookup spends the process-wide bucket.
+  if (!link) return linkMissLimit("files-up") ?? Response.json({ error: NOT_FOUND }, { status: 404 });
   audit(getDb(), link.ownerId, "file_upload_link_used", "file", "-", "mcp", { ip, details: { name: link.name } });
   const length = req.headers.get("content-length");
   try {

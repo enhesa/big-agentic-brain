@@ -512,6 +512,24 @@ describe("identity and opt-in", () => {
     expect(cc.ccLogOf(OWNER).length).toBeGreaterThan(0);
   });
 
+  it("keeps parked and paused records 180 days, others 30, and list says how many days are left", () => {
+    publish({ id: "plain", worked: "x" });
+    publish({ id: "set-aside", state: "parked" });
+    publish({ id: "on-hold", priority: "paused" });
+    publish({ id: "finished", state: "done" });
+    type Item = { id: string; expiresInDays: number };
+    const days = () => Object.fromEntries((run({ action: "list" }).initiatives as Item[]).map((i) => [i.id, i.expiresInDays]));
+    expect(days()).toEqual({ plain: 30, "set-aside": 180, "on-hold": 180, finished: 30 });
+
+    vi.setSystemTime(NOW + 31 * DAY);
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 2 });
+    expect(days()).toEqual({ "set-aside": 149, "on-hold": 149 });
+
+    vi.setSystemTime(NOW + 181 * DAY);
+    expect(cc.sweepCommandCenter()).toMatchObject({ records: 2 });
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+  });
+
   it("keeps the data of a person whose old switch column says off", async () => {
     publish({ worked: "x" });
     (await import("../lib/db")).getDb().prepare("UPDATE users SET command_center_enabled_at = NULL, command_center_disabled_at = ? WHERE id = ?").run(new Date(NOW - 40 * DAY).toISOString(), OWNER);
@@ -606,7 +624,7 @@ describe("derived flags and the live view", () => {
     expect(v.dataHealth).toEqual({ staleQuestions: 0, silentInitiatives: 0, recurringWithoutHealth: 0, overdueRecurring: 0 });
   });
 
-  it("the page drops done, parked and silent ones; list keeps them; the store deletes them 30 days after the last write", () => {
+  it("the page drops done, parked and silent ones; list keeps them; the store deletes active and done ones 30 days after the last write", () => {
     publish({ worked: "work on it" });
     publish({ id: "old-done", state: "done", questions: [] });
     publish({ id: "parked-one", state: "parked", questions: [] });
@@ -622,7 +640,8 @@ describe("derived flags and the live view", () => {
     expect((run({ action: "list" }).initiatives as unknown[]).length).toBe(3);
     vi.setSystemTime(NOW + 31 * DAY);
     cc.sweepCommandCenter();
-    expect(run({ action: "list" }).initiatives).toEqual([]);
+    // The parked one stays longer (CC_SET_ASIDE_KEEP_MS).
+    expect((run({ action: "list" }).initiatives as { id: string }[]).map((i) => i.id)).toEqual(["parked-one"]);
     expect(cc.ccLogOf(OWNER).some((e) => e.text === "work on it")).toBe(true);
   });
 

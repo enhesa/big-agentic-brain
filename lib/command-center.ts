@@ -76,8 +76,14 @@ export const CC_STALE_QUESTION_MS = 3 * DAY_MS;
 export const CC_CLEARED_KEEP_MS = 7 * DAY_MS;
 /** An active initiative with no write for this long is "silent": it leaves the page. */
 export const CC_SILENT_MS = 14 * DAY_MS;
-/** The one live rule: a record with no write for this long is deleted. Its log entries stay. */
+/** The live rule: an active or done record with no write for this long is deleted. Its log entries stay. */
 export const CC_LIVE_KEEP_MS = 30 * DAY_MS;
+/**
+ * Parked and paused records are set aside on purpose, so they stay much longer: 180 days after the
+ * last write. Not forever, because a backfill creates parked records nobody chose, and those would
+ * otherwise hold places under CC_MAX_INITIATIVES for good.
+ */
+export const CC_SET_ASIDE_KEEP_MS = 180 * DAY_MS;
 /** How long an imported v2 snapshot file stays in place, so a rollback can still read it. */
 export const CC_SNAPSHOT_KEEP_MS = 30 * DAY_MS;
 /** Two sessions publishing one initiative within this window are flagged on the card. */
@@ -605,6 +611,16 @@ export function onPage(r: CcRecord, now: number): boolean {
   return r.state === "active" && (r.priority === "paused" || now - ms(r.updatedAt) < CC_SILENT_MS);
 }
 
+/** How long the retention sweep keeps `r` after its last write: longer for parked and paused records. */
+export function keepMsOf(r: Pick<CcRecord, "state" | "priority">): number {
+  return r.state === "parked" || r.priority === "paused" ? CC_SET_ASIDE_KEEP_MS : CC_LIVE_KEEP_MS;
+}
+
+/** Whole days until sweepCommandCenter deletes `r`, 0 when it is due. */
+export function expiresInDays(r: CcRecord, now: number): number {
+  return Math.max(0, Math.ceil((ms(r.updatedAt) + keepMsOf(r) - now) / DAY_MS));
+}
+
 /** Drops cleared questions past CC_CLEARED_KEEP_MS. True when anything changed. */
 function pruneQuestions(r: CcRecord, now: number): boolean {
   const before = r.questions.length;
@@ -619,14 +635,25 @@ export interface CcSweepResult {
 }
 
 /**
- * Retention for everyone: live records with no write for CC_LIVE_KEEP_MS and log entries older
+ * Retention for everyone: active and done records with no write for CC_LIVE_KEEP_MS, parked and
+ * paused ones with none for CC_SET_ASIDE_KEEP_MS, and log entries older
  * than BAB_COMMAND_CENTER_LOG_DAYS. `people` stays 0: a person's data goes as a whole only by
  * their own delete_all.
  */
 export function sweepCommandCenter(now: number = Date.now()): CcSweepResult {
   const db = getDb();
   const out: CcSweepResult = { records: 0, entries: 0, people: 0 };
-  out.records += Number(db.prepare("DELETE FROM command_center_initiatives WHERE updated_at < ?").run(iso(now - CC_LIVE_KEEP_MS)).changes);
+  // State and priority live in the stored record. Priority is NULL on most rows, so IS NOT keeps
+  // those on the short rule. Same split as keepMsOf.
+  out.records += Number(
+    db
+      .prepare(
+        `DELETE FROM command_center_initiatives
+         WHERE updated_at < ?
+           OR (updated_at < ? AND json_extract(record, '$.state') IS NOT 'parked' AND json_extract(record, '$.priority') IS NOT 'paused')`,
+      )
+      .run(iso(now - CC_SET_ASIDE_KEEP_MS), iso(now - CC_LIVE_KEEP_MS)).changes,
+  );
   retireImportedSnapshot(now);
   out.entries += Number(db.prepare("DELETE FROM command_center_log WHERE at < ?").run(iso(now - config().commandCenterLogDays * DAY_MS)).changes);
   db.prepare("DELETE FROM command_center_backfill_links WHERE used_at IS NOT NULL OR expires_at <= ?").run(iso(now));
@@ -1282,6 +1309,8 @@ export interface CcListItem {
   priority: Priority | null;
   seq: number;
   updatedAt: string;
+  /** Whole days until the retention sweep deletes this record, 0 when due. */
+  expiresInDays: number;
   openQuestions: number;
   staleQuestions: number;
   silent: boolean;
@@ -1303,6 +1332,7 @@ export function ccList(owner: string, now: number = Date.now()): { initiatives: 
       priority: r.priority,
       seq: r.seq,
       updatedAt: r.updatedAt,
+      expiresInDays: expiresInDays(r, now),
       openQuestions: f.openQuestions,
       staleQuestions: r.priority === "paused" ? 0 : r.questions.filter((q) => questionStale(r, q, now)).length,
       silent: f.silent,

@@ -54,7 +54,7 @@ import {
   LEARNINGS_LIST_LIMIT_MAX,
   LEARNINGS_SEARCH_LIMIT_MAX,
 } from "./learnings";
-import { inboxFor, send, validateRequest, requireThreadForActor, markRead, NEW_THREAD_NEEDS_TO } from "./messages";
+import { inboxCounts, inboxFor, send, validateRequest, requireThreadForActor, markRead, NEW_THREAD_NEEDS_TO } from "./messages";
 import {
   create as createTodo,
   listMine,
@@ -484,12 +484,12 @@ function runInbox(actor: SessionUser, args: Record<string, unknown>): string {
   const offsetRaw = Number(args.offset ?? 0);
   const offset = Math.max(Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : 0, 0);
 
-  const all = inboxFor(actor.id);
-  const totalReadCount = all.filter((t) => t.unreadCount === 0).length;
+  // Counts and one page in SQL: a long inbox is never loaded whole to show `limit` threads.
+  const counts = inboxCounts(actor.id);
+  const totalReadCount = counts.threads - counts.unreadThreads;
 
-  const candidates = includeRead ? all : all.filter((t) => t.unreadCount > 0);
-  const total = candidates.length;
-  const threads = candidates.slice(offset, offset + limit);
+  const total = includeRead ? counts.threads : counts.unreadThreads;
+  const threads = inboxFor(actor.id, { unreadOnly: !includeRead, limit, offset });
   const nextOffset = offset + limit < total ? offset + limit : null;
 
   const includedReadCount = threads.filter((t) => t.unreadCount === 0).length;
