@@ -13,6 +13,10 @@ read and write it through the `bab` MCP tools (`bab_search`, `bab_learn`, `bab_i
 `bab_command_center`, `bab_link_session`, `bab_identify`): their schemas carry the exact arguments, this file
 carries only the policy.
 
+The plugin approves its low-risk tools itself. `bab_send`, `bab_files`, `bab_kv`, `bab_feedback`, a
+`bab_react` retire, delete, pin or unpin, and `bab_command_center` actions other than publish and list
+still raise the host's permission prompt: that is expected, not a failure.
+
 ## Link the session
 
 If the `UserPromptSubmit` hook's context says this session is not yet linked, call

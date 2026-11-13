@@ -31,7 +31,8 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 - BAB marks the read tools (`bab_search`, `bab_inbox`) as read-only in its MCP tool list. Hosts such as the Claude desktop app can then allow them without asking each time. `bab_inbox` counts as read-only even though opening a thread marks it read.
 - If the host refuses a `bab_inbox`, `bab_remind` or `bab_people` call, the panel stops polling and says "BAB paused: allow its tools to see new messages and reminders". Run `/bab-check` (or press the refresh button) to resume it.
 - If BAB cannot be reached, the wait between polls doubles from 30 seconds up to 5 minutes. The first good answer resets it.
-- The mod approves the BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`), so they raise no permission dialog. A `deny` rule in settings, or an organisation ceiling on the tool, still wins. Sending and deleting keep their ask in words: the server instructions make the agent get the user's yes in the chat.
+- The mod approves the low-risk BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`, list in `hooks/poll-backoff.ts`), so they raise no permission dialog: `bab_search`, `bab_inbox`, `bab_people`, `bab_identify`, `bab_link_session`, `bab_learn` and `bab_remind`. It also approves `bab_react` votes and checks (helpful, not_helpful, kudos, confirm, keep, flag, label, comment) and `bab_command_center` `publish` and `list`, which the Command Center skill calls on every turn on your own private page.
+- Everything else keeps the host's normal ask: `bab_send`, `bab_files`, `bab_kv`, `bab_feedback`, `bab_react` retire, delete, pin and unpin, and the other `bab_command_center` actions. A `deny` rule in settings, or an organisation ceiling on the tool, still wins.
 - Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
 
 ## Measured agent effort
@@ -46,7 +47,13 @@ The mod measures agent effort for the "Agent time saved" and "Tokens saved" tile
 
 ## What the hooks do
 
-The plugin registers hooks that post to `<bab_url>/api/hook`:
+The plugin registers hooks that post to `<bab_url>/api/hook` through `scripts/bab-hook.sh` (run with `sh`, which Claude Code finds in Git Bash on Windows). The script reads the URL from the `bab_url` setting and:
+
+- prints BAB's answer only when it is JSON: HTTP 200, a JSON content type, a body that starts with `{`, at most 64 KB. A captive portal's sign-in page or a proxy error never lands in the session.
+- skips the call for 5 minutes after it could not connect (no DNS, refused, a connect timeout or a TLS failure), so off the network a prompt does not wait for the connect timeout each time. The mark is a file in the plugin's data folder.
+- always exits 0 and prints nothing else, so a hook never blocks a prompt.
+
+The hooks:
 
 - `UserPromptSubmit`: BAB answers with what the session should know now, for example unread
   messages, due reminders and house rules on the first prompt. It shows up to 8 company-wide and
@@ -56,9 +63,9 @@ The plugin registers hooks that post to `<bab_url>/api/hook`:
 - `SessionStart` (after a compaction only): reminds the agent to save what the summary lost.
 - `Stop`: after a finished task, nudges the agent to record a reusable learning, at most once an
   hour and only after six or more prompts since its last save.
-- Bash results: when a Bash command fails (an error result, or output that shows a failed test or build even though the command exited 0), the plugin appends a one-line reminder to the result: search BAB for the error text before debugging. It matches the output only, once per distinct error and at most three times per session, and stays quiet for interrupted or refused commands. It never changes the command, its output or its exit code, and if anything goes wrong the result passes through untouched.
+- Bash results: when a Bash command fails (an error result, or output that shows a failed test or build even though the command exited 0), the plugin appends a one-line reminder to the result: search BAB for the error text before debugging. It matches a test runner's or compiler's own failure lines only (`hooks/stuck-nudge.ts`): a count of failures must be nonzero, so `0 failed`, `FAIL_FAST=true` or a `"FAILED"` in code do not count. It nudges once per distinct error and at most three times per session, and stays quiet for interrupted or refused commands and for commands that only read, such as `grep`, `cat` or `git log` (a `grep` with no match exits 1). It never changes the command, its output or its exit code, and if anything goes wrong the result passes through untouched.
 
-Each hook posts the event Claude Code hands it, as is: the session id, the working directory, the event name and, on `Stop`, the agent's last message; on `UserPromptSubmit` that payload also includes the prompt text. The server reads only those fields. It keeps the session id (to count prompts and deliveries per session) and the working directory for a few minutes (to name the project); the last message is only matched against a task-completion pattern, and the prompt text is used to tell a new task from a short reply and to find matching memories; it is never stored. Use an `https://` URL without a trailing slash, since the hooks follow no redirects and a redirect body would land in the session as text.
+Each hook posts the event Claude Code hands it, as is: the session id, the working directory, the event name and, on `Stop`, the agent's last message; on `UserPromptSubmit` that payload also includes the prompt text. The server reads only those fields. It keeps the session id (to count prompts and deliveries per session) and the working directory for a few minutes (to name the project); the last message is only matched against a task-completion pattern, and the prompt text is used to tell a new task from a short reply and to find matching memories; it is never stored. Use an `https://` URL; the hooks follow no redirects, and the script drops any answer that is not JSON.
 
 Every answer carries the server's public `origin`. The plugin's inbox panel gets the same value from
 `bab_people` and builds its web links from it, so no host is written into the plugin. Until it has
@@ -105,7 +112,7 @@ Devices unused for 90 days are revoked automatically.
 
 - A recent Claude Code. The memory tools, skills and hooks were tested on 2.1.207 and 2.1.280;
   the inbox panel ("Inbox at a glance") needs 2.1.287 or newer, with mods enabled for your account.
-- Git for Windows on Windows (Claude Code already needs it), or `sh` elsewhere.
+- Git for Windows on Windows (Claude Code already needs it), or `sh` elsewhere, and `curl`.
 - `/dev/urandom`.
 
 ## Upgrading

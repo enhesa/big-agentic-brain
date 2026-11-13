@@ -21,7 +21,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-13",
     title: "Long pasted text no longer stalls BAB",
-    changes: ["Saving a memory or message with a very long run of spaces or dots no longer freezes the server."],
+    changes: [
+      "Saving a memory or message with a very long run of spaces or dots no longer freezes the server.",
+      "The plugin now asks before sending, sharing files, changing keys or retiring a memory.",
+      "The plugin's search-BAB-first hint no longer fires on passing tests or read-only commands.",
+      "Off the network, the plugin's hooks pause for 5 minutes and only pass on JSON answers.",
+    ],
   },
   {
     date: "2026-11-09",

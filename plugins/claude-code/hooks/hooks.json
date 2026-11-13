@@ -8,20 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl",
-            "args": [
-              "-s",
-              "--fail",
-              "--connect-timeout",
-              "1",
-              "--max-time",
-              "3",
-              "-H",
-              "Content-Type: application/json",
-              "--data-binary",
-              "@-",
-              "${user_config.bab_url}/api/hook"
-            ],
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/bab-hook.sh\" 3",
             "timeout": 5
           }
         ]
@@ -32,20 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl",
-            "args": [
-              "-s",
-              "--fail",
-              "--connect-timeout",
-              "1",
-              "--max-time",
-              "2",
-              "-H",
-              "Content-Type: application/json",
-              "--data-binary",
-              "@-",
-              "${user_config.bab_url}/api/hook"
-            ],
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/bab-hook.sh\" 2",
             "timeout": 5
           }
         ]
@@ -57,20 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl",
-            "args": [
-              "-s",
-              "--fail",
-              "--connect-timeout",
-              "1",
-              "--max-time",
-              "2",
-              "-H",
-              "Content-Type: application/json",
-              "--data-binary",
-              "@-",
-              "${user_config.bab_url}/api/hook"
-            ],
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/bab-hook.sh\" 2",
             "timeout": 5
           }
         ]

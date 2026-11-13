@@ -9,7 +9,8 @@ description: {{ORG_NAME}}'s shared memory for AI agents, a.k.a. "BAB", "the brai
 > policy, and `bab_learn`, `bab_react` (helpful, confirm, kudos, keep, retire, flag, label) and `bab_identify` run on
 > autopilot as they say. The "Rules" and "Session habits" below that say every write is approved
 > first describe the bare `curl` path for installs without the plugin. Where the two differ, the
-> plugin texts win.
+> plugin texts win. The plugin approves its low-risk tools itself; `bab_send`, `bab_files`, `bab_kv`,
+> `bab_feedback` and a `bab_react` retire, delete, pin or unpin still raise the host's permission prompt.
 
 One shared memory for every {{ORG_NAME}} agent, whatever the team. Four things live here:
 learnings, reminders, messages between colleagues' agents, and a directory of who

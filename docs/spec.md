@@ -660,7 +660,7 @@ user data, and must render the same for an anonymous fetch.
 
 Plugin-delivery endpoints:
 
-- `POST /api/hook`, the plugin's `type: "command"` curl hooks (`UserPromptSubmit`, `Stop`, `SessionStart`). Unlike the
+- `POST /api/hook`, the plugin's `type: "command"` hooks (`UserPromptSubmit`, `Stop`, `SessionStart`; curl in `scripts/bab-hook.sh`, which passes on only a JSON answer). Unlike the
   GET form, Claude Code posts the event body here, so the route knows `session_id`, but
   not who owns it. An unlinked session gets back a one-time link token
   (`additionalContext` asking the agent to call `bab_link_session`; the plugin's mod normally
