@@ -7,9 +7,11 @@ no skill file to write, no hooks to edit into `settings.json`, no permission rul
 2. **Install the plugin**: `/plugin install bab@{{MARKETPLACE_NAME}}`
 3. **Set `bab_url`** in the plugin's settings to `{{ORIGIN}}` (no trailing slash: a `//` in the
    address is rejected by some proxies). Claude Code asks for it when the plugin is enabled.
-4. **No permission prompts:** the plugin approves its own `bab_*` tools, in Claude Code and the
-   desktop app. A deny rule in your or your organization's settings still wins. Before sending a
-   message or deleting, the agent still asks you in the chat.
+4. **Few permission prompts:** the plugin approves its low-risk `bab_*` tools (search, inbox,
+   reading people, plain learnings, reminders, reactions, identity), in Claude Code and the desktop
+   app. Sending a message, sharing files, changing keys or your profile, filing feedback, a decision,
+   a standard, a supersede and retiring or deleting a memory still ask you. A deny rule in your or
+   your organization's settings still wins.
 5. **Optional, Command Center:** `/plugin install command-center@{{MARKETPLACE_NAME}}` gives you a
    private page of what your agents are working on, at {{ORIGIN}}/command-center.
 

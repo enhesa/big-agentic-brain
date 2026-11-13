@@ -16,6 +16,8 @@ export const FAILURE_IN_OUTPUT_RE = new RegExp(
     /^\s*(?:--- )?FAIL(?:ED)?(?=[\s:]|$)/,
     // "1 failed, 11 passed", "Tests  2 failed | 3 passed", "=== 1 failed in 0.1s ===", mocha "2 failing".
     /\b[1-9]\d* (?:failed|failing)\b/,
+    // pytest stopping before any test ran: "Interrupted: 1 error during collection".
+    /\bInterrupted: [1-9]\d* errors? during collection\b/,
     // npm before and after version 10.
     /^npm (?:ERR!|error )/,
     // A thrown error printed at a line start: "TypeError: x", "Error: x".
@@ -100,8 +102,12 @@ export function isReadOnlyCommand(command: string): boolean {
   return segments.length > 0 && segments.every(isReadOnlySegment)
 }
 
-/** Interrupted or refused, not stuck (Claude Code's own refusals say "requires approval"). */
-const NOT_STUCK_RE = /interrupted|permission|denied by|not allowed|requires approval/i
+/**
+ * Interrupted by the person or refused by the host, not stuck: Claude Code's own words ("Interrupted by
+ * user", "requires approval", "permission to use Bash"). A command's own "permission denied" (EACCES)
+ * or pytest's "Interrupted: 1 error during collection" is a real failure and still counts.
+ */
+const NOT_STUCK_RE = /\binterrupted by (?:the )?user\b|\brequest interrupted\b|\bpermissions? to use\b|\bdenied by\b|\brequires approval\b|\bhaven't granted\b/i
 
 /**
  * The key of the error a Bash result shows, or null when it is not a stuck moment: a read-only command,

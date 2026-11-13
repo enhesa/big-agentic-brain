@@ -41,16 +41,14 @@ export function isOwnBabTool(name: string, server: string | null): boolean {
 
 /**
  * The BAB tools the plugin approves itself (register.tsx, tool.check): reads, your own identity and
- * session link, a learning, and your private reminders. Sending, files and keys are not here: they reach
+ * session link, and your private reminders. Sending, files, keys and feedback are not here: they reach
  * colleagues or shared state, so they keep the host's normal ask.
  */
 export const AUTO_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
   'bab_search',
   'bab_inbox',
-  'bab_people',
   'bab_identify',
   'bab_link_session',
-  'bab_learn',
   'bab_remind',
 ])
 
@@ -58,26 +56,51 @@ export const AUTO_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
  * Tools approved only for some actions. bab_react: votes and checks the agent makes on autopilot, not
  * retire, delete, pin or unpin, which hide a memory or change house rules. bab_command_center: publish and
  * list, which the Command Center skill calls on every turn on the person's own private page; removing,
- * erasing and export grants keep the ask.
+ * erasing and export grants keep the ask. bab_feedback: reading; posts, votes and comments ask.
  */
 export const AUTO_ALLOWED_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   bab_react: new Set(['helpful', 'not_helpful', 'kudos', 'confirm', 'keep', 'flag', 'label', 'comment']),
   bab_command_center: new Set(['publish', 'list']),
+  bab_feedback: new Set(['list', 'get']),
+}
+
+/** The call's arguments as an object, or null when the host passed something else. */
+function args(input: unknown): Record<string, unknown> | null {
+  return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : null
+}
+
+/** An argument the model left out: absent, null or an empty string. */
+const isUnset = (v: unknown): boolean => v === undefined || v === null || v === ''
+
+/**
+ * Tools approved by their arguments. bab_people: reading the directory only; set_home_team, add_contact
+ * and remove_contact change a profile, so they ask. bab_learn: a plain learning or practice; a decision,
+ * a standard or a supersedes (which archives other entries) asks.
+ */
+const AUTO_ALLOWED_WHEN: Readonly<Record<string, (a: Record<string, unknown>) => boolean>> = {
+  bab_people: a => isUnset(a.action) && isUnset(a.user),
+  bab_learn: a => {
+    const supersedes = a.supersedes
+    const hasSupersedes = Array.isArray(supersedes) ? supersedes.length > 0 : !isUnset(supersedes)
+    return !hasSupersedes && (isUnset(a.kind) || a.kind === 'learning' || a.kind === 'practice')
+  },
 }
 
 /**
  * True when the plugin may turn the host's ask into an allow for this call: a tool on its own server,
- * in the low-risk set, or a listed action of a tool approved per action. Anything else, an unknown
- * tool or a missing or unknown action included, keeps the ask.
+ * in the low-risk set, a listed action of a tool approved per action, or arguments a per-tool rule
+ * accepts. Anything else, an unknown tool or missing or unknown arguments included, keeps the ask.
  */
 export function isAutoAllowed(name: string, server: string | null, input: unknown): boolean {
   const tool = ownBabTool(name, server)
   if (!tool) return false
   if (AUTO_ALLOWED_TOOLS.has(tool)) return true
+  const a = args(input)
+  if (!a) return false
+  const when = AUTO_ALLOWED_WHEN[tool]
+  if (when) return when(a)
   const actions = AUTO_ALLOWED_ACTIONS[tool]
-  if (!actions || typeof input !== 'object' || input === null) return false
-  const action = (input as { action?: unknown }).action
-  return typeof action === 'string' && actions.has(action)
+  return !!actions && typeof a.action === 'string' && actions.has(a.action)
 }
 
 /** What the panel says while polling is paused. */

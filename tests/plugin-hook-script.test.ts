@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -84,9 +84,15 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     calls = 0;
   });
 
-  function run(url: string | undefined, input = '{"session_id":"s1","hook_event_name":"Stop"}'): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  function run(
+    url: string | undefined,
+    input = '{"session_id":"s1","hook_event_name":"Stop"}',
+    dataDir: string | null = data,
+  ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
-      const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_PLUGIN_DATA: data };
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      delete env.CLAUDE_PLUGIN_DATA;
+      if (dataDir !== null) env.CLAUDE_PLUGIN_DATA = dataDir;
       delete env.CLAUDE_PLUGIN_OPTION_BAB_URL;
       if (url !== undefined) env.CLAUDE_PLUGIN_OPTION_BAB_URL = url;
       const child = spawn("sh", [SCRIPT, "3"], { env });
@@ -116,8 +122,18 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
 
   it.each([undefined, "", "ftp://example.com", 'https://example.com/"$(id)"', "https://example.com/a b"])("makes no call for the URL %j", async (url) => {
     const out = await run(url);
-    expect(out).toEqual({ status: 0, stdout: "", stderr: "" });
+    expect(out.status).toBe(0);
+    expect(out.stdout).toBe("");
+    expect(out.stderr).toMatch(/^BAB hooks: the bab_url setting \(CLAUDE_PLUGIN_OPTION_BAB_URL\) is unset or not an http\(s\) URL/);
+    expect(out.stderr.trim().split("\n")).toHaveLength(1);
     expect(calls).toBe(0);
+  });
+
+  it("says once per quiet period that the URL is missing", async () => {
+    expect((await run(undefined)).stderr).not.toBe("");
+    expect(await run(undefined)).toEqual({ status: 0, stdout: "", stderr: "" });
+    rmSync(path.join(data, "hook-no-url-until"));
+    expect((await run(undefined)).stderr).not.toBe("");
   });
 
   it("skips the next calls for a while after a refused connection, then calls again once the mark expires", async () => {
@@ -136,6 +152,37 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     rmSync(stamp);
     expect((await run(`${base}/json`)).stdout).toContain("hookSpecificOutput");
     expect(calls).toBe(1);
+  });
+
+  it("ignores a mark further ahead than the quiet period", async () => {
+    const stamp = path.join(data, "hook-offline-until");
+    writeFileSync(stamp, String(Math.floor(Date.now() / 1000) + 10 * 365 * 86400));
+    expect((await run(`${base}/json`)).stdout).toContain("hookSpecificOutput");
+    expect(calls).toBe(1);
+    expect(existsSync(stamp)).toBe(false);
+  });
+
+  it.each([null, "", "${CLAUDE_PLUGIN_DATA}"])("never skips and writes no mark without a plugin data folder (%j)", async (dataDir) => {
+    const refused = await run(`http://127.0.0.1:${closedPort}`, undefined, dataDir);
+    expect(refused).toEqual({ status: 0, stdout: "", stderr: "" });
+    // The next call still goes out: there is no mark to skip on.
+    expect((await run(`${base}/json`, undefined, dataDir)).stdout).toContain("hookSpecificOutput");
+    expect(calls).toBe(1);
+    expect(readdirSync(data)).toEqual([]);
+  });
+
+  it("does not write the mark through a link left in its place", async () => {
+    const target = path.join(data, "target");
+    writeFileSync(target, "keep");
+    const stamp = path.join(data, "hook-offline-until");
+    try {
+      symlinkSync(target, stamp);
+    } catch {
+      return; // No symlink privilege on this machine.
+    }
+    await run(`http://127.0.0.1:${closedPort}`);
+    expect(readFileSync(target, "utf8")).toBe("keep");
+    expect(lstatSync(stamp).isSymbolicLink()).toBe(false);
   });
 
   it("ignores a mark it cannot read", async () => {

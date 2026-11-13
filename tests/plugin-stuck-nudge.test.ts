@@ -107,6 +107,12 @@ describe("stuckKey", () => {
     expect(stuckKey("pnpm build", "Interrupted by user", true)).toBeNull();
   });
 
+  it("still nudges for a real failure that mentions a denial or an interruption", () => {
+    expect(stuckKey("npm test", "npm ERR! Error: EACCES: permission denied, open '/app/.cache/x'", true)).not.toBeNull();
+    expect(stuckKey("pytest", "ERROR collecting tests/test_a.py\n!!!!!!!! Interrupted: 1 error during collection !!!!!!!!", true)).not.toBeNull();
+    expect(stuckKey("pytest", "!!!!!!!! Interrupted: 1 error during collection !!!!!!!!", false)).not.toBeNull();
+  });
+
   it("names a piped test failure by its error", () => {
     expect(stuckKey("npm test 2>&1 | head -60", " FAIL  tests/a.test.ts\nTypeError: x is undefined", false)).toBe("TypeError");
   });

@@ -66,7 +66,7 @@ function learnOrigin(value: unknown): void {
 }
 const inboxUrl = (): string | null => (origin ? `${origin}/inbox` : null)
 const remindersUrl = (): string | null => (origin ? `${origin}/reminders` : null)
-/** The hook route, asked here for a link token only (link_only); the curl hooks post the real events. */
+/** The hook route, asked here for a link token only (link_only); the hook script (scripts/bab-hook.sh) posts the real events. */
 const hookUrl = (): string | null => (origin ? `${origin}/api/hook` : null)
 const PANE = 'bab-inbox'
 // The web Inbox on that thread, which opens a new Claude app session on it (open=app); a mod
@@ -968,7 +968,8 @@ export const register: Register = (on, options) => {
   // Installing the plugin is the consent for the low-risk BAB tools (isAutoAllowed): they run without a
   // permission dialog, in the CLI and the desktop app (which offers only "Allow once", so its inbox poll
   // asked forever). A deny from the person's or the organisation's rules still wins. bab_send, bab_files,
-  // bab_kv, bab_feedback and the riskier bab_react and bab_command_center actions keep the host's ask.
+  // bab_kv and the writing actions of bab_feedback, bab_people, bab_learn, bab_react and
+  // bab_command_center (poll-backoff.ts) keep the host's ask.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (verdict.decision !== 'ask' || (verdict.ceiling && verdict.ceiling !== 'allow')) return verdict

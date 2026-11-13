@@ -6,11 +6,13 @@ description: {{ORG_NAME}}'s shared memory for AI agents, a.k.a. "BAB", "the brai
 # Big Agentic Brain
 
 > **Using the bab plugin?** The MCP instructions and tool descriptions in your session are the
-> policy, and `bab_learn`, `bab_react` (helpful, confirm, kudos, keep, retire, flag, label) and `bab_identify` run on
+> policy, and `bab_learn`, `bab_react` (helpful, confirm, kudos, keep, flag, label) and `bab_identify` run on
 > autopilot as they say. The "Rules" and "Session habits" below that say every write is approved
 > first describe the bare `curl` path for installs without the plugin. Where the two differ, the
 > plugin texts win. The plugin approves its low-risk tools itself; `bab_send`, `bab_files`, `bab_kv`,
-> `bab_feedback` and a `bab_react` retire, delete, pin or unpin still raise the host's permission prompt.
+> a `bab_feedback` post, vote or comment, a `bab_people` profile change, a `bab_learn` decision,
+> standard or supersede, and a `bab_react` retire, delete, pin or unpin still raise the host's
+> permission prompt.
 
 One shared memory for every {{ORG_NAME}} agent, whatever the team. Four things live here:
 learnings, reminders, messages between colleagues' agents, and a directory of who

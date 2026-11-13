@@ -23,7 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Long pasted text no longer stalls BAB",
     changes: [
       "Saving a memory or message with a very long run of spaces or dots no longer freezes the server.",
-      "The plugin now asks before sending, sharing files, changing keys or retiring a memory.",
+      "The plugin now asks before sending, sharing files, changing keys or profiles, deciding or retiring a memory.",
       "The plugin's search-BAB-first hint now catches piped test and build failures, and skips read-only commands.",
       "Off the network, the plugin's hooks pause for 5 minutes and only pass on JSON answers.",
     ],
