@@ -290,7 +290,7 @@ Optional. Everything above works from any MCP client. The plugin adds hooks, ski
 
 Then set **BAB server URL** in the plugin's settings, without a trailing slash. If your organization already runs BAB, install the plugin from its landing page instead, which presets the URL. An organization can also list the plugin in its own plugin marketplace.
 
-No permission prompts: the plugin approves its own `bab_*` tools, in Claude Code and the desktop app. A deny rule in your or your organisation's settings still wins. Before sending a message or deleting, the agent still asks you in the chat.
+Few permission prompts: the plugin approves its low-risk `bab_*` tools (search, inbox, reading people, plain learnings, reminders, reactions, identity), in Claude Code and the desktop app. Sending a message, sharing files, changing keys or your profile, filing feedback, a decision, a standard, a supersede and retiring or deleting a memory still ask you. A deny rule in your or your organisation's settings still wins.
 
 <p align="center">
   <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel with a reminder and unread threads">

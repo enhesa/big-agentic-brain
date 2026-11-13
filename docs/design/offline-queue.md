@@ -1,12 +1,12 @@
 # Design: offline queue and circuit breaker for the Claude Code plugin
 
-Status: merged as the design baseline (PR #73). Phase 0 results are in section 20 and changed parts of 4, 5, 8 and 12. Two additions came after: a 24 hour stale hold (8, step 1a) and a status check for reactions (8, step 1b).
+Status: design only. Phase 0 (spikes) is done; phases 1 to 5 have not shipped, and the plugin has no breaker, queue or `/bab-queue` code yet. Merged as the design baseline (PR #73). Phase 0 results are in section 20 and changed parts of 4, 5, 8 and 12. Two additions came after: a 24 hour stale hold (8, step 1a) and a status check for reactions (8, step 1b).
 
 ## 1. Problem
 
 BAB is reachable only on the company network or VPN. Off it:
 
-- The curl hooks (`hooks.json`) fail silently after about 1 s (`--connect-timeout 1`). Fine.
+- The hooks (`hooks.json`, `scripts/bab-hook.sh`) fail silently after about 1 s (`--connect-timeout 1`), then skip the call for 5 minutes. They print only a JSON answer, so a captive portal's page does not reach the session. Fine.
 - The inbox poll in `register.tsx` backs off from 30 s to 5 min. Fine.
 - If Claude starts off the network, the MCP server never connects. The `bab_*` tools are absent for the whole session. A `bab_learn` the agent would have made is lost, and the agent often says nothing about it.
 - Reconnecting the VPN brings the tools back by itself only for a short time after the failure (12, 20). After that the person must run `/mcp` or restart.
@@ -312,7 +312,7 @@ A retry schedule of 1, 2, 4, 8 and 16 seconds would fit the data, but that is a 
 - Plugin and server skew is handled by the `features` flag (7).
 - A feature setting `bab_offline_queue` (plugin user config) ships off by default, then on after dogfooding. Off: no new entries are taken, but items already queued keep draining and stay visible in `/bab-queue`. Turning the setting off never drops saved work. The companion option `bab_offline_stale_hours` (default 24, minimum 1) sets the stale hold of 8, step 1a.
 
-Not in scope, listed so nobody assumes it: the curl hooks. Each prompt pays up to 1 s of connect timeout off the network. Moving those posts into a `prompt.submit` mod hook that reads the breaker would remove the cost, but changes how hook answers reach the model. Separate design.
+Not in scope, listed so nobody assumes it: the curl hooks. Off the network the first prompt pays up to 1 s of connect timeout; `scripts/bab-hook.sh` then skips the call for 5 minutes. Moving those posts into a `prompt.submit` mod hook that reads the breaker would remove the cost, but changes how hook answers reach the model. Separate design.
 
 ## 15. Alternatives considered
 

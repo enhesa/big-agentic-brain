@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isOwnBabTool, looksLikeRefusal } from './poll-backoff'
+import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isAutoAllowed, looksLikeRefusal } from './poll-backoff'
+import { stuckKey } from './stuck-nudge'
 import {
   addTokens,
   babToolOf,
@@ -65,7 +66,7 @@ function learnOrigin(value: unknown): void {
 }
 const inboxUrl = (): string | null => (origin ? `${origin}/inbox` : null)
 const remindersUrl = (): string | null => (origin ? `${origin}/reminders` : null)
-/** The hook route, asked here for a link token only (link_only); the curl hooks post the real events. */
+/** The hook route, asked here for a link token only (link_only); the hook script (scripts/bab-hook.sh) posts the real events. */
 const hookUrl = (): string | null => (origin ? `${origin}/api/hook` : null)
 const PANE = 'bab-inbox'
 // The web Inbox on that thread, which opens a new Claude app session on it (open=app); a mod
@@ -84,17 +85,10 @@ const MAX_REMINDERS = 50
 const CALL_TIMEOUT_MS = 20_000
 /** At most this many "search BAB first" lines per session, one per distinct error. */
 const STUCK_NUDGES_MAX = 3
-/** The error name in a failed command's output, if it has one: "LedgerSyncError", "TypeError", "error TS2304". */
-const ERROR_NAME_RE = /\b([A-Z][A-Za-z]*(?:Error|Exception)|error [A-Z]+\d+|ERR_[A-Z_]+|E[A-Z]{3,})\b/
 /** What the model reads under a failed command. An eval showed the instructions alone do not make a stuck agent search. */
 const STUCK_NUDGE =
   'BAB: before you fix this, bab_search the error text (a colleague\'s agent may have fixed it already). ' +
   'If BAB has nothing and your fix works, post it with bab_learn.'
-/**
- * A failed test or build that still exits 0: the agent piped it ("npm test 2>&1 | head -60", the eval
- * sessions all did), so only the output tells. Test runners' own failure lines and the usual error shapes.
- */
-const FAILURE_IN_OUTPUT_RE = /^not ok \d|^# fail|Tests?:\s+\d+ failed|FAIL|npm ERR!|^\s*\w*Error: |exit code [1-9]|command not found|failed with/m
 /** Distinct errors already nudged about in this session (module state: a reload starts over, which is fine). */
 const nudgedErrors = new Set<string>()
 // Reminders change rarely and every read is a row in BAB's audit log: read them this often, and when the person acts.
@@ -960,11 +954,9 @@ export const register: Register = (on, options) => {
       if (ran.deny !== undefined) return ran
       if (nudgedErrors.size >= STUCK_NUDGES_MAX) return ran
       const text = typeof ran.text === 'string' ? ran.text : ''
-      // Not a stuck moment: an interrupted or refused command (Claude Code's own refusals say "requires approval").
-      if (/interrupted|permission|denied by|not allowed|requires approval/i.test(text.slice(0, 200))) return ran
-      if (ran.isError !== true && !FAILURE_IN_OUTPUT_RE.test(text)) return ran
-      const key = ERROR_NAME_RE.exec(text)?.[1] ?? e.command.trim().slice(0, 60)
-      if (nudgedErrors.has(key)) return ran
+      // Not a stuck moment: a read-only command, an interrupted or refused one, or output with no failure (stuck-nudge.ts).
+      const key = stuckKey(typeof e.command === 'string' ? e.command : '', text, ran.isError === true)
+      if (key === null || nudgedErrors.has(key)) return ran
       nudgedErrors.add(key)
       return { ...ran, context: [...(ran.context ?? []), STUCK_NUDGE] }
     } catch {
@@ -973,10 +965,11 @@ export const register: Register = (on, options) => {
     }
   })
 
-  // Installing the plugin is the consent: BAB's own tools run without a permission dialog, in the
-  // CLI and the desktop app (which offers only "Allow once", so its inbox poll asked forever).
-  // A deny from the person's or the organisation's rules still wins. Sending and deleting keep
-  // their ask in words: the server instructions make the agent get the user's yes first.
+  // Installing the plugin is the consent for the low-risk BAB tools (isAutoAllowed): they run without a
+  // permission dialog, in the CLI and the desktop app (which offers only "Allow once", so its inbox poll
+  // asked forever). A deny from the person's or the organisation's rules still wins. bab_send, bab_files,
+  // bab_kv and the writing actions of bab_feedback, bab_people, bab_learn, bab_react and
+  // bab_command_center (poll-backoff.ts) keep the host's ask.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (verdict.decision !== 'ask' || (verdict.ceiling && verdict.ceiling !== 'allow')) return verdict
@@ -985,7 +978,7 @@ export const register: Register = (on, options) => {
       const c = await $.mcp.connect('bab').catch(() => null)
       if (c?.isConnected) ownServer = c.server
     }
-    if (!isOwnBabTool(e.tool, ownServer ?? null)) return verdict
+    if (!isAutoAllowed(e.tool, ownServer ?? null, e.input)) return verdict
     return { ...verdict, decision: 'allow', reason: 'BAB plugin tool' }
   })
 
