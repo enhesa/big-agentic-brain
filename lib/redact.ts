@@ -89,8 +89,9 @@ const SECRET_PATTERNS: RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----/g,
   // JWTs: three base64url segments, first one is a JSON header ("eyJ").
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
-  // Credentials embedded in URLs: scheme://user:pass@host -> scheme://[redacted]@host
-  /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/:@]+:[^\s@/]+@/gi,
+  // Credentials embedded in URLs: scheme://user:pass@host -> scheme://[redacted]@host. The scheme is
+  // capped at 32 characters, or an unbounded run of dotted words rescans to the end from every start.
+  /\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/:@]+:[^\s@/]+@/gi,
   // Bearer / Basic authorization values. Only a credential-shaped value counts (12+ characters
   // with a digit, a symbol or an inner capital), so prose like "the bearer challenge" or
   // "plain Basic auth" stays readable (feedback f8942f33, 2026-10-07).
@@ -144,13 +145,15 @@ const SECRET_PATTERNS: RegExp[] = [
   KEY_VALUE_SECRET,
   // connection strings with ;Password=... / ;Pwd=...
   /;\s*(?:Password|Pwd)\s*=\s*[^;]+/gi,
-  // long base64/hex blobs (>=32 chars) sitting next to key/token/secret words
-  /\b(?:key|token|secret)\b\s*[:=]?\s*[A-Za-z0-9+/_-]{32,}={0,2}/gi,
+  // long base64/hex blobs (>=32 chars) sitting next to key/token/secret words. The separator is
+  // (?:\s*[:=])?\s*, not \s*[:=]?\s*: two adjacent \s* runs backtrack quadratically on a long space run.
+  /\b(?:key|token|secret)\b(?:\s*[:=])?\s*[A-Za-z0-9+/_-]{32,}={0,2}/gi,
 ];
 
 // --- Personal data -----------------------------------------------------------
 
-const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/g;
+// The local part is capped at 64 characters (the RFC limit) so a long dotted run is not rescanned from every start.
+const EMAIL_RE = /\b[A-Za-z0-9._%+-]{1,64}@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/g;
 
 function redactEmails(text: string): string {
   const internal = internalEmailDomains();
