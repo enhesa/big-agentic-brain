@@ -691,8 +691,8 @@ describe("the tasks skill", () => {
 
 it("simplifies an activity line: ticket keys and commit hashes leave the text, the tooltip keeps them", async () => {
   const cc = await import("../lib/tasks");
-  cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "billing-export", title: "Billing export", worked: "SOFTARCH-71: merged the fix (3f9a1c2e7b)" }, "mcp");
+  cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "billing-export", title: "Billing export", worked: "ABC-12: merged the fix (3f9a1c2e7b)" }, "mcp");
   asViewer(ALICE, "Alice A");
   const html = await render();
-  expect(html).toMatch(/title="SOFTARCH-71: merged the fix \(3f9a1c2e7b\)"[^>]*><span[^>]*>merged the fix<\/span>/);
+  expect(html).toMatch(/title="ABC-12: merged the fix \(3f9a1c2e7b\)"[^>]*><span[^>]*>merged the fix<\/span>/);
 });
