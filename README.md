@@ -108,9 +108,9 @@ An agent writes to a colleague's inbox, online or not, after you approve the tex
 - **Key-value store.** `bab_kv` offers `get`, `set`, compare-and-swap, `incr`, `lock`, `unlock`, `renew` and `throttle`, all atomic. A lock answers with its holder and is never broken; a throttle books one shared slot per interval, so 50 agents calling at once get 50 slots, one interval apart. Every key needs a time-to-live (24 hours at most, one hour in a shared namespace). Never secrets or personal data. See [Key-value store](docs/kv.md).
 - **Files.** `bab_files` puts, lists, shares and deletes files, 25 MB per file and 100 MB per person by default, with an expiry of 14 days (30 at most). Bigger files go through a one-time upload link and plain `curl`. See [Files](docs/files.md).
 
-### Command Center
+### BAB Tasks
 
-An optional, private page where a person sees what their own agents publish: initiatives with progress, open questions with their age, upkeep health, links, and a work log. A question card has an Open in Claude button. Installing the `command-center` plugin is the opt-in. The person can export the log, delete everything, backfill the log from old sessions with a local tool, or let a report app they name read counts or entries. `bab_command_center` writes it. See [Command Center](docs/command-center.md).
+A Kanban board for your agents. An optional, private page where a person sees what their own agents publish: initiatives with progress, open questions with their age, upkeep health, links, and a work log. A question card has an Open in Claude button. Installing the `bab-tasks` plugin is the opt-in. The person can export the log, delete everything, backfill the log from old sessions with a local tool, or let a report app they name read counts or entries. `bab_tasks` writes it. See [BAB Tasks](docs/tasks.md).
 
 ### Insight and upkeep
 
@@ -273,7 +273,7 @@ In Claude Code without the plugin: `claude mcp add --transport http bab https://
 | `bab_people` | The people directory, maintainers, home teams and knowledge-area contacts. | |
 | `bab_files` | Pass files between sessions, machines and colleagues. | |
 | `bab_kv` | Atomic locks, counters, compare-and-swap and a shared pace. | |
-| `bab_command_center` | Publish or patch the person's private Command Center page and its work log. | |
+| `bab_tasks` | Publish or patch the person's private BAB Tasks page and its work log. | |
 | `bab_feedback` | Bugs and ideas about BAB itself, votes, comments and triage. | |
 | `bab_link_session` | Link a Claude Code session to you with the hook's one-time token. | |
 
@@ -305,7 +305,7 @@ Few permission prompts: the plugin approves its low-risk `bab_*` tools (search, 
 - **Measured effort.** Active time and tokens per save and per helpful reuse, numbers only, for the usage page.
 - **Skills.** Use BAB, record a learning (`/bab:bab-learn`), merge overlapping memories (`/bab:bab-consolidate`), triage feedback (`/bab:bab-triage`).
 
-The separate `command-center` plugin, from the same marketplace, is the opt-in for [Command Center](#command-center): `/plugin install command-center@big-agentic-brain`.
+The separate `bab-tasks` plugin, from the same marketplace, is the opt-in for [BAB Tasks](#bab-tasks): `/plugin install bab-tasks@big-agentic-brain`.
 
 Setup, requirements and details: [plugins/claude-code/README.md](plugins/claude-code/README.md).
 
@@ -329,7 +329,7 @@ flowchart LR
   CI -- "/api" --> BAB
   Proxy -- "web pages" --> BAB
   subgraph BAB["BAB: one container"]
-    Core["Memories, messages, reminders, feedback, Command Center"]
+    Core["Memories, messages, reminders, feedback, BAB Tasks"]
     KV["Key-value store, in memory"]
   end
   Core --> DB[("SQLite file: bab.db")]
@@ -349,7 +349,7 @@ BAB works like a team wiki. Choose the trust setup that matches where it runs:
 | **Behind a sign-in proxy** | Web viewers are who your SSO proxy (for example oauth2-proxy) says. Agent calls still self-identify, so keep `/api` and `/mcp` on the private network. |
 | **Bearer tokens** (`BAB_API_TOKENS`) | `/api` and `/mcp` require a token. A `token=email` entry binds the identity, so only the token holder acts as that person. |
 
-- **Who reads what.** Memories are readable by everyone who can reach BAB, so nothing confidential belongs there. Messages are visible to the people in the thread and to maintainers. Reminders are private. Command Center is private to its owner.
+- **Who reads what.** Memories are readable by everyone who can reach BAB, so nothing confidential belongs there. Messages are visible to the people in the thread and to maintainers. Reminders are private. BAB Tasks is private to its owner.
 - **Identity.** Each call resolves to a person: the sign-in proxy, a bound token, a remembered device, a remembered MCP connection, or self-asserted headers, in that order. Files and the key-value store refuse header-only identities.
 - **Maintainers.** `BAB_MAINTAINERS` names who can pin house rules, post and rule on standards, set feedback status and open the admin pages.
 - **Masking.** Secrets, outside email addresses, phone, card, IBAN and national ID numbers are masked before storing, in memories, messages, comments, feedback and search logs. Files and key-value values that hold them are refused. This is best effort: a client named in plain words is not caught.
@@ -419,7 +419,7 @@ Where others are stronger: graph and semantic retrieval with automatic fact extr
 - [Savings model and measured savings](docs/savings.md)
 - [Files](docs/files.md): limits, sharing, what not to upload
 - [Key-value store](docs/kv.md): locks, counters, throttles, namespaces, limits
-- [Command Center](docs/command-center.md): the opt-in page, the record, the work log, export, limits, retention
+- [BAB Tasks](docs/tasks.md): the opt-in page, the record, the work log, export, limits, retention
 - [Deploy with Compose](docs/deploy/compose.md), [behind oauth2-proxy](docs/deploy/oauth2-proxy.md) and [build your own image](docs/build.md)
 - [Claude Code plugin](plugins/claude-code/README.md)
 - [Design reference](docs/spec.md)

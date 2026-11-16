@@ -1,5 +1,5 @@
 {
-  "_about": "A typical Command Center session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). A step with \"http\" { url, body, method } sends a plain HTTP request instead (as the backfill tool posts to a backfill link; expect.status is the HTTP status), with the same expect handling. Checks: [path, op, value], ops eq, len, set, unset, match.",
+  "_about": "A typical BAB Tasks session (v3), as the MCP calls an agent sends with the slim tool schema (action, id, record). Every turn ends with a publish that carries worked. evals/cc-contract.mjs replays it against a fresh BAB and checks the answer and the stored state after each step. Placeholders: {{origin}}, {{now}} (an ISO time), {{secret}} (a credential-shaped value built at runtime), {{seq:<id>}} and {{seq-1:<id>}} (the stored seq, read before the step), {{saved:<name>}} (a value an earlier step saved with expect.save). A step with \"http\" { url, body, method } sends a plain HTTP request instead (as the backfill tool posts to a backfill link; expect.status is the HTTP status), with the same expect handling. Checks: [path, op, value], ops eq, len, set, unset, match.",
   "steps": [
     {
       "name": "first publish of the turn needs no opt-in, with worked and size",
@@ -195,7 +195,7 @@
         }
       },
       "expect": {
-        "error": "^worked holds .+, and Command Center never keeps confidential data\\.",
+        "error": "^worked holds .+, and BAB Tasks never keeps confidential data\\.",
         "state": { "billing-export": [["seq", "eq", 4], ["tasks.2.status", "eq", "in_progress"]] }
       }
     },
@@ -271,7 +271,7 @@
         }
       },
       "expect": {
-        "error": "^expectSeq is 3 but 'billing-export' is at seq 4\\. Merge your change into the current record",
+        "error": "^expectSeq is 3 but 'billing-export' is at seq 4\\. Merge your change with the current record",
         "current": [["id", "eq", "billing-export"], ["seq", "eq", 4], ["tasks", "len", 3], ["tasks.2.id", "eq", "add-tests"], ["source.session", "eq", "session-a"]],
         "state": { "billing-export": [["seq", "eq", 4], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
       }
@@ -318,7 +318,7 @@
       "name": "backfill_link mints a single-use upload link for the sync",
       "call": { "action": "backfill_link" },
       "expect": {
-        "answerChecks": [["url", "match", "^{{origin}}/api/command-center/backfill/[0-9a-f]{64}$"], ["maxCurrent", "eq", 100], ["expiresAt", "set"]],
+        "answerChecks": [["url", "match", "^{{origin}}/api/tasks/backfill/[0-9a-f]{64}$"], ["maxCurrent", "eq", 100], ["expiresAt", "set"]],
         "save": { "link1": "url" }
       }
     },
@@ -369,7 +369,7 @@
     {
       "name": "the spent link is a 404 that names the fix",
       "http": { "url": "{{saved:link1}}", "body": { "v": 1, "current": [{ "id": "other-work", "title": "Other work", "state": "active", "tasks": [] }] } },
-      "expect": { "status": 404, "error": "Not found \\(the backfill link is wrong, expired or already used: make a new one with bab_command_center action=backfill_link\\)" }
+      "expect": { "status": 404, "error": "Not found \\(the backfill link is wrong, expired or already used: make a new one with bab_tasks action=backfill_link\\)" }
     },
     {
       "name": "list shows the synced initiative next to the live one",
@@ -405,7 +405,7 @@
       "name": "a second backfill_link for a sync from another machine",
       "as": "second",
       "call": { "action": "backfill_link" },
-      "expect": { "answerChecks": [["url", "match", "^{{origin}}/api/command-center/backfill/[0-9a-f]{64}$"]], "save": { "link2": "url" } }
+      "expect": { "answerChecks": [["url", "match", "^{{origin}}/api/tasks/backfill/[0-9a-f]{64}$"]], "save": { "link2": "url" } }
     },
     {
       "name": "the same id in a second upload is skipped and the live record is unchanged",
@@ -463,7 +463,7 @@
       "expect": { "error": "confirm: true" }
     },
     {
-      "name": "delete_all empties the person's Command Center",
+      "name": "delete_all empties the person's BAB Tasks",
       "call": { "action": "delete_all", "record": { "confirm": true } },
       "expect": { "answerChecks": [["deleted", "eq", 1]] }
     },

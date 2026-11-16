@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 56;
+export const CURRENT_VERSION = 57;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -356,6 +356,40 @@ function runMigrations(database: DatabaseSync) {
     runMigrationV56(database);
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(56);
     appliedVersion = 56;
+  }
+  if (appliedVersion < 57) {
+    runMigrationV57(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(57);
+    appliedVersion = 57;
+  }
+}
+
+function runMigrationV57(database: DatabaseSync) {
+  // Command Center became BAB Tasks (lib/tasks.ts). Its tables, indexes and the two old opt-in
+  // columns on users are renamed in place, so nothing is copied or lost. Guarded, so a process that
+  // died before the version row can run this again, and a fresh database (which just created the
+  // old names in V53 to V56) ends up with the same names.
+  const hasTable = (name: string) => !!database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+  for (const part of ["backfill_links", "initiatives", "log", "export_grants", "imports"]) {
+    if (hasTable("command_center_" + part) && !hasTable("tasks_" + part)) database.exec("ALTER TABLE command_center_" + part + " RENAME TO tasks_" + part);
+  }
+  database.exec(`
+    DROP INDEX IF EXISTS idx_command_center_backfill_links_owner;
+    DROP INDEX IF EXISTS idx_command_center_log_owner_at;
+    DROP INDEX IF EXISTS idx_command_center_log_initiative;
+    DROP INDEX IF EXISTS idx_command_center_log_at;
+    DROP INDEX IF EXISTS idx_command_center_export_grants_app;
+    CREATE INDEX IF NOT EXISTS idx_tasks_backfill_links_owner ON tasks_backfill_links(owner_id, used_at, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_owner_at ON tasks_log(owner_id, at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_initiative ON tasks_log(owner_id, initiative_id, at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_at ON tasks_log(at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_export_grants_app ON tasks_export_grants(app);
+  `);
+  const cols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  for (const part of ["enabled_at", "disabled_at"]) {
+    if (cols.some((c) => c.name === "command_center_" + part) && !cols.some((c) => c.name === "tasks_" + part)) {
+      database.exec("ALTER TABLE users RENAME COLUMN command_center_" + part + " TO tasks_" + part);
+    }
   }
 }
 

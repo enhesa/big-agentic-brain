@@ -54,13 +54,13 @@ export const AUTO_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * Tools approved only for some actions. bab_react: votes and checks the agent makes on autopilot, not
- * retire, delete, pin or unpin, which hide a memory or change house rules. bab_command_center: publish, patch
- * and list, which the Command Center skill calls on every turn on the person's own private page; removing,
+ * retire, delete, pin or unpin, which hide a memory or change house rules. bab_tasks: publish, patch
+ * and list, which the BAB Tasks skill calls on every turn on the person's own private page; removing,
  * erasing and export grants keep the ask. bab_feedback: reading; posts, votes and comments ask.
  */
 export const AUTO_ALLOWED_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   bab_react: new Set(['helpful', 'not_helpful', 'kudos', 'confirm', 'keep', 'flag', 'label', 'comment']),
-  bab_command_center: new Set(['publish', 'patch', 'list']),
+  bab_tasks: new Set(['publish', 'patch', 'list']),
   bab_feedback: new Set(['list', 'get']),
 }
 

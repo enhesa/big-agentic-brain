@@ -59,11 +59,11 @@ export interface BabConfig {
   /** Default MCP tool list (BAB_MCP_TOOLS): full, or lean (bab_search, bab_learn, bab_react). A connection can override it with ?tools=. */
   mcpTools: "full" | "lean";
   inboxPage: boolean;
-  /** Command Center (lib/command-center.ts): the page, its routes and the MCP tool. */
-  commandCenter: boolean;
-  /** Command Center v3: days the work log is kept, and the export apps (name to token) that carry the export scope. */
-  commandCenterLogDays: number;
-  commandCenterExportApps: Map<string, string>;
+  /** BAB Tasks (lib/tasks.ts): the page, its routes and the MCP tool. */
+  tasks: boolean;
+  /** BAB Tasks v3: days the work log is kept, and the export apps (name to token) that carry the export scope. */
+  tasksLogDays: number;
+  tasksExportApps: Map<string, string>;
   /** The file store (lib/files.ts). Sizes in bytes, expiry in days. */
   files: {
     enabled: boolean;
@@ -157,9 +157,9 @@ function int(env: Env, name: string, def: number): number {
 /** The shortest export app token: shorter ones are refused at startup. */
 export const EXPORT_APP_TOKEN_MIN = 32;
 
-/** BAB_COMMAND_CENTER_EXPORT_APPS: app=token entries, comma or newline separated. A bad entry stops startup. */
+/** BAB_TASKS_EXPORT_APPS: app=token entries, comma or newline separated. A bad entry stops startup. */
 function exportAppsOf(env: Env, api: { tokens: Set<string>; identities: Map<string, string> } | null): Map<string, string> {
-  const raw = read(env, "BAB_COMMAND_CENTER_EXPORT_APPS")?.trim() ?? "";
+  const raw = read(env, "BAB_TASKS_EXPORT_APPS")?.trim() ?? "";
   const apps = new Map<string, string>();
   if (!raw) return apps;
   const tokens = new Set<string>();
@@ -167,12 +167,12 @@ function exportAppsOf(env: Env, api: { tokens: Set<string>; identities: Map<stri
     const eq = entry.indexOf("=");
     const name = eq > 0 ? entry.slice(0, eq).trim() : "";
     const token = eq > 0 ? entry.slice(eq + 1).trim() : "";
-    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)) throw new ConfigError("BAB_COMMAND_CENTER_EXPORT_APPS: entry " + (i + 1) + " must be app=token with app a slug (a-z, 0-9, -, at most 40)");
-    if (token.length < EXPORT_APP_TOKEN_MIN || /\s/.test(token)) throw new ConfigError("BAB_COMMAND_CENTER_EXPORT_APPS: the token in entry " + (i + 1) + " must be at least " + EXPORT_APP_TOKEN_MIN + " characters without spaces");
-    if (apps.has(name)) throw new ConfigError("BAB_COMMAND_CENTER_EXPORT_APPS: app " + name + " is listed twice");
-    if (tokens.has(token)) throw new ConfigError("BAB_COMMAND_CENTER_EXPORT_APPS: two apps share one token; give each app its own");
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)) throw new ConfigError("BAB_TASKS_EXPORT_APPS: entry " + (i + 1) + " must be app=token with app a slug (a-z, 0-9, -, at most 40)");
+    if (token.length < EXPORT_APP_TOKEN_MIN || /\s/.test(token)) throw new ConfigError("BAB_TASKS_EXPORT_APPS: the token in entry " + (i + 1) + " must be at least " + EXPORT_APP_TOKEN_MIN + " characters without spaces");
+    if (apps.has(name)) throw new ConfigError("BAB_TASKS_EXPORT_APPS: app " + name + " is listed twice");
+    if (tokens.has(token)) throw new ConfigError("BAB_TASKS_EXPORT_APPS: two apps share one token; give each app its own");
     // An export token carries the export scope only: the same string as an API token would be both.
-    if (api && (api.tokens.has(token) || api.identities.has(token))) throw new ConfigError("BAB_COMMAND_CENTER_EXPORT_APPS: the token in entry " + (i + 1) + " is also in BAB_API_TOKENS; give the app its own token");
+    if (api && (api.tokens.has(token) || api.identities.has(token))) throw new ConfigError("BAB_TASKS_EXPORT_APPS: the token in entry " + (i + 1) + " is also in BAB_API_TOKENS; give the app its own token");
     tokens.add(token);
     apps.set(name, token);
   }
@@ -456,9 +456,9 @@ function parse(env: Env): BabConfig {
     devices: bool(env, "BAB_DEVICES", true),
     mcpTools: mcpToolsOf(env),
     inboxPage: bool(env, "BAB_INBOX_PAGE", true),
-    commandCenter: bool(env, "BAB_COMMAND_CENTER", true),
-    commandCenterLogDays: int(env, "BAB_COMMAND_CENTER_LOG_DAYS", 400),
-    commandCenterExportApps: exportAppsOf(env, parsed),
+    tasks: bool(env, "BAB_TASKS", true),
+    tasksLogDays: int(env, "BAB_TASKS_LOG_DAYS", 400),
+    tasksExportApps: exportAppsOf(env, parsed),
     files: filesOf(env),
     kv: kvOf(env),
     replicas: int(env, "BAB_REPLICAS", 1),
@@ -504,7 +504,7 @@ export function logEffectiveConfig(log: (line: string) => void = (l) => console.
   log("[config] redact: pii=" + c.redact.pii + " domains=" + (c.redact.domains.join(",") || "none") + " sourceHosts=" + (c.sourceHosts?.join(",") ?? "any") + " projectKeyPrefixes=" + (c.projectKeyPrefixes.join(",") || "none"));
   const b = c.branding;
   log("[config] branding: org=" + b.orgName + " accent=" + b.accentColor + " marketplace=" + b.pluginMarketplace + " (" + b.pluginMarketplaceName + ") locale=" + b.locale + " tz=" + b.timeZone);
-  log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage + " commandCenter=" + c.commandCenter + " commandCenterLogDays=" + c.commandCenterLogDays + " commandCenterExportApps=" + (c.commandCenterExportApps.size ? [...c.commandCenterExportApps.keys()].join(",") + " (tokens masked)" : "none"));
+  log("[config] features: staleAfterDays=" + c.retention.staleAfterDays + " auditDays=" + c.retention.auditDays + " devices=" + c.devices + " inboxPage=" + c.inboxPage + " tasks=" + c.tasks + " tasksLogDays=" + c.tasksLogDays + " tasksExportApps=" + (c.tasksExportApps.size ? [...c.tasksExportApps.keys()].join(",") + " (tokens masked)" : "none"));
   const f = c.files;
   log("[config] files: enabled=" + f.enabled + " maxFileBytes=" + f.maxFileBytes + " userQuotaBytes=" + f.userQuotaBytes + " expiryDays=" + f.defaultExpiryDays + "/" + f.maxExpiryDays + " diskFullPercent=" + f.diskFullPercent + " diskReserveBytes=" + f.diskReserveBytes + " uploadDeadlineMs=" + f.uploadDeadlineMs + " allowDeclared=" + f.allowDeclared);
   if (f.enabled && f.allowDeclared) log("[config] WARN: BAB_FILES_ALLOW_DECLARED is on: callers identified only by headers can read and delete other people's files");

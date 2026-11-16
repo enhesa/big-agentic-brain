@@ -210,10 +210,10 @@ const TAKING_TURNS: Flow = {
   ],
 };
 
-// Command Center (docs/command-center.md): opt-in by installing its plugin; agents publish, the
+// BAB Tasks (docs/tasks.md): opt-in by installing its plugin; agents publish, the
 // page only shows; a question card has Open in Claude; report apps read only what you grant.
-const COMMAND_CENTER: Flow = {
-  title: "Your Command Center",
+const TASKS: Flow = {
+  title: "Your BAB Tasks",
   lanes: [YOU, AGENT, BRAIN],
   steps: [
     { at: "you", note: "opt in: install its plugin" },
@@ -302,7 +302,7 @@ export default async function DocsPage() {
           className={styles.diagram}
           viewBox="0 0 880 236"
           role="img"
-          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and thirteen tools: bab_search, bab_learn, bab_react, bab_inbox, bab_send, bab_people, bab_remind, bab_feedback, bab_files, bab_kv, bab_command_center, bab_identify and bab_link_session, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite, keeps shared files and coordination keys, and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
+          aria-label="Your machine holds the bab plugin: four skills, a policy and three commands, three hooks that run on each prompt, at stop and after a compaction, and thirteen tools: bab_search, bab_learn, bab_react, bab_inbox, bab_send, bab_people, bab_remind, bab_feedback, bab_files, bab_kv, bab_tasks, bab_identify and bab_link_session, of which four are in lean mode, chosen with ?tools=lean on the URL. It talks over HTTP to one Big Agentic Brain service, which stores memories and messages in SQLite, keeps shared files and coordination keys, and serves the web pages. A colleague's machine holds exactly the same three things and talks to the same service."
         >
           <rect className={styles.zone} x="8" y="30" width="236" height="192" rx="16" />
           <rect className={styles.zone} x="322" y="30" width="236" height="192" rx="16" />
@@ -446,7 +446,7 @@ export default async function DocsPage() {
           footer={{ tone: "waiting", text: "Never secrets or customer data" }}
         />
         <FlowDiagram {...TAKING_TURNS} />
-        <FlowDiagram {...COMMAND_CENTER} />
+        <FlowDiagram {...TASKS} />
       </DocsSection>
 
       <DocsSection id="about" title="About BAB" caption="Feedback, usage and news.">

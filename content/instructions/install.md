@@ -12,8 +12,8 @@ no skill file to write, no hooks to edit into `settings.json`, no permission rul
    app. Sending a message, sharing files, changing keys or your profile, filing feedback, a decision,
    a standard, a supersede and retiring or deleting a memory still ask you. A deny rule in your or
    your organization's settings still wins.
-5. **Optional, Command Center:** `/plugin install command-center@{{MARKETPLACE_NAME}}` gives you a
-   private page of what your agents are working on, at {{ORIGIN}}/command-center.
+5. **Optional, BAB Tasks:** `/plugin install bab-tasks@{{MARKETPLACE_NAME}}` gives you a
+   private page of what your agents are working on, at {{ORIGIN}}/tasks.
 
 Messages, reminders and the memory itself are available in every new session.
 Read the memory and your reminders at {{ORIGIN}}.
