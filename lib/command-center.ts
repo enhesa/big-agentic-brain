@@ -91,7 +91,7 @@ export const CC_TWO_WRITERS_MS = HOUR_MS;
 /** How late a recurring initiative's health may be, by cadence. No cadence counts as daily. */
 export const CC_OVERDUE_MS: Record<Cadence, number> = { daily: 26 * HOUR_MS, weekly: 8 * DAY_MS, drain: 2 * HOUR_MS };
 
-export const CC_ACTIONS = ["publish", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"] as const;
+export const CC_ACTIONS = ["publish", "patch", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"] as const;
 export type CcAction = (typeof CC_ACTIONS)[number];
 /** v2 actions and what replaced them, so an agent on an old skill text is told the fix. */
 export const CC_RETIRED_ACTIONS: Record<string, string> = {
@@ -1138,110 +1138,231 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
   const input = validateRecord(body);
   const { worked, size } = validateWorked(body);
   ready(now);
-  const db = getDb();
-  return inTransaction(db, () => {
+  return inTransaction(getDb(), () => {
     const prev = loadRecord(owner, input.id);
     if (prev) pruneQuestions(prev, now);
-    const conflict = expectSeq !== null && expectSeq !== (prev?.seq ?? 0);
-    const at = iso(now);
-    const session = input.source?.session ?? null;
-    // Questions: keep askedAt while the id stays; an open id missing from this publish is cleared now.
-    // One the person dismissed stays cleared while its text is the same; reworded, it is asked anew.
-    const questions: CcQuestion[] = [];
-    const dismissed: string[] = [];
-    const sent = new Set(input.questions.map((q) => q.id));
-    for (const q of input.questions) {
-      const old = prev?.questions.find((p) => p.id === q.id);
-      if (old?.clearedAt && old.text === q.text) {
-        questions.push(old);
-        dismissed.push(q.id);
-        continue;
-      }
-      const open = old && !old.clearedAt ? old : undefined;
-      questions.push({ ...q, askedAt: open?.askedAt ?? at, clearedAt: null, session: open ? open.session : session });
+    const write = { op: "publish" as const, expectSeq, worked, size, healthSent: body.health !== undefined, session: input.source?.session ?? null, machine: input.source?.machine ?? null };
+    return commitRecord(actor, owner, input, prev, write, via, now);
+  });
+}
+
+/** What a publish or patch writes besides the record, and which session wrote it. */
+interface CommitWrite {
+  expectSeq: number | null;
+  worked: string | null;
+  size: CcSize | null;
+  /** The call named `health` (an object or null); left out, a recurring record keeps its health. */
+  healthSent: boolean;
+  /** The audit action: cc_publish or cc_patch. */
+  op: "publish" | "patch";
+  /** The writing session, for the writers list, new questions and log entries. */
+  session: string | null;
+  machine: string | null;
+}
+
+/**
+ * The write shared by publish and patch, inside the caller's transaction: `input` is the whole
+ * validated record and `prev` the stored one (pruned), or null for a new initiative.
+ */
+function commitRecord(actor: CcActor, owner: string, input: RecordInput, prev: CcRecord | null, write: CommitWrite, via: AuditVia, now: number): PublishResult {
+  const db = getDb();
+  const { expectSeq, worked, size, session } = write;
+  const conflict = expectSeq !== null && expectSeq !== (prev?.seq ?? 0);
+  const at = iso(now);
+  // Questions: keep askedAt while the id stays; an open id missing from this publish is cleared now.
+  // One the person dismissed stays cleared while its text is the same; reworded, it is asked anew.
+  const questions: CcQuestion[] = [];
+  const dismissed: string[] = [];
+  const sent = new Set(input.questions.map((q) => q.id));
+  for (const q of input.questions) {
+    const old = prev?.questions.find((p) => p.id === q.id);
+    if (old?.clearedAt && old.text === q.text) {
+      questions.push(old);
+      dismissed.push(q.id);
+      continue;
     }
-    const cleared: CcQuestion[] = [];
-    for (const p of prev?.questions ?? []) {
-      if (sent.has(p.id)) continue;
-      cleared.push(p.clearedAt ? p : { ...p, clearedAt: at });
-    }
-    // Keep the newest cleared ones only, so they cannot fill the record.
-    cleared.sort((x, y) => (y.clearedAt ?? "").localeCompare(x.clearedAt ?? ""));
-    questions.push(...cleared.slice(0, CC_MAX_CLEARED_QUESTIONS));
-    const tasks: CcTask[] = input.tasks.map((t) => {
-      const old = prev?.tasks.find((p) => p.id === t.id);
-      const startedAt = old?.startedAt ?? (t.status !== "pending" ? at : null);
-      const finishedAt = t.status === "done" ? (old?.finishedAt ?? at) : null;
-      return { ...t, startedAt, finishedAt };
-    });
-    // Health is a field: left out on a recurring initiative, it stays; an explicit null clears it.
-    let health: CcHealth | null = null;
-    if (input.health) {
-      const same = prev?.health && prev.health.level === input.health.level && prev.health.reason === input.health.reason && prev.health.checkedAt === input.health.checkedAt;
-      health = { ...input.health, receivedAt: same ? prev!.health!.receivedAt : at };
-    } else if (body.health === undefined && prev && input.kind === "recurring") {
-      health = prev.health;
-    }
-    const writers = [...(prev?.writers ?? [])];
-    if (session) writers.push({ session, at });
-    const next: CcRecord = {
-      v: 1,
-      ...input,
-      tasks,
-      questions,
-      health,
-      updatedAt: at,
-      seq: (prev?.seq ?? 0) + 1,
-      publishedBy: publisherOf(actor),
-      writers: writers.slice(-5),
-    };
-    const base = { initiative: input.id, title: input.title, key: input.key, session, machine: input.source?.machine ?? null, source: "live" as const };
-    const answer = (r: CcRecord, logged: string | null): PublishResult => ({
-      id: r.id,
-      seq: r.seq,
-      questions: r.questions.map((q) => ({ id: q.id, askedAt: q.askedAt, clearedAt: q.clearedAt })),
-      ...(dismissed.length ? { dismissed } : {}),
-      ...(logged ? { logged } : {}),
-    });
-    // A replay of the same record changes nothing: no new seq, no audit row. That holds for a
-    // retried PUT whose expectSeq the first try already moved past, so a replay is never a 409.
-    // A `worked` line on it is still logged, unless it repeats this session's newest line here.
-    if (prev && contentOf(prev) === contentOf(next)) {
-      let logged: string | null = null;
-      if (worked) {
-        const last = db
-          .prepare("SELECT entry_id, text FROM command_center_log WHERE owner_id = ? AND initiative_id = ? AND kind = 'worked' AND COALESCE(session, '') = ? ORDER BY at DESC, entry_id DESC LIMIT 1")
-          .get(owner, input.id, session ?? "") as { entry_id: string; text: string } | undefined;
-        if (last && last.text === worked) logged = last.entry_id;
-        else {
-          logged = ccEntryId("worked", input.id, prev.seq, session, worked, at);
-          writeLog(owner, [{ ...base, id: logged, kind: "worked", text: worked, size, at }]);
-          // Logged work is activity: the record is not silent, but its seq stays.
-          const touched = { ...prev, updatedAt: at };
-          saveRecord(owner, touched);
-          auditCc(owner, "publish", input.id, "worked", via);
-        }
-      }
-      return { ...answer(prev, logged), unchanged: true };
-    }
-    if (conflict) {
-      throw new CcConflictError(
-        `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record (in current) and publish again with expectSeq ${prev?.seq ?? 0}.`,
-        prev ?? null,
-      );
-    }
-    assertFits(owner, next, prev);
-    auditCc(owner, "publish", input.id, prev ? "updated" : "created", via);
-    saveRecord(owner, next);
-    const entries = derivedEntries(prev, next, base);
+    const open = old && !old.clearedAt ? old : undefined;
+    questions.push({ ...q, askedAt: open?.askedAt ?? at, clearedAt: null, session: open ? open.session : session });
+  }
+  const cleared: CcQuestion[] = [];
+  for (const p of prev?.questions ?? []) {
+    if (sent.has(p.id)) continue;
+    cleared.push(p.clearedAt ? p : { ...p, clearedAt: at });
+  }
+  // Keep the newest cleared ones only, so they cannot fill the record.
+  cleared.sort((x, y) => (y.clearedAt ?? "").localeCompare(x.clearedAt ?? ""));
+  questions.push(...cleared.slice(0, CC_MAX_CLEARED_QUESTIONS));
+  const tasks: CcTask[] = input.tasks.map((t) => {
+    const old = prev?.tasks.find((p) => p.id === t.id);
+    const startedAt = old?.startedAt ?? (t.status !== "pending" ? at : null);
+    const finishedAt = t.status === "done" ? (old?.finishedAt ?? at) : null;
+    return { ...t, startedAt, finishedAt };
+  });
+  // Health is a field: left out on a recurring initiative, it stays; an explicit null clears it.
+  let health: CcHealth | null = null;
+  if (input.health) {
+    const same = prev?.health && prev.health.level === input.health.level && prev.health.reason === input.health.reason && prev.health.checkedAt === input.health.checkedAt;
+    health = { ...input.health, receivedAt: same ? prev!.health!.receivedAt : at };
+  } else if (!write.healthSent && prev && input.kind === "recurring") {
+    health = prev.health;
+  }
+  const writers = [...(prev?.writers ?? [])];
+  if (session) writers.push({ session, at });
+  const next: CcRecord = {
+    v: 1,
+    ...input,
+    tasks,
+    questions,
+    health,
+    updatedAt: at,
+    seq: (prev?.seq ?? 0) + 1,
+    publishedBy: publisherOf(actor),
+    writers: writers.slice(-5),
+  };
+  const base = { initiative: input.id, title: input.title, key: input.key, session, machine: write.machine, source: "live" as const };
+  const answer = (r: CcRecord, logged: string | null): PublishResult => ({
+    id: r.id,
+    seq: r.seq,
+    questions: r.questions.map((q) => ({ id: q.id, askedAt: q.askedAt, clearedAt: q.clearedAt })),
+    ...(dismissed.length ? { dismissed } : {}),
+    ...(logged ? { logged } : {}),
+  });
+  // A replay of the same record changes nothing: no new seq, no audit row. That holds for a
+  // retried PUT whose expectSeq the first try already moved past, so a replay is never a 409.
+  // A `worked` line on it is still logged, unless it repeats this session's newest line here.
+  if (prev && contentOf(prev) === contentOf(next)) {
     let logged: string | null = null;
     if (worked) {
-      // One publish, one seq: the id is fixed by the seq it produced.
-      logged = ccEntryId("worked", input.id, next.seq, session, worked, at);
-      entries.push({ ...base, id: logged, kind: "worked", text: worked, size, at });
+      const last = db
+        .prepare("SELECT entry_id, text FROM command_center_log WHERE owner_id = ? AND initiative_id = ? AND kind = 'worked' AND COALESCE(session, '') = ? ORDER BY at DESC, entry_id DESC LIMIT 1")
+        .get(owner, input.id, session ?? "") as { entry_id: string; text: string } | undefined;
+      if (last && last.text === worked) logged = last.entry_id;
+      else {
+        logged = ccEntryId("worked", input.id, prev.seq, session, worked, at);
+        writeLog(owner, [{ ...base, id: logged, kind: "worked", text: worked, size, at }]);
+        // Logged work is activity: the record is not silent, but its seq stays.
+        const touched = { ...prev, updatedAt: at };
+        saveRecord(owner, touched);
+        auditCc(owner, write.op, input.id, "worked", via);
+      }
     }
-    writeLog(owner, entries);
-    return answer(next, logged);
+    return { ...answer(prev, logged), unchanged: true };
+  }
+  if (conflict) {
+    throw new CcConflictError(
+      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change with the current record (in current) and send it again with expectSeq ${prev?.seq ?? 0}.`,
+      prev ?? null,
+    );
+  }
+  assertFits(owner, next, prev);
+  auditCc(owner, write.op, input.id, prev ? "updated" : "created", via);
+  saveRecord(owner, next);
+  const entries = derivedEntries(prev, next, base);
+  let logged: string | null = null;
+  if (worked) {
+    // One publish, one seq: the id is fixed by the seq it produced.
+    logged = ccEntryId("worked", input.id, next.seq, session, worked, at);
+    entries.push({ ...base, id: logged, kind: "worked", text: worked, size, at });
+  }
+  writeLog(owner, entries);
+  return answer(next, logged);
+}
+
+/** The list fields a patch merges, each by its key. Links have no id: their url names them. */
+const PATCH_LISTS = [
+  { field: "tasks", key: "id", fields: TASK_FIELDS },
+  { field: "questions", key: "id", fields: QUESTION_FIELDS },
+  { field: "links", key: "url", fields: LINK_FIELDS },
+] as const;
+/** The scalar fields a patch may set; left out, they keep their value. Only the nullable ones clear with null. */
+const PATCH_SCALARS = ["v", "title", "area", "key", "state", "kind", "cadence", "deadline", "priority", "source", "health"];
+const PATCH_NULLABLE = ["area", "key", "cadence", "deadline", "priority", "source", "health"];
+
+/** The stored source as a publish would send it, or null. */
+function prevSource(prev: CcRecord): Record<string, unknown> | null {
+  return prev.source ? { machine: prev.source.machine, session: prev.source.session, link: prev.source.link ?? null } : null;
+}
+
+/** Applies one list's changes: add or update by key, `remove: true` drops it, the rest stay as they are. */
+function mergeItems(field: string, key: string, fields: readonly string[], current: Record<string, unknown>[], raw: unknown): Record<string, unknown>[] {
+  if (raw === undefined) return current;
+  if (!Array.isArray(raw)) throw new ValidationError(`${field} must be an array of changes, each with ${key}; add remove: true to drop one`);
+  let out = current;
+  const seen = new Set<unknown>();
+  for (const [i, item] of list(raw, field, CC_MAX_TASKS, "changes").entries()) {
+    const where = `${field}[${i}]`;
+    if (!isObject(item)) throw new ValidationError(`${where} must be an object with ${key}`);
+    onlyFields(item, [...fields, "remove"], `${where}.`);
+    const k = item[key];
+    if (typeof k !== "string" || !k) throw new ValidationError(`${where}.${key} is required: it names the item to add, change or remove`);
+    if (seen.has(k)) throw new ValidationError(`${where}.${key} '${k}' is sent twice; send one change per item`);
+    seen.add(k);
+    if (item.remove !== undefined) {
+      if (item.remove !== true) throw new ValidationError(`${where}.remove must be true, or left out`);
+      if (Object.keys(item).length !== 2) throw new ValidationError(`${where}: to remove an item send only ${key} and remove: true`);
+      out = out.filter((o) => o[key] !== k);
+      continue;
+    }
+    if (out.some((o) => o[key] === k)) out = out.map((o) => (o[key] === k ? { ...o, ...item } : o));
+    else out = [...out, { ...item }];
+  }
+  return out;
+}
+
+/** The stored record with a patch applied, shaped as a publish body, so publish's checks run on it. */
+function mergePatch(prev: CcRecord, patch: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = {
+    v: 1,
+    id: prev.id,
+    title: prev.title,
+    area: prev.area,
+    key: prev.key,
+    state: prev.state,
+    kind: prev.kind,
+    cadence: prev.cadence,
+    deadline: prev.deadline,
+    priority: prev.priority,
+    source: prevSource(prev),
+  };
+  for (const k of PATCH_SCALARS) {
+    if (patch[k] === undefined) continue;
+    if (patch[k] === null && !PATCH_NULLABLE.includes(k)) throw new ValidationError(`${k} cannot be null on patch; leave it out to keep it, or send a new value`);
+    merged[k] = patch[k];
+  }
+  // source merges field by field: a patch that sends only session keeps the stored machine and link.
+  if (isObject(patch.source) && isObject(merged.source)) merged.source = { ...(prevSource(prev) ?? {}), ...patch.source };
+  const current: Record<string, Record<string, unknown>[]> = {
+    tasks: prev.tasks.map((t) => ({ id: t.id, text: t.text, status: t.status })),
+    // Only the open questions: a cleared one stays cleared, as on publish.
+    questions: prev.questions.filter((q) => !q.clearedAt).map((q) => ({ id: q.id, text: q.text, options: q.options })),
+    links: prev.links.map((l) => ({ label: l.label, url: l.url })),
+  };
+  for (const l of PATCH_LISTS) merged[l.field] = mergeItems(l.field, l.key, l.fields, current[l.field], patch[l.field]);
+  return merged;
+}
+
+/**
+ * Patch: changes part of an existing record in one transaction, so two sessions changing different
+ * fields or items never overwrite each other. The merged record passes the same checks, limits and
+ * log as a publish. An unknown id is 404: a patch never creates an initiative.
+ */
+export function ccPatch(actor: CcActor, owner: string, body: Record<string, unknown>, via: AuditVia, now: number = Date.now()): PublishResult {
+  onlyFields(body, RECORD_FIELDS, "");
+  const id = slug(body.id, "id");
+  const expectSeq = parseExpectSeq(body.expectSeq);
+  const { worked, size } = validateWorked(body);
+  ready(now);
+  return inTransaction(getDb(), () => {
+    const prev = loadRecord(owner, id);
+    if (!prev) throw new NotFoundError(`No initiative '${id}' in your Command Center. patch changes an existing one; publish the whole record first.`);
+    pruneQuestions(prev, now);
+    const input = validateRecord(mergePatch(prev, body));
+    // A session or machine kept from the stored record is not this call's: only the ones sent count as the writer.
+    const sent = isObject(body.source) ? body.source : {};
+    const session = sent.session !== undefined ? (input.source?.session ?? null) : null;
+    const machine = sent.machine !== undefined ? (input.source?.machine ?? null) : null;
+    const write = { op: "patch" as const, expectSeq, worked, size, healthSent: body.health !== undefined, session, machine };
+    return commitRecord(actor, owner, input, prev, write, via, now);
   });
 }
 
@@ -1448,6 +1569,11 @@ export function runCommandCenter(
       const { action: _drop, ...record } = args;
       void _drop;
       return ccPublish(actor, owner, record, via);
+    }
+    case "patch": {
+      const { action: _drop, ...changes } = args;
+      void _drop;
+      return ccPatch(actor, owner, changes, via);
     }
     case "list":
       // With an id: that one initiative, whole (the same answer as GET /api/command-center/<id>).

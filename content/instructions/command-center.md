@@ -27,8 +27,8 @@ The last call of every turn is `publish` with `worked`, even when the turn only 
 or declined a task.
 
 If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
-of your first turn, with that step `in_progress`. Publish again after every task status change, and
-as the last call of every turn, after the work has returned.
+of your first turn, with that step `in_progress`. Publish again (or `patch`, see The record) after
+every task status change, and publish as the last call of every turn, after the work has returned.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
@@ -40,8 +40,9 @@ not repeat it.
 
 To see what another session published, call `list` with the `id`: it returns the full record and
 its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
-after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
-`expectSeq` protects the other session.
+after `current:`: merge it and send the call again with the `expectSeq` it names. Never skip
+publishing for fear of overwriting; `expectSeq` protects the other session. To change only a few
+items, or to leave another session's changes alone, you may use `patch` instead (see The record).
 
 There is no switch: installing the command-center plugin turns it on, and your first `publish`
 creates the person's page. If they ask you to leave it alone, or the tool answers that Command Center
@@ -66,6 +67,16 @@ Send the record as one object in `record`, with `action` and `id` beside it:
 `{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [], "worked": "Planned the export" } }`.
 Put `action`, `id` and `record` at the top level of the call. Never nest them inside `record`.
 
+`patch` is optional. Publish stays the default; use `patch` to change a few items of an initiative
+that already exists (an unknown `id` is refused: publish it first), or when another session also
+writes it, so neither overwrites the other. Send only what changed: a field you leave out keeps its
+value, and `null` clears an optional one (never `title`, `state` or `kind`). In `tasks`,
+`questions` and `links`, each item is a change, found by its `id` (links by `url`): a known one is
+updated with the fields you send, a new one is added, and `"remove": true` drops it (a removed
+question is cleared). Items you do not name stay as they are. `source` merges field by field; send
+it with every patch, as on publish. The same limits and checks apply to the merged record. For example
+`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "source": { "session": "<session id>", "link": "<session link>" } } }`.
+
 | Field | Rules |
 | --- | --- |
 | `v` | `1`. Required. |
@@ -85,7 +96,7 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
-| `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
+| `expectSeq` | Optional, on publish and patch. The `seq` you last saw; a mismatch is 409 with the current record to merge. Every answer gives the new `seq`. |
 
 Always put the link that opens this session in `source.link` (for example claude://claude.ai/epitaxy/<your session id>, from `get_session` `"self"` in the Claude desktop app); the page shows an Open in Claude button.
 

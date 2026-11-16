@@ -33,3 +33,21 @@ export async function PUT(req: Request, { params }: Ctx) {
   if ("action" in body) return Response.json({ error: "unknown field 'action'; PUT publishes the record, actions go to POST /api/command-center/<id>/actions" }, { status: 400 });
   return answer(() => runCommandCenter(user, { ...body, id, action: "publish" }, "mcp", publicOrigin(req.headers)));
 }
+
+/**
+ * PATCH /api/command-center/:id: change part of an existing record (the patch action). Fields left
+ * out stay; tasks, questions and links merge by id (links by url), and remove: true drops one.
+ */
+export async function PATCH(req: Request, { params }: Ctx) {
+  const user = await requireCommandCenterActor(req);
+  if (user instanceof Response) return user;
+  const { id } = await params;
+  await auditRequest({ actor: user, method: "PATCH", path: `/api/command-center/${id}`, via: "mcp" });
+  const body = await readJsonObject(req);
+  if (body instanceof Response) return body;
+  if (body.id !== undefined && body.id !== id) {
+    return Response.json({ error: `id in the body ('${String(body.id)}') must match the path ('${id}')` }, { status: 400 });
+  }
+  if ("action" in body) return Response.json({ error: "unknown field 'action'; PATCH changes the record, actions go to POST /api/command-center/<id>/actions" }, { status: 400 });
+  return answer(() => runCommandCenter(user, { ...body, id, action: "patch" }, "mcp", publicOrigin(req.headers)));
+}
