@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.27.0](https://github.com/enhesa/big-agentic-brain/compare/v2.26.0...v2.27.0) (2026-11-16)
+
+
+### Features
+
+* rename Command Center to BAB Tasks ([#154](https://github.com/enhesa/big-agentic-brain/issues/154)) ([6a3a400](https://github.com/enhesa/big-agentic-brain/commit/6a3a4005126641d413b3c6f0502f33ba182cf98e))
+
 ## [2.26.0](https://github.com/enhesa/big-agentic-brain/compare/v2.25.3...v2.26.0) (2026-11-16)
 
 
