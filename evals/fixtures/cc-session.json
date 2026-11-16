@@ -271,7 +271,7 @@
         }
       },
       "expect": {
-        "error": "^expectSeq is 3 but 'billing-export' is at seq 4\\. Merge your change into the current record",
+        "error": "^expectSeq is 3 but 'billing-export' is at seq 4\\. Merge your change with the current record",
         "current": [["id", "eq", "billing-export"], ["seq", "eq", 4], ["tasks", "len", 3], ["tasks.2.id", "eq", "add-tests"], ["source.session", "eq", "session-a"]],
         "state": { "billing-export": [["seq", "eq", 4], ["tasks", "len", 3], ["source.session", "eq", "session-a"]] }
       }
