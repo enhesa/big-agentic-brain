@@ -1,25 +1,25 @@
 name: evals
 
-# Offline evals (no LLM, no secrets) only on PRs that change search, the MCP tools, Command Center logic or the evals.
+# Offline evals (no LLM, no secrets) only on PRs that change search, the MCP tools, BAB Tasks logic or the evals.
 # Agent evals (LLM, costs money) only on manual dispatch, reading the key from the ANTHROPIC_API_KEY secret.
 on:
   pull_request:
-    # Only changes that can move an eval result: search ranking, the MCP tools, Command Center logic, skill text, the evals.
+    # Only changes that can move an eval result: search ranking, the MCP tools, BAB Tasks logic, skill text, the evals.
     paths:
       - "lib/learnings*.ts"
       - "lib/similarity*.ts"
       - "lib/mcp.ts"
-      - "lib/command-center*.ts"
+      - "lib/tasks*.ts"
       - "app/mcp/**"
-      - "app/api/command-center/**"
+      - "app/api/tasks/**"
       - "evals/**"
-      - "plugins/command-center/**"
-      - "content/instructions/command-center.md"
+      - "plugins/bab-tasks/**"
+      - "content/instructions/tasks.md"
       - ".github/workflows/evals.yml"
   workflow_dispatch:
     inputs:
       suite:
-        description: "core or tk (coding tasks), cc (Command Center skill behaviour) or cc-trigger (does the agent load the skill)"
+        description: "core or tk (coding tasks), cc (BAB Tasks skill behaviour) or cc-trigger (does the agent load the skill)"
         type: choice
         options: [core, tk, cc, cc-trigger]
         default: core
@@ -64,10 +64,10 @@ jobs:
         run: pnpm eval:retrieval --out "$RUNNER_TEMP/retrieval" --min-recall5 0.85 --min-mrr 0.80
       - name: Hard retrieval (vendor-overlap distractors + blind queries)
         run: pnpm eval:retrieval --corpus tk --hard-distractors --queries hard --out "$RUNNER_TEMP/retrieval-hard" --min-recall5 0 --min-mrr 0
-      - name: Command Center contract (replays a recorded session over MCP, checks the stored state)
+      - name: BAB Tasks contract (replays a recorded session over MCP, checks the stored state)
         if: ${{ !cancelled() }}
         run: pnpm eval:cc-contract --out "$RUNNER_TEMP/cc-contract"
-      - name: Command Center graders (ideal scripts pass, careless ones fail; no LLM)
+      - name: BAB Tasks graders (ideal scripts pass, careless ones fail; no LLM)
         if: ${{ !cancelled() }}
         run: |
           pnpm eval --suite cc --dry-run --out "$RUNNER_TEMP/cc-dry"

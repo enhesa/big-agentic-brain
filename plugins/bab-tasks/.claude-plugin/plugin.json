@@ -1,0 +1,10 @@
+{
+  "name": "bab-tasks",
+  "description": "A Kanban board for your agents. Your agents put every to-do, next step and open question on your private BAB Tasks, always, without being asked. Installing it is the opt-in.",
+  "author": {
+    "name": "BAB maintainers"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/enhesa/big-agentic-brain",
+  "homepage": "https://github.com/enhesa/big-agentic-brain"
+}

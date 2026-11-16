@@ -338,7 +338,7 @@ beforeAll(async () => {
     }
 
     // Participation and unread state live in thread_participants and message_recipients
-    // (migration v57). The rows above go in straight, so fill both the way v57's backfill does.
+    // (migration v58). The rows above go in straight, so fill both the way v58's backfill does.
     db.exec(`
       INSERT OR IGNORE INTO thread_participants (thread_id, user_id) SELECT id, created_by FROM threads;
       INSERT OR IGNORE INTO thread_participants (thread_id, user_id) SELECT thread_id, from_id FROM messages;

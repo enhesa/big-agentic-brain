@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 57;
+export const CURRENT_VERSION = 58;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -362,12 +362,46 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(57);
     appliedVersion = 57;
   }
+  if (appliedVersion < 58) {
+    runMigrationV58(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(58);
+    appliedVersion = 58;
+  }
+}
+
+function runMigrationV57(database: DatabaseSync) {
+  // Command Center became BAB Tasks (lib/tasks.ts). Its tables, indexes and the two old opt-in
+  // columns on users are renamed in place, so nothing is copied or lost. Guarded, so a process that
+  // died before the version row can run this again, and a fresh database (which just created the
+  // old names in V53 to V56) ends up with the same names.
+  const hasTable = (name: string) => !!database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+  for (const part of ["backfill_links", "initiatives", "log", "export_grants", "imports"]) {
+    if (hasTable("command_center_" + part) && !hasTable("tasks_" + part)) database.exec("ALTER TABLE command_center_" + part + " RENAME TO tasks_" + part);
+  }
+  database.exec(`
+    DROP INDEX IF EXISTS idx_command_center_backfill_links_owner;
+    DROP INDEX IF EXISTS idx_command_center_log_owner_at;
+    DROP INDEX IF EXISTS idx_command_center_log_initiative;
+    DROP INDEX IF EXISTS idx_command_center_log_at;
+    DROP INDEX IF EXISTS idx_command_center_export_grants_app;
+    CREATE INDEX IF NOT EXISTS idx_tasks_backfill_links_owner ON tasks_backfill_links(owner_id, used_at, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_owner_at ON tasks_log(owner_id, at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_initiative ON tasks_log(owner_id, initiative_id, at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_log_at ON tasks_log(at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_export_grants_app ON tasks_export_grants(app);
+  `);
+  const cols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  for (const part of ["enabled_at", "disabled_at"]) {
+    if (cols.some((c) => c.name === "command_center_" + part) && !cols.some((c) => c.name === "tasks_" + part)) {
+      database.exec("ALTER TABLE users RENAME COLUMN command_center_" + part + " TO tasks_" + part);
+    }
+  }
 }
 
 /**
- * Catches up writes made by a release older than v57 (a rollback) on this database: its messages
+ * Catches up writes made by a release older than v58 (a rollback) on this database: its messages
  * have no message_recipients rows, its threads no thread_participants rows, and its reads set only
- * messages.read_at. v57 is already recorded, so its backfill never runs again; this does, at every
+ * messages.read_at. v58 is already recorded, so its backfill never runs again; this does, at every
  * open. Each statement touches only rows that need it and can run twice. messages.read_at is only
  * ever set when messages.to_id read the message, so copying it to that person's row is safe.
  */
@@ -391,7 +425,7 @@ export function repairMessageMembership(database: DatabaseSync) {
   `);
 }
 
-function runMigrationV57(database: DatabaseSync) {
+function runMigrationV58(database: DatabaseSync) {
   // Group messages (lib/messages.ts). thread_participants is who may read a thread and who a reply
   // reaches; message_recipients is who a message went to, with read state per person. Both are
   // filled from the one-recipient columns, which stay: messages.to_id holds the first recipient and
@@ -1855,7 +1889,7 @@ export function wipeChats(database: DatabaseSync, dataDir: string) {
   database.exec("BEGIN");
   try {
     database.exec("DELETE FROM session_deliveries");
-    // The v57 tables reference messages and threads. They do not exist when v20 runs, so this only
+    // The v58 tables reference messages and threads. They do not exist when v20 runs, so this only
     // matters when the wipe is called on a newer database.
     for (const table of ["message_recipients", "thread_participants"]) {
       if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)) {

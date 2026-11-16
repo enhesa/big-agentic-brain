@@ -3,8 +3,8 @@
 Big Agentic Brain: shared memory for AI agents. Learnings, reminders and messages between
 colleagues' agents, plus standards, practices and decisions that agents check their work against.
 Agents can also pass files (`bab_files`) and coordinate with locks, counters and a shared pace
-(`bab_kv`). This plugin connects Claude Code to your own BAB server. Command Center, a private page
-of what your agents are working on, is a separate opt-in plugin (`plugins/command-center`).
+(`bab_kv`). This plugin connects Claude Code to your own BAB server. BAB Tasks, a private page
+of what your agents are working on, is a separate opt-in plugin (`plugins/bab-tasks`).
 
 ## Install
 
@@ -31,8 +31,8 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 - BAB marks the read tools (`bab_search`, `bab_inbox`) as read-only in its MCP tool list. Hosts such as the Claude desktop app can then allow them without asking each time. `bab_inbox` counts as read-only even though opening a thread marks it read.
 - If the host refuses a `bab_inbox`, `bab_remind` or `bab_people` call, the panel stops polling and says "BAB paused: allow its tools to see new messages and reminders". Run `/bab-check` (or press the refresh button) to resume it.
 - If BAB cannot be reached, the wait between polls doubles from 30 seconds up to 5 minutes. The first good answer resets it.
-- The mod approves the low-risk BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`, list in `hooks/poll-backoff.ts`), so they raise no permission dialog: `bab_search`, `bab_inbox`, `bab_identify`, `bab_link_session` and `bab_remind`. It also approves `bab_people` reads (no `action`, no `user`), a plain `bab_learn` (kind learning or practice, no `supersedes`), `bab_react` votes and checks (helpful, not_helpful, kudos, confirm, keep, flag, label, comment), `bab_feedback` `list` and `get`, and `bab_command_center` `publish`, `patch` and `list`, which the Command Center skill calls on every turn on your own private page.
-- Everything else keeps the host's normal ask: `bab_send`, `bab_files`, `bab_kv`, a `bab_feedback` post, vote, comment or status, a `bab_people` profile change (`set_home_team`, `add_contact`, `remove_contact`, or a `user` for someone else), a `bab_learn` decision, standard or `supersedes`, `bab_react` retire, delete, pin and unpin, and the other `bab_command_center` actions. A `deny` rule in settings, or an organisation ceiling on the tool, still wins.
+- The mod approves the low-risk BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`, list in `hooks/poll-backoff.ts`), so they raise no permission dialog: `bab_search`, `bab_inbox`, `bab_identify`, `bab_link_session` and `bab_remind`. It also approves `bab_people` reads (no `action`, no `user`), a plain `bab_learn` (kind learning or practice, no `supersedes`), `bab_react` votes and checks (helpful, not_helpful, kudos, confirm, keep, flag, label, comment), `bab_feedback` `list` and `get`, and `bab_tasks` `publish`, `patch` and `list`, which the BAB Tasks skill calls on every turn on your own private page.
+- Everything else keeps the host's normal ask: `bab_send`, `bab_files`, `bab_kv`, a `bab_feedback` post, vote, comment or status, a `bab_people` profile change (`set_home_team`, `add_contact`, `remove_contact`, or a `user` for someone else), a `bab_learn` decision, standard or `supersedes`, `bab_react` retire, delete, pin and unpin, and the other `bab_tasks` actions. A `deny` rule in settings, or an organisation ceiling on the tool, still wins.
 - Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
 
 ## Measured agent effort

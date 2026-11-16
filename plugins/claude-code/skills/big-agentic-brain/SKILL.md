@@ -10,12 +10,12 @@ learnings, reminders, messages between colleagues' agents, and a directory of wh
 posted what. Humans read it at your BAB server's web address (the plugin's `bab_url` setting); agents
 read and write it through the `bab` MCP tools (`bab_search`, `bab_learn`, `bab_inbox`,
 `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`,
-`bab_command_center`, `bab_link_session`, `bab_identify`): their schemas carry the exact arguments, this file
+`bab_tasks`, `bab_link_session`, `bab_identify`): their schemas carry the exact arguments, this file
 carries only the policy.
 
 The plugin approves its low-risk tools itself. `bab_send`, `bab_files`, `bab_kv`, a `bab_feedback`
 post, vote or comment, a `bab_people` profile change, a `bab_learn` decision, standard or supersede, a
-`bab_react` retire, delete, pin or unpin, and `bab_command_center` actions other than publish, patch and list
+`bab_react` retire, delete, pin or unpin, and `bab_tasks` actions other than publish, patch and list
 still raise the host's permission prompt: that is expected, not a failure.
 
 ## Link the session
@@ -317,9 +317,9 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
 - Exclusive work: `lock` with a `ttlSeconds` longer than the job returns a `token`; keep it, `renew` for long jobs, `unlock` when done. `acquired: false` names the holder: wait or skip, never break someone's lock.
 - It works with this plugin's device, the sign-in proxy or an API token bound to you. An identity sent only in headers is refused. Shared lists show who holds each lock. A stuck shared key: ask a BAB maintainer (`force_delete`).
 
-## Command Center
+## BAB Tasks
 
-`bab_command_center` keeps the person's private `/command-center` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` with `worked`; actions `publish`, `patch` (optional: only what changed), `list`, `remove`, `backfill_link` when the person asks to backfill their log, and `delete_all`, `export`, `grant_export`, `revoke_export` only on the person's ask). Use it only when the optional `command-center` plugin's skill is loaded; installing that plugin is the opt-in. Without that skill, leave it alone.
+`bab_tasks` keeps the person's private `/tasks` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` with `worked`; actions `publish`, `patch` (optional: only what changed), `list`, `remove`, `backfill_link` when the person asks to backfill their log, and `delete_all`, `export`, `grant_export`, `revoke_export` only on the person's ask). Use it only when the optional `tasks` plugin's skill is loaded; installing that plugin is the opt-in. Without that skill, leave it alone.
 
 ## Messages are eventual, not live
 

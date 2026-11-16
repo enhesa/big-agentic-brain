@@ -54,9 +54,9 @@ export async function registerNode(): Promise<void> {
     process.exit(1);
   }
   try {
-    // Command Center v3: move a v2 snapshot into SQLite once. It never throws and never blocks start.
-    const { importCommandCenterSnapshot } = await import("./lib/command-center");
-    importCommandCenterSnapshot();
+    // BAB Tasks v3: move a v2 snapshot into SQLite once. It never throws and never blocks start.
+    const { importTasksSnapshot } = await import("./lib/tasks");
+    importTasksSnapshot();
   } catch (err) {
     // The import is retried on first use; a failure here only logs.
     console.warn(err);

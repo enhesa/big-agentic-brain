@@ -190,7 +190,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 - `votes(learning_id, voter_id, kind TEXT /* helpful|not_helpful|flag|cited|kudos|confirm */, note, created_at, PK(learning_id, voter_id, kind))`
 - `memory_comments(id, learning_id REFERENCES learnings, author_id REFERENCES users, body, created_at, edited_at, deleted_at)` (migration v50): comments on memories, see "Comments" under Features.
 - `todos(id, owner_id, title, body, due_at, due_has_time INTEGER /* 1: due_at is a UTC instant YYYY-MM-DDTHH:MM:SSZ; 0: a UTC day YYYY-MM-DD */, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
-- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`; `thread_participants(thread_id, user_id, added_at)` and `message_recipients(message_id, user_id, read_at)` (migration v57): who is in a thread and who has read each message, see "Group messages". `messages.to_id` holds the first recipient and `messages.read_at` mirrors that person's read.
+- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`; `thread_participants(thread_id, user_id, added_at)` and `message_recipients(message_id, user_id, read_at)` (migration v58): who is in a thread and who has read each message, see "Group messages". `messages.to_id` holds the first recipient and `messages.read_at` mirrors that person's read.
 - `audit_log(id, actor_id, action, entity, entity_id, via TEXT /* ui|mcp */, at)`
 
 ## Features
@@ -711,7 +711,7 @@ Plugin-delivery endpoints:
 - `POST /mcp`, JSON-RPC 2.0 over HTTP (Streamable HTTP transport, one response per POST,
   no SSE stream): `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
   Thirteen tools (`TOOLS` in `lib/mcp.ts`): `bab_link_session`, `bab_identify`, `bab_search`, `bab_learn`, `bab_inbox`,
-  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, `bab_command_center`, replacing the skill's curl examples with real
+  `bab_send`, `bab_people`, `bab_remind`, `bab_react`, `bab_feedback`, `bab_files`, `bab_kv`, `bab_tasks`, replacing the skill's curl examples with real
   schemas. Identity resolves the same way as every other agent route,
   `requireActorForApi()` off `X-Bab-Actor-Email` (long-form addresses only, same
   validation as the REST API). `bab_link_session` redeems the token from `POST /api/hook`
@@ -949,7 +949,7 @@ to a list starts one group thread.
 - **Privacy.** Only participants read a thread (maintainers can still open
   `/conversations/[id]`). The participant list, with names and emails, is visible to every
   participant. Event payloads stay ids only.
-- **Migration v57.** Adds `thread_participants` and `message_recipients`, backfilled with
+- **Migration v58.** Adds `thread_participants` and `message_recipients`, backfilled with
   `INSERT OR IGNORE` from `threads.created_by` and `messages.from_id`, `to_id` and `read_at`. The
   old columns stay: `messages.to_id` holds the first recipient and `messages.read_at` mirrors that
   person's read, so an older release on the new database still reads 1:1 threads. The change is

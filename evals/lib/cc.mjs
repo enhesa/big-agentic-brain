@@ -1,17 +1,17 @@
-// Command Center helpers shared by the contract eval (evals/cc-contract.mjs) and the LLM suites
-// (evals/lib/cc-suite.mjs): a throwaway BAB with Command Center on and an agent MCP client bound
-// to a device. There is no per-person switch: the first publish creates the person's Command Center.
+// BAB Tasks helpers shared by the contract eval (evals/cc-contract.mjs) and the LLM suites
+// (evals/lib/cc-suite.mjs): a throwaway BAB with BAB Tasks on and an agent MCP client bound
+// to a device. There is no per-person switch: the first publish creates the person's BAB Tasks.
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { startBab } from "./bab-server.mjs";
 import { McpClient } from "./mcp.mjs";
 
-/** BAB with Command Center on and the proxy identity headers trusted. Nothing but the harness reaches it. */
+/** BAB with BAB Tasks on and the proxy identity headers trusted. Nothing but the harness reaches it. */
 export function startCcBab(dir) {
   return startBab({
     dataDir: path.join(dir, "bab-data"),
     logFile: path.join(dir, "bab-server.log"),
-    env: { BAB_COMMAND_CENTER: "true", BAB_TRUST_PROXY_IDENTITY: "1", BAB_TRUST_PROXY_WITHOUT_SECRET: "1" },
+    env: { BAB_TASKS: "true", BAB_TRUST_PROXY_IDENTITY: "1", BAB_TRUST_PROXY_WITHOUT_SECRET: "1" },
   });
 }
 
@@ -20,7 +20,7 @@ export function ccPerson(n = 1) {
   return { email: `cc.person.${n}@example.com`, name: `Casey Example ${n}`, device: randomBytes(32).toString("hex") };
 }
 
-// BAB allows each person a bucket of 20 Command Center calls that refills at 60 a minute. The
+// BAB allows each person a bucket of 20 BAB Tasks calls that refills at 60 a minute. The
 // harness keeps a slightly smaller bucket of its own, so its reads never turn an agent's call into a 429.
 const BURST = 15;
 const PER_MS = 50 / 60_000;
@@ -51,7 +51,7 @@ export async function ccAgent(origin, person, label = "Eval laptop") {
   if (id.isError) throw new Error(`bab_identify failed: ${id.text.slice(0, 300)}`);
   const call = mcp.call.bind(mcp);
   mcp.call = async (name, args) => {
-    if (name === "bab_command_center") await pace(person);
+    if (name === "bab_tasks") await pace(person);
     return call(name, args);
   };
   return mcp;
@@ -62,35 +62,35 @@ export function otherDevice(person) {
   return { ...person, device: randomBytes(32).toString("hex") };
 }
 
-/** GET /api/command-center/<id> as the person's device: the full record with server fields, or null on 404. */
+/** GET /api/tasks/<id> as the person's device: the full record with server fields, or null on 404. */
 export async function getRecord(origin, person, id) {
   await pace(person);
-  const res = await fetch(`${origin}/api/command-center/${encodeURIComponent(id)}`, {
+  const res = await fetch(`${origin}/api/tasks/${encodeURIComponent(id)}`, {
     headers: { "x-bab-device": person.device },
     signal: AbortSignal.timeout(30_000),
   });
   if (res.status === 404) return null;
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`GET /api/command-center/${id} ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`GET /api/tasks/${id} ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.record ?? body;
 }
 
-/** GET /api/command-center as the person's device: { initiatives, dataHealth, ... }. */
+/** GET /api/tasks as the person's device: { initiatives, dataHealth, ... }. */
 export async function listRecords(origin, person) {
   await pace(person);
-  const res = await fetch(`${origin}/api/command-center`, {
+  const res = await fetch(`${origin}/api/tasks`, {
     headers: { "x-bab-device": person.device },
     signal: AbortSignal.timeout(30_000),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`GET /api/command-center ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`GET /api/tasks ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body;
 }
 
 /** The skill as BAB serves it, with this server's origin filled in. */
 export async function skillText(origin) {
-  const res = await fetch(`${origin}/instructions/command-center.md`, { signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`GET /instructions/command-center.md ${res.status}`);
+  const res = await fetch(`${origin}/instructions/tasks.md`, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`GET /instructions/tasks.md ${res.status}`);
   return res.text();
 }
 

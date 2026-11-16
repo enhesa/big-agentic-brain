@@ -506,7 +506,7 @@ describe("drafting", () => {
     const quotedPw = `qp${randomUUID().slice(0, 8)}`;
     const email = `person.${randomUUID().slice(0, 6)}@example.com`;
     const linkToken = randomBytes(32).toString("hex");
-    const link = `https://bab.example.com/api/command-center/backfill/${linkToken}`;
+    const link = `https://bab.example.com/api/tasks/backfill/${linkToken}`;
     const secrets = [hex, b64, pkBody, bearer, pat, keyValue, tokenValue, pwValue, quotedPw, email, linkToken, link];
     const ask = [
       `use hash ${hex} and blob ${b64}`,
@@ -577,7 +577,7 @@ describe("sentinel: transcript text never leaves except as the drafted line", ()
     for (const f of ["a.json", "b.json"]) {
       const u = capture();
       expect(await run(["upload", "--draft", path.join(outDir, f), "--dry-run"], { ...u.deps, fetch })).toBe(0);
-      expect(await run(["upload", "--draft", path.join(outDir, f), "--url", "https://bab.example.com/api/command-center/backfill/abcdef0123"], { ...u.deps, fetch })).toBe(0);
+      expect(await run(["upload", "--draft", path.join(outDir, f), "--url", "https://bab.example.com/api/tasks/backfill/abcdef0123"], { ...u.deps, fetch })).toBe(0);
       expect(u.out.join("\n") + u.err.join("\n")).not.toContain(S);
     }
     expect(bodies).toHaveLength(2);
@@ -638,7 +638,7 @@ describe("upload", () => {
   it("batches at 2000 entries, uploads one batch per link, prints counts and what is left", async () => {
     const p = draftWith(Array.from({ length: 2500 }, (_, i) => entry(i)));
     const token = "abcdef" + randomBytes(32).toString("hex").slice(6);
-    const url = `https://bab.example.com/api/command-center/backfill/${token}`;
+    const url = `https://bab.example.com/api/tasks/backfill/${token}`;
     const sent: Array<{ url: string; body: { v: number; entries: Entry[] } }> = [];
     const fetch = async (u: string, init: { body: string; method: string; headers: Record<string, string>; redirect?: string }) => {
       expect(init.method).toBe("POST");
@@ -663,7 +663,7 @@ describe("upload", () => {
     expect(text).toContain("at is too old");
     expect(text).toContain("500 entries left");
     expect(text).toContain("--from 2000");
-    expect(text).toContain("/api/command-center/backfill/abcdef...");
+    expect(text).toContain("/api/tasks/backfill/abcdef...");
     expect(c.out.join("\n") + c.err.join("\n")).not.toContain(token);
 
     // Continue with --from and a second link; or send both batches with two links.
@@ -680,8 +680,8 @@ describe("upload", () => {
   it("takes the link from BAB_BACKFILL_LINK when no --url is given, refusing redirects; --url wins", async () => {
     const p = draftWith([entry(1)]);
     const token = randomBytes(32).toString("hex");
-    const envUrl = `https://bab.example.com/api/command-center/backfill/${token}`;
-    const flagUrl = `https://bab.example.com/api/command-center/backfill/${randomBytes(32).toString("hex")}`;
+    const envUrl = `https://bab.example.com/api/tasks/backfill/${token}`;
+    const flagUrl = `https://bab.example.com/api/tasks/backfill/${randomBytes(32).toString("hex")}`;
     const sent: Array<{ url: string; redirect?: string }> = [];
     const fetch = async (u: string, init: { redirect?: string }) => {
       sent.push({ url: u, redirect: init.redirect });
@@ -714,28 +714,28 @@ describe("upload", () => {
   it("reports a refused upload with a non-zero exit and the masked link", async () => {
     const p = draftWith([entry(1)]);
     const token = randomBytes(32).toString("hex");
-    const url = `https://bab.example.com/api/command-center/backfill/${token}`;
+    const url = `https://bab.example.com/api/tasks/backfill/${token}`;
     const c = capture();
-    const fetch = async () => new Response(JSON.stringify({ error: "This link is used or expired; make a new one with bab_command_center action=backfill_link" }), { status: 404 });
+    const fetch = async () => new Response(JSON.stringify({ error: "This link is used or expired; make a new one with bab_tasks action=backfill_link" }), { status: 404 });
     expect(await run(["upload", "--draft", p, "--url", url], { ...c.deps, fetch })).toBe(1);
     expect(c.err.join("\n")).toMatch(/HTTP 404: This link is used or expired/);
     expect(c.out.join("\n") + c.err.join("\n")).not.toContain(token);
   });
 
   it("masks the link token after 6 characters", () => {
-    expect(maskUrl("https://bab.example.com/api/command-center/backfill/0123456789abcdef?x=1")).toBe("https://bab.example.com/api/command-center/backfill/012345...");
+    expect(maskUrl("https://bab.example.com/api/tasks/backfill/0123456789abcdef?x=1")).toBe("https://bab.example.com/api/tasks/backfill/012345...");
   });
 
   it("refuses http on a non-loopback host and accepts https and loopback http", async () => {
-    expect(() => checkUploadUrl("http://bab.example.com/api/command-center/backfill/abc")).toThrow(/https/);
+    expect(() => checkUploadUrl("http://bab.example.com/api/tasks/backfill/abc")).toThrow(/https/);
     expect(() => checkUploadUrl("ftp://bab.example.com/x")).toThrow(/https/);
-    expect(checkUploadUrl("http://127.0.0.1:4310/api/command-center/backfill/abc").hostname).toBe("127.0.0.1");
+    expect(checkUploadUrl("http://127.0.0.1:4310/api/tasks/backfill/abc").hostname).toBe("127.0.0.1");
     expect(checkUploadUrl("http://localhost:4310/x").hostname).toBe("localhost");
     expect(checkUploadUrl("https://bab.example.com/x").protocol).toBe("https:");
     const p = draftWith([entry(1)]);
     const c = capture();
     let called = 0;
-    expect(await run(["upload", "--draft", p, "--url", "http://bab.example.com/api/command-center/backfill/abc"], { ...c.deps, fetch: async () => { called++; return new Response("{}"); } })).toBe(2);
+    expect(await run(["upload", "--draft", p, "--url", "http://bab.example.com/api/tasks/backfill/abc"], { ...c.deps, fetch: async () => { called++; return new Response("{}"); } })).toBe(2);
     expect(called).toBe(0);
   });
 });
@@ -1108,7 +1108,7 @@ describe("sync: draft output and masking", () => {
     };
     const u = capture();
     expect(await run(["upload", "--draft", path.join(outDir, "s.json"), "--dry-run"], { ...u.deps, fetch })).toBe(0);
-    expect(await run(["upload", "--draft", path.join(outDir, "s.json"), "--url", "https://bab.example.com/api/command-center/backfill/abcdef0123"], { ...u.deps, fetch })).toBe(0);
+    expect(await run(["upload", "--draft", path.join(outDir, "s.json"), "--url", "https://bab.example.com/api/tasks/backfill/abcdef0123"], { ...u.deps, fetch })).toBe(0);
     expect(u.out.join("\n") + u.err.join("\n") + bodies.join("\n")).not.toContain(S);
     expect(bodies).toHaveLength(1);
   });
@@ -1315,7 +1315,7 @@ describe("sync: upload of current records", () => {
     // The server's real answer shape for current records.
     return new Response(JSON.stringify({ accepted: 0, duplicate: 0, refused: [], created: [], reassigned: [], syncCreated: 2, syncSkipped: 0, syncRefused: [] }), { status: 200 });
   };
-  const URL1 = "https://bab.example.com/api/command-center/backfill/abcdef0123";
+  const URL1 = "https://bab.example.com/api/tasks/backfill/abcdef0123";
 
   it("sends included records as current, allowlisted, without include or review fields", async () => {
     const p = syncDraft([
@@ -1779,7 +1779,7 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
   });
 
   it("--retry-errors maps the redone entries with the current rules", async () => {
-    writeTranscript([...pair(NOW - 10 * HOUR, 5, { session: "a" }), titleLine("a", "ai-title", "Command Center")]);
+    writeTranscript([...pair(NOW - 10 * HOUR, 5, { session: "a" }), titleLine("a", "ai-title", "BAB Tasks")]);
     const out = path.join(dir, "d.json");
     const failing = async (): Promise<string> => {
       throw new Error("model request failed (network)");
@@ -1787,7 +1787,7 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
     await run(["draft", "--projects-dir", projects, "--out", out], { ...capture().deps, provider: failing });
     expect(JSON.parse(readFileSync(out, "utf8")).entries[0]).toMatchObject({ initiative: "unassigned", error: "model request failed (network)" });
     const map = path.join(dir, "map.json");
-    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "command center" }] }));
+    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "BAB Tasks" }] }));
     expect(await run(["draft", "--projects-dir", projects, "--out", out, "--retry-errors", "--map", map], { ...capture().deps, provider: async () => "Built it" })).toBe(0);
     expect(JSON.parse(readFileSync(out, "utf8")).entries[0]).toMatchObject({ initiative: "cc", worked: "Built it", include: true });
   });
@@ -1851,7 +1851,7 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
     writeTranscript([
       ...pair(t0, 5, { ...generic, session: "a" }),
       titleLine("a", "ai-title", "Ai said something"),
-      titleLine("a", "custom-title", "Command Center rollout zq"),
+      titleLine("a", "custom-title", "BAB Tasks rollout zq"),
       ...pair(t0, 5, { ...generic, session: "b" }),
       titleLine("b", "ai-title", "Fix flaky login tests"),
       ...pair(t0, 5, { ...generic, session: "c" }),
@@ -1859,7 +1859,7 @@ describe("real run fixes: model answers, retry-errors, title and session mapping
       ...pair(t0, 5, { ...generic, session: "d" }),
     ]);
     const map = path.join(dir, "map.json");
-    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "command center" }, { initiative: "pinned", sessionId: "d" }] }));
+    writeFileSync(map, JSON.stringify({ rules: [{ initiative: "cc", titleMatch: "BAB Tasks" }, { initiative: "pinned", sessionId: "d" }] }));
     const out = path.join(dir, "out", "d.json");
     expect(await run(["draft", "--projects-dir", projects, "--out", out, "--map", map, "--no-llm"], capture().deps)).toBe(0);
     const entries = JSON.parse(readFileSync(out, "utf8")).entries as Entry[];

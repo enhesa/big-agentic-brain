@@ -74,7 +74,7 @@ const DIAGRAMS = [
   "Reminders",
   "Files and keys",
   "Agents taking turns",
-  "Your Command Center",
+  "Your BAB Tasks",
   // About BAB
   "Feedback about BAB",
   "Seeing how BAB is used",
@@ -192,7 +192,7 @@ describe("/docs", () => {
     expect(html).toContain("file_shares");
   });
 
-  it("draws bab_kv locks and throttles, and Command Center", async () => {
+  it("draws bab_kv locks and throttles, and BAB Tasks", async () => {
     const html = await render();
     expect(html).toContain("held by you: wait");
     expect(html).toContain("throttle: next slot?");
@@ -224,7 +224,7 @@ describe("/docs", () => {
     // session, what BAB tells your session). It went from 1000 to 1330 for "Under the hood" (2026-10-08), then 1350 for the failed-command note:
     // four technical drawings whose labels (table names, paths, numbers) add about 375 words to the
     // page's 925 or so, 1315 in all. It went from 1350 to 1400 on 2026-11-05 for two features the
-    // page did not draw (agents taking turns with bab_kv, Command Center), after shortening ten
+    // page did not draw (agents taking turns with bab_kv, BAB Tasks), after shortening ten
     // labels elsewhere. If a change pushes past the cap, shorten a label or
     // cut a diagram's detail instead of raising the number: a step that needs a sentence is the
     // wrong step.
