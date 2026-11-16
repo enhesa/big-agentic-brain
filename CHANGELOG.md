@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.26.0](https://github.com/enhesa/big-agentic-brain/compare/v2.25.3...v2.26.0) (2026-11-16)
+
+
+### Features
+
+* **command-center:** add a patch action to bab_command_center ([#152](https://github.com/enhesa/big-agentic-brain/issues/152)) ([d29bf4f](https://github.com/enhesa/big-agentic-brain/commit/d29bf4f22f37971143dc590f264f022365ca8bc7))
+
 ## [2.25.3](https://github.com/enhesa/big-agentic-brain/compare/v2.25.2...v2.25.3) (2026-11-16)
 
 
