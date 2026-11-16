@@ -6,6 +6,9 @@
 # with "{") of at most 64 KB, so a captive portal's page never lands in the session.
 # After a connection failure it skips the call for 5 minutes (a stamp in CLAUDE_PLUGIN_DATA; without
 # that folder there is no skipping, never a stamp in a shared temp folder).
+# When the bab_token setting is set (CLAUDE_PLUGIN_OPTION_BAB_TOKEN), it is sent as a bearer token, so
+# the hooks also work on an instance that sets BAB_API_TOKENS. A token with characters outside
+# A-Z a-z 0-9 . _ ~ + / = - is not sent.
 # Without a usable URL it makes no call and says so on stderr once per 5 minutes.
 # Always exits 0 and prints nothing else on stdout: a hook must never break or block a session.
 # Builtins where it can: every extra process costs time on Windows, on every prompt.
@@ -81,12 +84,18 @@ case "$url" in
   *[!A-Za-z0-9.:/_-]*) no_url ;;
 esac
 
+# An optional bearer header; empty arguments are never passed to curl.
+tok=${CLAUDE_PLUGIN_OPTION_BAB_TOKEN:-}
+case "$tok" in
+  '' | *[!A-Za-z0-9._~+/=-]*) tok= ;;
+esac
+
 stamp="$data/hook-offline-until"
 is_quiet "$stamp" && drain
 
 # The body, then one last line: status, connect time, size, content type.
 out=$(curl -s --connect-timeout 1 --max-time "$max_time" --max-filesize "$MAX_BYTES" \
-  -H 'Content-Type: application/json' --data-binary @- \
+  -H 'Content-Type: application/json' ${tok:+-H "Authorization: Bearer $tok"} --data-binary @- \
   -w "${nl}%{http_code} %{time_connect} %{size_download} %{content_type}" "$url/api/hook")
 rc=$?
 body=${out%"$nl"*}

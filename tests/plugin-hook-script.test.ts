@@ -38,7 +38,10 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
       req.on("data", (c) => (body += c));
       req.on("end", () => {
         calls += 1;
-        if (req.url === "/json/api/hook") {
+        if (req.url === "/auth/api/hook") {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ auth: req.headers.authorization ?? null }));
+        } else if (req.url === "/json/api/hook") {
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ echo: JSON.parse(body || "{}"), hookSpecificOutput: { additionalContext: "hi" } }));
         } else if (req.url === "/html/api/hook") {
@@ -88,6 +91,7 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     url: string | undefined,
     input = '{"session_id":"s1","hook_event_name":"Stop"}',
     dataDir: string | null = data,
+    token?: string,
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
       const env: NodeJS.ProcessEnv = { ...process.env };
@@ -95,6 +99,8 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
       if (dataDir !== null) env.CLAUDE_PLUGIN_DATA = dataDir;
       delete env.CLAUDE_PLUGIN_OPTION_BAB_URL;
       if (url !== undefined) env.CLAUDE_PLUGIN_OPTION_BAB_URL = url;
+      delete env.CLAUDE_PLUGIN_OPTION_BAB_TOKEN;
+      if (token !== undefined) env.CLAUDE_PLUGIN_OPTION_BAB_TOKEN = token;
       const child = spawn("sh", [SCRIPT, "3"], { env });
       let stdout = "";
       let stderr = "";
@@ -109,6 +115,16 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     const out = await run(`${base}/json`);
     expect(out.status).toBe(0);
     expect(JSON.parse(out.stdout)).toEqual({ echo: { session_id: "s1", hook_event_name: "Stop" }, hookSpecificOutput: { additionalContext: "hi" } });
+  });
+
+  it("sends the bab_token setting as a bearer token", async () => {
+    const out = await run(`${base}/auth`, undefined, data, "tok_abc+/=.-~");
+    expect(JSON.parse(out.stdout).auth).toBe("Bearer tok_abc+/=.-~");
+  });
+
+  it.each([undefined, "", "bad token", 'x"; id', "${user_config.bab_token}"])("sends no bearer header for the token %j", async (token) => {
+    const out = await run(`${base}/auth`, undefined, data, token);
+    expect(JSON.parse(out.stdout).auth).toBeNull();
   });
 
   it("drops a trailing slash from the URL", async () => {
