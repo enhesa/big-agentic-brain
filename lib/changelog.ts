@@ -19,6 +19,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-16",
+    title: "Release 2.25.1 and a framework update",
+    changes: [
+      "BAB now runs on an updated Next.js release with upstream security and stability fixes.",
+      "Release 2.25.1 rolls out the redact, Command Center and plugin fixes from the last days.",
+    ],
+  },
+  {
     date: "2026-11-13",
     title: "Long pasted text no longer stalls BAB",
     changes: [
