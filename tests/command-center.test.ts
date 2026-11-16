@@ -305,6 +305,159 @@ describe("publish", () => {
   });
 });
 
+describe("patch", () => {
+  const patch = (extra: Record<string, unknown>, actor?: Parameters<Cc["runCommandCenter"]>[0]) => run({ action: "patch", id: "billing-export", ...extra }, actor);
+
+  it("merges scalars: a field left out stays, null clears, and the answer carries the new seq", () => {
+    publish({ priority: "high", deadline: "2026-04-01" });
+    expect(patch({ title: "Billing export v2", deadline: null })).toMatchObject({ id: "billing-export", seq: 2 });
+    const got = cc.ccGet(OWNER, "billing-export");
+    expect(got).toMatchObject({ title: "Billing export v2", deadline: null, priority: "high", area: "finance", state: "active" });
+    expect(got.tasks.map((t) => t.id)).toEqual(["design", "build"]);
+    expect(got.links).toHaveLength(1);
+    expect(got.source).toMatchObject({ machine: "laptop-1", session: "s-1" });
+  });
+
+  it("adds, updates and removes tasks, questions and links by key, and leaves the others untouched", () => {
+    publish({ links: [{ label: "PR", url: "https://git.example.com/acme/x/pull/1" }, { label: "Docs", url: "https://example.com/docs" }] });
+    const before = cc.ccGet(OWNER, "billing-export");
+    vi.setSystemTime(NOW + HOUR);
+    patch({
+      tasks: [{ id: "build", status: "done" }, { id: "ship", text: "Ship it", status: "pending" }],
+      questions: [{ id: "q-scope", remove: true }, { id: "q-format", text: "CSV or JSON?" }],
+      links: [{ url: "https://example.com/docs", remove: true }, { url: "https://git.example.com/acme/x/pull/1", label: "Pull request" }],
+    });
+    const got = cc.ccGet(OWNER, "billing-export");
+    expect(got.tasks.map((t) => [t.id, t.status, t.text])).toEqual([
+      ["design", "done", "Design it"],
+      ["build", "done", "Build it"],
+      ["ship", "pending", "Ship it"],
+    ]);
+    // The untouched task keeps its times; the finished one gets a finish time now.
+    expect(got.tasks[0]).toEqual(before.tasks[0]);
+    expect(got.tasks[1]).toMatchObject({ startedAt: before.tasks[1].startedAt, finishedAt: new Date(NOW + HOUR).toISOString() });
+    expect(got.questions.find((q) => q.id === "q-scope")?.clearedAt).toBe(new Date(NOW + HOUR).toISOString());
+    expect(got.questions.find((q) => q.id === "q-format")).toMatchObject({ clearedAt: null, options: [] });
+    expect(got.links).toEqual([{ label: "Pull request", url: "https://git.example.com/acme/x/pull/1" }]);
+    const kinds = cc.ccLogOf(OWNER).map((e) => e.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["task_done", "question_cleared", "question_asked"]));
+  });
+
+  it("keeps health on a recurring record unless the patch sends it", () => {
+    const health = { level: "green", reason: "", checkedAt: "2026-03-02T09:00:00Z" };
+    publish({ id: "billing-export", kind: "recurring", cadence: "daily", tasks: [], health });
+    patch({ title: "Nightly billing" });
+    expect(cc.ccGet(OWNER, "billing-export").health).toMatchObject({ level: "green" });
+    patch({ health: null });
+    expect(cc.ccGet(OWNER, "billing-export").health).toBeNull();
+  });
+
+  it("rejects a stale expectSeq with 409 and the current record, and accepts the current one", () => {
+    publish();
+    patch({ title: "Changed by another session" });
+    const r = refusal(() => patch({ expectSeq: 1, title: "Mine" }));
+    expect(r.status).toBe(409);
+    expect(r.current).toMatchObject({ seq: 2, title: "Changed by another session" });
+    expect(patch({ expectSeq: 2, title: "Mine" })).toMatchObject({ seq: 3 });
+  });
+
+  it("two sessions patching different items both land, without expectSeq", () => {
+    publish();
+    patch({ tasks: [{ id: "a", text: "From session A", status: "pending" }], source: { session: "s-a" } });
+    patch({ tasks: [{ id: "b", text: "From session B", status: "pending" }], source: { session: "s-b" } });
+    const got = cc.ccGet(OWNER, "billing-export");
+    expect(got.tasks.map((t) => t.id)).toEqual(["design", "build", "a", "b"]);
+    expect(got.writers.map((w) => w.session)).toEqual(["s-1", "s-a", "s-b"]);
+  });
+
+  it("does not count the kept source as a writer", () => {
+    publish();
+    patch({ title: "No source sent" });
+    patch({ title: "Only a link sent", source: { link: "https://example.com/session/2" } });
+    expect(cc.ccGet(OWNER, "billing-export").writers.map((w) => w.session)).toEqual(["s-1"]);
+  });
+
+  it("merges source field by field, and null clears it", () => {
+    publish({ source: { machine: "laptop-1", session: "s-1", link: "https://example.com/session/1" } });
+    patch({ source: { session: "s-2" } });
+    expect(cc.ccGet(OWNER, "billing-export").source).toEqual({ machine: "laptop-1", session: "s-2", link: "https://example.com/session/1" });
+    patch({ source: { link: null } });
+    expect(cc.ccGet(OWNER, "billing-export").source).toEqual({ machine: "laptop-1", session: "s-2" });
+    patch({ source: null });
+    expect(cc.ccGet(OWNER, "billing-export").source).toBeNull();
+  });
+
+  it("refuses null for a field that cannot be empty", () => {
+    publish();
+    for (const field of ["state", "kind", "title", "v"]) {
+      expect(refusal(() => patch({ [field]: null }))).toMatchObject({ status: 400, message: `${field} cannot be null on patch; leave it out to keep it, or send a new value` });
+    }
+    expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, state: "active", kind: "project" });
+  });
+
+  it("is audited as cc_patch, not cc_publish", async () => {
+    publish();
+    patch({ title: "Patched" });
+    patch({ title: "Patched", worked: "Logged on an unchanged record" });
+    expect(await auditRows("cc_publish")).toHaveLength(1);
+    expect(await auditRows("cc_patch")).toHaveLength(2);
+  });
+
+  it("rejects an unknown id with 404 and never creates a record", () => {
+    const r = refusal(() => run({ action: "patch", id: "nothing-here", title: "New" }));
+    expect(r.status).toBe(404);
+    expect(r.message).toMatch(/publish the whole record first/);
+    expect(run({ action: "list" }).initiatives).toEqual([]);
+  });
+
+  it("refuses bad changes and names the field", () => {
+    publish();
+    expect(refusal(() => patch({ tasks: { id: "x" } })).message).toMatch(/^tasks must be an array of changes/);
+    expect(refusal(() => patch({ tasks: [{ text: "No id", status: "pending" }] })).message).toMatch(/^tasks\[0\]\.id is required/);
+    expect(refusal(() => patch({ tasks: [{ id: "build", remove: false }] })).message).toMatch(/remove must be true/);
+    expect(refusal(() => patch({ tasks: [{ id: "build", status: "done", remove: true }] })).message).toMatch(/send only id and remove: true/);
+    expect(refusal(() => patch({ tasks: [{ id: "x", text: "New" }] })).message).toMatch(/^tasks\[2\]\.status must be/);
+    expect(refusal(() => patch({ tasks: [{ id: "build", status: "done" }, { id: "build", status: "pending" }] })).message).toMatch(/sent twice/);
+    expect(refusal(() => patch({ tasks: [{ id: "build", owner: "someone" }] })).message).toMatch(/unknown field 'tasks\[0\]\.owner'/);
+    expect(refusal(() => patch({ comments: [] })).message).toMatch(/comments is gone/);
+    expect(cc.ccGet(OWNER, "billing-export").seq).toBe(1);
+  });
+
+  it("refuses confidential text in a patched field like a publish, and stores nothing", () => {
+    publish();
+    const token = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    expect(refusal(() => patch({ tasks: [{ id: "build", text: `use ${token}` }] })).message).toMatch(/^tasks\[1\]\.text holds .+, and Command Center never keeps confidential data/);
+    expect(refusal(() => patch({ worked: `used ${token}` })).message).toMatch(/^worked holds/);
+    expect(cc.ccGet(OWNER, "billing-export").seq).toBe(1);
+  });
+
+  it("respects the limits on the merged record", () => {
+    publish({ questions: Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, text: "Why?" })) });
+    expect(refusal(() => patch({ questions: [{ id: "q-six", text: "One more?" }] })).message).toMatch(/questions: at most 5 open/);
+    expect(patch({ questions: [{ id: "q0", remove: true }, { id: "q-six", text: "One more?" }] })).toMatchObject({ seq: 2 });
+    const tasks = Array.from({ length: 49 }, (_, i) => ({ id: `t${i}`, text: "x", status: "pending" }));
+    expect(refusal(() => patch({ tasks })).message).toMatch(/tasks: at most 50 tasks; you sent 51/);
+    const big = Array.from({ length: 18 }, (_, i) => ({ label: "z".repeat(60), url: "https://example.com/" + "p".repeat(470) + i }));
+    patch({ links: big });
+    expect(cc.ccGet(OWNER, "billing-export").links).toHaveLength(19);
+    expect(refusal(() => patch({ links: [{ label: "a", url: "https://example.com/a" }, { label: "b", url: "https://example.com/b" }] })).message).toMatch(/links: at most 20 links/);
+  });
+
+  it("a replayed patch is unchanged, and logs its worked line once", () => {
+    publish();
+    expect(patch({ tasks: [{ id: "build", status: "done" }], worked: "Built it" })).toMatchObject({ seq: 2 });
+    expect(patch({ tasks: [{ id: "build", status: "done" }], worked: "Built it" })).toMatchObject({ seq: 2, unchanged: true });
+    expect(cc.ccLogOf(OWNER).filter((e) => e.kind === "worked")).toHaveLength(1);
+  });
+
+  it("reads JSON text and record on the MCP path", () => {
+    publish();
+    const out = cc.runCommandCenterMcp(ME, { action: "patch", id: "billing-export", record: { tasks: JSON.stringify([{ id: "build", status: "done" }]), expectSeq: "1" } }, ORIGIN) as { seq: number };
+    expect(out.seq).toBe(2);
+    expect(cc.ccGet(OWNER, "billing-export").tasks[1].status).toBe("done");
+  });
+});
+
 describe("the work log", () => {
   it("logs worked with the server time, the session and machine, and a size", () => {
     const res = publish({ worked: "Built the export", size: "medium" });

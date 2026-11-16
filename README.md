@@ -273,7 +273,7 @@ In Claude Code without the plugin: `claude mcp add --transport http bab https://
 | `bab_people` | The people directory, maintainers, home teams and knowledge-area contacts. | |
 | `bab_files` | Pass files between sessions, machines and colleagues. | |
 | `bab_kv` | Atomic locks, counters, compare-and-swap and a shared pace. | |
-| `bab_command_center` | Publish to the person's private Command Center page and its work log. | |
+| `bab_command_center` | Publish or patch the person's private Command Center page and its work log. | |
 | `bab_feedback` | Bugs and ideas about BAB itself, votes, comments and triage. | |
 | `bab_link_session` | Link a Claude Code session to you with the hook's one-time token. | |
 

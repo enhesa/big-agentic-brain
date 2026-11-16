@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.25.3](https://github.com/enhesa/big-agentic-brain/compare/v2.25.2...v2.25.3) (2026-11-16)
+
+
+### Bug Fixes
+
+* **hooks:** send the API token from the hook script ([#150](https://github.com/enhesa/big-agentic-brain/issues/150)) ([5779de2](https://github.com/enhesa/big-agentic-brain/commit/5779de2ca427583bc56188a197d7cb5f989a707d))
+
 ## [2.25.2](https://github.com/enhesa/big-agentic-brain/compare/v2.25.1...v2.25.2) (2026-11-16)
 
 

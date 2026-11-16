@@ -1152,13 +1152,13 @@ export const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["create", "list", "complete", "snooze", "abandon"], description: "Which operation to perform; required, has no default. snooze moves the due date to dueAt if given, else 7 days past today or the current due date, whichever is later." },
-        title: { type: "string", description: "Reminder title, required for action=create, 160 characters or fewer." },
+        action: { type: "string", enum: ["create", "list", "complete", "snooze", "abandon"], description: "Required, has no default. snooze moves the due date to dueAt if given, else 7 days past today or the current due date, whichever is later." },
+        title: { type: "string", description: "create: required, 160 characters or fewer." },
         dueAt: { type: "string", description: "Due date YYYY-MM-DD, or date-time with offset or Z (2026-10-21T16:00:00-04:00); a time needs an offset. Required for create; optional for snooze." },
-        body: { type: "string", description: "Optional reminder detail for action=create, 4000 characters or fewer." },
-        relatedKey: { type: "string", description: "Optional free-text key linking this reminder to something else, for action=create." },
-        id: { type: "string", description: "The reminder's id; required for action=complete/snooze/abandon." },
-        tab: { type: "string", enum: ["overdue", "due_soon", "open", "done"], description: "Which reminders to list, for action=list; defaults to open." },
+        body: { type: "string", description: "create: optional detail, 4000 characters or fewer." },
+        relatedKey: { type: "string", description: "create: optional free-text key linking it to something else." },
+        id: { type: "string", description: "complete, snooze, abandon: the reminder id." },
+        tab: { type: "string", enum: ["overdue", "due_soon", "open", "done"], description: "list: which reminders; default open." },
       },
       required: ["action"],
     },
@@ -1290,7 +1290,7 @@ export const TOOLS: Tool[] = [
       properties: {
         action: { type: "string", enum: [...CC_ACTIONS], description: "Required, has no default." },
         id: { type: "string" },
-        record: { type: "object", additionalProperties: true, description: "The record, with worked, for publish." },
+        record: { type: "object", additionalProperties: true, description: "publish: whole record, with worked. patch: changes only; items merge by id, remove: true drops one. Optional expectSeq." },
       },
       required: ["action"],
     },
