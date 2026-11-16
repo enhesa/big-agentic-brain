@@ -136,7 +136,7 @@ describe("isAutoAllowed", () => {
     expect(isAutoAllowed(tool("bab_react"), server, { learningId: "x", action })).toBe(false);
   });
 
-  it.each(["publish", "list"])("approves bab_command_center %s, which the skill calls every turn", (action) => {
+  it.each(["publish", "patch", "list"])("approves bab_command_center %s, which the skill calls every turn", (action) => {
     expect(isAutoAllowed(tool("bab_command_center"), server, { action })).toBe(true);
   });
 
@@ -144,7 +144,7 @@ describe("isAutoAllowed", () => {
     expect(isAutoAllowed(tool("bab_command_center"), server, { action })).toBe(false);
   });
 
-  it.each([undefined, null, "publish", 7, {}, { action: 1 }, { action: "PUBLISH" }])("keeps the ask when the input is %j", (input) => {
+  it.each([undefined, null, "publish", 7, {}, { action: 1 }, { action: "PUBLISH" }, { action: "PATCH" }])("keeps the ask when the input is %j", (input) => {
     expect(isAutoAllowed(tool("bab_command_center"), server, input)).toBe(false);
     expect(isAutoAllowed(tool("bab_react"), server, input)).toBe(false);
     if (typeof input !== "object" || input === null) {

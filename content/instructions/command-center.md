@@ -24,7 +24,7 @@ session (`get_session` with `"self"`) and use its `link`. Only when your app giv
 leave it out. A card without a link cannot be opened, so check it on every publish.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
-or declined a task.
+or declined a task. A `patch` with `worked` counts as that publish.
 
 If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
 of your first turn, with that step `in_progress`. Publish again after every task status change, and
@@ -38,8 +38,9 @@ Your first reply after your first publish includes the full page link {{ORIGIN}}
 Always paste the URL itself, never only say that Command Center is tracking the work. Later replies do
 not repeat it.
 
-To see what another session published, call `list` with the `id`: it returns the full record and
-its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
+After the first publish, prefer `patch`: it sends only what changed, so two sessions on one
+initiative never overwrite each other. To see what another session published, call `list` with the
+`id`: it returns the full record and its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
 after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
 `expectSeq` protects the other session.
 
@@ -66,6 +67,14 @@ Send the record as one object in `record`, with `action` and `id` beside it:
 `{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [], "worked": "Planned the export" } }`.
 Put `action`, `id` and `record` at the top level of the call. Never nest them inside `record`.
 
+`patch` changes an initiative that already exists (an unknown `id` is refused: publish it first).
+Send only what changed: a field you leave out keeps its value, and `null` clears an optional one. In `tasks`,
+`questions` and `links`, each item is a change, found by its `id` (links by `url`): a known one is
+updated with the fields you send, a new one is added, and `"remove": true` drops it (a removed
+question is cleared). Items you do not name stay as they are. For example
+`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "worked": "Built the exporter" } }`.
+Send `source` with every patch, as on publish. The same limits and checks apply to the merged record.
+
 | Field | Rules |
 | --- | --- |
 | `v` | `1`. Required. |
@@ -85,7 +94,7 @@ Put `action`, `id` and `record` at the top level of the call. Never nest them in
 | `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
-| `expectSeq` | Optional. The `seq` you last saw; a mismatch is 409 with the current record to merge. |
+| `expectSeq` | Optional, on publish and patch. The `seq` you last saw; a mismatch is 409 with the current record to merge. Every answer gives the new `seq`. |
 
 Always put the link that opens this session in `source.link` (for example claude://claude.ai/epitaxy/<your session id>, from `get_session` `"self"` in the Claude desktop app); the page shows an Open in Claude button.
 

@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-16",
     title: "Release 2.25.1 and a framework update",
     changes: [
+      "Command Center has a patch action: change only some fields or tasks, so two sessions no longer overwrite each other.",
       "The plugin's hooks now send your API token, so they also work on instances that require one.",
       "BAB now runs on an updated Next.js release with upstream security and stability fixes.",
       "Release 2.25.1 rolls out the redact, Command Center and plugin fixes from the last days.",

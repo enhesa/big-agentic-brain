@@ -63,6 +63,27 @@ const getOne = async (id: string) => (await import("../app/api/command-center/[i
 const action = async (id: string, body: unknown, extra?: Record<string, string>) =>
   (await import("../app/api/command-center/[id]/actions/route")).POST(req(`/api/command-center/${id}/actions`, "POST", body, extra), ctx(id));
 
+const patchReq = async (id: string, body: unknown) => (await import("../app/api/command-center/[id]/route")).PATCH(req(`/api/command-center/${id}`, "PATCH", body), ctx(id));
+
+describe("PATCH /api/command-center/<id>", () => {
+  it("changes part of a record, 404s an unknown id and refuses a mismatched id or an action", async () => {
+    expect((await patchReq("billing", { title: "x" })).status).toBe(401);
+    headers = asDevice();
+    expect((await patchReq("billing", { title: "x" })).status).toBe(404);
+    await put("billing", RECORD);
+    const res = await patchReq("billing", { tasks: [{ id: "t1", status: "done" }], expectSeq: 1 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: "billing", seq: 2 });
+    expect(await (await getOne("billing")).json()).toMatchObject({ title: "Billing export", tasks: [{ id: "t1", status: "done" }] });
+    const stale = await patchReq("billing", { title: "Stale", expectSeq: 1 });
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).current).toMatchObject({ seq: 2 });
+    expect((await patchReq("billing", { id: "other", title: "x" })).status).toBe(400);
+    expect((await patchReq("billing", { action: "remove" })).status).toBe(400);
+    expect((await patchReq("billing", "not json")).status).toBe(400);
+  });
+});
+
 describe("/api/command-center", () => {
   it("401s without an identity and 403s a declared one", async () => {
     expect((await list()).status).toBe(401);
@@ -201,7 +222,7 @@ describe("bab_command_center", () => {
     expect(LEAN_TOOL_NAMES).not.toContain("bab_command_center");
     const tool = findTool("bab_command_center")!;
     expect(tool.description).toMatch(/^Needs the command-center skill/);
-    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"]);
+    expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "patch", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"]);
     expect(tool.description).not.toContain("<origin>");
     expect(tool.inputSchema.required).toEqual(["action"]);
     const actor = { id: OWNER, email: OWNER, name: "Owner One", roles: [], source: "device" as const, deviceId: "d" };

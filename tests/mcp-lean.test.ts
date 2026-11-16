@@ -147,5 +147,7 @@ describe("tool description size", () => {
 // Its backfill_link action (2026-11-03) added 16 characters, the enum value only: the list is 24481.
 // Its delete_all, export, grant_export and revoke_export actions (2026-11-04), which replace the page's
 // switch, delete and export controls, added 53 characters, the enum values only: the list is 24534.
+// Its patch action and the record text naming patch and expectSeq (2026-11-16) added 90 characters, paid for by
+// shorter bab_remind field texts (138 fewer): the list is 24486.
 const CEILING_FULL = 24539;
 const CEILING_LEAN = 11200;

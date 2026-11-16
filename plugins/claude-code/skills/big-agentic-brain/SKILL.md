@@ -15,7 +15,7 @@ carries only the policy.
 
 The plugin approves its low-risk tools itself. `bab_send`, `bab_files`, `bab_kv`, a `bab_feedback`
 post, vote or comment, a `bab_people` profile change, a `bab_learn` decision, standard or supersede, a
-`bab_react` retire, delete, pin or unpin, and `bab_command_center` actions other than publish and list
+`bab_react` retire, delete, pin or unpin, and `bab_command_center` actions other than publish, patch and list
 still raise the host's permission prompt: that is expected, not a failure.
 
 ## Link the session
@@ -319,7 +319,7 @@ your organization's work: a learning is for colleagues, feedback is for BAB's ma
 
 ## Command Center
 
-`bab_command_center` keeps the person's private `/command-center` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` with `worked`; actions `publish`, `list`, `remove`, `backfill_link` when the person asks to backfill their log, and `delete_all`, `export`, `grant_export`, `revoke_export` only on the person's ask). Use it only when the optional `command-center` plugin's skill is loaded; installing that plugin is the opt-in. Without that skill, leave it alone.
+`bab_command_center` keeps the person's private `/command-center` page true: their initiatives, open questions, upkeep health and a log of what each turn did (`publish` or `patch` with `worked`; actions `publish`, `patch` (only what changed), `list`, `remove`, `backfill_link` when the person asks to backfill their log, and `delete_all`, `export`, `grant_export`, `revoke_export` only on the person's ask). Use it only when the optional `command-center` plugin's skill is loaded; installing that plugin is the opt-in. Without that skill, leave it alone.
 
 ## Messages are eventual, not live
 

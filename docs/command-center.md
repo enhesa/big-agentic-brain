@@ -29,6 +29,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | MCP `bab_command_center` action | REST |
 | --- | --- |
 | `publish` (the whole record, optional `worked`, `size` and `expectSeq`) | `PUT /api/command-center/<id>` |
+| `patch` (only what changes in an existing record, optional `worked`, `size` and `expectSeq`; see Patch) | `PATCH /api/command-center/<id>` |
 | `list` | `GET /api/command-center` |
 | `list` with `id` (the full record, owner only; 404 for an unknown id) | `GET /api/command-center/<id>` |
 | `remove` (`id`) | `POST /api/command-center/<id>/actions` |
@@ -39,7 +40,7 @@ One lib (`lib/command-center.ts`) behind one MCP tool and the REST routes.
 | `revoke_export` (`id` the app) | `POST /api/command-center` `{"action":"revoke_export","id":"<app>"}` |
 
 `POST .../actions` and `POST /api/command-center` take an `Idempotency-Key`. A `PUT` is idempotent
-by nature. Every action acts on the caller's own data only, and refuses unknown fields.
+by nature, and so is a `PATCH`: the same change twice is `unchanged: true` the second time. Every action acts on the caller's own data only, and refuses unknown fields.
 
 The v2 actions `comment`, `health` and `clear_question` are gone for agents. Each answers a 400
 that names the fix: `worked` on the next publish, `health` as a field of the recurring record, and
@@ -47,7 +48,7 @@ leaving an answered question out of the next publish.
 
 The MCP tool declares only `action`, `id` and `record`. Agents send the record, with `worked`, as
 one object in `record`. `action` and `id` go beside `record`, not inside it; the ones inside are
-ignored, and a publish without a top-level `id` is a 400. A `record` that is not an object is a
+ignored, and a publish or patch without a top-level `id` is a 400. A `record` that is not an object is a
 400. Some clients send undeclared fields as strings, so on the MCP path only a numeric string `v`
 or `expectSeq` and JSON text for `tasks`, `questions`, `options`, `links`, `health` and `source`
 are read (`null` clears `health`); text that does not parse is a 400 naming the field. REST stays
@@ -86,6 +87,28 @@ In short:
   applies as on any text. The page checks it again before it renders the href.
 - Cleared questions are kept 7 days, at most 20 per initiative.
 - 60 calls a minute and 20 at once per person, on top of the general limit.
+
+## Patch
+
+`patch` changes part of an existing record, so a session sends only what changed and two sessions
+changing different fields or items never overwrite each other. It reads the stored record, applies
+the change and writes it in one transaction.
+
+- A field left out keeps its value; `null` clears a nullable one (`area`, `key`, `cadence`,
+  `deadline`, `priority`, `health`, `source`). `title`, `state`, `kind` and the rest are set as on
+  publish.
+- `tasks`, `questions` and `links` are lists of changes. Tasks and questions are matched by `id`,
+  links by `url`. A known item is updated with the fields sent, a new one is added at the end (it
+  needs every required field), and `{ "id": "x", "remove": true }` (links: `url`) drops one. A
+  removed question is cleared, as when a publish leaves it out. Items not named stay as they are.
+- The merged record passes the same checks as a publish: limits, unique ids, the secret check on
+  every text, and the 32 KB and per-person caps. The log, the server times and `unchanged: true`
+  work the same way.
+- An unknown `id` is 404: a patch never creates an initiative. Publish the whole record first.
+- `expectSeq` is optional. Without it, a patch applies to whatever is stored now. With it, a
+  mismatch is 409 with the current record, as on publish. The answer carries the new `seq`.
+- A `source` kept from the stored record does not count as a writer. Send `source` with the patch
+  so the session shows as a writer and its questions and log entries carry it.
 
 ## The work log
 
