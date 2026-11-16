@@ -665,7 +665,7 @@ export function sweepTasks(now: number = Date.now()): CcSweepResult {
 // ---------------------------------------------------------------------------
 
 export function ccSnapshotPath(): string {
-  return path.join(resolveDataDir(), "tasks-snapshot.json");
+  return path.join(resolveDataDir(), "command-center-snapshot.json");
 }
 
 /** The sha256 of a file's bytes. */
@@ -696,7 +696,7 @@ function deleteSnapshotFile(file: string): void {
  * reads it, and is then deleted: it holds v2 records that Delete now and retention no longer reach.
  * It is deleted only while its sha256 is an imported one that is past the window. A file that a
  * rolled-back v2.19 rewrote has a new sha256, so it is kept; the next v3 start imports it and its
- * own window starts then. A tasks-snapshot.imported.json left by an earlier v3 build is
+ * own window starts then. A command-center-snapshot.imported.json left by an earlier v3 build is
  * deleted once the latest import is past the window.
  */
 function retireImportedSnapshot(now: number): void {
@@ -738,7 +738,7 @@ function retireImportedSnapshot(now: number): void {
 
 /** Where an earlier v3 build renamed an imported snapshot. Only deleted now, never written. */
 export function ccImportedSnapshotPath(): string {
-  return path.join(resolveDataDir(), "tasks-snapshot.imported.json");
+  return path.join(resolveDataDir(), "command-center-snapshot.imported.json");
 }
 
 function isoOrNull(raw: unknown): string | null | undefined {

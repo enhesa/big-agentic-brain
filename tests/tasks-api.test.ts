@@ -221,7 +221,7 @@ describe("bab_tasks", () => {
     const { findTool, LEAN_TOOL_NAMES } = await import("../lib/mcp");
     expect(LEAN_TOOL_NAMES).not.toContain("bab_tasks");
     const tool = findTool("bab_tasks")!;
-    expect(tool.description).toMatch(/^Needs the tasks skill/);
+    expect(tool.description).toMatch(/^Needs the bab-tasks skill/);
     expect((tool.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual(["publish", "patch", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"]);
     expect(tool.description).not.toContain("<origin>");
     expect(tool.inputSchema.required).toEqual(["action"]);

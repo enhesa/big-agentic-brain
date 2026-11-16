@@ -875,7 +875,7 @@ function v2Record(id: string, extra: Record<string, unknown> = {}): Record<strin
 }
 
 function writeSnapshot(owners: Record<string, unknown[]>): void {
-  writeFileSync(path.join(dataDir, "tasks-snapshot.json"), JSON.stringify({ version: 1, savedAt: new Date(NOW).toISOString(), owners }));
+  writeFileSync(path.join(dataDir, "command-center-snapshot.json"), JSON.stringify({ version: 1, savedAt: new Date(NOW).toISOString(), owners }));
 }
 
 describe("the one-time import of a v2 snapshot", () => {
@@ -996,7 +996,7 @@ describe("the one-time import of a v2 snapshot", () => {
     expect(cc.ccGet(OWNER, "gamma")).toMatchObject({ title: "Title gamma", seq: 4 });
   });
 
-  it("deletes a tasks-snapshot.imported.json left by an earlier build after the window", () => {
+  it("deletes a command-center-snapshot.imported.json left by an earlier build after the window", () => {
     writeSnapshot({ [OWNER]: [v2Record("alpha")] });
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     cc.importTasksSnapshot();

@@ -1279,7 +1279,7 @@ export const TOOLS: Tool[] = [
     annotations: { title: "BAB Tasks", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     // Kept short on purpose: every session pays for it. The field rules live in the tasks
     // skill (content/instructions/tasks.md) and in the 400 answers, which name the fix.
-    description: "Needs the tasks skill, which has the format. " + CC_CONTENT_RULE,
+    description: "Needs the bab-tasks skill, which has the format. " + CC_CONTENT_RULE,
     inputSchema: {
       type: "object",
       properties: {

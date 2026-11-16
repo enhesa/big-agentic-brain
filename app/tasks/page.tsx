@@ -592,7 +592,7 @@ function Detail({ r }: { r: Rec }) {
 /** What a person reads: no ticket keys, commit hashes or empty brackets. The full text stays in the tooltip. */
 function simplifyLog(text: string): string {
   const t = text
-    .replace(/\b[A-Z][A-Z0-9]{1,9}-\d+\b:?/g, "")
+    .replace(/\b(?!(?:UTF|SHA|TLS|SSL|ISO|HTTP|HTTPS|TCP|UDP|RFC|AES|MD|V|ES|SQL|X|IPV|GPT|COVID)-)[A-Z][A-Z0-9]{1,9}-\d+\b:?/g, "")
     .replace(/\(?\b[0-9a-f]{7,40}\b\)?/g, (m) => (/[0-9]/.test(m) && /[a-f]/.test(m) ? "" : m))
     .replace(/\(\s*[,;]?\s*\)/g, "")
     .replace(/\s{2,}/g, " ")
