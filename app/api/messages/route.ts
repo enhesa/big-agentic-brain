@@ -1,13 +1,16 @@
 import { NextRequest } from "next/server";
 import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { send, validateRequest, NEW_THREAD_NEEDS_TO } from "@/lib/messages";
+import { send, validateRequest, toArgument, hasTo, NEW_THREAD_NEEDS_TO } from "@/lib/messages";
 import { withIdempotency } from "@/lib/idempotency";
 import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** POST /api/messages — { to, subject?, threadId?, body }. Send, or reply into a thread. */
+/**
+ * POST /api/messages: { to, subject?, threadId?, body }. Send, or reply into a thread. `to` is an
+ * email or a list of them (a group); a reply reaches every other participant.
+ */
 export async function POST(req: NextRequest) {
   let user;
   try {
@@ -26,16 +29,16 @@ export async function POST(req: NextRequest) {
       }
       const record = payload as Record<string, unknown>;
 
-      const to = String(record.to ?? "").trim();
+      const to = toArgument(record.to);
       const body = String(record.body ?? "").trim();
       const subject = record.subject == null ? undefined : String(record.subject);
       const threadId = record.threadId == null ? undefined : String(record.threadId).trim() || undefined;
       if (!body) {
         return { status: 400, body: { error: "body is required" } };
       }
-      // A new thread needs a recipient; a reply can omit it (inferred from the thread).
+      // A new thread needs a recipient; a reply can omit it (it reaches every other participant).
       // Messages go to a person's inbox only: an old client's toSession is ignored.
-      if (!to && !threadId) {
+      if (!hasTo(to) && !threadId) {
         return { status: 400, body: { error: NEW_THREAD_NEEDS_TO } };
       }
 

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { requireThreadForActor, markRead, getLeaseForActor } from "@/lib/messages";
+import { requireThreadForActor, markRead, getLeaseForActor, participantsOf } from "@/lib/messages";
 import { getUsersByIds } from "@/lib/users";
 import { toApiError } from "@/lib/errors";
 
@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/inbox/[threadId] — one thread; participant only, marks it read
- * for me. Carries the participants and the caller's own `lease` on this thread (null if none/expired).
+ * for me. Carries every participant (a group thread has more than two), each message's
+ * `recipients`, and the caller's own `lease` on this thread (null if none/expired).
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ threadId: string }> }) {
   let user;
@@ -31,16 +32,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ thre
     markRead(threadId, user.id, "mcp");
     const found = requireThreadForActor(threadId, user.id);
 
-    const participantIds = new Set<string>([found.thread.created_by]);
-    for (const m of found.messages) {
-      participantIds.add(m.from_id);
-      participantIds.add(m.to_id);
-    }
-    const userMap = getUsersByIds(Array.from(participantIds));
-    const participants = Array.from(participantIds).map((id) => {
-      const u = userMap.get(id);
-      return { id, name: u?.name ?? null };
-    });
+    const participants = participantsOf(threadId);
+    const userMap = getUsersByIds([...new Set(found.messages.flatMap((m) => [m.from_id, m.to_id]))]);
 
     const lease = getLeaseForActor(threadId, user.id) ?? null;
 

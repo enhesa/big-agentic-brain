@@ -1,6 +1,6 @@
 import { config } from "./config";
 import { getDb } from "./db";
-import { inboxFor, thread, threadForViewer, type ViewerMessage } from "./messages";
+import { inboxFor, participantsForThreads, thread, threadForViewer, type ViewerMessage } from "./messages";
 import { getUsersByIds } from "./users";
 import { THREAD_ID_RE } from "./handoff";
 import type { BabEvent } from "./events";
@@ -9,8 +9,14 @@ import type { ThreadRow } from "./types";
 /**
  * Data for the /inbox page and its routes. Everything here is scoped to one viewer id (the
  * long-form email of the signed-in SSO viewer, see getViewer in lib/notify-auth.ts): a thread
- * is only ever returned to someone who sent or received a message in it.
+ * is only ever returned to one of its participants.
  */
+
+/** "Bob, Carol" for two others, "Bob, Carol +2" for more: a group thread's name in a list. */
+export function groupLabel(names: string[]): string {
+  const shown = names.slice(0, 2).join(", ");
+  return names.length > 2 ? `${shown} +${names.length - 2}` : shown;
+}
 
 /** Kill switch: BAB_INBOX_PAGE=0/false/no/off hides the nav item and switches the page and its routes off. Unset means on. */
 export function inboxEnabled(): boolean {
@@ -26,7 +32,10 @@ export interface InboxListItem {
   subject: string;
   unread: number;
   lastAt: string;
-  /** The other person in the thread, from the viewer's side: who they last wrote to or heard from. */
+  /**
+   * The other person in the thread, from the viewer's side: who they last wrote to or heard from.
+   * In a group thread, everyone else (groupLabel).
+   */
   otherName: string;
   lastFromViewer: boolean;
   snippet: string;
@@ -49,6 +58,13 @@ export function inboxSummary(viewerId: string): InboxSummary {
 
   const otherIds = shown.map((t) => (t.lastMessage.from_id === viewerId ? t.lastMessage.to_id : t.lastMessage.from_id));
   const names = getUsersByIds(Array.from(new Set(otherIds)));
+  // A group thread is named after everyone else in it, not one counterpart. Names only for the shown threads.
+  const members = participantsForThreads(shown.map((t) => t.thread.id));
+  const otherName = (t: (typeof shown)[number], i: number) => {
+    const others = (members.get(t.thread.id) ?? []).filter((p) => p.id !== viewerId);
+    if (others.length > 1) return groupLabel(others.map((p) => p.name ?? p.id));
+    return names.get(otherIds[i])?.name ?? otherIds[i];
+  };
 
   return {
     unread,
@@ -57,7 +73,7 @@ export function inboxSummary(viewerId: string): InboxSummary {
       subject: t.thread.subject || "(no subject)",
       unread: t.unreadCount,
       lastAt: t.lastMessage.created_at,
-      otherName: names.get(otherIds[i])?.name ?? otherIds[i],
+      otherName: otherName(t, i),
       lastFromViewer: t.lastMessage.from_id === viewerId,
       snippet: oneLine(t.lastMessage.body),
     })),
@@ -108,7 +124,7 @@ export function earlierThreads(
   if (!REPLY_PREFIX_RE.test((current.thread.subject ?? "").trim())) return [];
   const key = normalizeSubject(current.thread.subject);
   if (!key) return [];
-  const people = (msgs: ViewerMessage[]) => new Set(msgs.flatMap((m) => [m.from_id, m.to_id]));
+  const people = (msgs: ViewerMessage[]) => new Set(msgs.flatMap((m) => [m.from_id, ...m.recipients.map((r) => r.id)]));
   const mine = people(current.messages);
   // created_at has one-second resolution and a reply often lands in the same second, so equal
   // timestamps fall back to insert order (rowid; VACUUM keeps the relative order).
@@ -152,15 +168,16 @@ export function eventConcernsViewer(event: BabEvent, viewerId: string): InboxLiv
   const db = getDb();
 
   if (event.payload.kind === "read") {
-    const row = db
-      .prepare("SELECT 1 AS n FROM messages WHERE thread_id = ? AND (from_id = ? OR to_id = ?) LIMIT 1")
-      .get(id, viewerId, viewerId);
+    const row = db.prepare("SELECT 1 AS n FROM thread_participants WHERE thread_id = ? AND user_id = ?").get(id, viewerId);
     return row ? { threadId: id, kind: "read" } : null;
   }
 
-  const msg = db.prepare("SELECT thread_id, from_id, to_id FROM messages WHERE id = ?").get(id) as unknown as
-    | { thread_id: string; from_id: string; to_id: string }
+  const msg = db.prepare("SELECT thread_id, from_id FROM messages WHERE id = ?").get(id) as unknown as
+    | { thread_id: string; from_id: string }
     | undefined;
-  if (!msg || (msg.from_id !== viewerId && msg.to_id !== viewerId)) return null;
-  return { threadId: msg.thread_id, kind: "message" };
+  if (!msg) return null;
+  const isRecipient =
+    msg.from_id === viewerId ||
+    db.prepare("SELECT 1 AS n FROM message_recipients WHERE message_id = ? AND user_id = ?").get(id, viewerId) !== undefined;
+  return isRecipient ? { threadId: msg.thread_id, kind: "message" } : null;
 }

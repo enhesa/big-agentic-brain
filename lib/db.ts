@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 56;
+export const CURRENT_VERSION = 57;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -357,6 +357,77 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(56);
     appliedVersion = 56;
   }
+  if (appliedVersion < 57) {
+    runMigrationV57(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(57);
+    appliedVersion = 57;
+  }
+}
+
+/**
+ * Catches up writes made by a release older than v57 (a rollback) on this database: its messages
+ * have no message_recipients rows, its threads no thread_participants rows, and its reads set only
+ * messages.read_at. v57 is already recorded, so its backfill never runs again; this does, at every
+ * open. Each statement touches only rows that need it and can run twice. messages.read_at is only
+ * ever set when messages.to_id read the message, so copying it to that person's row is safe.
+ */
+export function repairMessageMembership(database: DatabaseSync) {
+  database.exec(`
+    INSERT OR IGNORE INTO thread_participants (thread_id, user_id, added_at)
+      SELECT m.thread_id, m.from_id, m.created_at FROM messages m
+      WHERE NOT EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id);
+    INSERT OR IGNORE INTO thread_participants (thread_id, user_id, added_at)
+      SELECT m.thread_id, m.to_id, m.created_at FROM messages m
+      WHERE NOT EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id);
+    INSERT OR IGNORE INTO message_recipients (message_id, user_id, read_at)
+      SELECT m.id, m.to_id, m.read_at FROM messages m
+      WHERE NOT EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id);
+    UPDATE message_recipients
+      SET read_at = (SELECT m.read_at FROM messages m WHERE m.id = message_recipients.message_id)
+      WHERE read_at IS NULL AND EXISTS (
+        SELECT 1 FROM messages m
+        WHERE m.id = message_recipients.message_id AND m.to_id = message_recipients.user_id AND m.read_at IS NOT NULL
+      );
+  `);
+}
+
+function runMigrationV57(database: DatabaseSync) {
+  // Group messages (lib/messages.ts). thread_participants is who may read a thread and who a reply
+  // reaches; message_recipients is who a message went to, with read state per person. Both are
+  // filled from the one-recipient columns, which stay: messages.to_id holds the first recipient and
+  // messages.read_at mirrors that person's read, so an older release on this database still reads
+  // 1:1 threads right. INSERT OR IGNORE makes the backfill safe to run twice.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS thread_participants (
+      thread_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (thread_id, user_id),
+      FOREIGN KEY (thread_id) REFERENCES threads(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_thread_participants_user ON thread_participants(user_id, thread_id);
+
+    CREATE TABLE IF NOT EXISTS message_recipients (
+      message_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      read_at TEXT,
+      PRIMARY KEY (message_id, user_id),
+      FOREIGN KEY (message_id) REFERENCES messages(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_message_recipients_user_read ON message_recipients(user_id, read_at);
+
+    INSERT OR IGNORE INTO thread_participants (thread_id, user_id, added_at)
+      SELECT id, created_by, created_at FROM threads;
+    INSERT OR IGNORE INTO thread_participants (thread_id, user_id, added_at)
+      SELECT thread_id, from_id, MIN(created_at) FROM messages GROUP BY thread_id, from_id;
+    INSERT OR IGNORE INTO thread_participants (thread_id, user_id, added_at)
+      SELECT thread_id, to_id, MIN(created_at) FROM messages GROUP BY thread_id, to_id;
+
+    INSERT OR IGNORE INTO message_recipients (message_id, user_id, read_at)
+      SELECT id, to_id, read_at FROM messages;
+  `);
 }
 
 function runMigrationV56(database: DatabaseSync) {
@@ -1442,6 +1513,7 @@ export function getDb(): DatabaseSync {
   db.exec("PRAGMA temp_store = MEMORY;");
   db.exec("PRAGMA cache_size = -20000;"); // ~20MB page cache
   runMigrations(db);
+  repairMessageMembership(db);
   // Cheap on a freshly-opened connection (SQLite bails out quickly when there's
   // no stale query-plan statistics to refresh); the hourly sweep in
   // lib/maintenance.ts re-runs it periodically for a long-lived process.
@@ -1783,6 +1855,13 @@ export function wipeChats(database: DatabaseSync, dataDir: string) {
   database.exec("BEGIN");
   try {
     database.exec("DELETE FROM session_deliveries");
+    // The v57 tables reference messages and threads. They do not exist when v20 runs, so this only
+    // matters when the wipe is called on a newer database.
+    for (const table of ["message_recipients", "thread_participants"]) {
+      if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)) {
+        database.exec(`DELETE FROM ${table}`);
+      }
+    }
     database.exec("DELETE FROM messages");
     database.exec("DELETE FROM threads");
     database.exec("COMMIT");

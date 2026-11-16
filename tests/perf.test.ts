@@ -337,6 +337,15 @@ beforeAll(async () => {
       remaining--;
     }
 
+    // Participation and unread state live in thread_participants and message_recipients
+    // (migration v57). The rows above go in straight, so fill both the way v57's backfill does.
+    db.exec(`
+      INSERT OR IGNORE INTO thread_participants (thread_id, user_id) SELECT id, created_by FROM threads;
+      INSERT OR IGNORE INTO thread_participants (thread_id, user_id) SELECT thread_id, from_id FROM messages;
+      INSERT OR IGNORE INTO thread_participants (thread_id, user_id) SELECT thread_id, to_id FROM messages;
+      INSERT OR IGNORE INTO message_recipients (message_id, user_id, read_at) SELECT id, to_id, read_at FROM messages;
+    `);
+
     const insertTodo = db.prepare(
       `INSERT INTO todos (id, owner_id, title, body, due_at, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?), datetime('now', ?))`,
@@ -428,6 +437,8 @@ describe("latency at seeded scale (40ms nominal, scaled by machine speed)", () =
 
   it("inboxFor a user", async () => {
     const { inboxFor } = await import("../lib/messages");
+    // A budget on an empty answer would time nothing: the seed must reach the user.
+    expect(inboxFor(inboxUserId).length).toBeGreaterThan(100);
     const t = p50(() => inboxFor(inboxUserId));
     TIMINGS["inboxFor (median)"] = t;
     expectWithinBudget(t, INBOX_MEDIAN_BUDGET_MS, "inboxFor (median)", await dbFactor());
@@ -435,6 +446,7 @@ describe("latency at seeded scale (40ms nominal, scaled by machine speed)", () =
 
   it("thread with 50 messages", async () => {
     const { thread } = await import("../lib/messages");
+    expect(thread(heavyThreadId, inboxUserId)?.messages.length).toBeGreaterThanOrEqual(50);
     const t = p95(() => thread(heavyThreadId, inboxUserId));
     TIMINGS["thread (50 messages)"] = t;
     expectWithinBudget(t, 40, "thread (50 messages)", await dbFactor());

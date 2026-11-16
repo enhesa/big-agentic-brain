@@ -16,6 +16,6 @@ export async function GET() {
   // The list is polled often (a mod, every 15 seconds per open session): one audit row per 5 minutes is enough.
   await auditRequest({ actor: user, method: "GET", path: "/api/inbox", via: "mcp", coalesce: { minutes: 5 } });
 
-  const threads = inboxFor(user.id);
+  const threads = inboxFor(user.id, { participants: true });
   return Response.json({ threads });
 }

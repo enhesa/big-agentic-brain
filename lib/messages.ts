@@ -3,8 +3,8 @@ import { getDb, inTransaction } from "./db";
 import { audit } from "./audit";
 import { emit } from "./events";
 import { redact, assertMaxLength, assertRawLength } from "./redact";
-import { getUser, getUsersByIds } from "./users";
-import { deliveryFor, type Delivery } from "./delivery";
+import { getUsersByIds } from "./users";
+import { deliveryFor, groupDelivery, type Delivery } from "./delivery";
 import { NotFoundError, ForbiddenError, ValidationError } from "./errors";
 import { isMaintainer } from "./feedback";
 import type {
@@ -156,10 +156,20 @@ export function validateRequest(input: unknown): MessageRequest {
   return result;
 }
 
+/** Most people one message may go to, not counting the sender. A constant, so error texts build from it. */
+export const MAX_RECIPIENTS = 10;
+/** Longest address accepted in `to` (the longest valid email address). */
+const ADDRESS_MAX = 320;
+/** A `to` list longer than this is refused before any work, duplicates or not. */
+const RAW_TO_LIST_MAX = 50;
+
 export interface SendInput {
   fromId: string;
-  /** Recipient id or email. Optional on a reply (inferred from the thread). */
-  to?: string;
+  /**
+   * Recipient id (email), or a list of them for a group. A string is one address, never split.
+   * Optional on a reply: a reply reaches every other participant.
+   */
+  to?: string | string[];
   body: string;
   subject?: string;
   threadId?: string;
@@ -170,39 +180,117 @@ export interface SendInput {
   request?: MessageRequest;
 }
 
-/** Whether actorId created the thread or has sent/received a message in it. */
-function isParticipant(db: ReturnType<typeof getDb>, threadId: string, actorId: string): boolean {
-  const t = db.prepare("SELECT * FROM threads WHERE id = ?").get(threadId) as unknown as | ThreadRow
-    | undefined;
-  if (!t) return false;
-  if (t.created_by === actorId) return true;
+/**
+ * Reads a caller's raw `to` (a JSON body or MCP arguments) into SendInput.to: a string or a list.
+ * Entries are checked in send(). Absent is undefined.
+ */
+export function toArgument(raw: unknown): string | string[] | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) return raw as string[];
+  throw new ValidationError("to must be an email or a list of emails");
+}
 
-  const { n } = db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM messages WHERE thread_id = ? AND (from_id = ? OR to_id = ?)",
-    )
-    .get(threadId, actorId, actorId) as unknown as { n: number };
-  return n > 0;
+/** Whether a raw `to` names anyone: a non-blank string or any list (an empty list is refused in send()). */
+export function hasTo(to: string | string[] | undefined): boolean {
+  return Array.isArray(to) || (typeof to === "string" && to.trim() !== "");
+}
+
+/** The addresses in `to`, trimmed, lowercased and without duplicates, in the order given. */
+function parseRecipients(to: string | string[] | undefined): string[] {
+  if (to == null) return [];
+  if (typeof to === "string") {
+    const one = to.trim().toLowerCase();
+    return one ? [one] : [];
+  }
+  if (to.length === 0) throw new ValidationError("to must name at least one recipient");
+  if (to.length > RAW_TO_LIST_MAX) throw new ValidationError(`to takes at most ${MAX_RECIPIENTS} recipients`);
+  const out: string[] = [];
+  for (const entry of to) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new ValidationError("to entries must be non-empty email strings");
+    }
+    const address = entry.trim().toLowerCase();
+    if (address.length > ADDRESS_MAX) {
+      throw new ValidationError(`to entries must be ${ADDRESS_MAX} characters or fewer`);
+    }
+    if (!out.includes(address)) out.push(address);
+  }
+  return out;
+}
+
+/** Whether actorId is a participant of the thread (thread_participants, migration v57). */
+function isParticipant(db: ReturnType<typeof getDb>, threadId: string, actorId: string): boolean {
+  return db.prepare("SELECT 1 AS n FROM thread_participants WHERE thread_id = ? AND user_id = ?").get(threadId, actorId) !== undefined;
+}
+
+/** The participant ids of a thread, in the order they joined (the creator first). */
+function participantIds(db: ReturnType<typeof getDb>, threadId: string): string[] {
+  return (
+    db.prepare("SELECT user_id FROM thread_participants WHERE thread_id = ? ORDER BY added_at, rowid").all(threadId) as unknown as {
+      user_id: string;
+    }[]
+  ).map((r) => r.user_id);
 }
 
 /**
- * The other side of a thread from `fromId`'s point of view: the counterpart of the most
- * recent message involving them, else the thread's creator. Lets a reply omit `to`.
+ * Everyone in a thread, with names, in the order they joined. Every participant may see this list.
+ * Callers check participation first.
  */
-function inferRecipient(db: ReturnType<typeof getDb>, threadId: string, fromId: string): string | null {
-  const last = db
-    .prepare(
-      `SELECT from_id, to_id FROM messages
-       WHERE thread_id = ? AND (from_id = ? OR to_id = ?)
-       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
-    )
-    .get(threadId, fromId, fromId) as unknown as { from_id: string; to_id: string } | undefined;
-  if (last) return last.from_id === fromId ? last.to_id : last.from_id;
-  const t = db.prepare("SELECT created_by FROM threads WHERE id = ?").get(threadId) as unknown as
-    | { created_by: string }
-    | undefined;
-  if (t && t.created_by !== fromId) return t.created_by;
-  return null;
+export function participantsOf(threadId: string): ThreadParticipant[] {
+  const ids = participantIds(getDb(), threadId);
+  const users = getUsersByIds(ids);
+  return ids.map((id) => ({ id, name: users.get(id)?.name ?? null, email: users.get(id)?.email ?? null }));
+}
+
+/** One recipient of a sent message, with what BAB knows about whether they can see it now. */
+export interface SentRecipient {
+  id: string;
+  name: string | null;
+  delivery: Delivery;
+}
+
+/**
+ * Who a message goes to. A new thread goes to the people named in `to` (the sender dropped from a
+ * list with others; only the sender is a note to self). A reply goes to every other participant:
+ * `to` must name participants but does not narrow a group. In a thread of two, an explicit `to`
+ * keeps today's meaning, so 1:1 threads behave exactly as before group messages.
+ */
+function resolveRecipients(
+  db: ReturnType<typeof getDb>,
+  input: SendInput,
+  named: string[],
+): string[] {
+  const single = !Array.isArray(input.to);
+  const withoutSender = (ids: string[]) => {
+    const others = ids.filter((id) => id !== input.fromId);
+    return others.length > 0 ? others : [input.fromId];
+  };
+
+  if (input.threadId) {
+    const members = participantIds(db, input.threadId);
+    for (const id of named) {
+      if (!members.includes(id)) throw new ForbiddenError("Recipient is not a participant of this thread");
+    }
+    if (members.length <= 2 && named.length > 0) return single ? named : withoutSender(named);
+    return withoutSender(members);
+  }
+
+  // The routes answer NEW_THREAD_NEEDS_TO before this; a direct call keeps its old message.
+  if (named.length === 0) throw new ValidationError("Unknown recipient");
+  const recipients = single ? named : withoutSender(named);
+  if (recipients.length > MAX_RECIPIENTS) {
+    throw new ValidationError(`to takes at most ${MAX_RECIPIENTS} recipients`);
+  }
+  const known = getUsersByIds(recipients);
+  const unknown = recipients.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    if (single) throw new ValidationError("Unknown recipient");
+    throw new ValidationError(
+      `Unknown recipient${unknown.length > 1 ? "s" : ""}: ${unknown.join(", ")}. Nothing was sent.`,
+    );
+  }
+  return recipients;
 }
 
 export function send(
@@ -211,13 +299,18 @@ export function send(
 ): {
   thread: ThreadRow;
   message: Omit<MessageRow, "request"> & { request: MessageRequest | null };
-  /** What BAB knows about whether the recipient can see it now (lib/delivery.ts); never "read". */
+  /**
+   * What BAB knows about whether the recipient can see it now (lib/delivery.ts); never "read".
+   * For a group, a summary of `recipients[].delivery`.
+   */
   delivery: Delivery;
+  /** Everyone this message went to, in order; to_id on the message is the first of them. */
+  recipients: SentRecipient[];
 } {
   const db = getDb();
 
   let threadId = input.threadId;
-  let to = (input.to ?? "").trim().toLowerCase();
+  const named = parseRecipients(input.to);
   if (threadId) {
     const existing = db.prepare("SELECT * FROM threads WHERE id = ?").get(threadId) as unknown as | ThreadRow
       | undefined;
@@ -225,22 +318,12 @@ export function send(
     if (!isParticipant(db, threadId, input.fromId)) {
       throw new ForbiddenError("Not a participant of this thread");
     }
-    if (!to) {
-      to = inferRecipient(db, threadId, input.fromId) ?? "";
-      if (!to) throw new ValidationError("Cannot infer the recipient; pass `to`");
-    } else {
-      const target = getUser(to);
-      if (!target || !isParticipant(db, threadId, target.id)) {
-        throw new ForbiddenError("Recipient is not a participant of this thread");
-      }
-      to = target.id;
-    }
   }
 
-  const recipient = getUser(to);
-  if (!recipient) throw new ValidationError("Unknown recipient");
   // A note to yourself is fine: it lands in your own inbox like any other message.
-  to = recipient.id;
+  const recipientIds = resolveRecipients(db, input, named);
+  const recipientUsers = getUsersByIds(recipientIds);
+  const to = recipientIds[0];
 
   assertRawLength("body", input.body, BODY_MAX);
   const body = redact(input.body.trim());
@@ -287,14 +370,20 @@ export function send(
       db.prepare(
         "INSERT INTO threads (id, subject, created_by) VALUES (?, ?, ?)",
       ).run(finalThreadId, newSubject, input.fromId);
+      const join = db.prepare("INSERT OR IGNORE INTO thread_participants (thread_id, user_id) VALUES (?, ?)");
+      for (const id of [input.fromId, ...recipientIds]) join.run(finalThreadId, id);
     }
 
+    // to_id keeps the first recipient, so readers of the one-recipient columns still work.
     db.prepare(
       `INSERT INTO messages (id, thread_id, from_id, to_id, body, kind, request)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(messageId, finalThreadId, input.fromId, to, body, kind, requestJson);
+    const addRecipient = db.prepare("INSERT INTO message_recipients (message_id, user_id) VALUES (?, ?)");
+    for (const id of recipientIds) addRecipient.run(messageId, id);
 
-    audit(db, input.fromId, "send", "message", messageId, via, { details: { kind } });
+    const details = recipientIds.length > 1 ? { kind, recipients: recipientIds.length } : { kind };
+    audit(db, input.fromId, "send", "message", messageId, via, { details });
 
     if (input.useLease) {
       decrementLease(db, finalThreadId, input.fromId);
@@ -316,13 +405,30 @@ export function send(
     kind,
   });
 
-  return { thread, message: withRequest(message), delivery: deliveryFor(recipient, input.fromId) };
+  const recipients: SentRecipient[] = recipientIds.map((id) => ({
+    id,
+    name: recipientUsers.get(id)?.name ?? null,
+    delivery: deliveryFor(recipientUsers.get(id), input.fromId),
+  }));
+  const delivery =
+    recipients.length === 1 ? recipients[0].delivery : groupDelivery(recipients.map((r) => r.delivery));
+  return { thread, message: withRequest(message), delivery, recipients };
 }
 
 export interface InboxThread {
   thread: ThreadRow;
+  /**
+   * The thread's last message. `to_id` is its first recipient; `read_at` is the caller's own read
+   * time when the caller received it, and when the caller sent it, the time the last recipient read
+   * it (null until all have), the same as an opened thread.
+   */
   lastMessage: Omit<MessageRow, "request"> & { request: MessageRequest | null };
   unreadCount: number;
+  /**
+   * Everyone in the thread, the caller included, in the order they joined. Only with
+   * `participants: true`: a whole inbox of names is work most callers do not need.
+   */
+  participants?: ThreadParticipant[];
 }
 
 /**
@@ -330,19 +436,23 @@ export interface InboxThread {
  * activity first. Single set-based query (CTEs for "my threads", each
  * thread's last message by rowid, and per-thread unread counts) instead of
  * a per-thread round trip. `unreadOnly`, `limit` and `offset` filter and page in SQL, so a
- * caller that shows one page never loads the whole inbox.
+ * caller that shows one page never loads the whole inbox. `participants` adds each thread's
+ * participant list (participantsForThreads).
  */
-export function inboxFor(userId: string, opts: { unreadOnly?: boolean; limit?: number; offset?: number } = {}): InboxThread[] {
+export function inboxFor(
+  userId: string,
+  opts: { unreadOnly?: boolean; limit?: number; offset?: number; participants?: boolean } = {},
+): InboxThread[] {
   const db = getDb();
   const where = opts.unreadOnly ? " AND COALESCE(u.n, 0) > 0" : "";
   const page = opts.limit == null ? "" : " LIMIT ? OFFSET ?";
-  const params: (string | number)[] = [userId, userId, userId];
+  const params: (string | number)[] = [userId, userId, userId, userId];
   if (opts.limit != null) params.push(Math.max(0, Math.trunc(opts.limit)), Math.max(0, Math.trunc(opts.offset ?? 0)));
 
   const rows = db
     .prepare(
       `WITH my_threads AS (
-         SELECT DISTINCT thread_id FROM messages WHERE to_id = ? OR from_id = ?
+         SELECT thread_id FROM thread_participants WHERE user_id = ?
        ),
        last_msg AS (
          SELECT m.*, m.rowid AS rowid
@@ -355,20 +465,31 @@ export function inboxFor(userId: string, opts: { unreadOnly?: boolean; limit?: n
          ) x ON x.thread_id = m.thread_id AND x.rid = m.rowid
        ),
        unread AS (
-         SELECT thread_id, COUNT(*) AS n
-         FROM messages
-         WHERE to_id = ? AND read_at IS NULL
-         GROUP BY thread_id
+         SELECT m.thread_id, COUNT(*) AS n
+         FROM message_recipients r
+         JOIN messages m ON m.id = r.message_id
+         WHERE r.user_id = ? AND r.read_at IS NULL
+         GROUP BY m.thread_id
        )
        SELECT
          t.id AS thread_id, t.subject AS thread_subject, t.created_by AS thread_created_by,
          t.created_at AS thread_created_at,
          lm.id AS msg_id, lm.from_id AS msg_from_id, lm.to_id AS msg_to_id,
-         lm.body AS msg_body, lm.read_at AS msg_read_at, lm.created_at AS msg_created_at,
+         lm.body AS msg_body,
+         CASE
+           WHEN mr.user_id IS NOT NULL THEN mr.read_at
+           WHEN lm.from_id = ? THEN (
+             SELECT CASE WHEN COUNT(*) > 0 AND COUNT(*) = COUNT(r2.read_at) THEN MAX(r2.read_at) END
+             FROM message_recipients r2 WHERE r2.message_id = lm.id
+           )
+           ELSE lm.read_at
+         END AS msg_read_at,
+         lm.created_at AS msg_created_at,
          lm.kind AS msg_kind, lm.request AS msg_request,
          COALESCE(u.n, 0) AS unread_count
        FROM threads t
        JOIN last_msg lm ON lm.thread_id = t.id
+       LEFT JOIN message_recipients mr ON mr.message_id = lm.id AND mr.user_id = ?
        LEFT JOIN unread u ON u.thread_id = t.id
        WHERE t.id IN (SELECT thread_id FROM my_threads)${where}
        ORDER BY lm.created_at DESC, lm.rowid DESC${page}`,
@@ -389,6 +510,8 @@ export function inboxFor(userId: string, opts: { unreadOnly?: boolean; limit?: n
     unread_count: number;
   }[];
 
+  const participants = opts.participants ? participantsForThreads(rows.map((r) => r.thread_id)) : null;
+
   return rows.map((r) => ({
     thread: {
       id: r.thread_id,
@@ -408,36 +531,70 @@ export function inboxFor(userId: string, opts: { unreadOnly?: boolean; limit?: n
       request: r.msg_request,
     } as MessageRow),
     unreadCount: r.unread_count,
+    ...(participants ? { participants: participants.get(r.thread_id) ?? [] } : {}),
   }));
 }
 
 /**
+ * Participants with names for a set of threads, in one query per 500 ids (well under SQLite's
+ * parameter limit), each list in the order people joined. Callers check participation first.
+ */
+export function participantsForThreads(threadIds: string[]): Map<string, ThreadParticipant[]> {
+  const db = getDb();
+  const out = new Map<string, ThreadParticipant[]>();
+  const rows: { thread_id: string; user_id: string }[] = [];
+  for (let i = 0; i < threadIds.length; i += 500) {
+    const chunk = threadIds.slice(i, i + 500);
+    rows.push(
+      ...(db
+        .prepare(
+          `SELECT thread_id, user_id FROM thread_participants WHERE thread_id IN (${chunk.map(() => "?").join(",")})
+           ORDER BY thread_id, added_at, rowid`,
+        )
+        .all(...chunk) as unknown as { thread_id: string; user_id: string }[]),
+    );
+  }
+  const users = getUsersByIds([...new Set(rows.map((r) => r.user_id))]);
+  for (const r of rows) {
+    const u = users.get(r.user_id);
+    const list = out.get(r.thread_id) ?? [];
+    list.push({ id: r.user_id, name: u?.name ?? null, email: u?.email ?? null });
+    out.set(r.thread_id, list);
+  }
+  return out;
+}
+
+/**
  * How many threads inboxFor(userId) would list, and how many of them hold unread messages,
- * without loading any message body. The same thread set as inboxFor: a thread row with a message
- * the user sent or received.
+ * without loading any message body. The same thread set as inboxFor: a thread the user is in
+ * that has at least one message.
  */
 export function inboxCounts(userId: string): { threads: number; unreadThreads: number } {
   const row = getDb()
     .prepare(
       `WITH my_threads AS (
-         SELECT DISTINCT thread_id FROM messages WHERE to_id = ? OR from_id = ?
+         SELECT tp.thread_id FROM thread_participants tp
+         WHERE tp.user_id = ? AND EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = tp.thread_id)
        ),
        unread AS (
-         SELECT DISTINCT thread_id FROM messages WHERE to_id = ? AND read_at IS NULL
+         SELECT DISTINCT m.thread_id
+         FROM message_recipients r
+         JOIN messages m ON m.id = r.message_id
+         WHERE r.user_id = ? AND r.read_at IS NULL
        )
        SELECT COUNT(*) AS threads,
               COALESCE(SUM(CASE WHEN t.id IN (SELECT thread_id FROM unread) THEN 1 ELSE 0 END), 0) AS unread_threads
        FROM threads t
        WHERE t.id IN (SELECT thread_id FROM my_threads)`,
     )
-    .get(userId, userId, userId) as unknown as { threads: number; unread_threads: number };
+    .get(userId, userId) as unknown as { threads: number; unread_threads: number };
   return { threads: Number(row.threads), unreadThreads: Number(row.unread_threads) };
 }
 
 export function unreadCountFor(userId: string): number {
   const db = getDb();
   const { n } = db
-    .prepare("SELECT COUNT(*) AS n FROM messages WHERE to_id = ? AND read_at IS NULL")
+    .prepare("SELECT COUNT(*) AS n FROM message_recipients WHERE user_id = ? AND read_at IS NULL")
     .get(userId) as unknown as { n: number };
   return n;
 }
@@ -445,21 +602,77 @@ export function unreadCountFor(userId: string): number {
 /** A message row as exposed to API/UI consumers: `request` parsed, never the raw JSON string. */
 export type ClientMessage = Omit<MessageRow, "request"> & { request: MessageRequest | null };
 
+/**
+ * One person a message went to. `readAt` is shown to the message's sender and to that person
+ * only; every other participant sees null, so read receipts stay between sender and reader.
+ */
+export interface MessageRecipient {
+  id: string;
+  name: string | null;
+  readAt: string | null;
+}
+
+/**
+ * A message in an opened thread, with every recipient. `read_at` is the viewer's own read time on
+ * a message they received; on one they sent, when the last recipient read it (null until all
+ * have, which for one recipient is the stored value).
+ */
+export type ThreadMessage = ClientMessage & { recipients: MessageRecipient[] };
+
+/** Every message of a thread, oldest first, with recipients and read state as `viewerId` may see them. */
+function threadMessages(db: ReturnType<typeof getDb>, threadId: string, viewerId: string): ThreadMessage[] {
+  const messages = db
+    .prepare("SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC, rowid ASC")
+    .all(threadId) as unknown as MessageRow[];
+  const rows = db
+    .prepare(
+      `SELECT r.message_id, r.user_id, r.read_at FROM message_recipients r
+       JOIN messages m ON m.id = r.message_id
+       WHERE m.thread_id = ? ORDER BY r.rowid`,
+    )
+    .all(threadId) as unknown as { message_id: string; user_id: string; read_at: string | null }[];
+  const users = getUsersByIds([...new Set(rows.map((r) => r.user_id))]);
+  const byMessage = new Map<string, { user_id: string; read_at: string | null }[]>();
+  for (const r of rows) {
+    const list = byMessage.get(r.message_id) ?? [];
+    list.push(r);
+    byMessage.set(r.message_id, list);
+  }
+
+  return messages.map((m) => {
+    const own = byMessage.get(m.id) ?? [];
+    const isSender = m.from_id === viewerId;
+    const mine = own.find((r) => r.user_id === viewerId);
+    let readAt = m.read_at;
+    if (mine) readAt = mine.read_at;
+    else if (isSender && own.length > 0) {
+      readAt = own.every((r) => r.read_at) ? (own.map((r) => r.read_at as string).sort().at(-1) ?? null) : null;
+    } else if (own.length > 1) {
+      // Neither sender nor recipient (a maintainer on /conversations): no one's read time in a group.
+      readAt = null;
+    }
+    return {
+      ...withRequest({ ...m, read_at: readAt }),
+      recipients: own.map((r) => ({
+        id: r.user_id,
+        name: users.get(r.user_id)?.name ?? null,
+        readAt: isSender || r.user_id === viewerId ? r.read_at : null,
+      })),
+    };
+  });
+}
+
 export function thread(
   threadId: string,
   actorId: string,
-): { thread: ThreadRow; messages: ClientMessage[] } | undefined {
+): { thread: ThreadRow; messages: ThreadMessage[] } | undefined {
   const db = getDb();
   const t = db.prepare("SELECT * FROM threads WHERE id = ?").get(threadId) as unknown as | ThreadRow
     | undefined;
   if (!t) return undefined;
   if (!isParticipant(db, threadId, actorId)) return undefined;
 
-  const messages = db
-    .prepare("SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC")
-    .all(threadId) as unknown as MessageRow[];
-
-  return { thread: t, messages: messages.map(withRequest) };
+  return { thread: t, messages: threadMessages(db, threadId, actorId) };
 }
 
 /**
@@ -470,7 +683,7 @@ export function thread(
 export function requireThreadForActor(
   threadId: string,
   actorId: string,
-): { thread: ThreadRow; messages: ClientMessage[] } {
+): { thread: ThreadRow; messages: ThreadMessage[] } {
   const db = getDb();
   const t = db.prepare("SELECT * FROM threads WHERE id = ?").get(threadId) as unknown as | ThreadRow
     | undefined;
@@ -479,23 +692,32 @@ export function requireThreadForActor(
     throw new ForbiddenError("Not a participant of this thread");
   }
 
-  const messages = db
-    .prepare("SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC")
-    .all(threadId) as unknown as MessageRow[];
-
-  return { thread: t, messages: messages.map(withRequest) };
+  return { thread: t, messages: threadMessages(db, threadId, actorId) };
 }
 
+/**
+ * Marks the user's own unread messages in the thread read (message_recipients), and mirrors that
+ * into messages.read_at where the user is the first recipient, for readers of the old column.
+ */
 export function markRead(threadId: string, userId: string, via: AuditVia = "ui") {
   const db = getDb();
-  const result = db.prepare(
-    "UPDATE messages SET read_at = datetime('now') WHERE thread_id = ? AND to_id = ? AND read_at IS NULL",
-  ).run(threadId, userId);
-  // Nothing changed means nothing to record: a second click or a refresh must not add audit rows.
-  if (Number(result.changes ?? 0) > 0) {
-    audit(db, userId, "read", "thread", threadId, via);
-    emit("message.created", threadId, { id: threadId, kind: "read" });
-  }
+  const changed = inTransaction(db, () => {
+    const result = db
+      .prepare(
+        `UPDATE message_recipients SET read_at = datetime('now')
+         WHERE user_id = ? AND read_at IS NULL
+           AND message_id IN (SELECT id FROM messages WHERE thread_id = ?)`,
+      )
+      .run(userId, threadId);
+    db.prepare(
+      "UPDATE messages SET read_at = datetime('now') WHERE thread_id = ? AND to_id = ? AND read_at IS NULL",
+    ).run(threadId, userId);
+    const n = Number(result.changes ?? 0);
+    // Nothing changed means nothing to record: a second click or a refresh must not add audit rows.
+    if (n > 0) audit(db, userId, "read", "thread", threadId, via);
+    return n;
+  });
+  if (changed > 0) emit("message.created", threadId, { id: threadId, kind: "read" });
 }
 
 export interface ThreadParticipant {
@@ -609,11 +831,10 @@ export function listAllThreads(options: ListAllThreadsOptions = {}): ThreadSumma
   const placeholders = threadIds.map(() => "?").join(",");
   const participantRows = db
     .prepare(
-      `SELECT thread_id, from_id AS id FROM messages WHERE thread_id IN (${placeholders})
-       UNION
-       SELECT thread_id, to_id AS id FROM messages WHERE thread_id IN (${placeholders})`,
+      `SELECT thread_id, user_id AS id FROM thread_participants WHERE thread_id IN (${placeholders})
+       ORDER BY thread_id, added_at, rowid`,
     )
-    .all(...threadIds, ...threadIds) as unknown as { thread_id: string; id: string }[];
+    .all(...threadIds) as unknown as { thread_id: string; id: string }[];
 
   const participantIdsByThread = new Map<string, string[]>();
   for (const r of rows) participantIdsByThread.set(r.id, [r.created_by]);
@@ -644,9 +865,10 @@ export function listAllThreads(options: ListAllThreadsOptions = {}): ThreadSumma
   });
 }
 
-export interface ViewerMessage extends ClientMessage {
+export interface ViewerMessage extends ThreadMessage {
   fromName: string | null;
   fromEmail: string | null;
+  /** The first recipient (to_id); `recipients` has everyone. */
   toName: string | null;
   toEmail: string | null;
 }
@@ -669,9 +891,7 @@ export function threadForViewer(
     throw new ForbiddenError("Not a participant of this thread");
   }
 
-  const messages = db
-    .prepare("SELECT * FROM messages WHERE thread_id = ? ORDER BY created_at ASC")
-    .all(threadId) as unknown as MessageRow[];
+  const messages = threadMessages(db, threadId, viewerId);
 
   const userIds = new Set<string>();
   for (const m of messages) {
@@ -684,7 +904,7 @@ export function threadForViewer(
     const from = userMap.get(m.from_id);
     const to = userMap.get(m.to_id);
     return {
-      ...withRequest(m),
+      ...m,
       fromName: from?.name ?? null,
       fromEmail: from?.email ?? null,
       toName: to?.name ?? null,

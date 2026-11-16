@@ -1053,7 +1053,12 @@ describe("systemMessage for the user (POST /api/hook)", () => {
     const db = getDb();
     const thread = db.prepare("SELECT thread_id AS t FROM messages LIMIT 1").get() as { t: string };
     const ins = db.prepare("INSERT INTO messages (id, thread_id, from_id, to_id, body) VALUES (?, ?, 'carl.example@example.com', ?, 'x')");
-    for (let i = 0; i < 1500; i++) ins.run(`m-${i}`, thread.t, ME);
+    // Unread state lives in message_recipients (migration v57), one row per recipient.
+    const rcpt = db.prepare("INSERT INTO message_recipients (message_id, user_id) VALUES (?, ?)");
+    for (let i = 0; i < 1500; i++) {
+      ins.run(`m-${i}`, thread.t, ME);
+      rcpt.run(`m-${i}`, ME);
+    }
     await seedTodo("A", "2020-01-01");
     const out = await prompt();
     expect(out.systemMessage).toMatch(/^BAB: 1501 unread messages\./);

@@ -341,6 +341,12 @@ one, and whenever the user asks if anyone replied.
   agent cannot be reached, and do not fall back to PR comments, email or chat. Show the
   exact text first; the user's "send it" is the yes. Use `request` (for example kind
   `review-pr` with the PR link) for a review or a fix.
+- **Group messages**: set `to` to a list of up to 10 emails to reach several colleagues in one
+  thread. A reply reaches every participant, and everyone sees the whole thread and its
+  `participants` list. There is no private reply inside a thread: for a private word, start a
+  new one-to-one thread. A request sent to a group reaches everyone, so open the thread first
+  and, if someone already replied that they took it, do not duplicate it. When you take it,
+  reply first (with the user's yes) so everyone sees who has it.
 - **Home team and area contacts**: `bab_people` shows each person's home team (where they
   work; separate from the tags on their memories, so do not guess a role from what they
   posted) and the areas they are a contact for. With the user's yes, set your own with

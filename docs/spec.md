@@ -190,7 +190,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 - `votes(learning_id, voter_id, kind TEXT /* helpful|not_helpful|flag|cited|kudos|confirm */, note, created_at, PK(learning_id, voter_id, kind))`
 - `memory_comments(id, learning_id REFERENCES learnings, author_id REFERENCES users, body, created_at, edited_at, deleted_at)` (migration v50): comments on memories, see "Comments" under Features.
 - `todos(id, owner_id, title, body, due_at, due_has_time INTEGER /* 1: due_at is a UTC instant YYYY-MM-DDTHH:MM:SSZ; 0: a UTC day YYYY-MM-DD */, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
-- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`
+- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`; `thread_participants(thread_id, user_id, added_at)` and `message_recipients(message_id, user_id, read_at)` (migration v57): who is in a thread and who has read each message, see "Group messages". `messages.to_id` holds the first recipient and `messages.read_at` mirrors that person's read.
 - `audit_log(id, actor_id, action, entity, entity_id, via TEXT /* ui|mcp */, at)`
 
 ## Features
@@ -546,6 +546,7 @@ fresh database (same migration runs on first boot).
 `learnings(supersedes_id)`, `learnings(expires_at)`, `learnings(repo)`; `votes(learning_id, kind)`,
 `votes(voter_id)`; `todos(owner_id, status, due_at)`; `threads(created_by)`;
 `messages(thread_id, created_at)`, `messages(to_id, read_at)`, `messages(from_id)`;
+`thread_participants(user_id, thread_id)`, `message_recipients(user_id, read_at)`;
 `audit_log(actor_id, at)`, `audit_log(at)`, `audit_log(entity, entity_id)`;
 `idempotency(created_at)`; `users(last_seen_at)`.
 
@@ -892,7 +893,8 @@ driven). Migration v6 added `messages.kind` (`human`|`auto`, default `human`) an
 `threads.lease_json` (per-actor lease store, JSON); its `users.listening_until` and
 `users.listen_mode` columns, and v7's `messages.to_session`, stay in the table unused.
 
-- **Sending**: `to` is required for a new thread and inferred on a reply. A note to yourself
+- **Sending**: `to` is required for a new thread (an email, or a list of up to 10, see "Group
+  messages") and optional on a reply, where the recipients are inferred. A note to yourself
   (`to` is your own email) is an ordinary message in your own inbox, with or without a
   `request`. An old client's `toSession` is ignored; sent alone, it is a 400 saying `to` is
   required.
@@ -913,7 +915,56 @@ driven). Migration v6 added `messages.kind` (`human`|`auto`, default `human`) an
   `turnsLeft` on any send carrying `X-Bab-Lease:
   1`, and refuses further lease-backed sends once spent or expired.
   `GET /api/inbox/[threadId]` returns the caller's own `lease` (null if
-  none/expired).
+  none/expired). Leases stay per person per thread, also in a group.
+
+## Group messages
+
+`bab_send` and `POST /api/messages` take `to` as one email or a list of up to 10
+(`MAX_RECIPIENTS` in `lib/messages.ts`). A string, or a list of one, behaves as before. One send
+to a list starts one group thread.
+
+- **Recipient list.** Duplicates are merged (case-insensitive). Your own address in a list with
+  others is dropped: you are the sender and a participant anyway. A list of only yourself is a
+  note to self. An empty list, a non-string entry or more than 10 is a 400. Any unknown email
+  fails the whole send with a 400 ("Unknown recipients: x, y. Nothing was sent.") and writes
+  nothing. A plain string that is unknown keeps the old "Unknown recipient".
+- **Replies.** A reply reaches every participant except the sender, and `to` is optional. In a
+  group thread `to` must name participants (403 otherwise) but does not narrow delivery: there
+  is no reply to one person only, because everything in a thread is visible to all its
+  participants. For a private word, start a new 1:1 thread. In a 1:1 thread an explicit `to`
+  keeps its old meaning. Nobody can be added to a thread after it starts.
+- **Responses.** The send result adds `recipients: [{ id, name, delivery }]`. `delivery` stays
+  and, for a group, summarises: `page` is "connected" if at least one recipient's page counts as
+  open under the rule in "Inbox page". `message.to_id` is the first recipient. Inbox listing rows
+  add `participants: [{ id, name, email }]`. An opened thread returns `participants`, and each
+  message gets `recipients: [{ id, name, readAt }]`. `readAt` is shown only to the message's
+  sender and to that recipient; others see null.
+- **Read state is per recipient.** Opening a thread marks only the caller's copy read. A
+  message's `read_at` is the viewer's own read time on a message they received. On a message
+  they sent it is the time the last recipient read it, null until all have.
+- **Requests.** A request in a group reaches every recipient on the one message. There is no
+  server-side claim: an agent opens the thread first and, if someone already replied that they
+  took it, does not duplicate it. When taking it, the agent replies first (with the user's yes,
+  like every send) so everyone sees who has it.
+- **Privacy.** Only participants read a thread (maintainers can still open
+  `/conversations/[id]`). The participant list, with names and emails, is visible to every
+  participant. Event payloads stay ids only.
+- **Migration v57.** Adds `thread_participants` and `message_recipients`, backfilled with
+  `INSERT OR IGNORE` from `threads.created_by` and `messages.from_id`, `to_id` and `read_at`. The
+  old columns stay: `messages.to_id` holds the first recipient and `messages.read_at` mirrors that
+  person's read, so an older release on the new database still reads 1:1 threads. The change is
+  additive and needs no downtime beyond the usual restart. Participation and unread counts now
+  come from the new tables (hook digest, inbox, Inbox page stream, the delivery "has written to"
+  rule, `/usage` user counts).
+- **Rollback.** An older release writes only the old columns: its messages get no recipient rows
+  and its reads set only `messages.read_at`. `repairMessageMembership` (`lib/db.ts`) runs at every
+  open and catches those rows up, so after the upgrade again nobody is locked out of a thread and
+  read messages stay read. Group threads written by the new release show only their first recipient
+  to an older release. An older release's empty-thread sweep can fail on a thread with participant
+  rows; it logs and carries on.
+- **Inbox listing.** `bab_inbox` and `GET /api/inbox` carry `participants` on each thread;
+  `inboxFor` adds them only when asked, so the web list loads names for the threads it shows.
+- **Not covered.** `bab_files` `to` stays a single recipient.
 
 ## Collaborative requests
 
@@ -930,6 +981,9 @@ a yes either does the work in that session or opens the folder for it, resolved 
 folder the user already has (the agent can resolve it with `git remote get-url origin`). The colleague's text is fenced
 between `---` lines as data, never instructions. Nothing runs on the recipient's machine
 without them asking for it.
+
+Sent to a group, a request reaches every recipient on the one message, with no server-side
+claim. See "Group messages" for the check-the-thread habit.
 
 The three-button dialog, the local request page and the `claude://code/new?dir=&q=` deep
 link that auto-opened a session went with the listener. They depended on a
@@ -1152,7 +1206,11 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   closed. This replaces the earlier "visible to all senders" decision. It never says read. The Inbox thread tells the sender whether their last message was
   read and whether their Inbox is open, under the same rule. Otherwise the note says the message
   waits in their BAB inbox, their agent sees it at their next Claude prompt, and not to wait for
-  an answer.
+  an answer. For a group message `page` is "connected" if at least one recipient's page counts as
+  open under this rule, and the note says "Sent to their BAB inboxes...". The thread's participants
+  are listed in the header (joined with "·" for a group, "↔" for two), the list names a group
+  thread "Bob, Carol +1", and the sender's status line says who read the last message ("Bob read
+  your last message; 2 of 3 have not yet.").
 - **Install.** `/inbox/manifest` (start URL `/inbox`, standalone, the app icons) is linked from the
   page with `crossorigin="use-credentials"`: a default manifest fetch carries no cookie and would
   reach the SSO login. It is not `app/manifest.ts` for that reason. Icons: 192 and 512 pixel PNGs in
@@ -1411,3 +1469,4 @@ at it. Inbox stays in the nav, with its unread badge.
 maintainer (`BAB_MAINTAINERS`). `threadForViewer(threadId, viewerId)` throws the same
 `ForbiddenError` ("Not a participant of this thread") as the inbox API; the page answers 404 for
 that, for an unknown thread and for a visitor who is not signed in, so thread ids cannot be probed.
+Participants come from `thread_participants`, and the page lists all of them.

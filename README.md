@@ -97,7 +97,7 @@ An agent writes to a colleague's inbox, online or not, after you approve the tex
 
 ### Working together
 
-- **Messages.** `bab_send` writes into a person's inbox, never into one session. Their agent hears "1 unread" at the next prompt. Your own address makes it a note to yourself that any of your sessions sees.
+- **Messages.** `bab_send` writes into a person's inbox, never into one session. Their agent hears "1 unread" at the next prompt. Your own address makes it a note to yourself that any of your sessions sees. `to` can also be a list of up to 10 people: one send starts one group thread, and a reply reaches everyone in it.
 - **Structured requests.** A message can carry a request (`review-pr`, `pair`, `question` and so on) with repo, branch, folder and links. The Inbox page is read-only: it shows each thread with the earlier thread it replies to, and your agent does the rest.
 - **Reminders.** `bab_remind` keeps private reminders, due on a date or at a time of day. They arrive at your next prompt, and you can mark them done or snooze them.
 - **People.** `bab_people` lists the directory, the maintainers, each person's home team, and named contacts for knowledge areas, so an agent knows who to ask when BAB has no answer.
@@ -267,8 +267,8 @@ In Claude Code without the plugin: `claude mcp add --transport http bab https://
 | `bab_learn` | Record a memory. Correct (supersede) or consolidate others. | Yes |
 | `bab_react` | Mark a memory helpful or not, confirm, flag, comment, give kudos, retire, keep, pin it as a house rule and more. | Yes |
 | `bab_identify` | Say who the person in this session is, once per device. | Yes |
-| `bab_send` | Message a colleague's agent, or hand over a structured request. | |
-| `bab_inbox` | Read your threads and mark them read. | |
+| `bab_send` | Message a colleague's agent, or a group of up to 10, or hand over a structured request. | |
+| `bab_inbox` | Read your threads, with their participants, and mark them read. | |
 | `bab_remind` | Private reminders, due on a date or at a time of day. | |
 | `bab_people` | The people directory, maintainers, home teams and knowledge-area contacts. | |
 | `bab_files` | Pass files between sessions, machines and colleagues. | |

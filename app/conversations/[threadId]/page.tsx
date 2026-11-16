@@ -8,12 +8,12 @@ import Avatar from "@/app/components/shell/Avatar";
 import { auditRequest } from "@/lib/request-audit";
 import { getViewer } from "@/lib/notify-auth";
 import { ForbiddenError } from "@/lib/errors";
-import { threadForViewer } from "@/lib/messages";
+import { participantsOf, threadForViewer } from "@/lib/messages";
 import { formatRelativeTime } from "@/lib/relative-time";
 import styles from "../conversations.module.css";
 import { formatDate, DATE_TIME } from "@/lib/branding";
 
-/** One thread as a chat: the person who started it on the left, the other side on the
+/** One thread as a chat: the person who started it on the left, everyone else on the
  *  right, consecutive messages from the same sender grouped under one name. */
 export default async function ConversationDetailPage({ params }: { params: Promise<{ threadId: string }> }) {
   const { threadId } = await params;
@@ -33,10 +33,9 @@ export default async function ConversationDetailPage({ params }: { params: Promi
   if (!result) notFound();
   const { thread, messages } = result;
 
-  const people = new Map<string, { name: string }>();
-  for (const m of messages) {
-    if (!people.has(m.from_id)) people.set(m.from_id, { name: m.fromName ?? m.from_id });
-  }
+  // Everyone in the thread, not only those who wrote: a group thread shows all its members.
+  const people = participantsOf(thread.id).map((p) => ({ id: p.id, name: p.name ?? p.id }));
+  const joiner = people.length > 2 ? "·" : "↔";
 
   return (
     <Shell>
@@ -51,9 +50,9 @@ export default async function ConversationDetailPage({ params }: { params: Promi
             <LiveUpdates topics="message" />
           </div>
           <div className={styles.people}>
-            {[...people.values()].map((p, k) => (
-              <span key={p.name} className={styles.person}>
-                {k > 0 ? <span className={styles.arrow}>↔</span> : null}
+            {people.map((p, k) => (
+              <span key={p.id} className={styles.person}>
+                {k > 0 ? <span className={styles.arrow}>{joiner}</span> : null}
                 <Avatar name={p.name} size={22} />
                 <span>{p.name}</span>
               </span>

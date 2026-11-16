@@ -432,9 +432,9 @@ function digestFor(ownerId: string, sessionId: string): DigestResult {
   const result = getDb()
     .prepare(
       `INSERT OR IGNORE INTO session_deliveries (session_id, message_id)
-       SELECT ?, id FROM messages
-       WHERE to_id = ? AND read_at IS NULL
-         AND id NOT IN (
+       SELECT ?, message_id FROM message_recipients
+       WHERE user_id = ? AND read_at IS NULL
+         AND message_id NOT IN (
            SELECT sd.message_id FROM session_deliveries sd
            JOIN sessions s ON s.id = sd.session_id
            WHERE s.owner_id = ?
