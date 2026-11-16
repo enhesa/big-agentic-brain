@@ -1,6 +1,6 @@
-// The Command Center LLM suites: `pnpm eval --suite cc` (behaviour: the skill text is loaded) and
+// The BAB Tasks LLM suites: `pnpm eval --suite cc` (behaviour: the skill text is loaded) and
 // `pnpm eval --suite cc-trigger` (only the skill's frontmatter description is shown; the agent must
-// decide to load it). Each run gets a fresh BAB, a person with no Command Center yet (the first
+// decide to load it). Each run gets a fresh BAB, a person with no BAB Tasks yet (the first
 // publish creates it), and an agent bound to a device, then plays one scenario from cc-scenarios.mjs.
 // `--dry-run` swaps the LLM for each scenario's ideal script (no key, no cost) to prove the graders.
 import { execFileSync } from "node:child_process";
@@ -20,7 +20,7 @@ export const CC_SYSTEM = `You are a coding agent in an interactive session with 
 
 const WORK_TOOL = ["work", "Carry out one step of the task (for example 'write the exporter'). Returns what happened.",
   { type: "object", properties: { step: { type: "string" } }, required: ["step"] }];
-const SKILL_TOOL = (desc) => ["skill", `Load an installed skill by name before you act on it. Installed skills:\n- command-center: ${desc}`,
+const SKILL_TOOL = (desc) => ["skill", `Load an installed skill by name before you act on it. Installed skills:\n- tasks: ${desc}`,
   { type: "object", properties: { name: { type: "string" } }, required: ["name"] }];
 
 /** A provider that replays a scenario's ideal script: one step per chat call, a text step ends the turn. */
@@ -95,14 +95,14 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
     if (scenario.setup) await scenario.setup(x);
     // In the trigger suite the ideal agent loads the skill first, unless asked to leave it alone.
     const ideal = script ?? (suite === "cc-trigger" && scenario.context !== "off"
-      ? [[{ tool: "skill", args: { name: "command-center" } }, ...scenario.ideal[0]], ...scenario.ideal.slice(1)]
+      ? [[{ tool: "skill", args: { name: "tasks" } }, ...scenario.ideal[0]], ...scenario.ideal.slice(1)]
       : scenario.ideal);
     const prov = dryRun ? new Scripted(ideal, vars) : makeProvider(providerCfg);
     const skill = splitSkill(await skillText(bab.origin));
     // The harness clock, so the agent can fill health.checkedAt (a real session knows the date).
     let sys = `${CC_SYSTEM}\n\nCurrent time (UTC): ${x.now}.`;
     if (mcp.instructions) sys += `\n\n# MCP server instructions\n## bab (Big Agentic Brain)\n${mcp.instructions}`;
-    if (suite === "cc") sys += `\n\n# Skill: command-center (loaded)\n${skill.body}`;
+    if (suite === "cc") sys += `\n\n# Skill: tasks (loaded)\n${skill.body}`;
     const babTools = await mcp.listTools();
     const local = [WORK_TOOL, ...(suite === "cc-trigger" ? [SKILL_TOOL(skill.meta.description ?? "")] : [])];
     const tools = [...local.map(([n, d, s]) => prov.toolSpec(n, d, s)), ...babTools.map((t) => prov.toolSpec(t.name, t.description ?? "", t.inputSchema))];
@@ -146,10 +146,10 @@ export async function runScenario({ scenario, suite, providerCfg, dir, dryRun, s
             out = workResult(scenario, a);
           }
           else if (call.name === "skill") {
-            out = /command-center/.test(a.name ?? "") ? skill.body : `No skill named ${a.name}.`;
-            isError = !/command-center/.test(a.name ?? "");
+            out = /tasks/.test(a.name ?? "") ? skill.body : `No skill named ${a.name}.`;
+            isError = !/tasks/.test(a.name ?? "");
           } else if (babNames.has(call.name)) {
-            if (call.name === "bab_command_center" && a.action === "publish" && !firstPublishSeen) {
+            if (call.name === "bab_tasks" && a.action === "publish" && !firstPublishSeen) {
               firstPublishSeen = true;
               if (scenario.beforeFirstPublish) await scenario.beforeFirstPublish(x);
             }
@@ -239,7 +239,7 @@ export async function runCcSuite(opt) {
     for (const scenario of scenarios) {
       for (const [name, good] of goodScripts(scenario)) {
         const id = `${scenario.id}-good-${name}`;
-        const r = await runScenario({ scenario, suite, providerCfg, dir: path.join(outDir, "runs", id), dryRun, script: suite === "cc-trigger" ? [[{ tool: "skill", args: { name: "command-center" } }, ...good[0]], ...good.slice(1)] : good });
+        const r = await runScenario({ scenario, suite, providerCfg, dir: path.join(outDir, "runs", id), dryRun, script: suite === "cc-trigger" ? [[{ tool: "skill", args: { name: "tasks" } }, ...good[0]], ...good.slice(1)] : good });
         const failed = r.checks.filter((c) => !c.ok && !c.pending).map((c) => c.name);
         const pass = !r.error && r.checks.some((c) => !c.pending) && failed.length === 0;
         altGood.push({ scenario: scenario.id, name, pass, failed, error: r.error });
@@ -277,7 +277,7 @@ export async function runCcSuite(opt) {
 export function ccSummary(rows, meta) {
   const pct = (k, n) => (n ? `${Math.round((100 * k) / n)}%` : "n/a");
   const lines = [
-    `# Command Center ${meta.suite === "cc-trigger" ? "trigger" : "behaviour"} eval${meta.dryRun ? " (dry run: ideal scripts, no LLM)" : ""}`,
+    `# BAB Tasks ${meta.suite === "cc-trigger" ? "trigger" : "behaviour"} eval${meta.dryRun ? " (dry run: ideal scripts, no LLM)" : ""}`,
     "",
     `Model: ${meta.model}. Trials per scenario: ${meta.trials}. Spend: $${meta.spent.toFixed(3)} of $${meta.budget}.${meta.skipped ? ` ${meta.skipped} runs skipped: budget reached.` : ""} BAB ${meta.babCommit}.`,
     "",

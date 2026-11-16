@@ -100,7 +100,7 @@ import {
   type CreateFeedbackInput,
 } from "./feedback";
 import { branding } from "./branding";
-import { CC_ACTIONS, CC_CONTENT_RULE, runCommandCenterMcp } from "./command-center";
+import { CC_ACTIONS, CC_CONTENT_RULE, runTasksMcp } from "./tasks";
 import { teamTags } from "./teams";
 import { config, sourceLinkText } from "./config";
 import { ValidationError, NotFoundError, ConflictError } from "./errors";
@@ -1274,12 +1274,12 @@ export const TOOLS: Tool[] = [
     run: runKvTool,
   },
   {
-    name: "bab_command_center",
-    title: "Command Center",
-    annotations: { title: "Command Center", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-    // Kept short on purpose: every session pays for it. The field rules live in the command-center
-    // skill (content/instructions/command-center.md) and in the 400 answers, which name the fix.
-    description: "Needs the command-center skill, which has the format. " + CC_CONTENT_RULE,
+    name: "bab_tasks",
+    title: "BAB Tasks",
+    annotations: { title: "BAB Tasks", readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    // Kept short on purpose: every session pays for it. The field rules live in the tasks
+    // skill (content/instructions/tasks.md) and in the 400 answers, which name the fix.
+    description: "Needs the tasks skill, which has the format. " + CC_CONTENT_RULE,
     inputSchema: {
       type: "object",
       properties: {
@@ -1289,7 +1289,7 @@ export const TOOLS: Tool[] = [
       },
       required: ["action"],
     },
-    run: (actor, args, ctx) => JSON.stringify(runCommandCenterMcp(actor, args, originOf(ctx))),
+    run: (actor, args, ctx) => JSON.stringify(runTasksMcp(actor, args, originOf(ctx))),
   },
 ];
 

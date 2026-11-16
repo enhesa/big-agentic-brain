@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Command Center contract eval (no LLM, free, deterministic, CI-friendly): replays the MCP calls of a
-// typical agent session (fixtures/cc-session.json) against a fresh BAB with Command Center on for a
+// BAB Tasks contract eval (no LLM, free, deterministic, CI-friendly): replays the MCP calls of a
+// typical agent session (fixtures/cc-session.json) against a fresh BAB with BAB Tasks on for a
 // test identity, and checks the tool schema, every answer and the stored state after each step.
 // Catches drift between the skill, the slim MCP schema and the server.
 import fs from "node:fs";
@@ -19,7 +19,7 @@ const { values: opt } = parseArgs({
 });
 if (opt.help) {
   console.log(`Usage: node evals/cc-contract.mjs [--fixture FILE] [--out DIR]
-Replays a recorded Command Center session over MCP against a fresh BAB (run \`pnpm build\` first).
+Replays a recorded BAB Tasks session over MCP against a fresh BAB (run \`pnpm build\` first).
 Exits 1 when any check fails.`);
   process.exit(0);
 }
@@ -77,11 +77,11 @@ async function main() {
     agents.second = await ccAgent(bab.origin, second, "Eval VM");
 
     // The slim schema agents see: only action, id and record, with every action in the enum.
-    const tool = (await agents.agent.listTools()).find((t) => t.name === "bab_command_center");
+    const tool = (await agents.agent.listTools()).find((t) => t.name === "bab_tasks");
     const props = Object.keys(tool?.inputSchema?.properties ?? {}).sort();
     const actions = tool?.inputSchema?.properties?.action?.enum ?? [];
     const wantActions = ["publish", "patch", "list", "remove", "backfill_link", "delete_all", "export", "grant_export", "revoke_export"];
-    if (!tool) fail("tool schema", "bab_command_center is not in tools/list");
+    if (!tool) fail("tool schema", "bab_tasks is not in tools/list");
     else if (props.join(",") !== "action,id,record") fail("tool schema", `properties are ${props.join(",")}, want action,id,record`);
     else if ([...actions].sort().join(",") !== [...wantActions].sort().join(",")) fail("tool schema", `action enum is ${actions.join(",")}, want exactly ${wantActions.join(",")}`);
     else if (tool.inputSchema.properties.record?.type !== "object") fail("tool schema", "record is not declared as an object");
@@ -120,7 +120,7 @@ async function main() {
         isError = !res.ok;
         if (step.expect?.status !== undefined && res.status !== step.expect.status) errs.push(`want HTTP ${step.expect.status}, got ${res.status}`);
       } else {
-        ({ text, isError } = await agents[step.as ?? "agent"].call("bab_command_center", await fill(step.call)));
+        ({ text, isError } = await agents[step.as ?? "agent"].call("bab_tasks", await fill(step.call)));
       }
       if (text.includes(secret)) errs.push("the answer echoes the secret");
       const e = step.expect ?? {};
@@ -171,7 +171,7 @@ async function main() {
   const gating = results;
   const failed = gating.filter((r) => !r.ok);
   const md = [
-    "# Command Center contract eval (no LLM)",
+    "# BAB Tasks contract eval (no LLM)",
     "",
     `${gating.length - failed.length} of ${gating.length} checks passed.`,
     "",

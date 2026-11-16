@@ -969,7 +969,7 @@ export const register: Register = (on, options) => {
   // permission dialog, in the CLI and the desktop app (which offers only "Allow once", so its inbox poll
   // asked forever). A deny from the person's or the organisation's rules still wins. bab_send, bab_files,
   // bab_kv and the writing actions of bab_feedback, bab_people, bab_learn, bab_react and
-  // bab_command_center (poll-backoff.ts) keep the host's ask.
+  // bab_tasks (poll-backoff.ts) keep the host's ask.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (verdict.decision !== 'ask' || (verdict.ceiling && verdict.ceiling !== 'allow')) return verdict

@@ -1,0 +1,7 @@
+---
+type: tool_used
+tool: Skill
+input_match: '"skill"\s*:\s*"(?:[\w-]+:)?bab-tasks"'
+---
+
+The agent loads the bab-tasks skill when a task starts and BAB Tasks is on.

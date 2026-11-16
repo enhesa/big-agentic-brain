@@ -159,14 +159,14 @@ export function checkKvRateLimit(actorId: string): boolean {
   return true;
 }
 
-/** Command Center calls a person may make a minute on average (lib/command-center.ts), on top of the general limit. */
+/** BAB Tasks calls a person may make a minute on average (lib/tasks.ts), on top of the general limit. */
 export const CC_RATE_LIMIT_PER_MINUTE = 60;
-/** Command Center calls a person may make at once before the per-minute pace applies. */
+/** BAB Tasks calls a person may make at once before the per-minute pace applies. */
 export const CC_RATE_LIMIT_BURST = 20;
 const ccBuckets = new Map<string, TokenBucket>();
 
 /** The same token bucket as the key-value store's, in a map of its own, so one store cannot spend the other's budget. */
-export function checkCommandCenterRateLimit(actorId: string): boolean {
+export function checkTasksRateLimit(actorId: string): boolean {
   const now = clock();
   const perMs = CC_RATE_LIMIT_PER_MINUTE / WINDOW_MS;
   if (ccBuckets.size > 10_000) {

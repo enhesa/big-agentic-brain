@@ -156,8 +156,8 @@ it.each([
 it("tools/list returns exactly the thirteen tools", async () => {
   const out = await rpc("tools/list", {}, ACTOR);
   expect(out.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
-    "bab_command_center", "bab_feedback", "bab_files", "bab_identify", "bab_inbox", "bab_kv", "bab_learn", "bab_link_session", "bab_people",
-    "bab_react", "bab_remind", "bab_search", "bab_send",
+    "bab_feedback", "bab_files", "bab_identify", "bab_inbox", "bab_kv", "bab_learn", "bab_link_session", "bab_people",
+    "bab_react", "bab_remind", "bab_search", "bab_send", "bab_tasks",
   ]);
 });
 

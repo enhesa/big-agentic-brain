@@ -62,9 +62,9 @@ async function download(token: string) {
 }
 
 async function backfill(token: string) {
-  const { POST } = await import("../app/api/command-center/backfill/[token]/route");
+  const { POST } = await import("../app/api/tasks/backfill/[token]/route");
   const body = JSON.stringify({ v: 1, entries: [], current: [] });
-  const req = new Request(`${ORIGIN}/api/command-center/backfill/${token}`, { method: "POST", body, headers: { "content-type": "application/json" } });
+  const req = new Request(`${ORIGIN}/api/tasks/backfill/${token}`, { method: "POST", body, headers: { "content-type": "application/json" } });
   return POST(req, { params: Promise.resolve({ token }) });
 }
 
@@ -126,8 +126,8 @@ describe("backfill links", () => {
     expect(refused.status).toBe(429);
     expect(refused.headers.get("retry-after")).toBeTruthy();
 
-    const { runCommandCenter } = await import("../lib/command-center");
-    const minted = runCommandCenter(device, { action: "backfill_link" }, "mcp", ORIGIN) as { url: string };
+    const { runTasks } = await import("../lib/tasks");
+    const minted = runTasks(device, { action: "backfill_link" }, "mcp", ORIGIN) as { url: string };
     // The good link is found and spent: whatever the body's verdict, it is neither 404 nor 429.
     const res = await backfill(minted.url.split("/").pop()!);
     expect([404, 429]).not.toContain(res.status);

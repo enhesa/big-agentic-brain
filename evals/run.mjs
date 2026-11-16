@@ -36,7 +36,7 @@ const HELP = `Usage: node evals/run.mjs [options]
   --suite core|tk|cc|cc-trigger
                            core: bugs the repo itself reveals (evals/tasks); tk: team knowledge, the fix needs a
                            fact that is only in a colleague's memory (evals/tasks-tk; eval tasks are its variants);
-                           cc: Command Center skill behaviour over multi-turn scenarios (Haiku, $2 cap, 2 trials);
+                           cc: BAB Tasks skill behaviour over multi-turn scenarios (Haiku, $2 cap, 2 trials);
                            cc-trigger: the same with only the skill description, does the agent load it
   --dry-run                cc suites only: replay each scenario's ideal script instead of an LLM (no key, free)
   --conditions A,B,...     A no BAB; B BAB + colleague memory; C BAB + distractors only; H BAB + hand-written notes;
@@ -137,7 +137,7 @@ async function pool(items, n, fn) {
 }
 
 async function main() {
-  // Command Center suites: their own scenario loop (evals/lib/cc-suite.mjs), Haiku and a $2 cap by default.
+  // BAB Tasks suites: their own scenario loop (evals/lib/cc-suite.mjs), Haiku and a $2 cap by default.
   if (opt.suite === "cc" || opt.suite === "cc-trigger") {
     const { runCcSuite } = await import("./lib/cc-suite.mjs");
     return runCcSuite(opt);

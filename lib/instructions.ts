@@ -11,7 +11,7 @@ const contentDir = path.join(process.cwd(), "content", "instructions");
 
 const rawInstall = readFileSync(path.join(contentDir, "install.md"), "utf8");
 const rawSkill = readFileSync(path.join(contentDir, "skill.md"), "utf8");
-const rawCommandCenter = readFileSync(path.join(contentDir, "command-center.md"), "utf8");
+const rawTasks = readFileSync(path.join(contentDir, "tasks.md"), "utf8");
 
 const PLACEHOLDER_RE =
   /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS|TEAM_TAGS|FILES_LIMITS)\}\}|<origin>|__BAB_ORIGIN__/g;
@@ -76,9 +76,9 @@ export function getInstructions(origin: string): Instructions {
 }
 
 /**
- * The optional command-center skill (content/instructions/command-center.md), rendered for this
+ * The optional bab-tasks skill (content/instructions/tasks.md), rendered for this
  * deployment. Not part of `version`: only agents that installed it read it.
  */
-export function getCommandCenterInstructions(origin: string): string {
-  return renderInstructionText(rawCommandCenter, origin);
+export function getTasksInstructions(origin: string): string {
+  return renderInstructionText(rawTasks, origin);
 }

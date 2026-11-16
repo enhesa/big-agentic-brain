@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Backfills a Command Center work log from past agent sessions, in two steps.
+// Backfills a BAB Tasks work log from past agent sessions, in two steps.
 //
 //   draft   reads session transcripts (JSONL) on this machine, splits them into work blocks and
 //           drafts one `worked` line per block. It writes a draft file for the person to review.
 //           It uploads nothing.
 //   sync    reads the sessions active in the last days and drafts one `current` initiative record
 //           per session or group of sessions (title, plan tasks, open blocked question), so a fresh
-//           Command Center page shows what is going on now. It uploads nothing.
+//           BAB Tasks page shows what is going on now. It uploads nothing.
 //   upload  sends the reviewed draft lines and current records (include: true) to a single-use
-//           backfill link that the person's agent minted with bab_command_center action=backfill_link.
+//           backfill link that the person's agent minted with bab_tasks action=backfill_link.
 //
 // Transcript text never leaves this machine except as the prompt to the drafting model (when one
 // is configured), and then only as a capped excerpt with secret-shaped strings, email addresses
@@ -55,7 +55,7 @@ draft options:
   Without --no-llm, draft needs BAB_BACKFILL_BASE_URL, BAB_BACKFILL_MODEL and BAB_BACKFILL_API_KEY_ENV
   (the name of the variable that holds the API key). It posts to <base>/v1/messages.
 
-sync options (the current state of recent sessions as initiatives, for a fresh Command Center page):
+sync options (the current state of recent sessions as initiatives, for a fresh BAB Tasks page):
   --out <file.json>       draft to write, with "current" records; also writes <file>.md
   --projects-dir <dir>    as for draft
   --map <file.json>       as for draft; a matching rule names the initiative, and a rule with
@@ -530,7 +530,7 @@ const VALUE_SRC = String.raw`("[^"\n]{0,500}"?|'[^'\n]{0,500}'?|[^\s,;"']+)`;
  */
 const MASKS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-{5}[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-{5}|$)/g, "private key"],
-  [/(?:https?:\/\/[^\s/]+)?\/api\/command-center\/backfill\/[0-9a-f]{64}/gi, "backfill link"],
+  [/(?:https?:\/\/[^\s/]+)?\/api\/tasks\/backfill\/[0-9a-f]{64}/gi, "backfill link"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "bearer token"],
   [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{36})|(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, "token"],
   [new RegExp(String.raw`(?<![\w-])([\w-]*(?:key|token|secret|passw(?:or)?d|pwd))(["']?\s*[=:]\s*)${VALUE_SRC}`, "gi"), "assignment", "$1$2"],
@@ -889,7 +889,7 @@ export function draftMarkdown(draft) {
     return `| ${e.at.slice(0, 16).replace("T", " ")} | ${cell(e.initiative)} | ${cell(e.worked)} | ${e.size} | ${cell(inc)} |`;
   });
   return [
-    "# Command Center backfill draft",
+    "# BAB Tasks backfill draft",
     "",
     `Generated ${draft.generatedAt}. ${draft.entries.length} blocks. Edit the .json file (worked, initiative, include), then run upload.`,
     "",
@@ -1409,7 +1409,7 @@ export function buildSyncDraft(states, { rules = [], now, max = SYNC_MAX_DEFAULT
 export function syncMarkdown(draft) {
   const mark = { done: "[x]", in_progress: "[~]", pending: "[ ]" };
   const lines = [
-    "# Command Center sync draft",
+    "# BAB Tasks sync draft",
     "",
     `Generated ${draft.generatedAt}. ${draft.current.length} initiatives, ${draft.current.filter((r) => r.include === true).length} included. Every record is listed: set include to true or false in the .json file (and edit title, tasks, questions), then run upload. Only include: true records are sent.`,
     "",

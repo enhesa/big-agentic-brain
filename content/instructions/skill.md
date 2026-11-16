@@ -380,8 +380,8 @@ curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for 
 # Pace bulk pushes or pull requests: bab_kv action=throttle key=shared/bitbucket-push/default minIntervalSeconds=90, sleep waitSeconds, then act. A key keeps the interval of whoever creates it first, so cooperating scripts share the default key and 90 seconds. A 409 names the key's fixed interval: use it.
 # One at a time: bab_kv action=lock key=... ttlSeconds=600 returns a token; unlock with it when done. acquired:false names the holder: wait, never break it. A stuck shared key: ask a BAB maintainer (force_delete).
 
-# Command Center: the person's private {{ORIGIN}}/command-center page of initiatives, open questions, upkeep health and a work log.
-# Only when the optional command-center skill is loaded ({{ORIGIN}}/instructions/command-center.md) (installing the command-center plugin is the opt-in). It goes through the bab_command_center tool.
+# BAB Tasks: the person's private {{ORIGIN}}/tasks page of initiatives, open questions, upkeep health and a work log.
+# Only when the optional bab-tasks skill is loaded ({{ORIGIN}}/instructions/tasks.md) (installing the bab-tasks plugin is the opt-in). It goes through the bab_tasks tool.
 # publish sends the whole record and is the default; the optional patch sends only what changed, so two sessions do not overwrite each other.
 
 # Directory and self-check
