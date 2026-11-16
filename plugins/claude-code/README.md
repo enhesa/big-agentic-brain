@@ -52,6 +52,7 @@ The plugin registers hooks that post to `<bab_url>/api/hook` through `scripts/ba
 - prints BAB's answer only when it is JSON: HTTP 200, a JSON content type, a body that starts with `{`, at most 64 KB. A captive portal's sign-in page or a proxy error never lands in the session.
 - skips the call for 5 minutes after it could not connect (no DNS, refused, a connect timeout or a TLS failure), so off the network a prompt does not wait for the connect timeout each time. The mark is a file in the plugin's data folder (`CLAUDE_PLUGIN_DATA`). Without that folder it never skips and writes no mark, and a mark more than 5 minutes ahead is dropped.
 - makes no call when the `bab_url` setting is unset or not an `http(s)` URL (Claude Code passes it as `CLAUDE_PLUGIN_OPTION_BAB_URL`). The hooks then stay quiet, and the script writes one line about it to stderr at most once per 5 minutes.
+- sends the `bab_token` setting (`CLAUDE_PLUGIN_OPTION_BAB_TOKEN`) as `Authorization: Bearer <token>` when it is set and made only of letters, digits and `._~+/=-`, so the hooks serve on an instance that sets `BAB_API_TOKENS`. Without it, such an instance answers `{}` and the hooks say nothing.
 - always exits 0 and prints nothing else, so a hook never blocks a prompt.
 
 The hooks:

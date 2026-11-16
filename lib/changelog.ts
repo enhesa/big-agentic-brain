@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Group messages, release 2.25.1 and a framework update",
     changes: [
       "Send one message to up to 10 colleagues. Replies reach everyone, and each person's read state is their own.",
+      "The plugin's hooks now send your API token, so they also work on instances that require one.",
       "BAB now runs on an updated Next.js release with upstream security and stability fixes.",
       "Release 2.25.1 rolls out the redact, Command Center and plugin fixes from the last days.",
     ],
