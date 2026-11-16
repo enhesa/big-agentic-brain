@@ -27,11 +27,11 @@ session (`get_session` with `"self"`) and use its `link`. Only when your app giv
 leave it out. A card without a link cannot be opened, so check it on every publish.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
-or declined a task. A `patch` with `worked` counts as that publish.
+or declined a task.
 
 If this skill is loaded, call `bab_command_center` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
-of your first turn, with that step `in_progress`. Publish again after every task status change, and
-as the last call of every turn, after the work has returned.
+of your first turn, with that step `in_progress`. Publish again (or `patch`, see The record) after
+every task status change, and publish as the last call of every turn, after the work has returned.
 `worked` is one line on what this turn did, such as "Wrote the exporter" or "Answered how many
 fields were mapped". When you stop to ask the person something, put the same question in
 `questions` with a stable id; the turn the answer arrives, publish without it, which clears it.
@@ -41,11 +41,11 @@ Your first reply after your first publish includes the full page link <bab_url>/
 Always paste the URL itself, never only say that Command Center is tracking the work. Later replies do
 not repeat it.
 
-After the first publish, prefer `patch`: it sends only what changed, so two sessions on one
-initiative never overwrite each other. To see what another session published, call `list` with the
-`id`: it returns the full record and its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
-after `current:`: merge it and publish again. Never skip publishing for fear of overwriting;
-`expectSeq` protects the other session.
+To see what another session published, call `list` with the `id`: it returns the full record and
+its `seq`. Merge, then `publish` with that `expectSeq`. A 409 answer carries the current record
+after `current:`: merge it and send the call again with the `expectSeq` it names. Never skip
+publishing for fear of overwriting; `expectSeq` protects the other session. To change only a few
+items, or to leave another session's changes alone, you may use `patch` instead (see The record).
 
 There is no switch: installing the command-center plugin turns it on, and your first `publish`
 creates the person's page. If they ask you to leave it alone, or the tool answers that Command Center
@@ -70,13 +70,15 @@ Send the record as one object in `record`, with `action` and `id` beside it:
 `{ "action": "publish", "id": "billing-export", "record": { "v": 1, "title": "Billing export", "tasks": [], "worked": "Planned the export" } }`.
 Put `action`, `id` and `record` at the top level of the call. Never nest them inside `record`.
 
-`patch` changes an initiative that already exists (an unknown `id` is refused: publish it first).
-Send only what changed: a field you leave out keeps its value, and `null` clears an optional one. In `tasks`,
+`patch` is optional. Publish stays the default; use `patch` to change a few items of an initiative
+that already exists (an unknown `id` is refused: publish it first), or when another session also
+writes it, so neither overwrites the other. Send only what changed: a field you leave out keeps its
+value, and `null` clears an optional one (never `title`, `state` or `kind`). In `tasks`,
 `questions` and `links`, each item is a change, found by its `id` (links by `url`): a known one is
 updated with the fields you send, a new one is added, and `"remove": true` drops it (a removed
-question is cleared). Items you do not name stay as they are. For example
-`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "worked": "Built the exporter" } }`.
-Send `source` with every patch, as on publish. The same limits and checks apply to the merged record.
+question is cleared). Items you do not name stay as they are. `source` merges field by field; send
+it with every patch, as on publish. The same limits and checks apply to the merged record. For example
+`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "source": { "session": "<session id>", "link": "<session link>" } } }`.
 
 | Field | Rules |
 | --- | --- |

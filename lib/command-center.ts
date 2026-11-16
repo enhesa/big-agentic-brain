@@ -1141,7 +1141,7 @@ export function ccPublish(actor: CcActor, owner: string, body: Record<string, un
   return inTransaction(getDb(), () => {
     const prev = loadRecord(owner, input.id);
     if (prev) pruneQuestions(prev, now);
-    const write = { expectSeq, worked, size, healthSent: body.health !== undefined, session: input.source?.session ?? null, machine: input.source?.machine ?? null };
+    const write = { op: "publish" as const, expectSeq, worked, size, healthSent: body.health !== undefined, session: input.source?.session ?? null, machine: input.source?.machine ?? null };
     return commitRecord(actor, owner, input, prev, write, via, now);
   });
 }
@@ -1153,6 +1153,8 @@ interface CommitWrite {
   size: CcSize | null;
   /** The call named `health` (an object or null); left out, a recurring record keeps its health. */
   healthSent: boolean;
+  /** The audit action: cc_publish or cc_patch. */
+  op: "publish" | "patch";
   /** The writing session, for the writers list, new questions and log entries. */
   session: string | null;
   machine: string | null;
@@ -1241,19 +1243,19 @@ function commitRecord(actor: CcActor, owner: string, input: RecordInput, prev: C
         // Logged work is activity: the record is not silent, but its seq stays.
         const touched = { ...prev, updatedAt: at };
         saveRecord(owner, touched);
-        auditCc(owner, "publish", input.id, "worked", via);
+        auditCc(owner, write.op, input.id, "worked", via);
       }
     }
     return { ...answer(prev, logged), unchanged: true };
   }
   if (conflict) {
     throw new CcConflictError(
-      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change into the current record (in current) and publish again with expectSeq ${prev?.seq ?? 0}.`,
+      `expectSeq is ${expectSeq} but '${input.id}' is at seq ${prev?.seq ?? 0}. Merge your change with the current record (in current) and send it again with expectSeq ${prev?.seq ?? 0}.`,
       prev ?? null,
     );
   }
   assertFits(owner, next, prev);
-  auditCc(owner, "publish", input.id, prev ? "updated" : "created", via);
+  auditCc(owner, write.op, input.id, prev ? "updated" : "created", via);
   saveRecord(owner, next);
   const entries = derivedEntries(prev, next, base);
   let logged: string | null = null;
@@ -1272,8 +1274,14 @@ const PATCH_LISTS = [
   { field: "questions", key: "id", fields: QUESTION_FIELDS },
   { field: "links", key: "url", fields: LINK_FIELDS },
 ] as const;
-/** The scalar fields a patch may set; left out, they keep their value, and null clears them. */
+/** The scalar fields a patch may set; left out, they keep their value. Only the nullable ones clear with null. */
 const PATCH_SCALARS = ["v", "title", "area", "key", "state", "kind", "cadence", "deadline", "priority", "source", "health"];
+const PATCH_NULLABLE = ["area", "key", "cadence", "deadline", "priority", "source", "health"];
+
+/** The stored source as a publish would send it, or null. */
+function prevSource(prev: CcRecord): Record<string, unknown> | null {
+  return prev.source ? { machine: prev.source.machine, session: prev.source.session, link: prev.source.link ?? null } : null;
+}
 
 /** Applies one list's changes: add or update by key, `remove: true` drops it, the rest stay as they are. */
 function mergeItems(field: string, key: string, fields: readonly string[], current: Record<string, unknown>[], raw: unknown): Record<string, unknown>[] {
@@ -1314,9 +1322,15 @@ function mergePatch(prev: CcRecord, patch: Record<string, unknown>): Record<stri
     cadence: prev.cadence,
     deadline: prev.deadline,
     priority: prev.priority,
-    source: prev.source ? { machine: prev.source.machine, session: prev.source.session, link: prev.source.link ?? null } : null,
+    source: prevSource(prev),
   };
-  for (const k of PATCH_SCALARS) if (patch[k] !== undefined) merged[k] = patch[k];
+  for (const k of PATCH_SCALARS) {
+    if (patch[k] === undefined) continue;
+    if (patch[k] === null && !PATCH_NULLABLE.includes(k)) throw new ValidationError(`${k} cannot be null on patch; leave it out to keep it, or send a new value`);
+    merged[k] = patch[k];
+  }
+  // source merges field by field: a patch that sends only session keeps the stored machine and link.
+  if (isObject(patch.source) && isObject(merged.source)) merged.source = { ...(prevSource(prev) ?? {}), ...patch.source };
   const current: Record<string, Record<string, unknown>[]> = {
     tasks: prev.tasks.map((t) => ({ id: t.id, text: t.text, status: t.status })),
     // Only the open questions: a cleared one stays cleared, as on publish.
@@ -1343,9 +1357,11 @@ export function ccPatch(actor: CcActor, owner: string, body: Record<string, unkn
     if (!prev) throw new NotFoundError(`No initiative '${id}' in your Command Center. patch changes an existing one; publish the whole record first.`);
     pruneQuestions(prev, now);
     const input = validateRecord(mergePatch(prev, body));
-    // A source kept from the stored record is not this call's session: only a sent one counts as a writer.
-    const sent = body.source !== undefined ? input.source : null;
-    const write = { expectSeq, worked, size, healthSent: body.health !== undefined, session: sent?.session ?? null, machine: sent?.machine ?? null };
+    // A session or machine kept from the stored record is not this call's: only the ones sent count as the writer.
+    const sent = isObject(body.source) ? body.source : {};
+    const session = sent.session !== undefined ? (input.source?.session ?? null) : null;
+    const machine = sent.machine !== undefined ? (input.source?.machine ?? null) : null;
+    const write = { op: "patch" as const, expectSeq, worked, size, healthSent: body.health !== undefined, session, machine };
     return commitRecord(actor, owner, input, prev, write, via, now);
   });
 }

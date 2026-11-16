@@ -71,7 +71,7 @@ In short:
   time of every log entry. Clock skew between machines never shows.
 - `expectSeq` that does not match is 409 with the current record, unless the record you send is
   already exactly the current one (a retried request): that is `unchanged: true`, not a 409.
-- A 409 answer includes the current record: merge it and publish again. REST returns it as
+- A 409 answer includes the current record: merge it and send the publish or patch again. REST returns it as
   `current`; the MCP tool puts it in the error text after `current: `, because an MCP error is text only.
 - Publishing the same record again changes nothing (`unchanged: true`): no new `seq` or audit row.
   A new `worked` line on it is still logged, and the answer carries its id in `logged`.
@@ -95,20 +95,23 @@ changing different fields or items never overwrite each other. It reads the stor
 the change and writes it in one transaction.
 
 - A field left out keeps its value; `null` clears a nullable one (`area`, `key`, `cadence`,
-  `deadline`, `priority`, `health`, `source`). `title`, `state`, `kind` and the rest are set as on
-  publish.
+  `deadline`, `priority`, `health`, `source`). `v`, `title`, `state` and `kind` cannot be null:
+  `null` there is a 400.
+- `source` merges field by field: `{ "session": "s-2" }` keeps the stored `machine` and `link`.
 - `tasks`, `questions` and `links` are lists of changes. Tasks and questions are matched by `id`,
   links by `url`. A known item is updated with the fields sent, a new one is added at the end (it
   needs every required field), and `{ "id": "x", "remove": true }` (links: `url`) drops one. A
   removed question is cleared, as when a publish leaves it out. Items not named stay as they are.
 - The merged record passes the same checks as a publish: limits, unique ids, the secret check on
   every text, and the 32 KB and per-person caps. The log, the server times and `unchanged: true`
-  work the same way.
+  work the same way. A patch is audited as `cc_patch`.
 - An unknown `id` is 404: a patch never creates an initiative. Publish the whole record first.
 - `expectSeq` is optional. Without it, a patch applies to whatever is stored now. With it, a
   mismatch is 409 with the current record, as on publish. The answer carries the new `seq`.
-- A `source` kept from the stored record does not count as a writer. Send `source` with the patch
-  so the session shows as a writer and its questions and log entries carry it.
+- A session kept from the stored `source` does not count as a writer. Send `source.session` with
+  the patch so the session shows as a writer and its questions and log entries carry it.
+- Publish stays the per-turn default in the skill. Patch is optional, for changing a few items or
+  for not overwriting another session's change.
 
 ## The work log
 
@@ -345,7 +348,7 @@ write. A parked or paused one goes after 180 days: it was set aside on purpose, 
 creates parked records nobody chose, so it is not kept forever. Each `list` item carries
 `expiresInDays`, the whole days left before the sweep deletes it. The log
 is kept `BAB_COMMAND_CENTER_LOG_DAYS` days (default 400). Cleared questions stay 7 days. Writes
-are audited (`cc_publish`, `cc_clear`, `cc_remove`, `cc_delete_all`, and the export rows above)
+are audited (`cc_publish`, `cc_patch`, `cc_clear`, `cc_remove`, `cc_delete_all`, and the export rows above)
 with the person, the initiative id and the result, never the text.
 
 ## The page

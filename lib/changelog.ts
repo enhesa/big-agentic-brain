@@ -20,7 +20,7 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-16",
-    title: "Release 2.25.1 and a framework update",
+    title: "Release 2.25.1, a framework update and Command Center patch",
     changes: [
       "Command Center has a patch action: change only some fields or tasks, so two sessions no longer overwrite each other.",
       "The plugin's hooks now send your API token, so they also work on instances that require one.",

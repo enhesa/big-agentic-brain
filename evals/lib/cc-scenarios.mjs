@@ -63,18 +63,16 @@ export function workResult(scenario, args) {
 const c = (name, ok, detail = "", pending = false) => ({ name, ok: Boolean(ok), detail, pending });
 
 /**
- * The turn is logged: the last Command Center call of the turn is a publish (or a patch, which
- * counts as one) that succeeded and carries `worked`, after the last work step. Holds for turns
- * that only answer or decline too.
+ * The turn is logged: the last Command Center call of the turn is a publish that succeeded and
+ * carries `worked`, after the last work step. Holds for turns that only answer or decline too.
  */
 function wrapUp(ev, turn) {
   const inTurn = ev.filter((e) => e.turn === turn && e.type === "tool");
   const lastWork = lastIndex(inTurn, (e) => e.name === "work");
   const lastCc = lastIndex(inTurn, (e) => e.name === "bab_command_center");
   const last = inTurn[lastCc];
-  const writes = (e) => action(e) === "publish" || action(e) === "patch";
-  const ok = lastCc >= 0 && writes(last) && !last.isError && lastCc > lastWork && workedOf(last) !== "";
-  const why = lastCc < 0 ? "no Command Center call" : !writes(last) ? `last: ${action(last)}` : last.isError ? "last publish failed" : lastCc < lastWork ? "work after the last publish" : workedOf(last) ? "" : "last publish has no worked";
+  const ok = lastCc >= 0 && action(last) === "publish" && !last.isError && lastCc > lastWork && workedOf(last) !== "";
+  const why = lastCc < 0 ? "no Command Center call" : action(last) !== "publish" ? `last: ${action(last)}` : last.isError ? "last publish failed" : lastCc < lastWork ? "work after the last publish" : workedOf(last) ? "" : "last publish has no worked";
   return c(`turn ${turn + 1}: ends with a publish with worked (last call, after the work)`, ok, why);
 }
 

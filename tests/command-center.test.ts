@@ -373,7 +373,34 @@ describe("patch", () => {
   it("does not count the kept source as a writer", () => {
     publish();
     patch({ title: "No source sent" });
+    patch({ title: "Only a link sent", source: { link: "https://example.com/session/2" } });
     expect(cc.ccGet(OWNER, "billing-export").writers.map((w) => w.session)).toEqual(["s-1"]);
+  });
+
+  it("merges source field by field, and null clears it", () => {
+    publish({ source: { machine: "laptop-1", session: "s-1", link: "https://example.com/session/1" } });
+    patch({ source: { session: "s-2" } });
+    expect(cc.ccGet(OWNER, "billing-export").source).toEqual({ machine: "laptop-1", session: "s-2", link: "https://example.com/session/1" });
+    patch({ source: { link: null } });
+    expect(cc.ccGet(OWNER, "billing-export").source).toEqual({ machine: "laptop-1", session: "s-2" });
+    patch({ source: null });
+    expect(cc.ccGet(OWNER, "billing-export").source).toBeNull();
+  });
+
+  it("refuses null for a field that cannot be empty", () => {
+    publish();
+    for (const field of ["state", "kind", "title", "v"]) {
+      expect(refusal(() => patch({ [field]: null }))).toMatchObject({ status: 400, message: `${field} cannot be null on patch; leave it out to keep it, or send a new value` });
+    }
+    expect(cc.ccGet(OWNER, "billing-export")).toMatchObject({ seq: 1, state: "active", kind: "project" });
+  });
+
+  it("is audited as cc_patch, not cc_publish", async () => {
+    publish();
+    patch({ title: "Patched" });
+    patch({ title: "Patched", worked: "Logged on an unchanged record" });
+    expect(await auditRows("cc_publish")).toHaveLength(1);
+    expect(await auditRows("cc_patch")).toHaveLength(2);
   });
 
   it("rejects an unknown id with 404 and never creates a record", () => {
