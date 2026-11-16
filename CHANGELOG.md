@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.25.2](https://github.com/enhesa/big-agentic-brain/compare/v2.25.1...v2.25.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* add the missing changelog entry for release 2.25.1 ([#147](https://github.com/enhesa/big-agentic-brain/issues/147)) ([bac41c8](https://github.com/enhesa/big-agentic-brain/commit/bac41c8d89c895e0fca6e9962133457feef621be))
+
 ## [2.25.1](https://github.com/enhesa/big-agentic-brain/compare/v2.25.0...v2.25.1) (2026-11-16)
 
 
