@@ -143,7 +143,7 @@ describe("GET /api/learnings/[id] recentNotes", () => {
     expect((await res.json()).recentNotes).toEqual([]);
   });
 
-  it("note text never appears outside recentNotes: not in the list JSON, not in search", async () => {
+  it("note text never appears outside recentNotes and history: not in the list JSON, not in search", async () => {
     const learning = await seedWithNotes();
     mockAgentIdentity("caller.t@example.com", "Caller");
     const { GET: LIST } = await import("../app/api/learnings/route");
@@ -159,8 +159,10 @@ describe("GET /api/learnings/[id] recentNotes", () => {
     const { GET } = await import("../app/api/learnings/[id]/route");
     const detail = await GET(new Request(`http://x/api/learnings/${learning.id}`) as never, { params: Promise.resolve({ id: learning.id }) });
     const body = await detail.json();
-    const { recentNotes: notes, ...rest } = body;
+    // The validation history (lib/trust.ts) carries the same notes, on this same authenticated route.
+    const { recentNotes: notes, history, ...rest } = body;
     expect(JSON.stringify(notes)).toContain(SENTINEL);
+    expect(JSON.stringify(history)).toContain(SENTINEL);
     expect(JSON.stringify(rest)).not.toContain(SENTINEL);
   });
 });
