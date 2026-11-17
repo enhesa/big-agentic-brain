@@ -26,6 +26,13 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    date: "2026-11-17",
+    title: "Tasks in the navbar",
+    changes: [
+      "BAB Tasks, the Kanban board for your agents, now has its own item in the navbar after Reminders.",
+    ],
+  },
+  {
     date: "2026-11-16",
     title: "Release 2.25.1, a framework update and Command Center patch",
     changes: [
