@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.28.0](https://github.com/enhesa/big-agentic-brain/compare/v2.27.0...v2.28.0) (2026-11-17)
+
+
+### Features
+
+* add Tasks to the navbar after Reminders ([#156](https://github.com/enhesa/big-agentic-brain/issues/156)) ([39c64ac](https://github.com/enhesa/big-agentic-brain/commit/39c64ac3777bee29b6e4a10923c46a9d1386dd05))
+* clearer way to link your browser to BAB ([#157](https://github.com/enhesa/big-agentic-brain/issues/157)) ([32ee4b2](https://github.com/enhesa/big-agentic-brain/commit/32ee4b2fc679dea684c8ef6fb271376166544e26))
+* trust labels, validation history and an optional review page for memories ([#158](https://github.com/enhesa/big-agentic-brain/issues/158)) ([8a95d4d](https://github.com/enhesa/big-agentic-brain/commit/8a95d4dfb29dac4c1fe5d0090f1419e371d25156))
+
 ## [2.27.0](https://github.com/enhesa/big-agentic-brain/compare/v2.26.0...v2.27.0) (2026-11-16)
 
 
