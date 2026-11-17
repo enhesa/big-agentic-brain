@@ -203,12 +203,13 @@ export function activityCountsForUsers(ids: string[]): Record<string, UserActivi
     unique,
   );
   fill("sent", `SELECT from_id AS id, COUNT(*) AS n FROM messages WHERE from_id IN (${marks}) GROUP BY from_id`, unique);
-  fill("received", `SELECT to_id AS id, COUNT(*) AS n FROM messages WHERE to_id IN (${marks}) GROUP BY to_id`, unique);
+  fill("received", `SELECT user_id AS id, COUNT(*) AS n FROM message_recipients WHERE user_id IN (${marks}) GROUP BY user_id`, unique);
   fill(
     "conversations",
     `SELECT id, COUNT(DISTINCT thread_id) AS n FROM (
        SELECT from_id AS id, thread_id FROM messages WHERE from_id IN (${marks})
-       UNION SELECT to_id AS id, thread_id FROM messages WHERE to_id IN (${marks})
+       UNION SELECT r.user_id AS id, m.thread_id FROM message_recipients r
+         JOIN messages m ON m.id = r.message_id WHERE r.user_id IN (${marks})
      ) GROUP BY id`,
     [...unique, ...unique],
   );

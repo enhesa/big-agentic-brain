@@ -56,7 +56,7 @@ import {
   nearMatches,
   type SimilarLearning,
 } from "./learnings";
-import { inboxCounts, inboxFor, send, validateRequest, requireThreadForActor, markRead, NEW_THREAD_NEEDS_TO } from "./messages";
+import { inboxCounts, inboxFor, send, validateRequest, requireThreadForActor, markRead, participantsOf, toArgument, hasTo, MAX_RECIPIENTS, NEW_THREAD_NEEDS_TO } from "./messages";
 import {
   create as createTodo,
   listMine,
@@ -511,7 +511,7 @@ function runInbox(actor: SessionUser, args: Record<string, unknown>): string {
   const totalReadCount = counts.threads - counts.unreadThreads;
 
   const total = includeRead ? counts.threads : counts.unreadThreads;
-  const threads = inboxFor(actor.id, { unreadOnly: !includeRead, limit, offset });
+  const threads = inboxFor(actor.id, { unreadOnly: !includeRead, limit, offset, participants: true });
   const nextOffset = offset + limit < total ? offset + limit : null;
 
   const includedReadCount = threads.filter((t) => t.unreadCount === 0).length;
@@ -529,6 +529,7 @@ function openThread(actor: SessionUser, threadId: string): string {
   const users = getUsersByIds([...new Set(messages.flatMap((m) => [m.from_id, m.to_id]))]);
   return JSON.stringify({
     thread,
+    participants: participantsOf(threadId),
     messages: messages.map((m) => ({
       ...m,
       fromName: users.get(m.from_id)?.name ?? null,
@@ -542,7 +543,7 @@ function openThread(actor: SessionUser, threadId: string): string {
 // ---------------------------------------------------------------------------
 
 function runSend(actor: SessionUser, args: Record<string, unknown>): string {
-  const to = args.to == null ? "" : str(args.to).trim();
+  const to = toArgument(args.to);
   const body = str(args.body).trim();
   if (!body) throw new ValidationError("body is required");
 
@@ -550,7 +551,7 @@ function runSend(actor: SessionUser, args: Record<string, unknown>): string {
   const threadIdRaw = args.threadId == null ? undefined : str(args.threadId).trim();
   const threadId = threadIdRaw || undefined;
   // Messages go to a person's inbox only: an old caller's toSession is ignored.
-  if (!to && !threadId) {
+  if (!hasTo(to) && !threadId) {
     throw new ValidationError(NEW_THREAD_NEEDS_TO);
   }
 
@@ -1114,6 +1115,7 @@ export const TOOLS: Tool[] = [
     annotations: { title: "Send a message", readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
       "Sends a message to a colleague's BAB inbox (your own works too, as a note to yourself), or replies into an existing thread. " +
+      "A reply reaches every participant: say a private word in a new thread. " +
       "Use it whenever the user asks you to send, tell, ask, forward, hand over or request something (a review, a fix, a question) to a colleague or to \"<name>'s agent\" or \"<name>'s Claude\". " +
       "It reaches their agent even when they are offline: the message waits in their BAB inbox until their agent next looks. Never say another person's agent cannot be reached, and never point to a PR or another channel instead. " +
       "Find their id (email) with bab_people. Show the exact text, and send on the user's yes (an explicit \"send it\" counts). Use `request` for a review or a fix. " +
@@ -1121,7 +1123,10 @@ export const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        to: { type: "string", description: "Recipient user id (email). Required to start a new thread; optional on a reply, where it is inferred from the thread." },
+        to: {
+          anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+          description: `Recipient user id (email), or a list of up to ${MAX_RECIPIENTS} for a group thread. Required to start a new thread; optional on a reply.`,
+        },
         subject: { type: "string", description: "Subject for a new thread; ignored on a reply." },
         threadId: { type: "string", description: "Reply into this existing thread instead of starting a new one." },
         body: { type: "string", description: "Message text, 8000 characters or fewer." },

@@ -465,8 +465,12 @@ function sweepEmptyThreads(db: Db): number {
     "NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = threads.id)",
     [],
     (idList, ids) => {
-      const result = db.prepare(`DELETE FROM threads WHERE id IN (${idList})`).run(...ids);
-      return Number(result.changes ?? 0);
+      // thread_participants has a foreign key to threads (migration v59): its rows go first, together.
+      return inTransaction(db, () => {
+        db.prepare(`DELETE FROM thread_participants WHERE thread_id IN (${idList})`).run(...ids);
+        const result = db.prepare(`DELETE FROM threads WHERE id IN (${idList})`).run(...ids);
+        return Number(result.changes ?? 0);
+      });
     },
   );
 }

@@ -20,8 +20,9 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-17",
-    title: "Safer memories, in-place linking and Tasks in the navbar",
+    title: "Group messages, safer memories, in-place linking and Tasks in the navbar",
     changes: [
+      "Send one message to up to 10 colleagues. Replies reach everyone, and each person's read state is their own.",
       "A flagged memory ranks lower in search and in the house rules until someone else checks it.",
       "A memory archived by flags cannot be quietly rewritten, and new memories list their close matches.",
       "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",

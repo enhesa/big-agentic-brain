@@ -13,8 +13,8 @@ import { buildHandoffLinks } from "@/lib/handoff";
 import { publicOrigin } from "@/lib/origin";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { inboxTitle } from "@/lib/inbox-live-state";
-import { unreadCountFor } from "@/lib/messages";
-import { deliveryFor, outgoingStatus } from "@/lib/delivery";
+import { participantsOf, unreadCountFor } from "@/lib/messages";
+import { deliveryFor, groupOutgoingStatus, outgoingStatus } from "@/lib/delivery";
 import { getUser } from "@/lib/users";
 import { earlierThreads, inboxEnabled, inboxSummary, threadForParticipant, type InboxListItem } from "@/lib/inbox-page";
 import AutoOpenApp from "./AutoOpenApp";
@@ -161,7 +161,7 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
   if (!result) return <p className={styles.placeholder}>That thread was not found.</p>;
   const { thread, messages } = result;
 
-  const unread = messages.filter((m) => m.to_id === viewer.ownerId && !m.read_at).length;
+  const unread = messages.filter((m) => m.recipients.some((r) => r.id === viewer.ownerId && !r.readAt)).length;
   const earlier = earlierThreads(result, viewer.ownerId);
   // Only the Claude Code mod's "Open chat" link sets open=app. It is the one automatic step: no button.
   const appUrl = autoOpenApp
@@ -171,16 +171,25 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
       ).appUrl
     : null;
 
-  const people = new Map<string, { name: string }>();
-  for (const m of messages) {
-    if (!people.has(m.from_id)) people.set(m.from_id, { name: m.fromName ?? m.from_id });
-  }
+  // Everyone in the thread, not only those who wrote: a group thread shows all its members.
+  const people = participantsOf(thread.id).map((p) => ({ id: p.id, name: p.name ?? p.id }));
+  const joiner = people.length > 2 ? "·" : "↔";
 
   // Honest delivery for the sender: whether the last message they wrote here was read, and
   // whether their Inbox page is open right now.
   const outgoing = [...messages].reverse().find((m) => m.from_id === viewer.ownerId && m.to_id !== viewer.ownerId);
   let delivery: string | null = null;
-  if (outgoing) {
+  if (outgoing && outgoing.recipients.length > 1) {
+    // A group message: who of its recipients read it, and whether any of their pages is open
+    // (each under the same rule as one recipient).
+    delivery = groupOutgoingStatus({
+      readers: outgoing.recipients.filter((r) => r.readAt).map((r) => r.name ?? r.id),
+      total: outgoing.recipients.length,
+      page: outgoing.recipients.some((r) => deliveryFor(getUser(r.id), viewer.ownerId).page === "connected")
+        ? "connected"
+        : "none",
+    });
+  } else if (outgoing) {
     const live = deliveryFor(getUser(outgoing.to_id), viewer.ownerId);
     delivery = outgoingStatus({
       toName: outgoing.toName ?? outgoing.to_id,
@@ -194,9 +203,9 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
       <div className={styles.threadHeader}>
         <h2 className={styles.threadTitle}>{thread.subject || "(no subject)"}</h2>
         <div className={styles.people}>
-          {[...people.values()].map((p, k) => (
-            <span key={p.name} className={styles.person}>
-              {k > 0 ? <span className={styles.arrow}>↔</span> : null}
+          {people.map((p, k) => (
+            <span key={p.id} className={styles.person}>
+              {k > 0 ? <span className={styles.arrow}>{joiner}</span> : null}
               <Avatar name={p.name} size={22} />
               <span>{p.name}</span>
             </span>

@@ -22,6 +22,9 @@ show nothing there: a signed-in person is a proxy viewer. Run steps 4, 6 and 9 b
    `bab_files` put and get a small text file with a linked device. `bab_kv` lock and unlock a key in your own space.
 6. **Messages and reminders.** `bab_send` between two identities lands in the other inbox, and the thread opens
    on `/conversations/<id>` for both of them and for a maintainer, and answers 404 for anyone else.
+   Group send: `bab_send` with `to` set to two other identities starts one thread that lists all three
+   people on `/inbox` and `/conversations/<id>`. A reply from one reaches the other two. Opening the thread
+   as one recipient leaves it unread for the other, and the sender's status line says who has read it.
    `bab_remind` shows up under `/reminders` (read-only there). Complete it with `bab_remind`, and it shows as Completed.
 7. **Restart keeps data.** Restart the container. The memory, messages and reminders from above are still there.
 8. **Configuration.** Starting with a bad setting (for example an empty token file) stops the app with a clear

@@ -149,5 +149,7 @@ describe("tool description size", () => {
 // switch, delete and export controls, added 53 characters, the enum values only: the list is 24534.
 // Its patch action and the record text naming patch and expectSeq (2026-11-16) added 90 characters, paid for by
 // shorter bab_remind field texts (138 fewer): the list is 24486.
-const CEILING_FULL = 24539;
+// Group messages (2026-11-16): bab_send's `to` takes a string or a list, and its description says a reply
+// reaches every participant. 130 characters, the limit and errors left to the server: the list is 24616.
+const CEILING_FULL = 24621;
 const CEILING_LEAN = 11200;

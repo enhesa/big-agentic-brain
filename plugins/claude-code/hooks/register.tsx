@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import { PAUSED_TEXT, SLASH_WARNING, backoffMs, hasTrailingSlash, isAutoAllowed, looksLikeRefusal } from './poll-backoff'
+import { groupLabel, groupOthers } from './thread-label'
 import { stuckKey } from './stuck-nudge'
 import {
   addTokens,
@@ -174,6 +175,8 @@ type Thread = {
     request?: { kind?: string; goal?: string } | null
   }
   unreadCount?: number
+  // Everyone in the thread (servers with group messages); more than two means a group thread.
+  participants?: { id?: string }[]
 }
 type Snapshot = {
   unread: number
@@ -631,6 +634,11 @@ async function remind($: EngineInterface, id: string, action: 'complete' | 'snoo
 /** Who wrote a thread, as the pill and the toast name them: your own notes are "Note to self", not your name. */
 function senderName(t: Thread): string {
   const { from_id, to_id } = t.lastMessage ?? {}
+  const group = groupOthers(t, self)
+  if (group.length > 0) {
+    // A group thread: the person who wrote last, or everyone else when that was you.
+    return from_id && from_id !== self ? person(from_id).first : groupLabel(group.map(id => person(id).first))
+  }
   return from_id && from_id === to_id ? 'Note to self' : person(otherSide(t, self)).first
 }
 
@@ -831,11 +839,12 @@ async function fetchThreads($: EngineInterface): Promise<void> {
     const rows: ThreadRow[] = [...merged.values()]
       .map(t => {
         const other = person(otherSide(t, self))
+        const group = groupOthers(t, self)
         return {
           id: t.thread!.id!,
           subject: clean(t.thread?.subject, 90) || '(no subject)',
-          who: other.first,
-          whoFull: other.full,
+          who: group.length > 0 ? groupLabel(group.map(id => person(id).first)) : other.first,
+          whoFull: group.length > 0 ? group.map(id => person(id).full).join(', ') : other.full,
           whoId: otherSide(t, self) ?? '',
           isSelf: !!t.lastMessage?.from_id && t.lastMessage.from_id === t.lastMessage.to_id,
           preview: clean(t.lastMessage?.body, 140),

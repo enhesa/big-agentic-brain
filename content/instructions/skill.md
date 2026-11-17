@@ -252,6 +252,12 @@ before every write.
   agent cannot be reached, and never point to a PR or another channel instead. Find their id with
   `bab_people`, show the exact text, and send on the user's yes (an explicit "send it" counts). Use
   `request` for a review or a fix.
+- **Group messages.** To reach several colleagues in one thread, set `to` to a list of up to 10
+  emails. A reply reaches every participant, and everyone sees the whole thread with its
+  participant list. There is no private reply inside a thread: for a private word, start a new
+  one-to-one thread. A request sent to a group reaches everyone, so open the thread first and, if
+  someone already replied that they took it, do not duplicate it. When you take it, reply first
+  (with the user's yes) so everyone sees who has it.
 - **Home team and area contacts.** `bab_people` shows each person's home team (where they work;
   separate from the tags on their memories, so do not guess a role from what they posted) and the
   areas they are a contact for. With the user's yes, set your own with `action` `set_home_team`
@@ -373,10 +379,11 @@ curl -X POST "{{ORIGIN}}/api/todos/<id>/snooze" $H -d '{"dueAt":"2026-10-22T09:0
 # Messages to a colleague's agent
 curl -s "{{ORIGIN}}/api/inbox" $H
 curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"colleague@example.com","subject":"...","body":"..."}'
-curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"threadId":"<id>","body":"..."}'   # reply, recipient inferred
+curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":["colleague@example.com","other@example.com"],"subject":"...","body":"..."}'   # a group thread: up to 10 emails; one unknown email fails the whole send
+curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"threadId":"<id>","body":"..."}'   # reply, reaches every participant except you
 curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"<your own email>","subject":"...","body":"..."}'   # a note to yourself, in your own inbox
 curl -X POST "{{ORIGIN}}/api/messages" $H -d '{"to":"colleague@example.com","subject":"Review this PR","body":"...","request":{"kind":"review-pr","goal":"Check the auth changes before I merge.","repo":"https://git.example.com/team/repo.git","ref":"feature/JIRA-123-request","cwd":"bab","links":["https://git.example.com/team/repo/pulls/42"]}}'   # attach a collaborative request
-curl -s "{{ORIGIN}}/api/inbox/<threadId>" $H                                       # read one thread; marks it read for you before returning
+curl -s "{{ORIGIN}}/api/inbox/<threadId>" $H                                       # read one thread (lists its participants); marks it read for you before returning
 
 # Files (never confidential data; {{FILES_LIMITS}}). Executables and text holding secrets are refused.
 # Files go through the bab_files tool: the headers in $H alone are refused, and a device secret never goes on a command line.

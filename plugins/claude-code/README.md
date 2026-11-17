@@ -137,11 +137,11 @@ panel, **✕** hides the pill until something new arrives, and `/bab-check` chec
 A toast with the sender and subject, and NEW on the pill, announce only mail newer than the
 newest message this computer has already announced. Mail you were already told about is not
 announced again, in any session; the first run on a computer only takes note of what is waiting,
-and your own replies are not news. Reminders are read every 5 minutes, and when you open the
+and your own replies are not news. In a group thread the toast names who wrote last. Reminders are read every 5 minutes, and when you open the
 panel, press ↻, or mark one done or snoozed.
 
 The panel is a list of rows, unread first: a teal dot on unread rows, the name (each colleague
-has their own colour), the subject and the time. Unread rows also show the start of the last
+has their own colour; a group thread is named "Bob, Carol +1"), the subject and the time. Unread rows also show the start of the last
 message (or "Asks: ..." when it carries a request); a read thread is one line. At most five
 conversations show, unread ones always, with "N more" for the rest, and "Older" starts folded. It loads
 every unread thread (up to 100) and the 20 newest, and says "all caught up" only when BAB counts
