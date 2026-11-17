@@ -48,6 +48,24 @@ There is no switch: installing the bab-tasks plugin turns it on, and your first 
 creates the person's page. If they ask you to leave it alone, or the tool answers that BAB Tasks
 is off on this BAB, stop calling it for the rest of the session and say nothing more about it.
 
+## Scheduled and unattended runs
+
+A scheduled or unattended run (a nightly job, no person in the session) that owns a recurring card
+keeps that card fresh:
+
+- The run's prompt names the card `id`. If it does not, call `list` and use the `recurring`
+  initiative that matches the job. Never create a new initiative per run; publish a new recurring
+  record only when `list` has none for the job.
+- Every run ends with `patch` on that card, with `health` (`level`, `reason`, `checkedAt` now) and
+  `worked`. This goes for a clean run with nothing to do (`green`) and for a failed or blocked run
+  (`red` or `amber`, with the reason). A run that writes nothing leaves the card overdue. This
+  `patch` stands in for the closing `publish`.
+- When you create a scheduled task that owns a recurring card, put the card `id` and this last
+  step in its prompt.
+
+For example
+`{ "action": "patch", "id": "nightly-upkeep", "record": { "health": { "level": "green", "reason": "Nothing to do", "checkedAt": "2026-01-01T02:00:00Z" }, "worked": "Nightly upkeep: nothing to do" } }`.
+
 ## The person's data
 
 Only when the person asks, and only for their own data (the page has no settings):
@@ -91,7 +109,7 @@ it with every patch, as on publish. The same limits and checks apply to the merg
 | `priority` | `urgent`, `high`, `low`, `paused` or null. Paused hides its questions. |
 | `tasks` | At most 50 `{ id, text (120), status }`, status `pending`, `in_progress` or `done`. None for recurring. |
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
-| `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after each run. |
+| `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after every run, clean or failing. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
 | `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
