@@ -17,6 +17,7 @@ import {
   GENERAL_PROJECT_KEY,
   LEARNINGS_LIST_LIMIT_MAX,
   LEARNINGS_SEARCH_LIMIT_MAX,
+  nearMatches,
 } from "@/lib/learnings";
 import { parseAppliesToFilter, parseStack, readAppliesTo } from "@/lib/applies-to";
 import { withIdempotency } from "@/lib/idempotency";
@@ -188,7 +189,15 @@ export async function POST(req: NextRequest) {
         ...provenance,
       }, supersedesIds, "mcp");
 
-      return { status: 201, body: { learning: { ...created, appliesTo: readAppliesTo(created.applies_to) } } };
+      // Close matches of a new memory (not a correction), so the caller can still make it an update.
+      const similar = supersedesIds.length > 0 ? [] : nearMatches(created);
+      return {
+        status: 201,
+        body: {
+          learning: { ...created, appliesTo: readAppliesTo(created.applies_to) },
+          ...(similar.length > 0 ? { similar: similar.map((m) => ({ id: m.id, title: m.title, score: m.score })) } : {}),
+        },
+      };
     } catch (err) {
       return toApiError(err);
     }

@@ -170,7 +170,9 @@ before every write.
   or wrong, fix them in place with `bab_react` `label` and `appliesTo` (`[]` for anywhere): anyone
   may, on any active memory, and it keeps the id and the history, unlike a correction.
 - **Duplicates.** On a duplicate answer, react helpful to the existing one or supersede it;
-  `confirmNotDuplicate` only when the new fact is genuinely different. Someone else's `standard`
+  `confirmNotDuplicate` only when the new fact is genuinely different. A candidate marked
+  "archived after flags" was taken down as wrong: read why before writing it again. When a write
+  succeeds with `similar`, check them: if yours updates one, retire yours and supersede that one. Someone else's `standard`
   or `decision` is never superseded, unless you are a BAB maintainer: react helpful, or flag it with your evidence.
 - **Ranking signal.** When a colleague's memory you found answered the question or shaped what
   you did, call `bab_react` helpful on it without asking, in that same turn; that is how useful

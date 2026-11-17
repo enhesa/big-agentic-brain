@@ -1447,6 +1447,30 @@ export interface SimilarLearning {
 }
 
 const FTS_TOKEN_CAP = 20;
+
+/** How long a memory archived by flags still counts as a duplicate candidate. */
+export const FLAG_ARCHIVED_DEDUP_DAYS = 90;
+/**
+ * Active memories, plus memories two flags archived in the last FLAG_ARCHIVED_DEDUP_DAYS:
+ * without them a lesson the team just flagged off could be written again unnoticed.
+ * The candidate's status says which one it is.
+ */
+const DEDUP_CANDIDATE_STATUS = `(learnings.status = 'active' OR (learnings.status = 'archived' AND EXISTS (
+  SELECT 1 FROM trust_events te WHERE te.learning_id = learnings.id AND te.kind = 'archive'
+    AND te.at >= datetime('now', '-${FLAG_ARCHIVED_DEDUP_DAYS} days'))))`;
+
+/**
+ * Close but not duplicate matches of a memory that was just written, for the reply to its
+ * author: they may have meant to update one of them (supersedes) rather than add another.
+ */
+export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "tags" | "repo" | "project">, limit = 3): SimilarLearning[] {
+  return findSimilar(
+    { title: row.title, body: row.body, tags: JSON.parse(row.tags) as string[], repo: row.repo, project: row.project },
+    { limit: limit + 1 },
+  )
+    .filter((m) => m.id !== row.id && m.status === "active")
+    .slice(0, limit);
+}
 const FTS_CANDIDATE_LIMIT = 20;
 
 /**
@@ -1459,7 +1483,7 @@ function findSimilarByTagsOnly(draftTags: string[], limit: number): SimilarLearn
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT * FROM learnings WHERE status = 'active' ORDER BY created_at DESC LIMIT ?`,
+      `SELECT * FROM learnings WHERE ${DEDUP_CANDIDATE_STATUS} ORDER BY created_at DESC LIMIT ?`,
     )
     .all(FTS_CANDIDATE_LIMIT) as unknown as LearningRow[];
 
@@ -1522,7 +1546,7 @@ export function findSimilar(
     `SELECT learnings.*
        FROM learnings_fts
        CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
-       WHERE learnings_fts MATCH ? AND learnings.status = 'active'${projectClause}
+       WHERE learnings_fts MATCH ? AND ${DEDUP_CANDIDATE_STATUS}${projectClause}
        ORDER BY bm25(learnings_fts), learnings.rowid
        LIMIT ?`;
   let rows: LearningRow[] = [];
