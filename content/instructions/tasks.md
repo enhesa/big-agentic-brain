@@ -59,7 +59,8 @@ keeps that card fresh:
 - Every run ends with `patch` on that card, with `health` (`level`, `reason`, `checkedAt` now) and
   `worked`. This goes for a clean run with nothing to do (`green`) and for a failed or blocked run
   (`red` or `amber`, with the reason). A run that writes nothing leaves the card overdue. This
-  `patch` stands in for the closing `publish`.
+  `patch` stands in for the closing `publish`. Send `source` with it when the run has a session
+  link; leave it out when it has none.
 - When you create a scheduled task that owns a recurring card, put the card `id` and this last
   step in its prompt.
 
