@@ -461,12 +461,13 @@ non-deleted) rather than trusting the caller, so a bogus id can't bypass the gua
 /api/learnings/similar` exposes the same check pre-write; `GET /api/learnings/duplicates` finds
 duplicate pairs among the newest 300 active learnings, computed fresh on every request (no
 caching, no background job). Candidates are active memories plus memories two flags archived in
-the last `FLAG_ARCHIVED_DEDUP_DAYS` (90), so a lesson the team just flagged off is not written again
-unnoticed; such a candidate carries status `archived`, and `bab_learn` names it "archived after
-flags". The MCP refusal tells the agent to pass `supersedes: <id>` to update one, and
+the last `FLAG_ARCHIVED_DEDUP_DAYS` (90) that nothing restored, kept, superseded or retired since, so
+a lesson the team just flagged off is not written again unnoticed; such a candidate carries status
+`archived` (also in `GET /api/learnings/similar`), and `bab_learn` names it "archived after flags".
+The tag-only fallback compares active rows only. The MCP refusal tells the agent to pass `supersedes: <id>` to update one, and
 `confirmNotDuplicate` only for a genuinely different fact. A successful create of a new memory
 (not a correction) returns its close matches (`nearMatches`, up to 3 active ones below the
-duplicate threshold) as `similar`, so the author can still turn it into an update.
+duplicate threshold, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, so the author can still turn it into an update.
 
 A learning that has been superseded carries a `supersededBy: { id, title }` in `GET
 /api/learnings/[id]` and on the web detail page; search results carry just the id. Two-way: the

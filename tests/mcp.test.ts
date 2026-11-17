@@ -1023,6 +1023,24 @@ it("bab_learn refuses a lesson the team just archived with flags, and says so", 
   expect(again.result.content[0].text).toMatch(/archived after flags/);
 });
 
+it("bab_learn does not count a flag-archived lesson once it was kept and later retired", async () => {
+  const args = { title: "Rotate the staging signing key every Monday", body: "The staging signing key expires weekly, rotate it before the Monday deploy." };
+  const first = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const id = JSON.parse(first.result.content[0].text).learning.id;
+  const { flag, keepLearning, retire, getById } = await import("../lib/learnings");
+  const { upsertUser } = await import("../lib/users");
+  for (const e of ["flagger.one@example.com", "flagger.two@example.com", "keeper@example.com"]) upsertUser({ id: e, email: e, name: e, roles: [] });
+  flag(id, "flagger.one@example.com", "ui", "Rotation is monthly now.");
+  flag(id, "flagger.two@example.com", "ui", "Checked, monthly.");
+  keepLearning(id, "keeper@example.com", "ui", "Weekly again since the policy change.");
+  expect(getById(id)?.status).toBe("active");
+  retire(id, ACTOR["X-Bab-Actor-Email"], "ui", "No longer needed.");
+  expect(getById(id)?.status).toBe("archived");
+
+  const again = await rpc("tools/call", { name: "bab_learn", arguments: args }, OTHER_ACTOR);
+  expect(again.result.isError).toBeFalsy();
+});
+
 it("bab_learn lists close matches of a new memory, not of a correction", async () => {
   const base = await rpc(
     "tools/call",
