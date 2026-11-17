@@ -268,6 +268,30 @@ describe("POST /api/learnings", () => {
     expect(list().length).toBe(1);
   });
 
+  it("201s with the close matches of a new memory under similar", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const first = await POST(
+      postReq({
+        title: "Kafka consumer lag alert threshold",
+        body: "Alert when consumer lag stays above 10000 messages for 15 minutes on the orders topic.",
+        tags: ["kafka", "alerting"],
+      }) as never,
+    );
+    const firstId = (await first.json()).learning.id;
+
+    const res = await POST(
+      postReq({
+        title: "Consumer lag on payments",
+        body: "Payments traffic is small; alert on lag above 1000 for 10 minutes rather than the orders threshold.",
+        tags: ["kafka", "alerting"],
+      }) as never,
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.similar.map((m: { id: string }) => m.id)).toEqual([firstId]);
+  });
+
   it("201s when confirmNotDuplicate is set on an otherwise-duplicate draft", async () => {
     mockAgentIdentity("ada.t@example.com", "Ada");
     const { POST } = await import("../app/api/learnings/route");

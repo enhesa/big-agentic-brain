@@ -451,7 +451,7 @@ honour system applies: the texts tell agents what to do, the server only does th
   page").
 
 Dedup at write time is built: `findSimilar` (`lib/learnings.ts`) OR-queries FTS5 on the draft's
-title+body tokens, scores the top 20 active candidates with `lib/similarity.ts`
+title+body tokens, scores the top 20 candidates with `lib/similarity.ts`
 (title/body/tag Jaccard), and `create()` throws a 409 `ConflictError` with the candidates when
 one scores >= `DUPLICATE_THRESHOLD` (0.55), unless `supersedes` or `confirmNotDuplicate` is set.
 When the draft has no usable title/body tokens (too short, all stopwords) but does carry tags,
@@ -460,7 +460,14 @@ When the draft has no usable title/body tokens (too short, all stopwords) but do
 non-deleted) rather than trusting the caller, so a bogus id can't bypass the guard. `GET
 /api/learnings/similar` exposes the same check pre-write; `GET /api/learnings/duplicates` finds
 duplicate pairs among the newest 300 active learnings, computed fresh on every request (no
-caching, no background job).
+caching, no background job). Candidates are active memories plus memories two flags archived in
+the last `FLAG_ARCHIVED_DEDUP_DAYS` (90) that nothing restored, kept, superseded or retired since, so
+a lesson the team just flagged off is not written again unnoticed; such a candidate carries status
+`archived` (also in `GET /api/learnings/similar`), and `bab_learn` names it "archived after flags".
+The tag-only fallback compares active rows only. The MCP refusal tells the agent to pass `supersedes: <id>` to update one, and
+`confirmNotDuplicate` only for a genuinely different fact. A successful create of a new memory
+(not a correction) returns its close matches (`nearMatches`, up to 3 active ones below the
+duplicate threshold, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, so the author can still turn it into an update.
 
 A learning that has been superseded carries a `supersededBy: { id, title }` in `GET
 /api/learnings/[id]` and on the web detail page; search results carry just the id. Two-way: the
@@ -514,7 +521,7 @@ check has a record (`lib/trust.ts`).
 
 ## Ranking
 
-Search order is built in `search()` (`lib/learnings.ts`, `RANK_EXPRESSION`): bm25 relevance (title 10, tags 5, body 1)
+Search order is built in `search()` (`lib/learnings.ts`, `RANK_EXPRESSION`): bm25 relevance (title 5, tags 3, aliases 3, body 1)
 multiplied by a bounded vote boost (`score` clamped to -5..10, 5% per point) and a recency boost (up to +50% for a new
 memory, about half of that at 90 days). The boosts multiply, so relevance keeps the order and votes and age only separate
 close matches. One vote per identity; the author's own votes are refused. Author trust, a citation signal, a time-decayed
