@@ -17,6 +17,7 @@ export const NAV_ITEMS = [
   { href: "/memory", label: "Memory" },
   { href: "/inbox", label: "Inbox" },
   { href: "/reminders", label: "Reminders" },
+  { href: "/tasks", label: "Tasks" },
   { href: "/changelog", label: "News" },
   { href: "/usage", label: "Usage" },
   { href: "/#get-started", label: "Get started" },

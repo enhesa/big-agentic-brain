@@ -6,8 +6,8 @@ recurring upkeep, links, and a short log of what was worked on. Agents push the 
 only shows it. The log is the person's own record of effort per initiative: what each turn did,
 with the server's time, which the person can export.
 
-The page is hidden: it has no navbar or footer entry. The tasks skill gives the person
-the link.
+The page has a Tasks item in the navbar, after Reminders, and no footer entry. The
+bab-tasks skill also gives the person the link.
 
 ## Opt-in is the plugin
 
