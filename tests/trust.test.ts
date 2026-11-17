@@ -301,39 +301,29 @@ describe("hook: trust tags on injected titles", () => {
     expect(houseRulesBlock(houseRulesFor(null), null)!.text).toContain(`(${r.id}, flagged 1x)`);
   });
 
-  it("puts a flagged house rule after the others, and leaves it out at two open flags", async () => {
-    const { flag, confirm, houseRulesFor, houseRulesBlock, HOUSE_RULE_FLAGS_HIDE } = await import("../lib/learnings");
-    expect(HOUSE_RULE_FLAGS_HIDE).toBe(2);
+  it("puts a flagged house rule after the others, and back in place once someone checks it", async () => {
+    const { flag, confirm, houseRulesFor } = await import("../lib/learnings");
     const old = await mk({ kind: "practice", title: "Always tag images with the commit zqold" });
     await backdate(old.id, 30);
     const fresh = await mk({ kind: "practice", title: "Always run the linter before a push zqnew" });
-    for (const r of [old, fresh]) (await db()).prepare("UPDATE learnings SET pinned = 1, kind = 'standard' WHERE id = ?").run(r.id);
+    for (const r of [old, fresh]) (await db()).prepare("UPDATE learnings SET pinned = 1 WHERE id = ?").run(r.id);
     expect(houseRulesFor(null).map((r) => r.id)).toEqual([fresh.id, old.id]);
 
     flag(fresh.id, BOB, "mcp", "The linter runs in the pre-push hook now");
     expect(houseRulesFor(null).map((r) => r.id)).toEqual([old.id, fresh.id]);
 
-    flag(fresh.id, CID, "mcp", "Same, the hook does it");
-    expect((await db()).prepare("SELECT status FROM learnings WHERE id = ?").get(fresh.id)).toMatchObject({ status: "active" });
-    const block = houseRulesBlock(houseRulesFor(null), null)!;
-    expect(block.text).not.toContain(fresh.id);
-    expect(block.text).toContain("1 more there");
-
-    // A later check by someone else answers the flags: the rule is back.
-    const { upsertUser } = await import("../lib/users");
-    upsertUser({ id: "dee.d@example.com", email: "dee.d@example.com", name: "Dee D", roles: [] });
     await new Promise((r) => setTimeout(r, 1100));
-    confirm(fresh.id, "dee.d@example.com", "Checked the hook config, the linter is still required locally", "mcp");
-    expect(houseRulesBlock(houseRulesFor(null), null)!.text).toContain(fresh.id);
+    confirm(fresh.id, CID, "Checked the hook config, the linter is still required locally", "mcp");
+    expect(houseRulesFor(null).map((r) => r.id)).toEqual([fresh.id, old.id]);
   });
 
-  it("returns no house rules block when every rule is hidden by flags", async () => {
+  it("keeps a standard with two flags in the house rules, tagged, for a maintainer to decide", async () => {
     const { flag, houseRulesFor, houseRulesBlock } = await import("../lib/learnings");
-    const r = await mk({ kind: "practice", title: "Always squash zqonly" });
+    const r = await mk({ kind: "practice", title: "Every service exposes healthz zqstd" });
     (await db()).prepare("UPDATE learnings SET pinned = 1, kind = 'standard' WHERE id = ?").run(r.id);
-    flag(r.id, BOB, "mcp", "We merge now");
-    flag(r.id, CID, "mcp", "Merge commits since the switch");
-    expect(houseRulesBlock(houseRulesFor(null), null)).toBeNull();
+    flag(r.id, BOB, "mcp", "Not for batch jobs");
+    flag(r.id, CID, "mcp", "Batch jobs have no port");
+    expect(houseRulesBlock(houseRulesFor(null), null)!.text).toContain(`(${r.id}, flagged 2x)`);
   });
 });
 
@@ -346,7 +336,8 @@ describe("open flags in search ranking", () => {
     await backdate(a.id, 1);
     await backdate(b.id, 1);
     const order = () => search("zqrank signing key").map((r) => r.id);
-    const top = order()[0];
+    const before = order();
+    const top = before[0];
     expect([a.id, b.id]).toContain(top);
     flag(top, BOB, "mcp", "Rotation is quarterly now");
     expect(order()).toEqual([a.id, b.id].filter((id) => id !== top).concat(top));
@@ -356,6 +347,8 @@ describe("open flags in search ranking", () => {
     const { trustOf } = await import("../lib/trust");
     const { getById } = await import("../lib/learnings");
     expect(trustOf(getById(top)!).flags).toBe(0);
+    // The penalty is lifted (the confirm's own small boost alone could not undo a 0.6 factor).
+    expect(order()).toEqual(before);
   });
 });
 

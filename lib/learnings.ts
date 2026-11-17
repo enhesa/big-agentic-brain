@@ -2562,16 +2562,14 @@ export interface HouseRule extends LearningRow {
 
 const STANDING_ORDER: Record<StandingLevel, number> = { strong: 0, fair: 1, weak: 2 };
 
-/** Open flags at which a pinned rule leaves the injected block (houseRulesBlock); bab_search still lists it. */
-export const HOUSE_RULE_FLAGS_HIDE = 2;
-
 /**
  * The house rules digest: pinned standards and practices that are active and not past their
  * valid-until date, company-wide ones (no project) first, then the ones scoped to `projectKey` exactly (the
  * same match as bab_search project). Each group is ranked by standing (strong, fair, then weak:
  * the pin is the curation, so a new rule with no reactions yet still shows) and then newest
  * first, and capped at HOUSE_RULES_GENERAL_MAX and HOUSE_RULES_PROJECT_MAX. A rule with open flags
- * goes after the others in its group, so it is the first one cut.
+ * goes after the others in its group, so it is the first one cut. It is never hidden: two flags
+ * archive a practice (flag()), and a standard waits for a maintainer, tagged "flagged Nx".
  */
 export function houseRulesFor(projectKey: string | null, now: number = Date.now()): HouseRule[] {
   const kinds = HOUSE_RULE_KINDS.map(() => "?").join(",");
@@ -2617,11 +2615,8 @@ export function houseRulesBlock(
   projectKey: string | null,
 ): { text: string; shown: HouseRule[] } | null {
   if (rules.length === 0) return null;
-  // A rule with HOUSE_RULE_FLAGS_HIDE or more open flags is not injected until a maintainer keeps
-  // or retires it; the header counts it under "more there". One flag never silences a rule.
-  let general = rules.filter((r) => r.project == null && r.flags < HOUSE_RULE_FLAGS_HIDE);
-  let scoped = rules.filter((r) => r.project != null && r.flags < HOUSE_RULE_FLAGS_HIDE);
-  if (general.length + scoped.length === 0) return null;
+  let general = rules.filter((r) => r.project == null);
+  let scoped = rules.filter((r) => r.project != null);
   const line = (r: HouseRule) => {
     const t = r.title.replace(/\s+/g, " ").trim();
     // A flagged rule says so: a maintainer has not decided yet, so it is followed with care.

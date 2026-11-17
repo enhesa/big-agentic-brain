@@ -507,9 +507,8 @@ check has a record (`lib/trust.ts`).
 - *Hook.* The unauthenticated hook adds a short tag (`trustTag`: "flagged 2x", "unchecked", "due a
   check") to the titles it injects per prompt, and puts a flagged title after the others. The
   project titles and the house rules say "flagged Nx" when flagged. A flagged house rule goes after
-  the others in its group, and one with `HOUSE_RULE_FLAGS_HIDE` (2) or more open flags is not
-  injected until a maintainer keeps or retires it (the header counts it under "more there";
-  `bab_search houseRules true` still lists it). One flag never silences a rule. Search ranking: see
+  the others in its group, so it is the first one cut over the character budget. It is not hidden:
+  two flags already archive a practice, and a standard stays, tagged, until a maintainer decides. Search ranking: see
   Ranking.
 - *Review page.* `/memory/review` lists flagged memories, memories due a check and memories nobody
   but the author checked, at most `REVIEW_QUEUE_LIMIT` (30) each. Each has a note field and Confirm,
