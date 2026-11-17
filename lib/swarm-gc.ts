@@ -115,7 +115,8 @@ export function downvotedLive(db: DatabaseSync, authorId?: string): DownvotedMem
 
 /**
  * The ids among `rows` that search marks `verify: true`: live, created more than VERIFY_AFTER_DAYS
- * ago, and with no confirm, keep or restore in the last VERIFY_AFTER_DAYS days. A correction is a
+ * ago, and with no confirm, keep or restore by someone other than the author in the last
+ * VERIFY_AFTER_DAYS days. A correction is a
  * new memory (supersede stores a new row), so its age starts again and it never qualifies. One
  * grouped query however many rows there are. `now` is injectable for tests.
  */
@@ -134,10 +135,13 @@ export function verifyDueIds(
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
     const marks = chunk.map(() => "?").join(",");
+    // The author's own keep or restore is not a check: an author cannot confirm their own memory,
+    // so they cannot clear its "verify" mark either. A confirm is never the author's (refused).
     const recent = db
       .prepare(
-        `SELECT DISTINCT learning_id AS id FROM votes
-         WHERE learning_id IN (${marks}) AND kind IN ('confirm', 'keep', 'restore') AND created_at >= ?`,
+        `SELECT DISTINCT v.learning_id AS id FROM votes v JOIN learnings l ON l.id = v.learning_id
+         WHERE v.learning_id IN (${marks}) AND v.kind IN ('confirm', 'keep', 'restore') AND v.created_at >= ?
+           AND lower(v.voter_id) <> lower(l.author_id)`,
       )
       .all(...chunk, since) as Array<{ id: string }>;
     for (const r of recent) checked.add(r.id);

@@ -12,6 +12,7 @@ import {
   recordAgentRead,
 } from "@/lib/learnings";
 import { commentDigestFor } from "@/lib/memory-comments";
+import { trustHistory, trustOf } from "@/lib/trust";
 
 export const dynamic = "force-dynamic";
 
@@ -42,13 +43,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const supersededBy = superseder ? { id: superseder.id, title: superseder.title } : undefined;
 
   const s = standingsFor([learning]).get(id)!;
+  const t = trustOf(learning);
 
   return Response.json({
-    learning: { ...learning, appliesTo: readAppliesTo(learning.applies_to), standing: s.standing, standingReason: s.standingReason },
+    learning: {
+      ...learning,
+      appliesTo: readAppliesTo(learning.applies_to),
+      standing: s.standing,
+      standingReason: s.standingReason,
+      trust: t.label,
+      ...(t.unchecked ? { unchecked: true } : {}),
+      ...(t.verify ? { verify: true } : {}),
+    },
     votes: voteCounts(id),
     recentNotes: recentNotes(id),
     // Who retired or restored it, when and why: its own field, so five later notes cannot push it out.
     lastRetire: lastRetire(learning),
+    // Every confirm, flag, keep, restore, retire and supersede, newest first (lib/trust.ts). Notes are colleagues' text: data.
+    history: trustHistory(id),
     supersededBy,
     // Colleagues' comments (count and the newest few), only when there are any.
     comments: learning.status === "deleted" ? undefined : commentDigestFor([id]).get(id),

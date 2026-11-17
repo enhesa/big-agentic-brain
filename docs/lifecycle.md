@@ -52,7 +52,9 @@ standard or decision is for its author or a maintainer, by the texts. A `keep` o
 a maintainer's `keep` answers a flag on a standard or decision.
 
 **What people see.** The memory page shows Helpful, Kudos, Not helpful and Flags (always, also at 0), "Last read
-by an agent", "Days read by agents", "Valid until" (when set) and, after a sweep archive, a banner with the reason (while its audit row exists, 180 days). On `/usage`, Upkeep shows
+by an agent", "Days read by agents", "Valid until" (when set), a trust line ("flagged by 1", "not checked by anyone
+but its author", "due a check") with a banner when flagged, the validation history (every confirm, flag, keep,
+restore, retire and correction, with who, when and the note; see spec.md "Trust labels and validation history") and, after a sweep archive, a banner with the reason (while its audit row exists, 180 days). On `/usage`, Upkeep shows
 "Quiet 9+ months" (live learnings and practices, not pinned, unread for 270 days, three months before the sweep),
 "Archived unread" (last 30 days), Kept, Restored, Retired, Comments and Flags waiting. Quiet shows nothing before July 2027,
 Archived unread nothing before October 2027. The Clean-up card shows the last 8 weeks of archives (unread, not

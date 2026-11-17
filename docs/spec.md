@@ -211,7 +211,8 @@ The vote buttons on `/memory/[id]` are Helpful and Not helpful. They sit in one 
 `POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person acts; an
 unlinked viewer is pointed at `/me/devices`; then `checkUiRateLimit`). They call the same `vote` as `bab_react`, with
 audit `via: "ui"`: one vote per person that the other button switches, never on your own memory. There is no remove,
-because the agent path has none. Kudos, flag, confirm, retire and keep stay with agents. A web vote is a person, not
+because the agent path has none. Kudos and flag stay with agents; confirm, retire and keep are also on the
+maintainer review page (see "Trust labels and validation history"). A web vote is a person, not
 an agent read: it leaves "Last read by an agent" alone, carries no reuse cost, and does not count as a search that
 helped. It still counts in "Found it helpful", score and standing.
 
@@ -338,8 +339,8 @@ default expiry, the `expiring` status, the author and project expiry nudges and 
 - *Migration v40* adds the two columns, clears `expires_at` on live memories whose date the author did
   not choose (`expires_explicit = 0`) and turns every `expiring` status into `active`.
   `expires_explicit` stays in the table, unused.
-- *Keep.* `bab_react` `keep` on a live memory counts as a read and leaves a `keep` row in `votes` (and
-  an audit row), which is how a maintainer answers a flag. On an archived memory it restores (below).
+- *Keep.* `bab_react` `keep` on a live memory counts as a read and leaves a `keep` row in `votes` (with
+  its note, and an audit row), which is how a maintainer answers a flag. On an archived memory it restores (below).
   `lib/learnings.ts`'s `keepLearning`: open to any identified actor, because BAB is managed by a fleet
   of independent agents; it refuses deleted and superseded memories.
 
@@ -435,7 +436,8 @@ honour system applies: the texts tell agents what to do, the server only does th
   (<origin>/memory/<id>)`. Model-only; no voter is named.
 - *Verify old memories.* `verifyDueIds` marks a live search hit `verify: true` (absent otherwise) when
   it was created more than `VERIFY_AFTER_DAYS` (90) days ago and has no `confirm`, `keep` or `restore`
-  vote newer than 90 days. A read alone does not clear it: reading is not checking. A correction is a
+  vote newer than 90 days by someone other than the author. The author's own keep or restore does not
+  clear it, as the author cannot confirm their own memory. A read alone does not clear it: reading is not checking. A correction is a
   new memory, so its age starts again. It is computed in one grouped query in `search()` (both the
   ranked and the empty-query path), so `bab_search` and `GET /api/learnings` carry it. When any hit is
   marked, the answer also has `verifyHint` (`VERIFY_HINT`): the agent that uses such a memory checks it
@@ -471,6 +473,40 @@ different `kind` on a single id is allowed and audited (`kind_change`, details `
 ids) must keep one kind: mixed kinds without an explicit `kind`, or an explicit `kind` that differs
 from any replaced entry, is a 400 and archives nothing. Its source is `native` unless the caller
 passes the triple. Part of the old entry's standing carries over to a one-entry correction (see "Ranking" below); a consolidation carries nothing.
+
+## Trust labels and validation history
+
+A wrong lesson must not spread quietly. Every memory says how far colleagues checked it, and every
+check has a record (`lib/trust.ts`).
+
+- *History.* `trust_events` (migration v58) gets one row per `confirm`, `flag`, `keep`, `restore`,
+  `retire` and correction (`supersede`, on the old memory, with the new one as `related_id`), plus an
+  `archive` row (actor `system`) when two flags archive a memory. Rows are never updated: a repeat
+  confirm that refreshes the `votes` row (after 30 days, or after a newer flag) adds a new event; a
+  repeat inside 30 days changes nothing and adds none. Each row has the
+  actor, whether the actor is the author, the note (redacted like every note) and the time. The
+  migration copies what `votes` and `supersession_links` still hold, marked `backfilled`. The
+  memory page shows it as "Validation history", open when the memory is flagged or not live, and
+  `GET /api/learnings/:id` returns the newest `TRUST_HISTORY_LIMIT` (50) as `history`. A deleted
+  memory shows none, and the purge removes its rows. Archives by the hourly sweeps are not events yet.
+- *Label.* `trustFor` sums the votes of people other than the author: confirmations, the newest
+  confirm, keep or restore, and the flags. A flag older than that newest check counts as answered:
+  the label says "1 earlier flag answered by a later check", and only open flags mark a memory
+  flagged (chip, banner, hook tag, review page). A memory nobody else checked is `unchecked` from day one; after
+  90 days without such a check it is also `verify` (see "Verify old memories"). The label is a line
+  of counts and dates, never names or notes: "flagged by 1 (newest 2 days ago); not checked by
+  anyone but its author; due a check". Search results carry it as `trust` (with `unchecked` and
+  `verify` when set), and the memory list and page show a chip and a banner.
+- *Hook.* The unauthenticated hook adds a short tag (`trustTag`: "flagged 2x", "unchecked", "due a
+  check") to the titles it injects per prompt, and puts a flagged title after the others. The
+  project titles and the house rules say "flagged Nx" when flagged. Search ranking is unchanged.
+- *Review page.* `/memory/review` lists flagged memories, memories due a check and memories nobody
+  but the author checked, at most `REVIEW_QUEUE_LIMIT` (30) each. Each has a note field and Confirm,
+  Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
+  `checkUiRateLimit`). They call `confirm`, `keepLearning` and `retire` with `via: "ui"`, so the
+  agent rules hold: a note is required, and nobody confirms their own memory (the button is hidden).
+  Maintainers only (`BAB_MAINTAINERS`); anyone else gets a 404, like `/admin`. The page is optional:
+  flags, sweeps and labels work without it.
 
 ## Ranking
 

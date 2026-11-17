@@ -292,7 +292,7 @@ describe("a valid-until date the author chose", () => {
 });
 
 describe("a keep on a live memory is not a restore", () => {
-  it("it ignores a note and writes no restore row", async () => {
+  it("it keeps the note as evidence and writes no restore row", async () => {
     await seedUsers();
     const l = await mk();
     const { keepLearning } = await import("../lib/learnings");
@@ -302,8 +302,9 @@ describe("a keep on a live memory is not a restore", () => {
     expect(out.learning.status).toBe("active");
     expect(await events(l.id)).toEqual([]);
     expect(await audits(l.id, "restored")).toEqual([]);
-    // The keep is on record, without the note.
-    expect(getDb().prepare("SELECT note FROM votes WHERE learning_id = ? AND kind = 'keep'").all(l.id)).toEqual([{ note: null }]);
+    // The keep is on record with its note: a keep answers a flag, so its reason is evidence (lib/trust.ts).
+    expect(getDb().prepare("SELECT note FROM votes WHERE learning_id = ? AND kind = 'keep'").all(l.id)).toEqual([{ note: "a note nobody needs" }]);
+    expect(getDb().prepare("SELECT kind, note FROM trust_events WHERE learning_id = ?").all(l.id)).toEqual([{ kind: "keep", note: "a note nobody needs" }]);
   });
 });
 

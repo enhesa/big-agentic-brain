@@ -19,6 +19,14 @@ import styles from "./memory.module.css";
 
 type MemoryFilters = { q?: string; tag?: string; repo?: string; project?: string; author?: string; status?: string; kind?: string; applies?: string; sort?: string; page?: string };
 
+/** The one warning a list row shows (lib/trust.ts): flagged first, then due a check, then unchecked. */
+function trustChip(l: { trust: string; verify?: true; unchecked?: true }): string | null {
+  if (l.trust.startsWith("flagged")) return "Flagged";
+  if (l.verify) return "Due a check";
+  if (l.unchecked) return "Unchecked";
+  return null;
+}
+
 /** Rows per page — matches search()'s own historical default, so an unfiltered
  *  first page looks exactly as it always did. */
 const PAGE_SIZE = 20;
@@ -442,6 +450,11 @@ export default async function BoardPage({
                     <span className={`${styles.standing} ${styles[`standing_${l.standing}`]}`} title={standingText(l.standing, l.standingReason)}>
                       {standingText(l.standing)}
                     </span>
+                    {trustChip(l) ? (
+                      <span className={`${styles.trustChip} ${l.trust.startsWith("flagged") ? styles.trustChipFlagged : ""}`} title={`Trust: ${l.trust}`}>
+                        {trustChip(l)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </li>
