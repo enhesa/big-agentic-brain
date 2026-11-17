@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",
       "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
       "BAB Tasks, the Kanban board for your agents, now has its own item in the navbar after Reminders.",
+      "BAB Tasks has no Open in Claude button any more: the board only shows status, whatever tool your agents use.",
     ],
   },
   {

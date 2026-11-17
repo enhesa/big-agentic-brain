@@ -110,7 +110,7 @@ An agent writes to a colleague's inbox, online or not, after you approve the tex
 
 ### BAB Tasks
 
-A Kanban board for your agents. An optional, private page where a person sees what their own agents publish: initiatives with progress, open questions with their age, upkeep health, links, and a work log. A question card has an Open in Claude button. Installing the `bab-tasks` plugin is the opt-in. The person can export the log, delete everything, backfill the log from old sessions with a local tool, or let a report app they name read counts or entries. `bab_tasks` writes it. See [BAB Tasks](docs/tasks.md).
+A Kanban board for your agents. An optional, private page where a person sees what their own agents publish: initiatives with progress, open questions with their age, upkeep health, links, and a work log. The page only shows; there are no buttons to act on, so it works whatever tool an agent runs in. Installing the `bab-tasks` plugin is the opt-in. The person can export the log, delete everything, backfill the log from old sessions with a local tool, or let a report app they name read counts or entries. `bab_tasks` writes it. See [BAB Tasks](docs/tasks.md).
 
 ### Insight and upkeep
 
