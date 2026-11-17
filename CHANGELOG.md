@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.0](https://github.com/enhesa/big-agentic-brain/compare/v2.30.0...v2.31.0) (2026-11-17)
+
+
+### Features
+
+* make BAB Tasks tool-neutral, remove Open in Claude ([#165](https://github.com/enhesa/big-agentic-brain/issues/165)) ([6c150a3](https://github.com/enhesa/big-agentic-brain/commit/6c150a342043d76cfc9b90c266f6224e39956e81))
+
 ## [2.30.0](https://github.com/enhesa/big-agentic-brain/compare/v2.29.0...v2.30.0) (2026-11-17)
 
 
