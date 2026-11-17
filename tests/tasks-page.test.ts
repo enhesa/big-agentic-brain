@@ -5,7 +5,7 @@ import path from "node:path";
 
 /**
  * /tasks and its poll route: the signed-in viewer only, agent text as inert React
- * text, no controls but Open in Claude and the drawer, and the served tasks skill.
+ * text, no controls but the drawer, and the served tasks skill.
  */
 
 let dataDir: string;
@@ -218,9 +218,10 @@ describe("/tasks page", () => {
     const html = await render();
     const card = cardOf(html, "billing-export");
     const panel = panelOf(html, "billing-export");
-    // The card: title (a button that opens the drawer), ring and Open in Claude, no question text.
+    // The card: title (a button that opens the drawer) and ring, no question text and no action.
     expect(card).toMatch(/<button type="button"[^>]*data-open-card="billing-export"[^>]*>Billing &lt;b&gt;export&lt;\/b&gt;<\/button>/);
-    for (const shown of ["50%", "Open in Claude"]) expect(card).toContain(shown);
+    expect(card).toContain("50%");
+    expect(card).not.toContain("Open in Claude");
     expect(card).not.toContain("<details");
     expect(card).not.toContain("data-badge");
     expect(card).not.toContain("<form");
@@ -257,7 +258,7 @@ describe("/tasks page", () => {
     expect(panelOf(html, "late")).toContain("overdue by 2 days");
   });
 
-  it("shows an upkeep row with a question as one needs-you line with Open in Claude; the question opens in the drawer", async () => {
+  it("shows an upkeep row with a question as one needs-you line; the question opens in the drawer", async () => {
     const cc = await import("../lib/tasks");
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate <b>keys</b>?", options: ["Now"] }] }, "mcp");
     asViewer(ALICE, "Alice A");
@@ -272,7 +273,7 @@ describe("/tasks page", () => {
     expect(row).toContain('data-badge="needs_you"');
     expect(row).not.toContain("No health yet");
     expect(row).not.toContain("daily");
-    expect(row).toMatch(/disabled=""[^>]*title="No session link"/);
+    expect(row).not.toContain("Open in Claude");
     for (const gone of ["Rotate", "data-question", "asked ", "Now", "<form"]) expect(row).not.toContain(gone);
     const panel = panelOf(html, "backup");
     expect(panel).toContain("Rotate &lt;b&gt;keys&lt;/b&gt;?");
@@ -548,58 +549,27 @@ describe("/tasks page", () => {
     for (const gone of ["/tasks/export", "Download my log", "Report apps", 'data-app="reports"', "<form", "Delete all"]) expect(html).not.toContain(gone);
   });
 
-  it("puts Open in Claude on a Needs you card with its session link, disabled without one, and small in every drawer", async () => {
+  it("has no action on the board or in the drawer, and never renders a session link, even an old stored one", async () => {
     const cc = await import("../lib/tasks");
-    const a = agent(ALICE);
-    const link = "claude://claude.ai/epitaxy/session_01AbC-x_y.z";
-    cc.ccPublish(a, ALICE, { v: 1, id: "linked", title: "Linked", questions: [{ id: "q", text: "Go?" }], source: { machine: "vm", session: "s1", link } }, "mcp");
-    cc.ccPublish(a, ALICE, { v: 1, id: "nolink", title: "No link", questions: [{ id: "q", text: "Go?" }], source: { machine: "vm", session: "s2" } }, "mcp");
-    cc.ccPublish(a, ALICE, { v: 1, id: "busy", title: "Busy", tasks: [{ id: "t", text: "Work", status: "in_progress" }], source: { link: "https://claude.ai/code/session_01x" } }, "mcp");
-    asViewer(ALICE, "Alice A");
-    const html = await render();
-    expect(cardOf(html, "linked")).toContain(`href="${link}" rel="noopener noreferrer" data-open-session="linked">Open in Claude`);
-    expect(cardOf(html, "linked")).not.toContain("target=");
-    expect(cardOf(html, "nolink")).toMatch(/<button type="button"[^>]*disabled=""[^>]*title="No session link"[^>]*>Open in Claude<span class="[^"]*srOnly[^"]*"> \(no session link\)<\/span><\/button>/);
-    // Other cards carry it in the drawer only.
-    expect(cardOf(html, "busy")).not.toContain("Open in Claude");
-    expect(panelOf(html, "busy")).toContain('href="https://claude.ai/code/session_01x" rel="noopener noreferrer" data-open-session="busy"');
-    expect(panelOf(html, "linked")).toContain(`href="${link}"`);
-    expect(panelOf(html, "nolink")).toContain('title="No session link"');
-  });
-
-  it("has no action on the board or in the drawer but Open in Claude", async () => {
-    const cc = await import("../lib/tasks");
-    await seedAlice({ source: { machine: "vm", session: "s1", link: "https://claude.ai/code/s1" } });
+    await seedAlice({ source: { machine: "vm", session: "s1" } });
+    // A record from before source.link was deprecated still holds one.
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE tasks_initiatives SET record = json_set(record, '$.source.link', ?) WHERE owner_id = ? AND id = ?").run("claude://claude.ai/epitaxy/session_01x", ALICE, "billing-export");
     cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "backup", title: "Backup check", kind: "recurring", cadence: "daily", questions: [{ id: "u1", text: "Rotate?", options: ["Now"] }] }, "mcp");
     asViewer(ALICE, "Alice A");
     const html = await render();
+    expect(html).not.toContain("Open in Claude");
+    expect(html).not.toContain("data-open-session");
+    expect(html).not.toContain("claude://");
     // From the board through the upkeep section to the end of the drawer.
     const board = html.slice(html.indexOf('id="cc-initiatives"'), html.indexOf("</dialog>") + 9);
     expect(board).toContain('data-initiative="backup"');
     expect(board).not.toContain("<form");
     expect(board).not.toContain("<input");
     expect(board).not.toContain("Dismiss");
-    // Every button opens a card or the drawer's close, or is a disabled Open in Claude.
-    for (const b of board.match(/<button[^>]*>/g) ?? []) expect(b).toMatch(/data-open-card=|aria-label="Close details"|data-open-session=""[^>]*|disabled=""/);
-    for (const a of board.match(/<a [^>]*>/g) ?? []) expect(a).toMatch(/data-open-session=|linkPill/);
-  });
-
-  it("checks the session link again before it becomes an href, so a stored bad one renders a disabled button", async () => {
-    await seedAlice({ source: { machine: "vm", session: "s1", link: "https://claude.ai/ok" } });
-    const { getDb } = await import("../lib/db");
-    const strings = ["javascript:alert(1)", "JAVASCRIPT:alert(1)", "data:text/html,x", "//evil.example.com/x", "https://claude.ai/a b", "https://claude.ai/a?b=1",
-      "https://claude.ai/x\n", "https://claude.ai/%6A", "https://claude.ai\\@evil.example.com", "https://claude.ai:8443/x", "https://u@example.com/x",
-      "https://claude.ai//evil.example.com", "https://claude.ai/a/../b", `https://claude.ai/${"a".repeat(290)}`];
-    // Stored as JSON values, so non-strings land as numbers, objects and arrays.
-    const values = [...strings.map((s) => JSON.stringify(s)), "42", "{}", '["https://claude.ai/x"]', "true"];
-    for (const bad of values) {
-      getDb().prepare("UPDATE tasks_initiatives SET record = json_set(record, '$.source.link', json(?)) WHERE owner_id = ? AND id = ?").run(bad, ALICE, "billing-export");
-      asViewer(ALICE, "Alice A");
-      const html = await render();
-      expect(html).not.toContain("data-open-session=\"billing-export\"");
-      expect(html).not.toMatch(/href="(javascript|data|JAVASCRIPT):/);
-      expect(cardOf(html, "billing-export")).toMatch(/disabled=""[^>]*title="No session link"/);
-    }
+    // Every button opens a card or is the drawer's close; every link is a record link pill.
+    for (const b of board.match(/<button[^>]*>/g) ?? []) expect(b).toMatch(/data-open-card=|aria-label="Close details"/);
+    for (const a of board.match(/<a [^>]*>/g) ?? []) expect(a).toMatch(/linkPill/);
   });
 
   it("shows the 3 newest Finished cards, then +N more with the rest folded", async () => {

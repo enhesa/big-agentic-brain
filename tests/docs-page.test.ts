@@ -197,7 +197,7 @@ describe("/docs", () => {
     expect(html).toContain("held by you: wait");
     expect(html).toContain("throttle: next slot?");
     expect(html).toContain("opt in: install its plugin");
-    expect(html).toContain("Open in Claude: answer");
+    expect(html).toContain("answer where you work");
   });
 
   it("counts the tools the way the code does", async () => {

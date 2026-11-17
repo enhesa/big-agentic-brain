@@ -211,7 +211,7 @@ const TAKING_TURNS: Flow = {
 };
 
 // BAB Tasks (docs/tasks.md): opt-in by installing its plugin; agents publish, the
-// page only shows; a question card has Open in Claude; report apps read only what you grant.
+// page only shows; you answer where the work happens; report apps read only what you grant.
 const TASKS: Flow = {
   title: "Your BAB Tasks",
   lanes: [YOU, AGENT, BRAIN],
@@ -219,7 +219,7 @@ const TASKS: Flow = {
     { at: "you", note: "opt in: install its plugin" },
     { from: "agent", to: "brain", label: "plans, questions, work log" },
     { from: "brain", to: "you", label: "your private page", back: true },
-    { from: "you", to: "agent", label: "Open in Claude: answer" },
+    { from: "you", to: "agent", label: "answer where you work" },
   ],
 };
 

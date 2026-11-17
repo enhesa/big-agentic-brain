@@ -32,7 +32,6 @@ import { assertBoundIdentity, type BoundCaller } from "./bound-identity";
 import { checkTasksRateLimit, CC_RATE_LIMIT_BURST, CC_RATE_LIMIT_PER_MINUTE } from "./rate-limit";
 import { ApiError, NotFoundError, TooManyRequestsError, ValidationError } from "./errors";
 import { ownerIdFor } from "./reminders-view";
-import { CC_LINK_MAX, isSessionLink } from "./tasks-link";
 import type { AuditVia } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -171,7 +170,7 @@ export interface CcLink {
 export interface CcSource {
   machine: string | null;
   session: string | null;
-  /** The link that opens this session (lib/tasks-link.ts); absent on older records. */
+  /** Deprecated and ignored: a publish no longer stores it. Older records may still carry one. */
   link?: string | null;
 }
 
@@ -347,24 +346,12 @@ function checkLink(raw: unknown, field: string): CcLink {
   return { label: text(raw.label, `${field}.label`, 60)!, url: httpsUrl(raw.url, `${field}.url`) };
 }
 
-/** source.link: optional; https:// or claude://claude.ai/ and a plain path only (isSessionLink). */
-function sessionLink(raw: unknown, field: string): string | null {
-  if (raw == null || raw === "") return null;
-  if (typeof raw !== "string") throw new ValidationError(`${field} must be a string`);
-  if (raw.length > CC_LINK_MAX) throw new ValidationError(`${field} is ${raw.length} characters; at most ${CC_LINK_MAX}`);
-  if (!isSessionLink(raw)) {
-    throw new ValidationError(`${field} must be https://host/path (lowercase host) or claude://claude.ai/path, with only letters, digits and / _ - . after the host (no query, fragment, port, empty, . or .. segment, or other scheme)`);
-  }
-  refuseSensitive(raw, field);
-  return raw;
-}
-
 function checkSource(raw: unknown): CcSource | null {
   if (raw == null) return null;
   if (!isObject(raw)) throw new ValidationError("source must be an object { machine, session, link }");
   onlyFields(raw, SOURCE_FIELDS, "source.");
-  const link = sessionLink(raw.link, "source.link");
-  return { machine: text(raw.machine, "source.machine", 20, false), session: text(raw.session, "source.session", 60, false), ...(link ? { link } : {}) };
+  // source.link is deprecated: still accepted so older agents keep working, never stored or shown.
+  return { machine: text(raw.machine, "source.machine", 20, false), session: text(raw.session, "source.session", 60, false) };
 }
 
 /** Checks a publish body (the whole record) and returns it normalized. `v` is required. */
@@ -1280,7 +1267,7 @@ const PATCH_NULLABLE = ["area", "key", "cadence", "deadline", "priority", "sourc
 
 /** The stored source as a publish would send it, or null. */
 function prevSource(prev: CcRecord): Record<string, unknown> | null {
-  return prev.source ? { machine: prev.source.machine, session: prev.source.session, link: prev.source.link ?? null } : null;
+  return prev.source ? { machine: prev.source.machine, session: prev.source.session } : null;
 }
 
 /** Applies one list's changes: add or update by key, `remove: true` drops it, the rest stay as they are. */
