@@ -85,6 +85,7 @@ const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
   { table: "threads", id: "id", columns: ["subject"] },
   { table: "messages", id: "id", columns: ["body"] },
   { table: "votes", id: "rowid", columns: ["note"] },
+  { table: "trust_events", id: "id", columns: ["note"] },
   { table: "memory_comments", id: "id", columns: ["body"] },
   { table: "users", id: "id", columns: ["name"] },
   // Composite primary key (area, user_id): the rowid names the row.
@@ -307,6 +308,8 @@ function sweepDeletedLearnings(db: Db): number {
     (idList, ids) =>
       inTransaction(db, () => {
         db.prepare(`DELETE FROM votes WHERE learning_id IN (${idList})`).run(...ids);
+        // The validation history goes with the memory (no foreign key, so the order does not matter).
+        db.prepare(`DELETE FROM trust_events WHERE learning_id IN (${idList}) OR related_id IN (${idList})`).run(...ids, ...ids);
         // Foreign key to learnings, like votes: gone first, or the DELETE below fails.
         db.prepare(`DELETE FROM memory_comments WHERE learning_id IN (${idList})`).run(...ids);
         db.prepare(`DELETE FROM reuse_costs WHERE learning_id IN (${idList})`).run(...ids);

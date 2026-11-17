@@ -161,7 +161,10 @@ when the fact holds anywhere. If a memory's labels are missing or wrong, fix the
 (`appliesTo`); anyone may, like a correction, but without a new copy. When you search inside a repo, pass its stack as `stack`: a hit
 marked `stackMismatch` is for another stack, so weigh it, don't follow it. A hit marked
 `verify` is old and unconfirmed: if you use it, check it against the code or docs and then
-confirm, correct, flag or retire it.
+confirm, correct, flag or retire it. Each hit's `trust` says how far colleagues checked it:
+`unchecked` is one person's word, and a flagged one is contested, so read why before you rely
+on it. Its validation history (who confirmed, flagged, kept or replaced it, when, with the note)
+is in `GET /api/learnings/:id` (`history`) and on its page. The author's own keep never counts as a check.
 
 When the user asks a question inside a repo or project, search scoped to that project
 first, then again without it: the answer is either in that project or in the

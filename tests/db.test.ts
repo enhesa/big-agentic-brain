@@ -154,8 +154,9 @@ describe("getDb", () => {
     // 47: learnings.aliases and its learnings_fts column; 48: todos.due_has_time;
     // 49: the learning_costs and reuse_costs tables for measured agent effort;
     // 53: users.tasks_enabled_at and tasks_disabled_at; 54: BAB Tasks tables;
-    // 55: BAB Tasks backfill links; 56: maintenance_state; 57: Command Center renamed to BAB Tasks).
-    expect(migrations.n).toBe(57);
+    // 55: BAB Tasks backfill links; 56: maintenance_state; 57: Command Center renamed to BAB Tasks;
+    // 58: trust_events, the validation history of a memory).
+    expect(migrations.n).toBe(58);
   });
 });
 
@@ -653,7 +654,7 @@ describe("migration order: v40, then v41 to v47", () => {
   it("a fresh database gets all seven, in order", async () => {
     const db = (await import("../lib/db")).getDb();
     const versions = (db.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY rowid").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]);
+    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
     const cols = new Set((db.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     for (const c of ["last_accessed_at", "access_days", "applies_to", "pinned_by", "pinned_at", "aliases"]) expect(cols.has(c)).toBe(true);
   });
@@ -669,7 +670,7 @@ describe("migration order: v40, then v41 to v47", () => {
 
     const again = (await import("../lib/db")).getDb();
     const versions = (again.prepare("SELECT version FROM migrations WHERE version >= 40 ORDER BY version").all() as Array<{ version: number }>).map((r) => r.version);
-    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]);
+    expect(versions).toEqual([40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
     const cols = new Set((again.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name));
     expect(cols.has("applies_to")).toBe(true);
     expect({ ...again.prepare("SELECT title FROM sessions WHERE id = 's1'").get() }).toEqual({ title: null });

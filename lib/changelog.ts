@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-17",
+    title: "Trust labels and validation history",
+    changes: [
+      "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",
+    ],
+  },
+  {
     date: "2026-11-16",
     title: "Release 2.25.1, a framework update and Command Center patch",
     changes: [
