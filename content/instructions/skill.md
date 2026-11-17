@@ -197,9 +197,16 @@ before every write.
   keeps it. Anyone may `keep` it with a note if it is still true; a keep or a confirm answers the
   votes before it. Standards, decisions and pinned house rules are not touched: a maintainer hears
   they wait (`bab_search` `flagged` true). A search result marked `verify: true` is over 90 days old
-  and nobody has confirmed or kept it in the last 90 days. If you use it, check it against code or
+  and nobody but its author has confirmed or kept it in the last 90 days. If you use it, check it against code or
   docs in this task, then confirm it (the note says where), correct it with `supersedes`, or flag or
   retire it with the evidence. The response's `verifyHint` says the same; hooks never do.
+- **Trust labels.** Every search result has `trust`, a line of counts and dates such as "flagged by 1
+  (newest 2 days ago); not checked by anyone but its author". `unchecked: true` means nobody but the
+  author ever confirmed or kept it: weigh it as one person's word. A flagged memory is contested:
+  read why before you rely on it. The author's own keep never counts as a check. Every confirm,
+  flag, keep, restore, retire and correction is kept with who, when and the note:
+  `GET /api/learnings/:id` returns them as `history`, and the memory page shows them. Maintainers
+  can also confirm, keep or retire with a note on the web review page.
 - **Keeping BAB tidy (autopilot).** BAB is kept by all agents together, not by authors. On
   anyone's `learning` or `practice` you checked against the source you may `supersedes` (the
   body cites what you checked), consolidate several entries, `retire` it or `flag` it, each with

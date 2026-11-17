@@ -32,6 +32,18 @@ import { discoveryCostOf } from "@/lib/effort-cost";
 import styles from "../memory.module.css";
 import Markdown from "@/app/components/Markdown";
 import { formatDate, DATE_TIME } from "@/lib/branding";
+import { trustHistory, trustOf, type TrustEvent } from "@/lib/trust";
+
+/** One history line's verb: what happened, said plainly. */
+const HISTORY_VERB: Record<TrustEvent["kind"], string> = {
+  confirm: "Confirmed",
+  flag: "Flagged",
+  keep: "Kept",
+  restore: "Restored",
+  retire: "Retired",
+  supersede: "Replaced",
+  archive: "Archived",
+};
 
 /**
  * Why the sweep archived a memory, when it did (the `auto-archive` or `downvote_archived` audit row,
@@ -68,10 +80,10 @@ export default async function LearningDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ react?: string | string[]; edit?: string | string[] }>;
+  searchParams?: Promise<{ react?: string | string[]; edit?: string | string[]; claim?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { react, edit } = (await searchParams) ?? {};
+  const { react, edit, claim } = (await searchParams) ?? {};
   // Read-only page: no identity required, see app/memory/page.tsx.
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: `/memory/${id}`, via: "ui" });
@@ -103,11 +115,13 @@ export default async function LearningDetailPage({
   const standing = standingsFor([learning]).get(learning.id)!;
   const notes = recentNotes(learning.id);
   const retireEvent = lastRetire(learning);
+  const trust = learning.status === "deleted" ? null : trustOf(learning);
+  const history = trustHistory(learning.id);
 
   // Voting and commenting need a person: a browser linked to a BAB identity (getViewer). A signed-in
   // viewer who is not linked yet is pointed at /me/devices; anyone else reads the comments only.
   const viewer = learning.status === "deleted" ? null : await getViewer();
-  const needsLink = !viewer && learning.status !== "deleted" && (await pendingProxyLinkUser()) !== null;
+  const linkProxy = !viewer && learning.status !== "deleted" ? await pendingProxyLinkUser() : null;
   const mine = viewer && viewer.ownerId !== learning.author_id ? ownReactions(learning.id, viewer.ownerId) : null;
   // A deleted memory is a wiped tombstone: its comments go with it.
   const comments = learning.status === "deleted" ? [] : commentsFor(learning.id);
@@ -116,6 +130,8 @@ export default async function LearningDetailPage({
 
   const facts: Array<[string, string]> = [
     [STANDING_LABEL, `${standing.standing} (${standing.standingReason})`],
+    // Counts and dates only (lib/trust.ts): who and why are in the validation history below.
+    ...(trust ? ([["Trust", trust.label]] as Array<[string, string]>) : []),
     ["Helpful", String(votes.helpful)],
     ["Kudos", String(votes.kudos)],
     // Always shown, next to Helpful and Kudos: three not-helpful votes that outnumber the support
@@ -157,6 +173,14 @@ export default async function LearningDetailPage({
                 : archivedWhy === "downvoted"
                   ? "This memory was archived automatically: colleagues marked it not helpful and no agent read it for 90 days. Any agent can restore it with keep."
                   : "This memory is archived."}
+          </div>
+        ) : null}
+
+        {learning.status === "active" && trust && (trust.flags > 0 || trust.verify) ? (
+          <div className={styles.trustBanner} role="note">
+            {trust.flags > 0
+              ? `${trust.flags === 1 ? "A colleague flagged" : `${trust.flags} colleagues flagged`} this memory as wrong or stale. Read the validation history before you rely on it.`
+              : "Nobody else has checked this memory in the last 90 days. Check it at the source before you rely on it."}
           </div>
         ) : null}
 
@@ -238,7 +262,9 @@ export default async function LearningDetailPage({
           <CommentsPanel
             learningId={learning.id}
             comments={comments}
-            state={viewer ? (mine ? "open" : "own") : needsLink ? "link" : "none"}
+            state={viewer ? (mine ? "open" : "own") : linkProxy ? "link" : "none"}
+            linkProxy={linkProxy}
+            claim={claim}
             viewerId={viewer?.ownerId ?? null}
             maintainer={viewer ? isMaintainer(viewer.ownerId) : false}
             mine={mine}
@@ -268,6 +294,31 @@ export default async function LearningDetailPage({
               </ul>
             ) : null}
           </section>
+        ) : null}
+
+        {history.length > 0 ? (
+          <details className={styles.history} aria-label="Validation history" open={trust != null && (trust.flags > 0 || learning.status !== "active")}>
+            <summary>{`Validation history (${history.length})`}</summary>
+            {/* JSX text only: notes are written by any agent. */}
+            <ol>
+              {history.map((e, i) => (
+                <li key={`${e.kind}-${e.at}-${i}`}>
+                  <strong>{HISTORY_VERB[e.kind]}</strong>
+                  {e.kind === "archive" ? "" : ` by ${e.actorName}${e.byAuthor ? " (the author)" : ""}`}
+                  {`, ${formatDate(parseDbTime(e.at), DATE_TIME)}${e.backfilled ? " (from older records)" : ""}`}
+                  {e.related ? (
+                    <>
+                      {", with "}
+                      <Link href={`/memory/${e.related.id}`} className={styles.link}>
+                        {e.related.title}
+                      </Link>
+                    </>
+                  ) : null}
+                  {e.note ? `: ${e.note}` : ""}
+                </li>
+              ))}
+            </ol>
+          </details>
         ) : null}
 
         {supersedes ? (

@@ -11,6 +11,7 @@ import type { Standing, StandingLevel } from "./standing";
 import { isMaintainer, maintainerIdList } from "./feedback";
 import { appliesToFields, appliesToFilterSql, mergeAppliesTo, parseAppliesTo, readAppliesTo, stackRankSql } from "./applies-to";
 import { downvotedLive, verifyDueIds } from "./swarm-gc";
+import { recordTrustEvent, trustFor, type TrustSummary } from "./trust";
 import { markdownToPlainText } from "./markdown";
 import { normalizeProjectKey, deriveProjectFromRepo, projectKeyFromCwd, GENERAL_PROJECT_KEY } from "./project-key";
 export { normalizeProjectKey, GENERAL_PROJECT_KEY } from "./project-key";
@@ -262,10 +263,15 @@ export interface LearningSearchResult extends LearningRow, AgeInfo {
   /** The latest retire or restore of this memory (who, when, why), if there is one. */
   lastRetire?: RetireEvent;
   /**
-   * true on a live memory that is over 90 days old with no confirm or keep in the last 90 days
-   * (lib/swarm-gc.ts verifyDueIds): whoever uses it checks it first. Absent otherwise.
+   * true on a live memory that is over 90 days old with no confirm or keep by someone other than
+   * the author in the last 90 days (lib/swarm-gc.ts verifyDueIds): whoever uses it checks it first.
+   * Absent otherwise.
    */
   verify?: true;
+  /** The trust label (lib/trust.ts): flags, checks by others and their dates. Counts only, no notes. */
+  trust: string;
+  /** true when nobody but the author has confirmed, kept or restored it. Absent otherwise. */
+  unchecked?: true;
 }
 
 export interface AgeInfo {
@@ -974,7 +980,7 @@ export function search(
     const supersededByIds = getSupersededByIds(rows.map((r) => r.id));
     const standings = standingsFor(rows);
     const retires = lastRetiresFor(rows);
-    const verify = verifyDueIds(db, rows);
+    const trust = trustFor(rows);
     return rows.map((r) => ({
       ...r,
       ...ageInfo(r),
@@ -984,7 +990,7 @@ export function search(
       supersededBy: supersededByIds.get(r.id),
       ...standingFields(standings.get(r.id)!),
       lastRetire: retires.get(r.id),
-      ...(verify.has(r.id) ? { verify: true as const } : {}),
+      ...trustFields(trust.get(r.id)!),
     }));
   }
 
@@ -1050,7 +1056,7 @@ export function search(
   const supersededByIds = getSupersededByIds(rows.map((r) => r.id));
   const standings = standingsFor(rows);
   const retires = lastRetiresFor(rows);
-  const verify = verifyDueIds(db, rows);
+  const trust = trustFor(rows);
 
   return rows.map((r) => ({
     ...r,
@@ -1061,7 +1067,7 @@ export function search(
     supersededBy: supersededByIds.get(r.id),
     ...standingFields(standings.get(r.id)!),
     lastRetire: retires.get(r.id),
-    ...(verify.has(r.id) ? { verify: true as const } : {}),
+    ...trustFields(trust.get(r.id)!),
   }));
 }
 
@@ -1140,6 +1146,15 @@ export function lastRetiresFor(rows: Array<Pick<LearningRow, "id" | "status">>):
 /** lastRetiresFor for one memory. */
 export function lastRetire(learning: Pick<LearningRow, "id" | "status">): RetireEvent | undefined {
   return lastRetiresFor([learning]).get(learning.id);
+}
+
+/**
+ * The trust fields of a search hit: `trust` (the label, counts and dates only), `unchecked: true`
+ * when nobody but the author has checked it, `verify: true` when it is due a check. Absent flags
+ * keep the answer small.
+ */
+function trustFields(t: TrustSummary): { trust: string; unchecked?: true; verify?: true } {
+  return { trust: t.label, ...(t.unchecked ? { unchecked: true as const } : {}), ...(t.verify ? { verify: true as const } : {}) };
 }
 
 /** The two fields that go on the wire; `points` stays internal. */
@@ -1780,6 +1795,7 @@ function supersedeWithinTransaction(
     ).run(actorId, newId, ...HOUSE_RULE_KINDS);
   }
   audit(db, actorId, "supersede", "learning", oldId, via);
+  recordTrustEvent(db, { learningId: oldId, actorId, kind: "supersede", authorId: oldLearning.author_id, relatedId: newId });
   return { id: oldId, title: oldLearning.title };
 }
 
@@ -1817,12 +1833,19 @@ export function flag(
   // (ON CONFLICT keeps the row) would then never re-trigger it.
   let autoArchived = false;
   inTransaction(db, () => {
+    const before = db
+      .prepare("SELECT note FROM votes WHERE learning_id = ? AND voter_id = ? AND kind = 'flag'")
+      .get(learningId, voterId) as { note: string | null } | undefined;
     // created_at is left alone on a repeat: only the note may change, and only when one is given.
     db.prepare(
       `INSERT INTO votes (learning_id, voter_id, kind, note) VALUES (?, ?, 'flag', ?)
        ON CONFLICT(learning_id, voter_id, kind) DO UPDATE SET note = COALESCE(excluded.note, votes.note)`,
     ).run(learningId, voterId, normalizedNote);
     audit(db, voterId, "flag", "learning", learningId, via);
+    // The history keeps every flag and every new note on a repeat; a bare repeat adds nothing.
+    if (!before || (normalizedNote != null && normalizedNote !== before.note)) {
+      recordTrustEvent(db, { learningId, actorId: voterId, kind: "flag", authorId: learning.author_id, note: normalizedNote });
+    }
 
     // Only flags placed after the latest restore count (by rowid: a flag keeps its rowid when its
     // owner repeats it, a restore row is inserted fresh). A restore is an answer to the flags
@@ -1848,6 +1871,7 @@ export function flag(
         "UPDATE learnings SET status = 'archived', updated_at = datetime('now') WHERE id = ?",
       ).run(learningId);
       audit(db, voterId, "auto_archive", "learning", learningId, via);
+      recordTrustEvent(db, { learningId, actorId: "system", kind: "archive", authorId: learning.author_id, note: `${n} flags` });
       autoArchived = true;
     }
   });
@@ -2191,6 +2215,7 @@ export function confirm(
        ON CONFLICT(learning_id, voter_id, kind) DO UPDATE SET note = excluded.note, created_at = datetime('now')`,
     ).run(learningId, voterId, normalizedNote);
     audit(db, voterId, "confirm", "learning", learningId, via, verified ? { details: { verified: true } } : undefined);
+    recordTrustEvent(db, { learningId, actorId: voterId, kind: "confirm", authorId: learning.author_id, note: normalizedNote });
     recomputeScore(learningId);
     touchRead(db, [learningId]);
     return true;
@@ -2250,14 +2275,17 @@ export function keepLearning(
   }
   if (learning.status === "archived") return { learning: restore(learning, actorId, via, note), changed: true };
 
+  // Optional on a live memory, and kept when given: it is the evidence in the history.
+  const keepNote = normalizeNote(note, RESTORE_NOTE_MAX, false);
   const db = getDb();
   inTransaction(db, () => {
     // A keep says the memory was checked and still holds, so it counts as a read.
     touchRead(db, [learningId]);
     // Every keep is on record: a maintainer's keep after a flag answers it (flaggedStandardsWaiting).
     // The answer is a `keep` row in votes, not read from audit_log, which the retention sweep purges.
-    recordRetireEvent(db, learningId, actorId, "keep", null);
+    recordRetireEvent(db, learningId, actorId, "keep", keepNote);
     audit(db, actorId, "keep", "learning", learningId, via);
+    recordTrustEvent(db, { learningId, actorId, kind: "keep", authorId: learning.author_id, note: keepNote });
   });
   emit("learning.updated", learningId, { id: learningId, title: learning.title, kind: "active" });
   // A valid-until date is the author's own choice: say so, so a keep is not taken for an extension.
@@ -2290,6 +2318,7 @@ function restore(learning: LearningRow, actorId: string, via: AuditVia, note: st
     audit(db, actorId, "restored", "learning", learning.id, via, {
       details: { by: isAuthor ? "author" : "other", note: normalizedNote },
     });
+    recordTrustEvent(db, { learningId: learning.id, actorId, kind: "restore", authorId: learning.author_id, note: normalizedNote });
     // A restore is a read: without a fresh inactivity clock, a memory archived for lack of reads
     // would be archived again by the next sweep.
     touchRead(db, [learning.id]);
@@ -2366,6 +2395,7 @@ export function retire(
     audit(db, actorId, "retire", "learning", learningId, via, {
       details: { by: isAuthor ? "author" : "other", note: normalizedNote },
     });
+    recordTrustEvent(db, { learningId, actorId, kind: "retire", authorId: learning.author_id, note: normalizedNote });
   });
 
   const updated = getById(learningId)!;
@@ -2477,6 +2507,8 @@ export function setLabels(
 export interface HouseRule extends LearningRow {
   standing: StandingLevel;
   standingReason: string;
+  /** Distinct people who flagged it (lib/trust.ts); the digest line says so when it is over 0. */
+  flags: number;
   /** `_general` for a company-wide rule, otherwise the project key it is scoped to. */
   scope: string;
 }
@@ -2503,6 +2535,7 @@ export function houseRulesFor(projectKey: string | null, now: number = Date.now(
     )
     .all(...HOUSE_RULE_KINDS, todayUtc(), ...(projectKey ? [projectKey] : [])) as unknown as LearningRow[];
   const standings = standingsFor(rows, now);
+  const trust = trustFor(rows, now);
   const ranked = rows
     .map((r, i) => ({ r, i, s: standings.get(r.id)! }))
     .sort((a, b) => STANDING_ORDER[a.s.standing] - STANDING_ORDER[b.s.standing] || a.i - b.i)
@@ -2510,6 +2543,7 @@ export function houseRulesFor(projectKey: string | null, now: number = Date.now(
       ...r,
       standing: s.standing,
       standingReason: s.standingReason,
+      flags: trust.get(r.id)!.flags,
       scope: r.project ?? GENERAL_PROJECT_KEY,
     }));
   const general = ranked.filter((r) => r.project == null).slice(0, HOUSE_RULES_GENERAL_MAX);
@@ -2536,7 +2570,8 @@ export function houseRulesBlock(
   let scoped = rules.filter((r) => r.project != null);
   const line = (r: HouseRule) => {
     const t = r.title.replace(/\s+/g, " ").trim();
-    return `- ${t.length > HOUSE_RULE_TITLE_MAX ? `${t.slice(0, HOUSE_RULE_TITLE_MAX - 1)}…` : t} (${r.id})`;
+    // A flagged rule says so: a maintainer has not decided yet, so it is followed with care.
+    return `- ${t.length > HOUSE_RULE_TITLE_MAX ? `${t.slice(0, HOUSE_RULE_TITLE_MAX - 1)}…` : t} (${r.id}${r.flags > 0 ? `, flagged ${r.flags}x` : ""})`;
   };
   const render = () => {
     const hidden = rules.length - general.length - scoped.length;

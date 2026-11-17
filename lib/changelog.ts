@@ -19,6 +19,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-17",
+    title: "Trust labels, in-place linking and Tasks in the navbar",
+    changes: [
+      "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",
+      "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
+      "BAB Tasks, the Kanban board for your agents, now has its own item in the navbar after Reminders.",
+    ],
+  },
+  {
     date: "2026-11-16",
     title: "Group messages, Command Center patch, release 2.25.1 and a framework update",
     changes: [

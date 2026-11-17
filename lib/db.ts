@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 58;
+export const CURRENT_VERSION = 59;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -367,6 +367,49 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(58);
     appliedVersion = 58;
   }
+  if (appliedVersion < 59) {
+    runMigrationV59(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(59);
+    appliedVersion = 59;
+  }
+}
+
+function runMigrationV58(database: DatabaseSync) {
+  // The validation history of a memory (lib/trust.ts): one row per confirm, flag, keep, restore,
+  // retire or supersede, never updated. `votes` holds one row per person and kind (a repeat
+  // confirm overwrites the note and date) and the audit log is purged after 180 days, so neither
+  // is a history. No foreign key: the purge of a deleted memory removes its rows first anyway
+  // (lib/maintenance.ts). The backfill copies what `votes` and `supersession_links` still hold,
+  // marked backfilled, and skips a row already copied, so it can run twice.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS trust_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      learning_id TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      by_author INTEGER NOT NULL DEFAULT 0,
+      note TEXT,
+      related_id TEXT,
+      backfilled INTEGER NOT NULL DEFAULT 0,
+      at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_trust_events_learning ON trust_events(learning_id, id);
+    INSERT INTO trust_events (learning_id, actor_id, kind, by_author, note, backfilled, at)
+      SELECT v.learning_id, v.voter_id, v.kind, CASE WHEN lower(v.voter_id) = lower(l.author_id) THEN 1 ELSE 0 END, v.note, 1, v.created_at
+      FROM votes v JOIN learnings l ON l.id = v.learning_id
+      WHERE v.kind IN ('confirm', 'flag', 'keep', 'restore', 'retire')
+        AND NOT EXISTS (
+          SELECT 1 FROM trust_events t
+          WHERE t.backfilled = 1 AND t.learning_id = v.learning_id AND t.actor_id = v.voter_id AND t.kind = v.kind AND t.at = v.created_at)
+      ORDER BY v.created_at, v.rowid;
+    INSERT INTO trust_events (learning_id, actor_id, kind, by_author, related_id, backfilled, at)
+      SELECT s.old_id, n.author_id, 'supersede', CASE WHEN lower(n.author_id) = lower(o.author_id) THEN 1 ELSE 0 END, s.new_id, 1, n.created_at
+      FROM supersession_links s JOIN learnings n ON n.id = s.new_id JOIN learnings o ON o.id = s.old_id
+      WHERE NOT EXISTS (
+          SELECT 1 FROM trust_events t
+          WHERE t.backfilled = 1 AND t.learning_id = s.old_id AND t.kind = 'supersede' AND t.related_id = s.new_id)
+      ORDER BY n.created_at;
+  `);
 }
 
 function runMigrationV57(database: DatabaseSync) {
@@ -399,9 +442,9 @@ function runMigrationV57(database: DatabaseSync) {
 }
 
 /**
- * Catches up writes made by a release older than v58 (a rollback) on this database: its messages
+ * Catches up writes made by a release older than v59 (a rollback) on this database: its messages
  * have no message_recipients rows, its threads no thread_participants rows, and its reads set only
- * messages.read_at. v58 is already recorded, so its backfill never runs again; this does, at every
+ * messages.read_at. v59 is already recorded, so its backfill never runs again; this does, at every
  * open. Each statement touches only rows that need it and can run twice. messages.read_at is only
  * ever set when messages.to_id read the message, so copying it to that person's row is safe.
  */
@@ -425,7 +468,7 @@ export function repairMessageMembership(database: DatabaseSync) {
   `);
 }
 
-function runMigrationV58(database: DatabaseSync) {
+function runMigrationV59(database: DatabaseSync) {
   // Group messages (lib/messages.ts). thread_participants is who may read a thread and who a reply
   // reaches; message_recipients is who a message went to, with read state per person. Both are
   // filled from the one-recipient columns, which stay: messages.to_id holds the first recipient and
@@ -1889,7 +1932,7 @@ export function wipeChats(database: DatabaseSync, dataDir: string) {
   database.exec("BEGIN");
   try {
     database.exec("DELETE FROM session_deliveries");
-    // The v58 tables reference messages and threads. They do not exist when v20 runs, so this only
+    // The v59 tables reference messages and threads. They do not exist when v20 runs, so this only
     // matters when the wipe is called on a newer database.
     for (const table of ["message_recipients", "thread_participants"]) {
       if (database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)) {

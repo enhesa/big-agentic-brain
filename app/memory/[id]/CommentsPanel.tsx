@@ -1,6 +1,7 @@
 import Link from "next/link";
 import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import type { OwnReactions } from "@/lib/learnings";
+import type { ProxyUser } from "@/lib/user";
 import { MEMORY_COMMENT_MAX, type MemoryComment } from "@/lib/memory-comments";
 import { REACT_OK_CODES, type ReactCode } from "@/lib/memory-react-web";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -23,6 +24,8 @@ export default function CommentsPanel({
   mine,
   editing,
   message,
+  linkProxy = null,
+  claim,
 }: {
   learningId: string;
   comments: MemoryComment[];
@@ -34,6 +37,10 @@ export default function CommentsPanel({
   /** The comment id from ?edit=, when it is the viewer's own. */
   editing: string | null;
   message: { code: ReactCode; text: string } | null;
+  /** The signed-in, unlinked viewer (pendingProxyLinkUser) when state is "link". */
+  linkProxy?: ProxyUser | null;
+  /** The raw ?claim= code from a refused link, shown on the link card. */
+  claim?: string | string[];
 }) {
   const base = `/memory/${encodeURIComponent(learningId)}`;
   const live = comments.filter((c) => !c.deletedAt).length;
@@ -116,8 +123,8 @@ export default function CommentsPanel({
         <p className={styles.reactHint}>No comments yet.</p>
       )}
 
-      {state === "link" ? (
-        <LinkBrowserNotice className={styles.reactHint} then="you can comment and vote here" />
+      {state === "link" && linkProxy ? (
+        <LinkBrowserNotice proxy={linkProxy} then="you can comment and vote here" returnTo={base} claim={claim} headingLevel={3} />
       ) : canAct ? (
         <form method="post" action={`${base}/react`} className={styles.commentForm}>
           <label htmlFor="comment-body" className={styles.reactLabel}>

@@ -219,7 +219,7 @@ function parseRecipients(to: string | string[] | undefined): string[] {
   return out;
 }
 
-/** Whether actorId is a participant of the thread (thread_participants, migration v58). */
+/** Whether actorId is a participant of the thread (thread_participants, migration v59). */
 function isParticipant(db: ReturnType<typeof getDb>, threadId: string, actorId: string): boolean {
   return db.prepare("SELECT 1 AS n FROM thread_participants WHERE thread_id = ? AND user_id = ?").get(threadId, actorId) !== undefined;
 }

@@ -466,9 +466,10 @@ describe("/tasks page", () => {
     expect(html).not.toMatch(/chip(Warn|Bad)/);
   });
 
-  it("is not in the navbar or the footer", async () => {
+  it("is in the navbar right after Reminders, and not in the footer", async () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
-    expect(NAV_ITEMS.map((i) => i.href as string)).not.toContain("/tasks");
+    const hrefs = NAV_ITEMS.map((i) => i.href as string);
+    expect(hrefs.indexOf("/tasks")).toBe(hrefs.indexOf("/reminders") + 1);
     expect(readFileSync(path.join(process.cwd(), "app/components/shell/Footer.tsx"), "utf8")).not.toContain("/tasks");
   });
   it("shows a short Activity list per initiative, newest first, as text", async () => {

@@ -276,7 +276,9 @@ describe("the latest retire or restore on the detail page", () => {
     const html = await renderDetail(learning.id);
     expect(html).toMatch(/<strong>Restored<\/strong> by Dee,/);
     expect(html).toContain("Still in the repo, src/a.ts 2026-10-02");
-    expect(html).not.toContain("Looked stale");
+    // The retire note is only in the validation history now, never as the current state.
+    expect(html.split("Looked stale").length - 1).toBe(1);
+    expect(html.indexOf("Looked stale")).toBeGreaterThan(html.indexOf("Validation history"));
     expect(html).not.toContain("This memory is archived.");
   });
 

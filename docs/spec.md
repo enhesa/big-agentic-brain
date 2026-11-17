@@ -190,7 +190,7 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
 - `votes(learning_id, voter_id, kind TEXT /* helpful|not_helpful|flag|cited|kudos|confirm */, note, created_at, PK(learning_id, voter_id, kind))`
 - `memory_comments(id, learning_id REFERENCES learnings, author_id REFERENCES users, body, created_at, edited_at, deleted_at)` (migration v50): comments on memories, see "Comments" under Features.
 - `todos(id, owner_id, title, body, due_at, due_has_time INTEGER /* 1: due_at is a UTC instant YYYY-MM-DDTHH:MM:SSZ; 0: a UTC day YYYY-MM-DD */, status TEXT /* open|done|snoozed|abandoned */, related_key, created_at, updated_at)`
-- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`; `thread_participants(thread_id, user_id, added_at)` and `message_recipients(message_id, user_id, read_at)` (migration v58): who is in a thread and who has read each message, see "Group messages". `messages.to_id` holds the first recipient and `messages.read_at` mirrors that person's read.
+- `threads(id, subject, created_by, created_at)`; `messages(id, thread_id, from_id, to_id, body, read_at, created_at)`; `thread_participants(thread_id, user_id, added_at)` and `message_recipients(message_id, user_id, read_at)` (migration v59): who is in a thread and who has read each message, see "Group messages". `messages.to_id` holds the first recipient and `messages.read_at` mirrors that person's read.
 - `audit_log(id, actor_id, action, entity, entity_id, via TEXT /* ui|mcp */, at)`
 
 ## Features
@@ -211,7 +211,8 @@ The vote buttons on `/memory/[id]` are Helpful and Not helpful. They sit in one 
 `POST /memory/[id]/react` (`sameOrigin` first, then `getViewer`, so only a browser linked to a person acts; an
 unlinked viewer is pointed at `/me/devices`; then `checkUiRateLimit`). They call the same `vote` as `bab_react`, with
 audit `via: "ui"`: one vote per person that the other button switches, never on your own memory. There is no remove,
-because the agent path has none. Kudos, flag, confirm, retire and keep stay with agents. A web vote is a person, not
+because the agent path has none. Kudos and flag stay with agents; confirm, retire and keep are also on the
+maintainer review page (see "Trust labels and validation history"). A web vote is a person, not
 an agent read: it leaves "Last read by an agent" alone, carries no reuse cost, and does not count as a search that
 helped. It still counts in "Found it helpful", score and standing.
 
@@ -338,8 +339,8 @@ default expiry, the `expiring` status, the author and project expiry nudges and 
 - *Migration v40* adds the two columns, clears `expires_at` on live memories whose date the author did
   not choose (`expires_explicit = 0`) and turns every `expiring` status into `active`.
   `expires_explicit` stays in the table, unused.
-- *Keep.* `bab_react` `keep` on a live memory counts as a read and leaves a `keep` row in `votes` (and
-  an audit row), which is how a maintainer answers a flag. On an archived memory it restores (below).
+- *Keep.* `bab_react` `keep` on a live memory counts as a read and leaves a `keep` row in `votes` (with
+  its note, and an audit row), which is how a maintainer answers a flag. On an archived memory it restores (below).
   `lib/learnings.ts`'s `keepLearning`: open to any identified actor, because BAB is managed by a fleet
   of independent agents; it refuses deleted and superseded memories.
 
@@ -435,7 +436,8 @@ honour system applies: the texts tell agents what to do, the server only does th
   (<origin>/memory/<id>)`. Model-only; no voter is named.
 - *Verify old memories.* `verifyDueIds` marks a live search hit `verify: true` (absent otherwise) when
   it was created more than `VERIFY_AFTER_DAYS` (90) days ago and has no `confirm`, `keep` or `restore`
-  vote newer than 90 days. A read alone does not clear it: reading is not checking. A correction is a
+  vote newer than 90 days by someone other than the author. The author's own keep or restore does not
+  clear it, as the author cannot confirm their own memory. A read alone does not clear it: reading is not checking. A correction is a
   new memory, so its age starts again. It is computed in one grouped query in `search()` (both the
   ranked and the empty-query path), so `bab_search` and `GET /api/learnings` carry it. When any hit is
   marked, the answer also has `verifyHint` (`VERIFY_HINT`): the agent that uses such a memory checks it
@@ -471,6 +473,40 @@ different `kind` on a single id is allowed and audited (`kind_change`, details `
 ids) must keep one kind: mixed kinds without an explicit `kind`, or an explicit `kind` that differs
 from any replaced entry, is a 400 and archives nothing. Its source is `native` unless the caller
 passes the triple. Part of the old entry's standing carries over to a one-entry correction (see "Ranking" below); a consolidation carries nothing.
+
+## Trust labels and validation history
+
+A wrong lesson must not spread quietly. Every memory says how far colleagues checked it, and every
+check has a record (`lib/trust.ts`).
+
+- *History.* `trust_events` (migration v59) gets one row per `confirm`, `flag`, `keep`, `restore`,
+  `retire` and correction (`supersede`, on the old memory, with the new one as `related_id`), plus an
+  `archive` row (actor `system`) when two flags archive a memory. Rows are never updated: a repeat
+  confirm that refreshes the `votes` row (after 30 days, or after a newer flag) adds a new event; a
+  repeat inside 30 days changes nothing and adds none. Each row has the
+  actor, whether the actor is the author, the note (redacted like every note) and the time. The
+  migration copies what `votes` and `supersession_links` still hold, marked `backfilled`. The
+  memory page shows it as "Validation history", open when the memory is flagged or not live, and
+  `GET /api/learnings/:id` returns the newest `TRUST_HISTORY_LIMIT` (50) as `history`. A deleted
+  memory shows none, and the purge removes its rows. Archives by the hourly sweeps are not events yet.
+- *Label.* `trustFor` sums the votes of people other than the author: confirmations, the newest
+  confirm, keep or restore, and the flags. A flag older than that newest check counts as answered:
+  the label says "1 earlier flag answered by a later check", and only open flags mark a memory
+  flagged (chip, banner, hook tag, review page). A memory nobody else checked is `unchecked` from day one; after
+  90 days without such a check it is also `verify` (see "Verify old memories"). The label is a line
+  of counts and dates, never names or notes: "flagged by 1 (newest 2 days ago); not checked by
+  anyone but its author; due a check". Search results carry it as `trust` (with `unchecked` and
+  `verify` when set), and the memory list and page show a chip and a banner.
+- *Hook.* The unauthenticated hook adds a short tag (`trustTag`: "flagged 2x", "unchecked", "due a
+  check") to the titles it injects per prompt, and puts a flagged title after the others. The
+  project titles and the house rules say "flagged Nx" when flagged. Search ranking is unchanged.
+- *Review page.* `/memory/review` lists flagged memories, memories due a check and memories nobody
+  but the author checked, at most `REVIEW_QUEUE_LIMIT` (30) each. Each has a note field and Confirm,
+  Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
+  `checkUiRateLimit`). They call `confirm`, `keepLearning` and `retire` with `via: "ui"`, so the
+  agent rules hold: a note is required, and nobody confirms their own memory (the button is hidden).
+  Maintainers only (`BAB_MAINTAINERS`); anyone else gets a 404, like `/admin`. The page is optional:
+  flags, sweeps and labels work without it.
 
 ## Ranking
 
@@ -835,7 +871,7 @@ only gates access (`lib/gate.ts`) and leaves identity to the steps below. The br
   the connections that said they are the viewer in the last 7 days (no ids shown), and **Unlink
   this browser** (the browser link, `proxy_links`, is separate: it gives the web UI a person to show
   reminders to; unlinking also forgets devices an earlier release connected through that browser).
-  An unlinked viewer sees "Yes, that's me" and the typed claim (`claimTypedIdentity`). Forget is
+  An unlinked viewer sees the same link card as every other page ("Yes, that's me" and the typed claim, `claimTypedIdentity`). Forget is
   `revoked_at` on the row; the route keeps its old name (`/me/devices/revoke`) and needs the app's
   own `Origin`. Audited `device-revoke`.
 - **Admin**: `/admin/links` (maintainers) also lists every live device (person, label, address,
@@ -949,7 +985,7 @@ to a list starts one group thread.
 - **Privacy.** Only participants read a thread (maintainers can still open
   `/conversations/[id]`). The participant list, with names and emails, is visible to every
   participant. Event payloads stay ids only.
-- **Migration v58.** Adds `thread_participants` and `message_recipients`, backfilled with
+- **Migration v59.** Adds `thread_participants` and `message_recipients`, backfilled with
   `INSERT OR IGNORE` from `threads.created_by` and `messages.from_id`, `to_id` and `read_at`. The
   old columns stay: `messages.to_id` holds the first recipient and `messages.read_at` mirrors that
   person's read, so an older release on the new database still reads 1:1 threads. The change is
@@ -1073,13 +1109,21 @@ alias viewer has no identity until the browser is linked once (`proxy_links`). T
 itself, with no agent involved (the agent-mediated link code and the `bab_link_browser` tool were
 removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked viewer:
 
+- **Link card**: `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
+  card for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`), so the person links
+  the browser on the page they are on. It has the headline "Link this browser to your BAB account", what is missing
+  (the sign-in did not give BAB the full work address, with the `BAB_IDENTITY_HINT` example), what linking unlocks on
+  that page, "Yes, that's me" when there is a suggestion, the typed-address form, and "You do this once. This browser
+  stays linked after that." A refused claim shows its fixed `CLAIM_ERRORS` line on the same card.
 - **Suggest**: "Are you Alice Example (alice.example@example.com)?" with "Yes, that's me"
-  (`app/me/devices/SuggestLink.tsx`, on `/me/devices` only; posts `POST /notify/identity/claim`).
-- **Typed claim**: `/me/devices` takes the viewer's long-form address (`claimTypedIdentity`, see
-  "Identity"). `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
-  notice for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`): what is
-  missing (the sign-in did not pass a full email address BAB accepts, with the `BAB_IDENTITY_HINT` example), the one
-  step (confirm it once on Your devices) and what it unlocks; the browser stays linked after that.
+  (`app/me/devices/SuggestLink.tsx`, inside the link card; posts `POST /notify/identity/claim` and reloads the page).
+  It needs client JS; the typed form does not. The suggestion is the one `/me/devices` shows the same viewer, so the
+  card reveals nothing new.
+- **Typed claim**: the card's plain form posts the viewer's long-form address to `POST /me/devices/claim`
+  (`claimTypedIdentity`, see "Identity") with `next`, the page it sits on. The route redirects back there on success
+  and to `<next>?claim=<code>` on a refusal. `next` is used only after the Origin check and only when it is a plain
+  same-origin path (`safeReturnPath`: one leading slash, no `//` or `/\` at the start, no backslash, query, fragment, dot segments or other
+  characters); anything else goes to `/me/devices`, so the claim is never an open redirect.
   The server notes such a viewer in its log at most once per viewer per hour per server process, keyed in memory on a hash of
   the sign-in id and never logging the address or the hash (`lib/unlinked-viewer-log.ts`). `GET /notify/identity` reports where the viewer stands:
   `linked`, `suggest` (with the email and name), or `claim` (`{ state: "claim", url: "/me/devices" }`).

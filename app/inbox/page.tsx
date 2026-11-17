@@ -48,7 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ thread?: string | string[]; open?: string | string[] }>;
+  searchParams: Promise<{ thread?: string | string[]; open?: string | string[]; claim?: string | string[] }>;
 }) {
   const viewer = await getViewer();
   await auditRequest({ actor: viewer?.actor ?? null, method: "GET", path: "/inbox", via: "ui" });
@@ -64,9 +64,9 @@ export default async function InboxPage({
     );
   }
 
-  if (!viewer) return <SignedOut />;
+  const { thread: threadParam, open, claim } = await searchParams;
+  if (!viewer) return <SignedOut claim={claim} />;
 
-  const { thread: threadParam, open } = await searchParams;
   const selectedId = Array.isArray(threadParam) ? threadParam[0] : threadParam;
   const summary = inboxSummary(viewer.ownerId);
 
@@ -100,23 +100,23 @@ export default async function InboxPage({
   );
 }
 
-async function SignedOut() {
+async function SignedOut({ claim }: { claim?: string | string[] }) {
   // A signed-in proxy viewer with no identity yet (a short alias email, no link) is a real
-  // person who needs /me/devices, unlike a visitor with no session or an agent header.
+  // person who can link this browser right here, unlike a visitor with no session or an agent header.
   const pending = await pendingProxyLinkUser();
   return (
     <Shell>
       <h1 className={styles.h1}>Inbox</h1>
-      <div className={`card ${styles.notice}`}>
-        {pending ? (
-          <LinkBrowserNotice then="you can see your inbox here" />
-        ) : (
+      {pending ? (
+        <LinkBrowserNotice proxy={pending} then="you can see your inbox here" returnTo="/inbox" claim={claim} />
+      ) : (
+        <div className={`card ${styles.notice}`}>
           <p>
             Sign in with your {branding().orgName} account in a browser to see your inbox. This page is for a signed-in browser; an
             agent reads its messages with bab_inbox.
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </Shell>
   );
 }

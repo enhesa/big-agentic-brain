@@ -568,6 +568,57 @@
   color: #8a5c00;
 }
 
+/* The trust warning next to standing (lib/trust.ts): unchecked or due a check, or flagged. */
+.trustChip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-family: var(--font-head);
+  border: 1px solid rgba(63, 81, 117, 0.3);
+  color: var(--steel);
+}
+
+.trustChipFlagged {
+  border-color: rgba(200, 40, 40, 0.45);
+  background: rgba(200, 40, 40, 0.08);
+  color: #a12020;
+}
+
+.history {
+  margin: 18px 0 0;
+  font-size: 0.88rem;
+  color: var(--steel);
+}
+
+.history summary {
+  cursor: pointer;
+  font-family: var(--font-head);
+  font-size: 0.85rem;
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.history ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.history li + li {
+  margin-top: 4px;
+}
+
+.trustBanner {
+  background: rgba(200, 40, 40, 0.07);
+  color: #8a1c1c;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+}
+
 /* ------------------------------------------------------------------- badges */
 
 .badge {
@@ -1061,4 +1112,48 @@
     margin-left: 0;
     width: 100%;
   }
+}
+
+/* --------------------------------------------------------- review page */
+
+.reviewSection {
+  margin: 22px 0 0;
+}
+
+.reviewSection h2 {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  color: var(--navy);
+  margin: 0 0 4px;
+}
+
+.reviewList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.reviewItem {
+  border: 1px solid rgba(63, 81, 117, 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.reviewItem + .reviewItem {
+  margin-top: 10px;
+}
+
+.reviewTitle {
+  margin: 0 0 4px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-weight: 700;
+}
+
+.reviewForm {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
 }

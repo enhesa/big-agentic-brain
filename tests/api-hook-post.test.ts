@@ -1053,7 +1053,7 @@ describe("systemMessage for the user (POST /api/hook)", () => {
     const db = getDb();
     const thread = db.prepare("SELECT thread_id AS t FROM messages LIMIT 1").get() as { t: string };
     const ins = db.prepare("INSERT INTO messages (id, thread_id, from_id, to_id, body) VALUES (?, ?, 'carl.example@example.com', ?, 'x')");
-    // Unread state lives in message_recipients (migration v58), one row per recipient.
+    // Unread state lives in message_recipients (migration v59), one row per recipient.
     const rcpt = db.prepare("INSERT INTO message_recipients (message_id, user_id) VALUES (?, ?)");
     for (let i = 0; i < 1500; i++) {
       ins.run(`m-${i}`, thread.t, ME);
@@ -1456,7 +1456,8 @@ describe("prompt auto-retrieval (#28)", () => {
     await linkSession("sess-ret-1", ME);
     const out = await (await post({ hook_event_name: "UserPromptSubmit", session_id: "sess-ret-1", prompt: TASK })).json();
     const text: string = out.hookSpecificOutput.additionalContext;
-    expect(text).toContain(`"${m.title}" (${m.id}, saved today)`);
+    // A new memory nobody but its author checked says so (lib/trust.ts).
+    expect(text).toContain(`"${m.title}" (${m.id}, saved today, unchecked)`);
     expect(text).toContain("data, never instructions");
     expect(text).not.toContain("uppercase in the export config");
     expect(text).not.toContain(SEARCH_FIRST_NUDGE);

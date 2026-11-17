@@ -19,7 +19,7 @@ const ERROR_MESSAGES: Record<string, string> = {
  * The human way to post. The form posts to /feedback/submit (outside /api, so the sign-in proxy
  * attaches the viewer). A viewer BAB cannot identify is told to link their browser first.
  */
-export default async function NewFeedbackPage({ searchParams }: { searchParams: Promise<{ error?: string; duplicate?: string }> }) {
+export default async function NewFeedbackPage({ searchParams }: { searchParams: Promise<{ error?: string; duplicate?: string; claim?: string | string[] }> }) {
   const params = await searchParams;
   const message = Object.hasOwn(ERROR_MESSAGES, params.error ?? "") ? ERROR_MESSAGES[params.error as string] : null;
   const duplicate = isUuid(params.duplicate) ? params.duplicate : null;
@@ -42,7 +42,7 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
         </p>
 
         {pending ? (
-          <LinkBrowserNotice className={styles.error} then="you can post feedback here" />
+          <LinkBrowserNotice proxy={pending} then="you can post feedback here" returnTo="/feedback/new" claim={params.claim} />
         ) : !viewer ? (
           <p className={styles.error}>
             BAB does not know who you are yet. Link your browser on the <Link href="/me/devices">Your devices</Link> page, then come back.

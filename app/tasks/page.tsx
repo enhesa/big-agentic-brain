@@ -24,8 +24,8 @@ const DAY_MS = 86_400_000;
 const NEAR_DAYS = 7;
 
 /**
- * /tasks: what the viewer's own agent sessions publish (lib/tasks.ts). Hidden:
- * no nav or footer entry; the tasks skill gives the person the link. The signed-in viewer
+ * /tasks: what the viewer's own agent sessions publish (lib/tasks.ts). In the navbar after
+ * Reminders, no footer entry; the bab-tasks skill also gives the person the link. The signed-in viewer
  * only (getViewer), never anyone else's records. Every agent-written string is React text.
  * View only: no switch, settings or forms. Installing the bab-tasks plugin is the opt-in, and
  * deleting, exporting and report-app sharing are bab_tasks actions the person's agent runs.
