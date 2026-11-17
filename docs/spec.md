@@ -499,7 +499,11 @@ check has a record (`lib/trust.ts`).
   `verify` when set), and the memory list and page show a chip and a banner.
 - *Hook.* The unauthenticated hook adds a short tag (`trustTag`: "flagged 2x", "unchecked", "due a
   check") to the titles it injects per prompt, and puts a flagged title after the others. The
-  project titles and the house rules say "flagged Nx" when flagged. Search ranking is unchanged.
+  project titles and the house rules say "flagged Nx" when flagged. A flagged house rule goes after
+  the others in its group, and one with `HOUSE_RULE_FLAGS_HIDE` (2) or more open flags is not
+  injected until a maintainer keeps or retires it (the header counts it under "more there";
+  `bab_search houseRules true` still lists it). One flag never silences a rule. Search ranking: see
+  Ranking.
 - *Review page.* `/memory/review` lists flagged memories, memories due a check and memories nobody
   but the author checked, at most `REVIEW_QUEUE_LIMIT` (30) each. Each has a note field and Confirm,
   Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
@@ -515,6 +519,10 @@ multiplied by a bounded vote boost (`score` clamped to -5..10, 5% per point) and
 memory, about half of that at 90 days). The boosts multiply, so relevance keeps the order and votes and age only separate
 close matches. One vote per identity; the author's own votes are refused. Author trust, a citation signal, a time-decayed
 score and a nightly recompute were planned and never built. Score and staleness stay separate axes and are both shown.
+A memory with an open flag (a flag newer than the newest check by someone other than the author, the same rule as
+`trustFor`) is multiplied by `OPEN_FLAG_RANK_FACTOR` (0.6): it still matches, but ranks below an equal match, so an
+agent that reads only the top results meets it less. A later check answers the flag and lifts the penalty. Unchecked
+memories are not demoted: they are most of the corpus, and recency already favours new ones.
 
 `learnings.score` (`recomputeScore()`) is `helpful - not_helpful + 2*kudos + 2*confirm`; flags stay
 out of it. `confirm` means "I checked this against code or docs and it holds": a note saying where

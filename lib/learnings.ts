@@ -914,6 +914,17 @@ const VOTE_SCORE_MAX = 10;
 const RECENCY_FACTOR_MAX = 0.5;
 const RECENCY_HALF_LIFE_DAYS = 90.0;
 
+// Open flag: a flag newer than the newest check (confirm, keep, restore) by someone other than
+// the author, the same rule as trustFor (lib/trust.ts). Such a memory still matches, but ranks
+// lower: an agent mostly reads the top results, and a flag means someone found it wrong. Unchecked
+// memories are not demoted; they are most of the corpus. Both subqueries use the votes primary key.
+export const OPEN_FLAG_RANK_FACTOR = 0.6;
+const OPEN_FLAG_SQL = `EXISTS (
+  SELECT 1 FROM votes f WHERE f.learning_id = learnings.id AND f.kind = 'flag'
+    AND f.created_at > COALESCE((SELECT MAX(c.created_at) FROM votes c
+      WHERE c.learning_id = learnings.id AND c.kind IN ('confirm', 'keep', 'restore')
+        AND lower(c.voter_id) <> lower(learnings.author_id)), ''))`;
+
 // COALESCE and the MAX(..., 0) floor are belt and braces, not live bugs: score is NOT
 // NULL today and nothing writes a future created_at. Both matter because SQLite's
 // scalar MIN/MAX propagate NULL, and a row whose age went negative enough would divide
@@ -923,6 +934,7 @@ const RANK_EXPRESSION = `(
   (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}, ${BM25_ALIASES_WEIGHT}))
   * (1.0 + MIN(MAX(COALESCE(learnings.score, 0), ${VOTE_SCORE_MIN}), ${VOTE_SCORE_MAX}) * ${VOTE_FACTOR_PER_POINT})
   * (1.0 + ${RECENCY_FACTOR_MAX} / (1.0 + MAX(julianday('now') - julianday(learnings.created_at), 0) / ${RECENCY_HALF_LIFE_DAYS}))
+  * (CASE WHEN ${OPEN_FLAG_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
 )`;
 
 /**
@@ -2515,12 +2527,16 @@ export interface HouseRule extends LearningRow {
 
 const STANDING_ORDER: Record<StandingLevel, number> = { strong: 0, fair: 1, weak: 2 };
 
+/** Open flags at which a pinned rule leaves the injected block (houseRulesBlock); bab_search still lists it. */
+export const HOUSE_RULE_FLAGS_HIDE = 2;
+
 /**
  * The house rules digest: pinned standards and practices that are active and not past their
  * valid-until date, company-wide ones (no project) first, then the ones scoped to `projectKey` exactly (the
  * same match as bab_search project). Each group is ranked by standing (strong, fair, then weak:
  * the pin is the curation, so a new rule with no reactions yet still shows) and then newest
- * first, and capped at HOUSE_RULES_GENERAL_MAX and HOUSE_RULES_PROJECT_MAX.
+ * first, and capped at HOUSE_RULES_GENERAL_MAX and HOUSE_RULES_PROJECT_MAX. A rule with open flags
+ * goes after the others in its group, so it is the first one cut.
  */
 export function houseRulesFor(projectKey: string | null, now: number = Date.now()): HouseRule[] {
   const kinds = HOUSE_RULE_KINDS.map(() => "?").join(",");
@@ -2537,8 +2553,8 @@ export function houseRulesFor(projectKey: string | null, now: number = Date.now(
   const standings = standingsFor(rows, now);
   const trust = trustFor(rows, now);
   const ranked = rows
-    .map((r, i) => ({ r, i, s: standings.get(r.id)! }))
-    .sort((a, b) => STANDING_ORDER[a.s.standing] - STANDING_ORDER[b.s.standing] || a.i - b.i)
+    .map((r, i) => ({ r, i, s: standings.get(r.id)!, flags: trust.get(r.id)!.flags }))
+    .sort((a, b) => Number(a.flags > 0) - Number(b.flags > 0) || STANDING_ORDER[a.s.standing] - STANDING_ORDER[b.s.standing] || a.i - b.i)
     .map(({ r, s }) => ({
       ...r,
       standing: s.standing,
@@ -2566,8 +2582,11 @@ export function houseRulesBlock(
   projectKey: string | null,
 ): { text: string; shown: HouseRule[] } | null {
   if (rules.length === 0) return null;
-  let general = rules.filter((r) => r.project == null);
-  let scoped = rules.filter((r) => r.project != null);
+  // A rule with HOUSE_RULE_FLAGS_HIDE or more open flags is not injected until a maintainer keeps
+  // or retires it; the header counts it under "more there". One flag never silences a rule.
+  let general = rules.filter((r) => r.project == null && r.flags < HOUSE_RULE_FLAGS_HIDE);
+  let scoped = rules.filter((r) => r.project != null && r.flags < HOUSE_RULE_FLAGS_HIDE);
+  if (general.length + scoped.length === 0) return null;
   const line = (r: HouseRule) => {
     const t = r.title.replace(/\s+/g, " ").trim();
     // A flagged rule says so: a maintainer has not decided yet, so it is followed with care.
