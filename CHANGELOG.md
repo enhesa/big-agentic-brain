@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.30.0](https://github.com/enhesa/big-agentic-brain/compare/v2.29.0...v2.30.0) (2026-11-17)
+
+
+### Features
+
+* group messages in bab_send and the inbox ([#149](https://github.com/enhesa/big-agentic-brain/issues/149)) ([37f2764](https://github.com/enhesa/big-agentic-brain/commit/37f27641e816842a69f9616c853443cc579af1e7))
+
 ## [2.29.0](https://github.com/enhesa/big-agentic-brain/compare/v2.28.0...v2.29.0) (2026-11-17)
 
 
