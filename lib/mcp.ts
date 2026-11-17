@@ -53,6 +53,8 @@ import {
   GENERAL_PROJECT_KEY,
   LEARNINGS_LIST_LIMIT_MAX,
   LEARNINGS_SEARCH_LIMIT_MAX,
+  nearMatches,
+  type SimilarLearning,
 } from "./learnings";
 import { inboxCounts, inboxFor, send, validateRequest, requireThreadForActor, markRead, participantsOf, toArgument, hasTo, MAX_RECIPIENTS, NEW_THREAD_NEEDS_TO } from "./messages";
 import {
@@ -432,8 +434,7 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     // can still reach the agent (POST /api/learnings instead returns it as a
     // structured `candidates` field alongside the 409).
     if (err instanceof ConflictError) {
-      const named = err.candidates.map((c) => `${c.id} (${c.title})`).join(", ");
-      throw new ConflictError(`Looks like a duplicate of: ${named}`, err.candidates);
+      throw new ConflictError(duplicateMessage(err.candidates as SimilarLearning[]), err.candidates);
     }
     throw err;
   }
@@ -443,10 +444,30 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   resetPromptsSinceLearn(actor.id);
   recordDiscoveryCost(created.id, cost);
 
+  // A correction already names what it replaces; a new memory lists close matches so the
+  // author can still turn it into an update of one of them.
+  const similar = supersedesIds.length > 0 ? [] : nearMatches(created);
   return JSON.stringify({
     learning: { ...getLearningById(created.id)!, appliesTo: readAppliesTo(created.applies_to) },
     url: memoryUrl(ctx, created.id),
+    ...(similar.length > 0
+      ? {
+          similar: similar.map((m) => ({ id: m.id, title: m.title, url: memoryUrl(ctx, m.id) })),
+          similarHint: "Close matches exist. If yours updates one of them, retire yours and write it again with supersedes: <id>.",
+        }
+      : {}),
   });
+}
+
+/**
+ * The text an agent gets when bab_learn refuses a duplicate: the candidates, and the two ways on.
+ * A candidate the team archived with flags is named as such, so the agent reads why first.
+ */
+export function duplicateMessage(candidates: SimilarLearning[]): string {
+  const named = candidates
+    .map((c) => `${c.id} (${c.title})${c.status === "archived" ? " [archived after flags: read why before writing it again]" : ""}`)
+    .join(", ");
+  return `Looks like a duplicate of: ${named}. To update one, pass supersedes: <id> with the evidence. confirmNotDuplicate: true only if yours is genuinely different.`;
 }
 
 // ---------------------------------------------------------------------------

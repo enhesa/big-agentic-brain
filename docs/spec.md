@@ -451,7 +451,7 @@ honour system applies: the texts tell agents what to do, the server only does th
   page").
 
 Dedup at write time is built: `findSimilar` (`lib/learnings.ts`) OR-queries FTS5 on the draft's
-title+body tokens, scores the top 20 active candidates with `lib/similarity.ts`
+title+body tokens, scores the top 20 candidates with `lib/similarity.ts`
 (title/body/tag Jaccard), and `create()` throws a 409 `ConflictError` with the candidates when
 one scores >= `DUPLICATE_THRESHOLD` (0.55), unless `supersedes` or `confirmNotDuplicate` is set.
 When the draft has no usable title/body tokens (too short, all stopwords) but does carry tags,
@@ -460,7 +460,14 @@ When the draft has no usable title/body tokens (too short, all stopwords) but do
 non-deleted) rather than trusting the caller, so a bogus id can't bypass the guard. `GET
 /api/learnings/similar` exposes the same check pre-write; `GET /api/learnings/duplicates` finds
 duplicate pairs among the newest 300 active learnings, computed fresh on every request (no
-caching, no background job).
+caching, no background job). Candidates are active memories plus memories two flags archived in
+the last `FLAG_ARCHIVED_DEDUP_DAYS` (90) that nothing restored, kept, superseded or retired since, so
+a lesson the team just flagged off is not written again unnoticed; such a candidate carries status
+`archived` (also in `GET /api/learnings/similar`), and `bab_learn` names it "archived after flags".
+The tag-only fallback compares active rows only. The MCP refusal tells the agent to pass `supersedes: <id>` to update one, and
+`confirmNotDuplicate` only for a genuinely different fact. A successful create of a new memory
+(not a correction) returns its close matches (`nearMatches`, up to 3 active ones below the
+duplicate threshold, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, so the author can still turn it into an update.
 
 A learning that has been superseded carries a `supersededBy: { id, title }` in `GET
 /api/learnings/[id]` and on the web detail page; search results carry just the id. Two-way: the
@@ -499,7 +506,10 @@ check has a record (`lib/trust.ts`).
   `verify` when set), and the memory list and page show a chip and a banner.
 - *Hook.* The unauthenticated hook adds a short tag (`trustTag`: "flagged 2x", "unchecked", "due a
   check") to the titles it injects per prompt, and puts a flagged title after the others. The
-  project titles and the house rules say "flagged Nx" when flagged. Search ranking is unchanged.
+  project titles and the house rules say "flagged Nx" when flagged. A flagged house rule goes after
+  the others in its group, so it is the first one cut over the character budget. It is not hidden:
+  two flags already archive a practice, and a standard stays, tagged, until a maintainer decides. Search ranking: see
+  Ranking.
 - *Review page.* `/memory/review` lists flagged memories, memories due a check and memories nobody
   but the author checked, at most `REVIEW_QUEUE_LIMIT` (30) each. Each has a note field and Confirm,
   Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
@@ -510,11 +520,15 @@ check has a record (`lib/trust.ts`).
 
 ## Ranking
 
-Search order is built in `search()` (`lib/learnings.ts`, `RANK_EXPRESSION`): bm25 relevance (title 10, tags 5, body 1)
+Search order is built in `search()` (`lib/learnings.ts`, `RANK_EXPRESSION`): bm25 relevance (title 5, tags 3, aliases 3, body 1)
 multiplied by a bounded vote boost (`score` clamped to -5..10, 5% per point) and a recency boost (up to +50% for a new
 memory, about half of that at 90 days). The boosts multiply, so relevance keeps the order and votes and age only separate
 close matches. One vote per identity; the author's own votes are refused. Author trust, a citation signal, a time-decayed
 score and a nightly recompute were planned and never built. Score and staleness stay separate axes and are both shown.
+A memory with an open flag (a flag newer than the newest check by someone other than the author, the same rule as
+`trustFor`) is multiplied by `OPEN_FLAG_RANK_FACTOR` (0.6): it still matches, but ranks below an equal match, so an
+agent that reads only the top results meets it less. A later check answers the flag and lifts the penalty. Unchecked
+memories are not demoted: they are most of the corpus, and recency already favours new ones.
 
 `learnings.score` (`recomputeScore()`) is `helpful - not_helpful + 2*kudos + 2*confirm`; flags stay
 out of it. `confirm` means "I checked this against code or docs and it holds": a note saying where

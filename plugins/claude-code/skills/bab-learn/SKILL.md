@@ -54,4 +54,6 @@ If `bab_learn` answers with similar existing learnings, decide yourself: react `
 to one that already says it, supersede one that is wrong or stale, whoever wrote it
 (except someone else's `standard` or `decision`, unless the user is a BAB maintainer: flag
 those with the evidence; your own decision needs the user's yes), or post with
-`confirmNotDuplicate` when the new fact is genuinely different. Say which you did.
+`confirmNotDuplicate` when the new fact is genuinely different. Say which you did. A match
+marked "archived after flags" was taken down as wrong: read why before writing it again. If a
+write succeeds with `similar` and yours updates one of them, retire yours and supersede that one.

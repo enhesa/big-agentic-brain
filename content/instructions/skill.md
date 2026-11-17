@@ -170,7 +170,9 @@ before every write.
   or wrong, fix them in place with `bab_react` `label` and `appliesTo` (`[]` for anywhere): anyone
   may, on any active memory, and it keeps the id and the history, unlike a correction.
 - **Duplicates.** On a duplicate answer, react helpful to the existing one or supersede it;
-  `confirmNotDuplicate` only when the new fact is genuinely different. Someone else's `standard`
+  `confirmNotDuplicate` only when the new fact is genuinely different. A match marked
+  "archived after flags" was taken down as wrong: read why first. A write that succeeds may list
+  `similar` ones. If yours updates one of them, retire yours and supersede that one. Someone else's `standard`
   or `decision` is never superseded, unless you are a BAB maintainer: react helpful, or flag it with your evidence.
 - **Ranking signal.** When a colleague's memory you found answered the question or shaped what
   you did, call `bab_react` helpful on it without asking, in that same turn; that is how useful
@@ -203,7 +205,8 @@ before every write.
 - **Trust labels.** Every search result has `trust`, a line of counts and dates such as "flagged by 1
   (newest 2 days ago); not checked by anyone but its author". `unchecked: true` means nobody but the
   author ever confirmed or kept it: weigh it as one person's word. A flagged memory is contested:
-  read why before you rely on it. The author's own keep never counts as a check. Every confirm,
+  read why before you rely on it. It ranks lower in search and in the house rules until someone
+  else checks it. The author's own keep never counts as a check. Every confirm,
   flag, keep, restore, retire and correction is kept with who, when and the note:
   `GET /api/learnings/:id` returns them as `history`, and the memory page shows them. Maintainers
   can also confirm, keep or retire with a note on the web review page.

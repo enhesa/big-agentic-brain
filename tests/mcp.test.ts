@@ -997,6 +997,76 @@ it("bab_learn reports a near-duplicate as a conflict naming the candidates", asy
   expect(out.result.content[0].text).toMatch(/duplicate of/i);
 });
 
+it("bab_learn's duplicate refusal names supersedes as the way to update", async () => {
+  const args = { title: "Grafana folder naming convention", body: "team-service-purpose, always lowercase." };
+  await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  expect(out.result.isError).toBe(true);
+  expect(out.result.content[0].text).toMatch(/supersedes: <id>/);
+  expect(out.result.content[0].text).toMatch(/confirmNotDuplicate: true only if/);
+});
+
+it("bab_learn refuses a lesson the team just archived with flags, and says so", async () => {
+  const args = { title: "Retry the deploy webhook with the old signature", body: "Sign the webhook body with sha1 and retry three times." };
+  const first = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const id = JSON.parse(first.result.content[0].text).learning.id;
+  const { flag, getById } = await import("../lib/learnings");
+  const { upsertUser } = await import("../lib/users");
+  for (const e of ["flagger.one@example.com", "flagger.two@example.com"]) upsertUser({ id: e, email: e, name: e, roles: [] });
+  flag(id, "flagger.one@example.com", "ui", "The signature changed to sha256.");
+  flag(id, "flagger.two@example.com", "ui", "Wrong since the last upgrade.");
+  expect(getById(id)?.status).toBe("archived");
+
+  const again = await rpc("tools/call", { name: "bab_learn", arguments: args }, OTHER_ACTOR);
+  expect(again.result.isError).toBe(true);
+  expect(again.result.content[0].text).toContain(id);
+  expect(again.result.content[0].text).toMatch(/archived after flags/);
+});
+
+it("bab_learn does not count a flag-archived lesson once it was kept and later retired", async () => {
+  const args = { title: "Rotate the staging signing key every Monday", body: "The staging signing key expires weekly, rotate it before the Monday deploy." };
+  const first = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const id = JSON.parse(first.result.content[0].text).learning.id;
+  const { flag, keepLearning, retire, getById } = await import("../lib/learnings");
+  const { upsertUser } = await import("../lib/users");
+  for (const e of ["flagger.one@example.com", "flagger.two@example.com", "keeper@example.com"]) upsertUser({ id: e, email: e, name: e, roles: [] });
+  flag(id, "flagger.one@example.com", "ui", "Rotation is monthly now.");
+  flag(id, "flagger.two@example.com", "ui", "Checked, monthly.");
+  keepLearning(id, "keeper@example.com", "ui", "Weekly again since the policy change.");
+  expect(getById(id)?.status).toBe("active");
+  retire(id, ACTOR["X-Bab-Actor-Email"], "ui", "No longer needed.");
+  expect(getById(id)?.status).toBe("archived");
+
+  const again = await rpc("tools/call", { name: "bab_learn", arguments: args }, OTHER_ACTOR);
+  expect(again.result.isError).toBeFalsy();
+});
+
+it("bab_learn lists close matches of a new memory, not of a correction", async () => {
+  const base = await rpc(
+    "tools/call",
+    { name: "bab_learn", arguments: { title: "Kafka consumer lag alert threshold", body: "Alert when consumer lag stays above 10000 messages for 15 minutes on the orders topic.", tags: ["kafka", "alerting"] } },
+    ACTOR,
+  );
+  const baseId = JSON.parse(base.result.content[0].text).learning.id;
+
+  const near = await rpc(
+    "tools/call",
+    { name: "bab_learn", arguments: { title: "Consumer lag on payments", body: "Payments traffic is small; alert on lag above 1000 for 10 minutes rather than the orders threshold.", tags: ["kafka", "alerting"] } },
+    ACTOR,
+  );
+  expect(near.result.isError).toBeFalsy();
+  const reply = JSON.parse(near.result.content[0].text);
+  expect(reply.similar.map((m: { id: string }) => m.id)).toContain(baseId);
+  expect(reply.similarHint).toMatch(/supersedes/);
+
+  const fix = await rpc(
+    "tools/call",
+    { name: "bab_learn", arguments: { title: "Kafka consumer lag alert threshold, corrected", body: "Alert when consumer lag stays above 20000 messages for 15 minutes on the orders topic.", tags: ["kafka", "alerting"], supersedes: baseId } },
+    ACTOR,
+  );
+  expect(JSON.parse(fix.result.content[0].text).similar).toBeUndefined();
+});
+
 it("bab_send refuses an empty body", async () => {
   const out = await rpc("tools/call", { name: "bab_send", arguments: { to: "carol.c@example.com", body: "" } }, ACTOR);
   expect(out.result.isError).toBe(true);

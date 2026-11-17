@@ -914,6 +914,17 @@ const VOTE_SCORE_MAX = 10;
 const RECENCY_FACTOR_MAX = 0.5;
 const RECENCY_HALF_LIFE_DAYS = 90.0;
 
+// Open flag: a flag newer than the newest check (confirm, keep, restore) by someone other than
+// the author, the same rule as trustFor (lib/trust.ts). Such a memory still matches, but ranks
+// lower: an agent mostly reads the top results, and a flag means someone found it wrong. Unchecked
+// memories are not demoted; they are most of the corpus. Both subqueries use the votes primary key.
+export const OPEN_FLAG_RANK_FACTOR = 0.6;
+const OPEN_FLAG_SQL = `EXISTS (
+  SELECT 1 FROM votes f WHERE f.learning_id = learnings.id AND f.kind = 'flag'
+    AND f.created_at > COALESCE((SELECT MAX(c.created_at) FROM votes c
+      WHERE c.learning_id = learnings.id AND c.kind IN ('confirm', 'keep', 'restore')
+        AND lower(c.voter_id) <> lower(learnings.author_id)), ''))`;
+
 // COALESCE and the MAX(..., 0) floor are belt and braces, not live bugs: score is NOT
 // NULL today and nothing writes a future created_at. Both matter because SQLite's
 // scalar MIN/MAX propagate NULL, and a row whose age went negative enough would divide
@@ -923,6 +934,7 @@ const RANK_EXPRESSION = `(
   (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}, ${BM25_ALIASES_WEIGHT}))
   * (1.0 + MIN(MAX(COALESCE(learnings.score, 0), ${VOTE_SCORE_MIN}), ${VOTE_SCORE_MAX}) * ${VOTE_FACTOR_PER_POINT})
   * (1.0 + ${RECENCY_FACTOR_MAX} / (1.0 + MAX(julianday('now') - julianday(learnings.created_at), 0) / ${RECENCY_HALF_LIFE_DAYS}))
+  * (CASE WHEN ${OPEN_FLAG_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
 )`;
 
 /**
@@ -1447,6 +1459,41 @@ export interface SimilarLearning {
 }
 
 const FTS_TOKEN_CAP = 20;
+
+/** How long a memory archived by flags still counts as a duplicate candidate. */
+export const FLAG_ARCHIVED_DEDUP_DAYS = 90;
+/**
+ * Active memories, plus memories two flags archived in the last FLAG_ARCHIVED_DEDUP_DAYS and
+ * that nothing restored, kept, superseded or retired since: without them a lesson the team just
+ * flagged off could be written again unnoticed. The candidate's status says which one it is.
+ * Only the FTS path uses it; the tag-only fallback stays on active rows (its index has no
+ * cheap way to add these).
+ */
+const DEDUP_CANDIDATE_STATUS = `(learnings.status = 'active' OR (learnings.status = 'archived' AND EXISTS (
+  SELECT 1 FROM trust_events te WHERE te.learning_id = learnings.id AND te.kind = 'archive'
+    AND te.at >= datetime('now', '-${FLAG_ARCHIVED_DEDUP_DAYS} days')
+    AND NOT EXISTS (SELECT 1 FROM trust_events later WHERE later.learning_id = te.learning_id
+      AND later.id > te.id AND later.kind IN ('restore', 'keep', 'supersede', 'retire')))))`;
+
+/**
+ * Close but not duplicate matches of a memory that was just written, for the reply to its
+ * author: they may have meant to update one of them (supersedes) rather than add another.
+ * The write already happened, so a failure here gives no matches rather than an error.
+ */
+export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "tags" | "repo" | "project">, limit = 3): SimilarLearning[] {
+  // Over-fetched: the row itself, archived and duplicate candidates are dropped below.
+  try {
+    return findSimilar(
+      { title: row.title, body: row.body, tags: JSON.parse(row.tags) as string[], repo: row.repo, project: row.project },
+      { limit: limit + 6 },
+    )
+      .filter((m) => m.id !== row.id && m.status === "active" && m.verdict === "similar")
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 const FTS_CANDIDATE_LIMIT = 20;
 
 /**
@@ -1522,7 +1569,7 @@ export function findSimilar(
     `SELECT learnings.*
        FROM learnings_fts
        CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
-       WHERE learnings_fts MATCH ? AND learnings.status = 'active'${projectClause}
+       WHERE learnings_fts MATCH ? AND ${DEDUP_CANDIDATE_STATUS}${projectClause}
        ORDER BY bm25(learnings_fts), learnings.rowid
        LIMIT ?`;
   let rows: LearningRow[] = [];
@@ -2520,7 +2567,9 @@ const STANDING_ORDER: Record<StandingLevel, number> = { strong: 0, fair: 1, weak
  * valid-until date, company-wide ones (no project) first, then the ones scoped to `projectKey` exactly (the
  * same match as bab_search project). Each group is ranked by standing (strong, fair, then weak:
  * the pin is the curation, so a new rule with no reactions yet still shows) and then newest
- * first, and capped at HOUSE_RULES_GENERAL_MAX and HOUSE_RULES_PROJECT_MAX.
+ * first, and capped at HOUSE_RULES_GENERAL_MAX and HOUSE_RULES_PROJECT_MAX. A rule with open flags
+ * goes after the others in its group, so it is the first one cut. It is never hidden: two flags
+ * archive a practice (flag()), and a standard waits for a maintainer, tagged "flagged Nx".
  */
 export function houseRulesFor(projectKey: string | null, now: number = Date.now()): HouseRule[] {
   const kinds = HOUSE_RULE_KINDS.map(() => "?").join(",");
@@ -2537,8 +2586,8 @@ export function houseRulesFor(projectKey: string | null, now: number = Date.now(
   const standings = standingsFor(rows, now);
   const trust = trustFor(rows, now);
   const ranked = rows
-    .map((r, i) => ({ r, i, s: standings.get(r.id)! }))
-    .sort((a, b) => STANDING_ORDER[a.s.standing] - STANDING_ORDER[b.s.standing] || a.i - b.i)
+    .map((r, i) => ({ r, i, s: standings.get(r.id)!, flags: trust.get(r.id)!.flags }))
+    .sort((a, b) => Number(a.flags > 0) - Number(b.flags > 0) || STANDING_ORDER[a.s.standing] - STANDING_ORDER[b.s.standing] || a.i - b.i)
     .map(({ r, s }) => ({
       ...r,
       standing: s.standing,
