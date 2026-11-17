@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.29.0](https://github.com/enhesa/big-agentic-brain/compare/v2.28.0...v2.29.0) (2026-11-17)
+
+
+### Features
+
+* close the write-time dedupe gaps ([#160](https://github.com/enhesa/big-agentic-brain/issues/160)) ([b8e07db](https://github.com/enhesa/big-agentic-brain/commit/b8e07db9f1d5bb8e25f334b836053449ce6cc754))
+* rank memories with open flags lower ([#162](https://github.com/enhesa/big-agentic-brain/issues/162)) ([2f235a4](https://github.com/enhesa/big-agentic-brain/commit/2f235a4a4af67f17a4c4a048409fa291159b7e92))
+
 ## [2.28.0](https://github.com/enhesa/big-agentic-brain/compare/v2.27.0...v2.28.0) (2026-11-17)
 
 
