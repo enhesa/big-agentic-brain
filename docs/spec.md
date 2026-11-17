@@ -870,7 +870,7 @@ only gates access (`lib/gate.ts`) and leaves identity to the steps below. The br
   the connections that said they are the viewer in the last 7 days (no ids shown), and **Unlink
   this browser** (the browser link, `proxy_links`, is separate: it gives the web UI a person to show
   reminders to; unlinking also forgets devices an earlier release connected through that browser).
-  An unlinked viewer sees "Yes, that's me" and the typed claim (`claimTypedIdentity`). Forget is
+  An unlinked viewer sees the same link card as every other page ("Yes, that's me" and the typed claim, `claimTypedIdentity`). Forget is
   `revoked_at` on the row; the route keeps its old name (`/me/devices/revoke`) and needs the app's
   own `Origin`. Audited `device-revoke`.
 - **Admin**: `/admin/links` (maintainers) also lists every live device (person, label, address,
@@ -1055,13 +1055,21 @@ alias viewer has no identity until the browser is linked once (`proxy_links`). T
 itself, with no agent involved (the agent-mediated link code and the `bab_link_browser` tool were
 removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked viewer:
 
+- **Link card**: `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
+  card for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`), so the person links
+  the browser on the page they are on. It has the headline "Link this browser to your BAB account", what is missing
+  (the sign-in did not give BAB the full work address, with the `BAB_IDENTITY_HINT` example), what linking unlocks on
+  that page, "Yes, that's me" when there is a suggestion, the typed-address form, and "You do this once. This browser
+  stays linked after that." A refused claim shows its fixed `CLAIM_ERRORS` line on the same card.
 - **Suggest**: "Are you Alice Example (alice.example@example.com)?" with "Yes, that's me"
-  (`app/me/devices/SuggestLink.tsx`, on `/me/devices` only; posts `POST /notify/identity/claim`).
-- **Typed claim**: `/me/devices` takes the viewer's long-form address (`claimTypedIdentity`, see
-  "Identity"). `/inbox`, `/reminders`, the comment form on `/memory/[id]`, `/feedback/new` and `/me/devices` show one
-  notice for such a viewer (`app/components/LinkBrowserNotice.tsx`, text in `lib/link-notice.ts`): what is
-  missing (the sign-in did not pass a full email address BAB accepts, with the `BAB_IDENTITY_HINT` example), the one
-  step (confirm it once on Your devices) and what it unlocks; the browser stays linked after that.
+  (`app/me/devices/SuggestLink.tsx`, inside the link card; posts `POST /notify/identity/claim` and reloads the page).
+  It needs client JS; the typed form does not. The suggestion is the one `/me/devices` shows the same viewer, so the
+  card reveals nothing new.
+- **Typed claim**: the card's plain form posts the viewer's long-form address to `POST /me/devices/claim`
+  (`claimTypedIdentity`, see "Identity") with `next`, the page it sits on. The route redirects back there on success
+  and to `<next>?claim=<code>` on a refusal. `next` is used only after the Origin check and only when it is a plain
+  same-origin path (`safeReturnPath`: one leading slash, no `//` or `/\` at the start, no backslash, query, fragment, dot segments or other
+  characters); anything else goes to `/me/devices`, so the claim is never an open redirect.
   The server notes such a viewer in its log at most once per viewer per hour per server process, keyed in memory on a hash of
   the sign-in id and never logging the address or the hash (`lib/unlinked-viewer-log.ts`). `GET /notify/identity` reports where the viewer stands:
   `linked`, `suggest` (with the email and name), or `claim` (`{ state: "claim", url: "/me/devices" }`).

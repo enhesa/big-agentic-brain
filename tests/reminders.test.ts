@@ -35,10 +35,10 @@ async function seedUser(id: string) {
   upsertUser({ id, email: id, name: null, roles: [] });
 }
 
-async function renderReminders() {
+async function renderReminders(params: { claim?: string | string[] } = {}) {
   const { renderToReadableStream } = await import("react-dom/server.edge");
   const { default: RemindersPage } = await import("../app/reminders/page");
-  return new Response(await renderToReadableStream(RemindersPage() as never)).text();
+  return new Response(await renderToReadableStream(RemindersPage({ searchParams: Promise.resolve(params) }) as never)).text();
 }
 
 // ------------------------------------------------------------------ ownerIdFor
@@ -229,7 +229,7 @@ describe("RemindersPage (render)", () => {
 
   // ---------------------------------------------------------------- one-time browser link
 
-  it("points at /me/devices plus the privacy line for a trusted, unlinked proxy viewer (short alias)", async () => {
+  it("shows the link card plus the privacy line for a trusted, unlinked proxy viewer (short alias)", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
       "x-auth-request-user": "proxy-oid-pending",
@@ -238,16 +238,17 @@ describe("RemindersPage (render)", () => {
     });
 
     const html = await renderReminders();
-    // The shared notice: what is missing, the one step, and what it unlocks.
+    // The shared card: a headline, what is missing, what it unlocks, and the fix right here.
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
-    expect(html).toContain('<a href="/me/devices">Your devices</a>');
+    expect(html).toContain("Link this browser to your BAB account");
+    expect(html).toContain("Your sign-in did not give BAB your full work address");
     expect(html).toContain("you can see your reminders here");
+    expect(html).toContain('<a href="/me/devices">Your devices</a>');
     expect(html).not.toContain("link my BAB browser");
     expect(html).toContain("Reminders are private");
   });
 
-  it("an unlinked viewer sees just the /me/devices line and the privacy line: no form, no button, no link to a devices list", async () => {
+  it("an unlinked viewer can link right here: one typed-address form that comes back to /reminders, no device list", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
       "x-auth-request-user": "proxy-oid-pending",
@@ -255,14 +256,15 @@ describe("RemindersPage (render)", () => {
       "x-auth-request-preferred-username": "Jean Dupont",
     });
     const html = await renderReminders();
-    expect(html).not.toContain("<form");
-    expect(html).not.toContain("<button");
-    // The one link is the notice's "Your devices"; no device list or Forget button here.
+    expect(html.match(/<form/g)).toHaveLength(1);
+    expect(html).toContain('action="/me/devices/claim"');
+    expect(html).toContain('name="next" value="/reminders"');
+    expect(html).toContain("Link this browser</button>");
     expect(html).not.toContain("Forget");
-    expect(html.match(/href="\/me\/devices"/g)).toHaveLength(1);
+    expect(html).not.toContain("Unlink");
   });
 
-  it("does NOT offer 'Yes, that is me' here even when the alias matches exactly one person (that lives on /me/devices)", async () => {
+  it("offers 'Yes, that's me' here too when the alias matches exactly one person", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     await seedUser("alice.example@example.com");
     mockRequest({
@@ -272,12 +274,9 @@ describe("RemindersPage (render)", () => {
     });
 
     const html = await renderReminders();
-    expect(html).not.toContain("alice.example@example.com");
-    expect(html).not.toContain("that&#x27;s me");
-    expect(html).not.toContain("<button");
-    expect(html).toContain("Confirm it once on");
-    expect(html).toContain('href="/me/devices"');
-    expect(html).not.toContain("link my BAB browser");
+    expect(html).toContain("alice.example@example.com");
+    expect(html).toContain("that&#x27;s me");
+    expect(html).toContain("Not you? Type your work email");
   });
 
   it("shows no suggestion when the alias matches nobody", async () => {
@@ -290,12 +289,25 @@ describe("RemindersPage (render)", () => {
 
     const html = await renderReminders();
     expect(html).not.toContain("that&#x27;s me");
-    expect(html).toContain("Confirm it once on");
-    expect(html).toContain("/me/devices");
+    expect(html).toContain("Your work email");
     expect(html).not.toContain("link my BAB browser");
   });
 
-  it("never shows another person's reminders alongside the /me/devices line", async () => {
+  it("shows a refused link as one fixed line and ignores an unknown code", async () => {
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    mockRequest({
+      "x-auth-request-user": "proxy-oid-pending",
+      "x-auth-request-email": "jdupont@example.com",
+      "x-auth-request-preferred-username": "Jean Dupont",
+    });
+    expect(await renderReminders({ claim: "mismatch" })).toContain("does not fit the name your sign-in shows");
+    expect(await renderReminders({ claim: "<script>x</script>" })).not.toContain('role="alert"');
+    expect(await renderReminders({ claim: "__proto__" })).not.toContain('role="alert"');
+    // A repeated ?claim= uses the first value only.
+    expect(await renderReminders({ claim: ["taken", "mismatch"] })).toContain("already linked");
+  });
+
+  it("never shows another person's reminders alongside the link card", async () => {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
     mockRequest({
       "x-auth-request-user": "proxy-oid-pending",
@@ -307,8 +319,7 @@ describe("RemindersPage (render)", () => {
     create({ ownerId: "someone.else@example.com", title: "Not this viewer's reminder" });
 
     const html = await renderReminders();
-    expect(html).toContain("Confirm it once on");
-    expect(html).toContain("/me/devices");
+    expect(html).toContain('data-testid="link-browser-notice"');
     expect(html).not.toContain("link my BAB browser");
     expect(html).not.toContain("Not this viewer's reminder");
   });

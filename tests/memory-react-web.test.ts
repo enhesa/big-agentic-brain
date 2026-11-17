@@ -497,6 +497,9 @@ describe("the comments panel on /memory/[id]", () => {
     expect(html).toContain('href="/me/devices"');
     expect(html).toContain('data-testid="link-browser-notice"');
     expect(html).toContain("you can comment and vote here");
+    expect(html).toContain('action="/me/devices/claim"');
+    expect(html).toContain('<h3 id="link-browser-title"');
+    expect(html).toContain(`name="next" value="/memory/${encodeURIComponent(l.id)}"`);
     expect(html).not.toContain(`action="/memory/${l.id}/react"`);
   });
 
