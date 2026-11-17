@@ -93,12 +93,14 @@ describe("/me/devices page", () => {
     asAliasViewer();
     const html = await render();
     // Says what is missing, then the step.
-    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
+    expect(html).toContain("Link this browser to your BAB account");
+    expect(html).toContain("Your sign-in did not give BAB your full work address");
     expect(html).toContain("This browser stays linked after that.");
     expect(html).toContain("Are you");
     expect(html).toContain(ALICE);
     expect(html).toContain("that&#x27;s me");
-    expect(html).toContain("Your address");
+    expect(html).toContain("Not you? Type your work email");
+    expect(html).toContain('name="next" value="/me/devices"');
     expect(html).toContain('action="/me/devices/claim"');
     expect(html).toContain('method="post"');
     expect(html).not.toContain("Forget");
@@ -108,7 +110,7 @@ describe("/me/devices page", () => {
   it("with no fitting person it shows only the typed claim", async () => {
     asAliasViewer();
     const html = await render();
-    expect(html).toContain("Your address");
+    expect(html).toContain("Your work email");
     expect(html).not.toContain("Are you");
   });
 
@@ -387,6 +389,26 @@ describe("POST /me/devices/claim", () => {
     const { POST } = await import("../app/me/devices/claim/route");
     const res = await POST(post("/me/devices/claim", { email: ALICE }));
     expect(res.headers.get("location")).toBe("http://localhost/me/devices?claim=mismatch");
+  });
+
+  it("goes back to the page in a safe `next`, with the refusal code on that page", async () => {
+    asAliasViewer({ name: "Marie Curie", email: "mcurie@example.com" });
+    const { POST } = await import("../app/me/devices/claim/route");
+    const refused = await POST(post("/me/devices/claim", { email: ALICE, next: "/inbox" }));
+    expect(refused.headers.get("location")).toBe("http://localhost/inbox?claim=mismatch");
+    asAliasViewer();
+    const ok = await POST(post("/me/devices/claim", { email: ALICE, next: "/memory/abc-12" }));
+    expect(ok.status).toBe(303);
+    expect(ok.headers.get("location")).toBe("http://localhost/memory/abc-12");
+  });
+
+  it("never redirects off the site, whatever `next` says", async () => {
+    asAliasViewer({ name: "Marie Curie", email: "mcurie@example.com" });
+    const { POST } = await import("../app/me/devices/claim/route");
+    for (const next of ["//evil.example.test", "@evil.example.test", ".evil.example.test", "https://evil.example.test/x", "/\\evil.example.test", "/inbox?x=1", "/a/../b", ""]) {
+      const res = await POST(post("/me/devices/claim", { email: ALICE, next }));
+      expect(res.headers.get("location"), next).toBe("http://localhost/me/devices?claim=mismatch");
+    }
   });
 
   it("is refused cross-site", async () => {

@@ -156,9 +156,12 @@ describe("/feedback/new", () => {
     asViewer("aalice@example.com");
     const html = await render("../app/feedback/new/page", { searchParams: Promise.resolve({}) });
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass a full email address BAB accepts (like first.last@example.com)");
-    expect(html).toContain('<a href="/me/devices">Your devices</a>');
+    expect(html).toContain("Your sign-in did not give BAB your full work address (like first.last@example.com)");
     expect(html).toContain("you can post feedback here");
+    // The fix is right here, and it comes back to this page.
+    expect(html).toContain('action="/me/devices/claim"');
+    expect(html).toContain('name="next" value="/feedback/new"');
+    expect(html).toContain('<a href="/me/devices">Your devices</a>');
   });
 
   it("keeps the short sign-in line for a visitor who is not signed in at all", async () => {

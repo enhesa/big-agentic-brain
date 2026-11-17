@@ -103,9 +103,27 @@ describe("/inbox who sees it", () => {
     expect(html).toContain('href="/me/devices"');
     // What is missing, the one step, and what it unlocks.
     expect(html).toContain('data-testid="link-browser-notice"');
-    expect(html).toContain("your sign-in did not pass a full email address BAB accepts");
+    expect(html).toContain("Link this browser to your BAB account");
+    expect(html).toContain("Your sign-in did not give BAB your full work address");
     expect(html).toContain("you can see your inbox here");
+    // The fix is on this page: "Yes, that's me" for the one fitting person, and the typed form back to /inbox.
+    expect(html).toContain("that&#x27;s me");
+    expect(html).toContain('action="/me/devices/claim"');
+    expect(html).toContain('name="next" value="/inbox"');
     expect(html).not.toContain("Review my PR");
+  });
+
+  it("shows a refused link on the inbox as a fixed line and ignores an unknown code", async () => {
+    mockHeaders({ "x-auth-request-user": "alias-1", "x-auth-request-email": "bobb@example.com", "x-auth-request-preferred-username": "Bob B" });
+    const { renderToReadableStream } = await import("react-dom/server.edge");
+    const { default: InboxPage } = await import("../app/inbox/page");
+    const at = async (claim: string) =>
+      new Response(await renderToReadableStream((await InboxPage({ searchParams: Promise.resolve({ claim }) })) as never)).text();
+    const taken = await at("taken");
+    expect(taken).toContain("already linked");
+    expect(taken).toContain('aria-invalid="true"');
+    expect(await at("constructor")).not.toContain('role="alert"');
+    expect(await at("<b>x</b>")).not.toContain('role="alert"');
   });
 
   it("says it is switched off while BAB_INBOX_PAGE=0", async () => {

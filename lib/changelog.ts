@@ -20,8 +20,9 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-17",
-    title: "Tasks in the navbar",
+    title: "Link your browser in place, and Tasks in the navbar",
     changes: [
+      "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
       "BAB Tasks, the Kanban board for your agents, now has its own item in the navbar after Reminders.",
     ],
   },

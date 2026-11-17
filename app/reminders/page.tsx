@@ -28,11 +28,12 @@ import styles from "./reminders.module.css";
  * handle identity now, and linking, unlinking and the device list live on /me/devices.
  * A trusted proxy viewer who is signed in but not yet linked
  * (production's short alias email, no proxy_links row) is a real person with no reminders
- * identity yet, not an absent one — that viewer is pointed at /me/devices to confirm who
- * they are, alongside the privacy line (see lib/session.ts's pendingProxyLinkUser()). The
- * one-click "Yes, that's me" is on /me/devices, not here.
+ * identity yet, not an absent one: that viewer gets the link card (app/components/LinkBrowserNotice.tsx)
+ * to confirm who they are right here, alongside the privacy line (see lib/session.ts's
+ * pendingProxyLinkUser()).
  */
-export default async function RemindersPage() {
+export default async function RemindersPage({ searchParams }: { searchParams?: Promise<{ claim?: string | string[] }> } = {}) {
+  const { claim } = (await searchParams) ?? {};
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: "/reminders", via: "ui" });
 
@@ -45,14 +46,14 @@ export default async function RemindersPage() {
       {ownerId ? (
         <RemindersList groups={remindersFor(ownerId)} />
       ) : (
-        <div className={`card ${styles.privacy}`}>
-          {proxy ? (
-            <LinkBrowserNotice then="you can see your reminders here" />
-          ) : null}
-          <p>
-            Reminders are private to their owner. Ask your agent to list yours with bab_remind.
-          </p>
-        </div>
+        <>
+          {proxy ? <LinkBrowserNotice proxy={proxy} then="you can see your reminders here" returnTo="/reminders" claim={claim} /> : null}
+          <div className={`card ${styles.privacy}`}>
+            <p>
+              Reminders are private to their owner. Ask your agent to list yours with bab_remind.
+            </p>
+          </div>
+        </>
       )}
     </Shell>
   );

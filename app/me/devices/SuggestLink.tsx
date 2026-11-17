@@ -4,9 +4,10 @@ import { useState } from "react";
 import styles from "@/app/components/shell/LinkActions.module.css";
 
 /**
- * The "Are you X? Yes, that's me" choice for an unlinked viewer on /me/devices (the only page
- * that links a browser by hand now; /reminders just points here). The server recomputes the
- * suggestion on claim, so `email` here only says which suggestion the viewer agreed to.
+ * The "Are you X? Yes, that's me" choice for an unlinked viewer, inside the link card
+ * (app/components/LinkBrowserNotice.tsx) on every page that shows it. On success it reloads the
+ * page the viewer is on. The server recomputes the suggestion on claim, so `email` here only
+ * says which suggestion the viewer agreed to. It needs client JS; the typed form beside it does not.
  */
 export default function SuggestLink({ email, name }: { email: string; name: string }) {
   const [busy, setBusy] = useState(false);
