@@ -89,6 +89,31 @@ describe("POST /memory/[id]/review", () => {
     expect(h[0]).toMatchObject({ kind: "confirm", actorName: "Mia M", note: "Checked against the provider docs", byAuthor: false });
   });
 
+  it("says so when a repeat confirm within 30 days changed nothing", async () => {
+    signedIn("maint");
+    const l = await seed();
+    await link("maint");
+    await review(l.id, { action: "confirm", note: "First check" });
+    expect((await review(l.id, { action: "confirm", note: "Second check" })).headers.get("location")).toContain("review=recent");
+    expect((await history(l.id)).map((e) => e.note)).toEqual(["First check"]);
+  });
+
+  it("takes a flagged memory off the Flagged list once the maintainer keeps it", async () => {
+    signedIn("maint");
+    const l = await seed();
+    await link("maint");
+    const { upsertUser } = await import("../lib/users");
+    upsertUser({ id: "cid.c@example.com", email: "cid.c@example.com", name: "Cid C", roles: [] });
+    const { flag } = await import("../lib/learnings");
+    flag(l.id, "cid.c@example.com", "mcp", "Provider moved to SHA-256");
+    const { reviewQueue } = await import("../lib/trust");
+    expect(reviewQueue().flagged.map((i) => i.id)).toEqual([l.id]);
+    await review(l.id, { action: "keep", note: "Old API still signs with SHA-1" });
+    const q = reviewQueue();
+    expect(q.flagged).toEqual([]);
+    expect(q.unchecked).toEqual([]);
+  });
+
   it("retires and keeps with a note", async () => {
     signedIn("maint");
     const l = await seed();

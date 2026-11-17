@@ -111,9 +111,16 @@ export function trustHistory(learningId: string, limit: number = TRUST_HISTORY_L
 }
 
 export interface TrustSummary {
-  /** Distinct people who flagged it (all time; a flag stays on record). */
+  /**
+   * Distinct people whose flag no later check answered: a confirm, keep or restore by someone other
+   * than the author after the flag (a tie in the same second counts as before, like swarm-gc). The
+   * flags stay on record in the history either way.
+   */
   flags: number;
+  /** The newest of those open flags. */
   lastFlagAt: string | null;
+  /** Distinct people whose flag a later check answered. */
+  answeredFlags: number;
   /** Distinct people other than the author who confirmed it. */
   confirmations: number;
   /** Newest check by someone other than the author: a confirm, keep or restore. */
@@ -144,6 +151,7 @@ export function trustLabel(s: Omit<TrustSummary, "label">, now: number = Date.no
   else if (s.confirmations > 0) {
     parts.push(`confirmed by ${s.confirmations}, last checked ${daysAgo(s.lastCheckedAt!, now)}`);
   } else parts.push(`kept by a colleague, last checked ${daysAgo(s.lastCheckedAt!, now)}`);
+  if (s.answeredFlags > 0) parts.push(`${s.answeredFlags === 1 ? "1 earlier flag" : `${s.answeredFlags} earlier flags`} answered by a later check`);
   if (s.verify) parts.push("due a check");
   return parts.join("; ");
 }
@@ -161,8 +169,8 @@ export function trustTag(s: Pick<TrustSummary, "flags" | "unchecked" | "verify">
 }
 
 /**
- * The trust summary of each row, in two grouped queries however many rows there are (the votes,
- * and verifyDueIds). Votes by the author never count as a check.
+ * The trust summary of each row, in three queries however many rows there are (the grouped votes,
+ * the flags, and verifyDueIds). Votes by the author never count as a check.
  */
 export function trustFor(
   rows: Array<TrustRow>,
@@ -177,11 +185,20 @@ export function trustFor(
     .prepare(
       `SELECT v.learning_id AS id, v.kind AS kind, COUNT(DISTINCT lower(v.voter_id)) AS n, MAX(v.created_at) AS last
        FROM votes v JOIN learnings l ON l.id = v.learning_id
-       WHERE v.learning_id IN (${marks}) AND v.kind IN ('flag', 'confirm', 'keep', 'restore')
+       WHERE v.learning_id IN (${marks}) AND v.kind IN ('confirm', 'keep', 'restore')
          AND lower(v.voter_id) <> lower(l.author_id)
        GROUP BY v.learning_id, v.kind`,
     )
     .all(...ids) as Array<{ id: string; kind: string; n: number | bigint; last: string }>;
+  // One row per flag (votes keeps one per person), so each can be weighed against the newest check.
+  const flagRows = db
+    .prepare(`SELECT learning_id AS id, lower(voter_id) AS voter, created_at AS at FROM votes WHERE learning_id IN (${marks}) AND kind = 'flag'`)
+    .all(...ids) as Array<{ id: string; voter: string; at: string }>;
+  const flagsBy = new Map<string, Array<{ voter: string; at: string }>>();
+  for (const f of flagRows) {
+    if (!flagsBy.has(f.id)) flagsBy.set(f.id, []);
+    flagsBy.get(f.id)!.push(f);
+  }
   const by = new Map<string, Map<string, { n: number; last: string }>>();
   for (const v of votes) {
     if (!by.has(v.id)) by.set(v.id, new Map());
@@ -192,9 +209,14 @@ export function trustFor(
     const k = by.get(r.id) ?? new Map<string, { n: number; last: string }>();
     const checks = ["confirm", "keep", "restore"].map((kind) => k.get(kind)?.last).filter((x): x is string => !!x);
     const lastCheckedAt = checks.length > 0 ? checks.sort().at(-1)! : null;
+    const flags = flagsBy.get(r.id) ?? [];
+    const open = flags.filter((f) => lastCheckedAt === null || f.at > lastCheckedAt);
+    const openVoters = new Set(open.map((f) => f.voter));
+    const answered = new Set(flags.map((f) => f.voter).filter((v) => !openVoters.has(v)));
     const base = {
-      flags: k.get("flag")?.n ?? 0,
-      lastFlagAt: k.get("flag")?.last ?? null,
+      flags: openVoters.size,
+      lastFlagAt: open.length > 0 ? open.map((f) => f.at).sort().at(-1)! : null,
+      answeredFlags: answered.size,
       confirmations: k.get("confirm")?.n ?? 0,
       lastCheckedAt,
       unchecked: lastCheckedAt === null,
@@ -222,7 +244,7 @@ export interface ReviewItem {
 }
 
 export interface ReviewQueue {
-  /** Active memories with a flag, newest flag first. */
+  /** Active memories with a flag no later check answered, newest flag first. */
   flagged: ReviewItem[];
   /** Active memories due a check (over 90 days, nobody else checked them lately), oldest first. */
   due: ReviewItem[];
@@ -242,12 +264,14 @@ export function reviewQueue(limit: number = REVIEW_QUEUE_LIMIT, now: number = Da
   const db = getDb();
   type Row = Pick<LearningRow, "id" | "title" | "kind" | "author_id" | "created_at" | "status"> & { authorName: string | null };
   const select = `SELECT l.id, l.title, l.kind, l.author_id, l.created_at, l.status, u.name AS authorName FROM learnings l LEFT JOIN users u ON u.id = l.author_id`;
+  // Every memory with a flag, newest flag first; trustFor then drops the ones a later check
+  // answered, so a Keep or Confirm on this page takes an item off the list. Read a wider window.
   const flaggedRows = db
     .prepare(
       `${select} JOIN (SELECT learning_id, MAX(created_at) AS at FROM votes WHERE kind = 'flag' GROUP BY learning_id) f ON f.learning_id = l.id
        WHERE l.status = 'active' ORDER BY f.at DESC, l.id LIMIT ?`,
     )
-    .all(limit) as unknown as Row[];
+    .all(limit * 10) as unknown as Row[];
   const cutoff = new Date(now - 90 * DAY_MS).toISOString().slice(0, 19).replace("T", " ");
   // Old enough to be due; verifyDueIds then drops the ones somebody else checked lately. Read a
   // wider window than the limit, since checked ones drop out.
@@ -272,7 +296,7 @@ export function reviewQueue(limit: number = REVIEW_QUEUE_LIMIT, now: number = Da
     createdAt: r.created_at,
     trust: trust.get(r.id)!,
   });
-  const flagged = flaggedRows.map(item);
+  const flagged = flaggedRows.filter((r) => trust.get(r.id)!.flags > 0).slice(0, limit).map(item);
   const shown = new Set(flagged.map((i) => i.id));
   const due = oldRows.filter((r) => !shown.has(r.id) && trust.get(r.id)!.verify).slice(0, limit).map(item);
   for (const i of due) shown.add(i.id);

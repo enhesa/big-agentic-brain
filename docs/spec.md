@@ -482,14 +482,17 @@ check has a record (`lib/trust.ts`).
 - *History.* `trust_events` (migration v58) gets one row per `confirm`, `flag`, `keep`, `restore`,
   `retire` and correction (`supersede`, on the old memory, with the new one as `related_id`), plus an
   `archive` row (actor `system`) when two flags archive a memory. Rows are never updated: a repeat
-  confirm that refreshes the `votes` row adds a new event when its note changed. Each row has the
+  confirm that refreshes the `votes` row (after 30 days, or after a newer flag) adds a new event; a
+  repeat inside 30 days changes nothing and adds none. Each row has the
   actor, whether the actor is the author, the note (redacted like every note) and the time. The
   migration copies what `votes` and `supersession_links` still hold, marked `backfilled`. The
   memory page shows it as "Validation history", open when the memory is flagged or not live, and
   `GET /api/learnings/:id` returns the newest `TRUST_HISTORY_LIMIT` (50) as `history`. A deleted
   memory shows none, and the purge removes its rows. Archives by the hourly sweeps are not events yet.
-- *Label.* `trustFor` sums the votes of people other than the author: flags, confirmations and the
-  newest confirm, keep or restore. A memory nobody else checked is `unchecked` from day one; after
+- *Label.* `trustFor` sums the votes of people other than the author: confirmations, the newest
+  confirm, keep or restore, and the flags. A flag older than that newest check counts as answered:
+  the label says "1 earlier flag answered by a later check", and only open flags mark a memory
+  flagged (chip, banner, hook tag, review page). A memory nobody else checked is `unchecked` from day one; after
   90 days without such a check it is also `verify` (see "Verify old memories"). The label is a line
   of counts and dates, never names or notes: "flagged by 1 (newest 2 days ago); not checked by
   anyone but its author; due a check". Search results carry it as `trust` (with `unchecked` and

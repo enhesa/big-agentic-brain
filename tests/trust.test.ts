@@ -189,11 +189,29 @@ describe("trust label", () => {
     const { flag, confirm } = await import("../lib/learnings");
     const l = await mk();
     confirm(l.id, CID, "Checked", "mcp");
+    // The flag comes after the confirm (a tie in the same second would count as answered).
+    (await db()).prepare("UPDATE votes SET created_at = datetime(created_at, '-1 second') WHERE learning_id = ? AND kind = 'confirm'").run(l.id);
     flag(l.id, BOB, "mcp", "Wrong since the upgrade, see the release notes");
     const t = await trust(l.id);
     expect(t.label).toBe("flagged by 1 (newest today); confirmed by 1, last checked today");
     expect(t.label).not.toContain("Bob");
     expect(t.label).not.toContain("release notes");
+  });
+
+  it("counts a flag a later check answered as answered, not as flagged", async () => {
+    const { flag, keepLearning } = await import("../lib/learnings");
+    const l = await mk();
+    flag(l.id, BOB, "mcp", "Wrong since the upgrade");
+    // Same-second ties count the flag as before the check: push the flag back a second.
+    (await db()).prepare("UPDATE votes SET created_at = datetime(created_at, '-1 second') WHERE learning_id = ? AND kind = 'flag'").run(l.id);
+    keepLearning(l.id, CID, "mcp", "Checked: the old API still uses it");
+    let t = await trust(l.id);
+    expect(t).toMatchObject({ flags: 0, answeredFlags: 1 });
+    expect(t.label).toBe("kept by a colleague, last checked today; 1 earlier flag answered by a later check");
+    // A new flag after the check is open again.
+    (await db()).prepare("UPDATE votes SET created_at = datetime(created_at, '+5 seconds') WHERE learning_id = ? AND kind = 'flag'").run(l.id);
+    t = await trust(l.id);
+    expect(t).toMatchObject({ flags: 1, answeredFlags: 0 });
   });
 
   it("is on every search result, with unchecked and verify set when they apply", async () => {

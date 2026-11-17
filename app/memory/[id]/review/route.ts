@@ -28,6 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const code = runReviewAction(viewer.ownerId, id, action, note);
   if (json) {
     const ok = REVIEW_OK_CODES.includes(code);
+    if (code === "recent") return notifyJson({ ok: true, code, changed: false, message: REVIEW_MESSAGES.recent }, 200);
     return notifyJson(ok ? { ok: true, code } : { error: REVIEW_MESSAGES[code], code }, ok ? 200 : code === "own" ? 403 : code === "gone" ? 404 : 400);
   }
   return back(code);

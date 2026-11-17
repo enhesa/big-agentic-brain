@@ -25,6 +25,7 @@ export const REVIEW_MESSAGES = {
   note: "Write a note first: where you checked, or why.",
   long: "That note is too long. Keep it to 300 characters or fewer.",
   own: "You cannot confirm your own memory. Ask a colleague to check it.",
+  recent: "You confirmed this memory in the last 30 days, so nothing changed and the note was not saved.",
   gone: "This memory no longer exists or is not live any more.",
   invalid: "That action is not one the page offers.",
   slow: "Too many clicks. Wait a minute and try again.",
@@ -60,8 +61,8 @@ export function runReviewAction(ownerId: string, learningId: string, action: unk
   try {
     if (action === "confirm") {
       if (learning.status !== "active") return "gone";
-      confirm(learningId, ownerId, note, "ui");
-      return "confirmed";
+      // A repeat within 30 days (and no flag since) changes nothing, the note included: say so.
+      return confirm(learningId, ownerId, note, "ui").changed ? "confirmed" : "recent";
     }
     if (action === "keep") {
       keepLearning(learningId, ownerId, "ui", note);

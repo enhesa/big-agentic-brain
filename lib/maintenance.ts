@@ -309,7 +309,9 @@ function sweepDeletedLearnings(db: Db): number {
       inTransaction(db, () => {
         db.prepare(`DELETE FROM votes WHERE learning_id IN (${idList})`).run(...ids);
         // The validation history goes with the memory (no foreign key, so the order does not matter).
-        db.prepare(`DELETE FROM trust_events WHERE learning_id IN (${idList}) OR related_id IN (${idList})`).run(...ids, ...ids);
+        // Only the deleted memory's own events. A "replaced by" event on a memory that still exists
+        // stays; trustHistory hides the link once the replacement is gone.
+        db.prepare(`DELETE FROM trust_events WHERE learning_id IN (${idList})`).run(...ids);
         // Foreign key to learnings, like votes: gone first, or the DELETE below fails.
         db.prepare(`DELETE FROM memory_comments WHERE learning_id IN (${idList})`).run(...ids);
         db.prepare(`DELETE FROM reuse_costs WHERE learning_id IN (${idList})`).run(...ids);
