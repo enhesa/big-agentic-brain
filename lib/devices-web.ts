@@ -7,6 +7,7 @@ import { claimTypedIdentity, SsoAddressMismatchError } from "./proxy-links";
 import { ConflictError, ForbiddenError, toApiError } from "./errors";
 import { forbiddenResponse, redirectTo, sameOrigin } from "./feedback-web";
 import { readFields, wantsJson } from "./me-web";
+import { safeReturnPath, withClaimCode } from "./link-notice";
 
 /**
  * The typed claim on /me/devices: a signed-in viewer with no identity types their long-form
@@ -21,7 +22,7 @@ export const CLAIM_ERRORS: Record<string, string> = {
   },
   mismatch: "That address does not fit the name your sign-in shows. Ask a maintainer for help (they use /admin/links).",
   sso: "The address your sign-in shows does not fit this one. Ask a maintainer for help (they use /admin/links).",
-  taken: "That address, or this browser, is already linked. Unlink it first, or ask a maintainer for help (they use /admin/links).",
+  taken: "That address, or this browser, is already linked. Unlink it on Your devices first, or ask a maintainer for help (they use /admin/links).",
 };
 
 export function claimErrorCode(err: unknown): "sso" | "mismatch" | "taken" | "invalid" {
@@ -32,7 +33,9 @@ export function claimErrorCode(err: unknown): "sso" | "mismatch" | "taken" | "in
 /**
  * The typed-claim POST. The proxy user comes from the SSO headers; the typed address is only a
  * claim that lib/proxy-links.ts checks against the SSO name. A plain HTML form is answered with
- * a redirect to `backTo` (refusals as `?claim=<code>`), a JSON caller with JSON.
+ * a redirect to `backTo` (refusals as `?claim=<code>`), a JSON caller with JSON. A form may send
+ * `next`, the page it sits on, to come back there instead; safeReturnPath keeps that a plain
+ * same-origin path, so the claim is never an open redirect.
  */
 export async function claimResponse(request: Request, path: string, backTo: string): Promise<Response> {
   if (!sameOrigin(request)) return forbiddenResponse();
@@ -41,7 +44,8 @@ export async function claimResponse(request: Request, path: string, backTo: stri
   if (!proxy) return notifyJson({ error: "Sign in through the BAB web UI" }, 401);
 
   const json = wantsJson(request);
-  const { email } = await readFields(request);
+  const { email, next } = await readFields(request);
+  if (next !== undefined) backTo = safeReturnPath(next);
   try {
     const claimed = claimTypedIdentity(proxy.id, proxy.email, proxy.name, email ?? "");
     await auditRequest({ actor: { id: claimed.email, name: proxy.name, email: claimed.email }, method: "POST", path, via: "ui" });
@@ -51,6 +55,6 @@ export async function claimResponse(request: Request, path: string, backTo: stri
       const { status, body } = toApiError(err);
       return notifyJson({ error: body.error }, status);
     }
-    return redirectTo(request, `${backTo}?claim=${claimErrorCode(err)}`);
+    return redirectTo(request, withClaimCode(backTo, claimErrorCode(err)));
   }
 }

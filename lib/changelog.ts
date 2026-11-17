@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-17",
+    title: "Link your browser on the page you are on",
+    changes: [
+      "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
+    ],
+  },
+  {
     date: "2026-11-16",
     title: "Release 2.25.1, a framework update and Command Center patch",
     changes: [

@@ -68,10 +68,10 @@ export default async function LearningDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ react?: string | string[]; edit?: string | string[] }>;
+  searchParams?: Promise<{ react?: string | string[]; edit?: string | string[]; claim?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { react, edit } = (await searchParams) ?? {};
+  const { react, edit, claim } = (await searchParams) ?? {};
   // Read-only page: no identity required, see app/memory/page.tsx.
   const actor = await getSessionUser();
   await auditRequest({ actor, method: "GET", path: `/memory/${id}`, via: "ui" });
@@ -107,7 +107,7 @@ export default async function LearningDetailPage({
   // Voting and commenting need a person: a browser linked to a BAB identity (getViewer). A signed-in
   // viewer who is not linked yet is pointed at /me/devices; anyone else reads the comments only.
   const viewer = learning.status === "deleted" ? null : await getViewer();
-  const needsLink = !viewer && learning.status !== "deleted" && (await pendingProxyLinkUser()) !== null;
+  const linkProxy = !viewer && learning.status !== "deleted" ? await pendingProxyLinkUser() : null;
   const mine = viewer && viewer.ownerId !== learning.author_id ? ownReactions(learning.id, viewer.ownerId) : null;
   // A deleted memory is a wiped tombstone: its comments go with it.
   const comments = learning.status === "deleted" ? [] : commentsFor(learning.id);
@@ -238,7 +238,9 @@ export default async function LearningDetailPage({
           <CommentsPanel
             learningId={learning.id}
             comments={comments}
-            state={viewer ? (mine ? "open" : "own") : needsLink ? "link" : "none"}
+            state={viewer ? (mine ? "open" : "own") : linkProxy ? "link" : "none"}
+            linkProxy={linkProxy}
+            claim={claim}
             viewerId={viewer?.ownerId ?? null}
             maintainer={viewer ? isMaintainer(viewer.ownerId) : false}
             mine={mine}

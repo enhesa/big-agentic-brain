@@ -1,21 +1,18 @@
 import Shell from "@/app/components/shell/Shell";
 import buttons from "@/app/components/shell/LinkActions.module.css";
-import SuggestLink from "./SuggestLink";
 import { getViewer } from "@/lib/notify-auth";
 import { trustProxyHeaders } from "@/lib/session";
 import { currentUser, type ProxyUser } from "@/lib/user";
-import { getLinkedUserId, suggestLinkFor } from "@/lib/proxy-links";
+import { getLinkedUserId } from "@/lib/proxy-links";
 import { listDevices } from "@/lib/devices";
 import { areasOf, AREAS_PER_PERSON_MAX, AREA_MAX, AREA_NOTE_MAX, CONTACTS_PER_AREA_MAX } from "@/lib/area-contacts";
 import { getUser } from "@/lib/users";
 import { teamLabel, teamTags } from "@/lib/teams";
 import { listRecentConnections, CONNECTION_TTL_DAYS } from "@/lib/mcp-connections";
-import { CLAIM_ERRORS } from "@/lib/devices-web";
 import { describeIp } from "@/lib/client-ip";
 import { formatDate } from "@/lib/me-web";
 import { formatRelativeTime } from "@/lib/relative-time";
-import { identityHint } from "@/lib/identity";
-import { linkNeededReason } from "@/lib/link-notice";
+import LinkBrowserNotice from "@/app/components/LinkBrowserNotice";
 import { auditRequest } from "@/lib/request-audit";
 import styles from "./devices.module.css";
 
@@ -35,7 +32,6 @@ import styles from "./devices.module.css";
 export default async function DevicesPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const params = (await searchParams) ?? {};
   const claim = typeof params.claim === "string" ? params.claim : "";
-  const claimError = Object.hasOwn(CLAIM_ERRORS, claim) ? CLAIM_ERRORS[claim] : undefined;
   const profileError = params.profile === "invalid";
 
   const viewer = await getViewer();
@@ -48,7 +44,7 @@ export default async function DevicesPage({ searchParams }: { searchParams?: Pro
       {viewer ? (
         <LinkedView email={viewer.ownerId} profileError={profileError} showUnlink={!!proxy && getLinkedUserId(proxy.id) !== null} />
       ) : proxy ? (
-        <WhoAreYou proxy={proxy} error={claimError} stale={getLinkedUserId(proxy.id) !== null} />
+        <WhoAreYou proxy={proxy} claim={claim} stale={getLinkedUserId(proxy.id) !== null} />
       ) : (
         <div className="card">
           <p className={styles.muted}>Sign in through the BAB web UI to see your devices.</p>
@@ -221,31 +217,18 @@ function Profile({ email, error }: { email: string; error: boolean }) {
   );
 }
 
-function WhoAreYou({ proxy, error, stale }: { proxy: ProxyUser; error?: string; stale: boolean }) {
-  const suggestion = stale ? null : suggestLinkFor(proxy.id, proxy.email, proxy.name);
+/** The same link card every page shows (app/components/LinkBrowserNotice.tsx), plus Unlink for an old link. */
+function WhoAreYou({ proxy, claim, stale }: { proxy: ProxyUser; claim: string; stale: boolean }) {
   return (
     <>
-      <div className={`card ${styles.section}`}>
-        <p className={styles.muted}>
-          {stale ? "BAB does not know who you are yet." : `${linkNeededReason()} Confirm who you are once below. This browser stays linked after that.`}
-        </p>
-        {suggestion ? <SuggestLink email={suggestion.email} name={suggestion.name} /> : null}
-        <p className={styles.muted}>
-          {suggestion ? "Not you? " : ""}Type your long address, {identityHint()}. It has to fit the name your sign-in shows.
-        </p>
-        {error ? (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
-        ) : null}
-        <form method="post" action="/me/devices/claim" className={styles.form}>
-          <label htmlFor="email">Your address</label>
-          <input id="email" name="email" type="email" placeholder={identityHint()} required />
-          <button type="submit" className={buttons.primary}>
-            Continue
-          </button>
-        </form>
-      </div>
+      <LinkBrowserNotice
+        proxy={proxy}
+        then="you can see your devices here"
+        returnTo="/me/devices"
+        claim={claim}
+        stale={stale}
+        showDevicesLink={false}
+      />
       {stale ? (
         <UnlinkBrowser text="This browser has an old link that no longer fits your sign-in. Unlink it, then type your address." />
       ) : null}
