@@ -205,7 +205,8 @@ before every write.
 - **Trust labels.** Every search result has `trust`, a line of counts and dates such as "flagged by 1
   (newest 2 days ago); not checked by anyone but its author". `unchecked: true` means nobody but the
   author ever confirmed or kept it: weigh it as one person's word. A flagged memory is contested:
-  read why before you rely on it. The author's own keep never counts as a check. Every confirm,
+  read why before you rely on it. It ranks lower in search and in the house rules until someone
+  else checks it. The author's own keep never counts as a check. Every confirm,
   flag, keep, restore, retire and correction is kept with who, when and the note:
   `GET /api/learnings/:id` returns them as `history`, and the memory page shows them. Maintainers
   can also confirm, keep or retire with a note on the web review page.

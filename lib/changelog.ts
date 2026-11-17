@@ -20,8 +20,9 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-17",
-    title: "Trust labels, in-place linking and Tasks in the navbar",
+    title: "Safer memories, in-place linking and Tasks in the navbar",
     changes: [
+      "A flagged memory ranks lower in search and in the house rules until someone else checks it.",
       "A memory archived by flags cannot be quietly rewritten, and new memories list their close matches.",
       "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",
       "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
