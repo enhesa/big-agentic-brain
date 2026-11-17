@@ -170,8 +170,6 @@ export interface CcLink {
 export interface CcSource {
   machine: string | null;
   session: string | null;
-  /** Deprecated and ignored: a publish no longer stores it. Older records may still carry one. */
-  link?: string | null;
 }
 
 export interface CcRecord {
@@ -500,11 +498,21 @@ function ready(now: number): void {
   }
 }
 
+/** A stored record, without the deprecated source.link an older release may have kept. */
+function parseRecord(json: string): CcRecord {
+  const r = JSON.parse(json) as CcRecord;
+  if (r.source && "link" in r.source) {
+    const { machine, session } = r.source;
+    r.source = { machine, session };
+  }
+  return r;
+}
+
 function loadRecords(owner: string): Map<string, CcRecord> {
   const rows = getDb().prepare("SELECT record FROM tasks_initiatives WHERE owner_id = ? ORDER BY id").all(owner) as { record: string }[];
   const map = new Map<string, CcRecord>();
   for (const row of rows) {
-    const r = JSON.parse(row.record) as CcRecord;
+    const r = parseRecord(row.record);
     map.set(r.id, r);
   }
   return map;
@@ -512,7 +520,7 @@ function loadRecords(owner: string): Map<string, CcRecord> {
 
 function loadRecord(owner: string, id: string): CcRecord | null {
   const row = getDb().prepare("SELECT record FROM tasks_initiatives WHERE owner_id = ? AND id = ?").get(owner, id) as { record: string } | undefined;
-  return row ? (JSON.parse(row.record) as CcRecord) : null;
+  return row ? parseRecord(row.record) : null;
 }
 
 function saveRecord(owner: string, r: CcRecord): void {

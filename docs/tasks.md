@@ -95,7 +95,7 @@ the change and writes it in one transaction.
 - A field left out keeps its value; `null` clears a nullable one (`area`, `key`, `cadence`,
   `deadline`, `priority`, `health`, `source`). `v`, `title`, `state` and `kind` cannot be null:
   `null` there is a 400.
-- `source` merges field by field: `{ "session": "s-2" }` keeps the stored `machine` and `link`.
+- `source` merges field by field: `{ "session": "s-2" }` keeps the stored `machine`.
 - `tasks`, `questions` and `links` are lists of changes. Tasks and questions are matched by `id`,
   links by `url`. A known item is updated with the fields sent, a new one is added at the end (it
   needs every required field), and `{ "id": "x", "remove": true }` (links: `url`) drops one. A

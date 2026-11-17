@@ -197,6 +197,13 @@ describe("publish", () => {
     for (const link of ignored) expect(withLink(link).source, String(link)).toEqual({ machine: "laptop-1", session: "s-1" });
   });
 
+  it("never returns a source.link an older release stored", async () => {
+    publish({ source: { machine: "laptop-1", session: "s-1" } });
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("UPDATE tasks_initiatives SET record = json_set(record, '$.source.link', ?) WHERE owner_id = ? AND id = ?").run("claude://claude.ai/epitaxy/s-1", OWNER, "billing-export");
+    expect(cc.ccGet(OWNER, "billing-export").source).toEqual({ machine: "laptop-1", session: "s-1" });
+  });
+
   it("expectSeq mismatch is 409 with the current record, and logs nothing", () => {
     publish();
     const before = cc.ccLogOf(OWNER).length;
