@@ -1100,56 +1100,6 @@
   margin-top: 5px;
 }
 
-.cardAct {
-  display: flex;
-}
-
-/* Open in Claude: the one action on a Needs you card, small in the drawer. */
-.openClaude {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 18px;
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--c-line-2);
-  background: var(--c-surface);
-  color: var(--c-ink);
-  text-decoration: none;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-a.openClaude:hover {
-  background: var(--c-plane);
-  border-color: var(--c-grey);
-}
-
-.openClaude:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: 2px;
-}
-
-.openClaude:disabled {
-  cursor: not-allowed;
-  color: var(--c-muted);
-  background: var(--c-plane);
-  border-style: dashed;
-}
-
-.openClaudeSm {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-}
-
-.detailAct {
-  display: flex;
-  margin-top: -6px;
-}
-
 /* Finished: the newest few, then "+N more". */
 .colMore {
   display: flex;
@@ -1385,10 +1335,6 @@ a.openClaude:hover {
 /* Upkeep: the name opens the drawer like a card title; the row is clickable too. */
 .upRow {
   cursor: pointer;
-}
-
-.upRow .openClaude {
-  flex: none;
 }
 
 .detailReason {

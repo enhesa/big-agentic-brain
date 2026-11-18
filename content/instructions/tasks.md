@@ -18,10 +18,8 @@ turn's publish, and every question you ask them MUST be in `questions`. If your 
 work that is not in the record, the turn is not finished: publish it first. Never publish `tasks: []`
 for a project with work left: it erases its progress. The person must never have to ask for this.
 
-**Every publish carries `source.link`, the link that opens this session.** Get it once at the start
-of the session and send it every time: in the Claude desktop app, call the session tool for this
-session (`get_session` with `"self"`) and use its `link`. Only when your app gives no link at all,
-leave it out. A card without a link cannot be opened, so check it on every publish.
+**Links people can open go in `links`**: the PR, the ticket, the doc, or a session link when your
+tool has an https one. `source.link` is deprecated: the page ignores it, so leave it out.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task.
@@ -59,8 +57,7 @@ keeps that card fresh:
 - Every run ends with `patch` on that card, with `health` (`level`, `reason`, `checkedAt` now) and
   `worked`. This goes for a clean run with nothing to do (`green`) and for a failed or blocked run
   (`red` or `amber`, with the reason). A run that writes nothing leaves the card overdue. This
-  `patch` stands in for the closing `publish`. Send `source` with it when the run has a session
-  link; leave it out when it has none.
+  `patch` stands in for the closing `publish`.
 - When you create a scheduled task that owns a recurring card, put the card `id` and this last
   step in its prompt.
 
@@ -94,7 +91,7 @@ value, and `null` clears an optional one (never `title`, `state` or `kind`). In 
 updated with the fields you send, a new one is added, and `"remove": true` drops it (a removed
 question is cleared). Items you do not name stay as they are. `source` merges field by field; send
 it with every patch, as on publish. The same limits and checks apply to the merged record. For example
-`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "source": { "session": "<session id>", "link": "<session link>" } } }`.
+`{ "action": "patch", "id": "billing-export", "record": { "tasks": [{ "id": "build", "status": "done" }, { "id": "ship", "text": "Ship it", "status": "pending" }], "source": { "session": "<session id>" } } }`.
 
 | Field | Rules |
 | --- | --- |
@@ -112,12 +109,10 @@ it with every patch, as on publish. The same limits and checks apply to the merg
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
 | `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after every run, clean or failing. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |
-| `source` | Optional `{ machine (20), session (60), link (300) }`; machine and session show as "last pushed by". |
+| `source` | Optional `{ machine (20), session (60) }`; they show as "last pushed by". A `link` is still accepted but ignored. |
 | `worked` | One line, at most 200: what this turn did. Logged with the server's time, not stored in the record. |
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional, on publish and patch. The `seq` you last saw; a mismatch is 409 with the current record to merge. Every answer gives the new `seq`. |
-
-Always put the link that opens this session in `source.link` (for example claude://claude.ai/epitaxy/<your session id>, from `get_session` `"self"` in the Claude desktop app); the page shows an Open in Claude button.
 
 At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut

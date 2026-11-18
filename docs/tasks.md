@@ -84,11 +84,9 @@ In short:
 - A question left out of a publish is cleared. The page has no Dismiss any more; a question
   dismissed there earlier stays cleared while the agent sends the same id and text (the answer
   lists it in `dismissed`).
-- `source.link` (optional, at most 300) is the link that opens the session behind the initiative.
-  Only `https://` with a plain lowercase host or `claude://claude.ai`, then a path of letters,
-  digits and `/ _ - .`; no query, fragment, port, credentials, percent-encoding or other scheme
-  (`lib/tasks-link.ts`). Anything else is 400 naming `source.link`; the secret check
-  applies as on any text. The page checks it again before it renders the href.
+- `source.link` is deprecated. Any value is accepted, so older agents keep working, and none is
+  stored or shown. Links people can open go in `links`. Older records may still hold one; the
+  page never renders it.
 - Cleared questions are kept 7 days, at most 20 per initiative.
 - 60 calls a minute and 20 at once per person, on top of the general limit.
 
@@ -101,7 +99,7 @@ the change and writes it in one transaction.
 - A field left out keeps its value; `null` clears a nullable one (`area`, `key`, `cadence`,
   `deadline`, `priority`, `health`, `source`). `v`, `title`, `state` and `kind` cannot be null:
   `null` there is a 400.
-- `source` merges field by field: `{ "session": "s-2" }` keeps the stored `machine` and `link`.
+- `source` merges field by field: `{ "session": "s-2" }` keeps the stored `machine`.
 - `tasks`, `questions` and `links` are lists of changes. Tasks and questions are matched by `id`,
   links by `url`. A known item is updated with the fields sent, a new one is added at the end (it
   needs every required field), and `{ "id": "x", "remove": true }` (links: `url`) drops one. A
@@ -377,19 +375,15 @@ Claude and the drawer: no switch, menu, delete, download or report-app grants.
 - A card face is the title (2 lines at most, a button), a small progress ring (percent inside)
   and one line: the main task on Active and Idle cards (in progress, else the next pending), none
   on Finished. An overdue deadline adds one small red dot with a tooltip. No chips, ages or lists.
-- The board has one action: Open in Claude. People only look; agents do the work, and the
-  person answers a question in the Claude session.
-- A Needs you card is the title, the ring, a coloured left edge and an Open in Claude button, no
-  question text. The button is the record's `source.link`, checked again on the page with the
-  server's rule (`lib/tasks-link.ts`) before it becomes an href, opened in the same tab
-  with `rel="noopener noreferrer"`; without a valid link it is a disabled button titled "No
-  session link". The questions, their ages, stale tags and options (plain text, "Options: a ·
-  b") are in the drawer.
+- The board has no actions. People only look; agents do the work, and the person answers a
+  question wherever the work happens. Nothing on the page assumes a particular agent tool.
+- A Needs you card is the title, the ring and a coloured left edge, no question text. The
+  questions, their ages, stale tags and options (plain text, "Options: a · b") are in the
+  drawer.
 - A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
   status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
   dates), the ring with done/total, every open question, the open tasks with their status icon
-  and the done ones folded under "N done", links as pills with their host, the Log, when it was updated and who pushed last, and a
-  small Open in Claude button on every card. Esc,
+  and the done ones folded under "N done", links as pills with their host, the Log, and when it was updated and who pushed last. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh
   keeps the drawer open with fresh content. The drawer needs JavaScript; without it the cards still show. Paused and silent cards have grey chrome; their text
@@ -401,7 +395,7 @@ Claude and the drawer: no switch, menu, delete, download or report-app grants.
   silent or asking something), one line each: health dot, name, one label (Needs you when it
   asks something, else the health label), the reason (cut short, full text in its tooltip;
   wrapped on phones) and when it was checked; then the green rows folded under "N healthy". A row
-  that asks something gets the coloured edge and a small Open in Claude button. A click on a row
+  that asks something gets the coloured edge. A click on a row
   opens the same drawer as a card: health, cadence and overdue tags, the reason, the questions,
   links and log.
 

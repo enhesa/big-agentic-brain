@@ -19,6 +19,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-18",
+    title: "BAB Tasks stays up to date after a compaction and on scheduled runs",
+    changes: [
+      "Agents keep publishing to BAB Tasks after a context compaction: the bab-tasks plugin now repeats its rule at session start.",
+      "Scheduled agent runs now refresh their recurring card's health after every run, so upkeep stops showing as overdue.",
+    ],
+  },
+  {
     date: "2026-11-17",
     title: "Group messages, safer memories, in-place linking and Tasks in the navbar",
     changes: [
@@ -28,8 +36,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Memories show who confirmed, flagged, kept or replaced them, when and why, and flagged ones are labelled.",
       "Inbox, reminders, comments and feedback show a clear card to link your browser right there, then bring you back.",
       "BAB Tasks, the Kanban board for your agents, now has its own item in the navbar after Reminders.",
-      "Agents keep publishing to BAB Tasks after a context compaction: the bab-tasks plugin now repeats its rule at session start.",
-      "Scheduled agent runs now refresh their recurring card's health after every run, so upkeep stops showing as overdue.",
+      "BAB Tasks has no Open in Claude button any more: the board only shows status, whatever tool your agents use.",
     ],
   },
   {

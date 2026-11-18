@@ -7,7 +7,6 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { ccView, type CcView } from "@/lib/tasks";
 import { branding } from "@/lib/branding";
 import { ApiError } from "@/lib/errors";
-import { isSessionLink } from "@/lib/tasks-link";
 import TasksPoll from "./TasksPoll";
 import CardDrawer from "./CardDrawer";
 import styles from "./tasks.module.css";
@@ -314,7 +313,7 @@ function ProgressRing({ r, done, count = false }: { r: Rec; done: number; count?
 
 /**
  * One open question: its text, age, a stale tag and the options the agent offered, display only.
- * The person answers in the Claude session (Open in Claude). Every string is React text.
+ * The person answers wherever the work happens; the board only shows it. Every string is React text.
  */
 function QuestionItem({ q }: { q: Rec["questionViews"][number] }) {
   return (
@@ -413,29 +412,6 @@ function doneCount(r: Rec): number {
   return r.tasks.filter((t) => t.status === "done").length;
 }
 
-/**
- * The button that opens the session behind an initiative in Claude (source.link). The link is
- * checked again here before it becomes an href (isSessionLink, the server's rule); no link, or one
- * that fails the check, gives a disabled button. Same tab, like CCC: a claude:// link hands off to
- * the app.
- */
-function OpenInClaude({ r, small = false }: { r: Rec; small?: boolean }) {
-  const link = r.source?.link;
-  const cls = `${styles.openClaude} ${small ? styles.openClaudeSm : ""}`;
-  if (isSessionLink(link)) {
-    return (
-      <a className={cls} href={link} rel="noopener noreferrer" data-open-session={r.id}>
-        Open in Claude <span aria-hidden="true">↗</span>
-      </a>
-    );
-  }
-  return (
-    <button type="button" className={cls} disabled title="No session link" data-open-session="">
-      Open in Claude<span className={styles.srOnly}> (no session link)</span>
-    </button>
-  );
-}
-
 /** Days past the deadline; 0 when it is not overdue, has none, or the initiative is done. */
 function overdueDays(r: Rec): number {
   if (!r.deadline || r.state === "done") return 0;
@@ -445,8 +421,8 @@ function overdueDays(r: Rec): number {
 
 /**
  * One compact card. The face holds the title (a button that opens the drawer), the progress ring
- * and one line: the current task on an Active or Idle card; on a Needs you card no line, only the
- * Open in Claude button (the board's only action); nothing on a Finished card. An overdue deadline
+ * and one line: the current task on an Active or Idle card; no line on a Needs you or Finished card.
+ * The board has no actions: it shows status, and a person answers wherever the work happens. An overdue deadline
  * is a small red dot with a tooltip. Chips, questions, options, ages, tasks, links and the log are
  * in the drawer only (CardDrawer); a click on the card opens it.
  */
@@ -480,11 +456,6 @@ function Initiative({ r }: { r: Rec }) {
           {late ? <span className={styles.lateDot} role="img" aria-label={lateText} title={`${lateText} (${r.deadline})`} data-overdue="" /> : null}
         </div>
       </div>
-      {r.status === "needs_you" ? (
-        <div className={styles.cardAct}>
-          <OpenInClaude r={r} />
-        </div>
-      ) : null}
     </article>
   );
 }
@@ -526,9 +497,6 @@ function Detail({ r }: { r: Rec }) {
           ) : null}
         </div>
         <ProgressRing r={r} done={doneCount(r)} count />
-      </div>
-      <div className={styles.detailAct}>
-        <OpenInClaude r={r} small />
       </div>
 
       {r.health?.reason ? (
@@ -727,7 +695,6 @@ function Upkeep({ r }: { r: Rec }) {
       <span className={styles.upWhen} title={r.health ? `Agent time ${r.health.checkedAt}` : undefined}>
         {r.health ? <>checked {formatRelativeTime(r.health.receivedAt)}</> : <>updated {formatRelativeTime(r.updatedAt)}</>}
       </span>
-      {needs ? <OpenInClaude r={r} small /> : null}
     </li>
   );
 }
