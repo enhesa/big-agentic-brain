@@ -15,6 +15,10 @@ bab-tasks skill also gives the person the link.
   (`plugins/bab-tasks`, its skill also served at `/instructions/tasks.md`) is the
   opt-in: agents publish only with that skill, and the first publish creates the person's Command
   Center. The BAB plugin's own skill only names the tool.
+- The plugin has one hook (`plugins/bab-tasks/hooks/hooks.json`). At every session start, also
+  after a context compaction, it prints one fixed line: load the skill when its text is not in
+  context, and publish every turn. A compaction can drop the skill text, and agents then stop
+  publishing. The hook makes no network call.
 - The page has no settings. Deleting, exporting and report-app grants are tool actions the agent
   runs on the person's ask, on the person's own data only (see API).
 - `BAB_TASKS=false` switches the feature off for the whole deployment.
@@ -308,7 +312,9 @@ new initiatives per upload (so a `--max` over 20 needs a second link for the res
   later publish from another `source.session` kept it.
 - An active initiative with no write for 14 days is silent: it leaves the page.
 - Recurring upkeep is overdue when its health is older than 26 hours (daily, the default), 8 days
-  (weekly) or 2 hours (drain). Unknown is never overdue.
+  (weekly) or 2 hours (drain). Unknown is never overdue. The skill tells a scheduled or unattended
+  run to end every run, clean or failing, with a `patch` of its card's `health` and `worked`, and
+  tells whoever creates such a task to name the card `id` in its prompt.
 - `priority: paused` hides the initiative's questions and counts nothing as stale or silent. A
   paused record is kept 180 days after its last write, like a parked one.
 - The list answer and the page header carry a data-health summary: stale questions, silent
