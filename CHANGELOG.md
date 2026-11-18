@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.32.0](https://github.com/enhesa/big-agentic-brain/compare/v2.31.0...v2.32.0) (2026-11-18)
+
+
+### Features
+
+* **SOFTARCH-71:** add bab-tasks-audit skill to sync BAB Tasks with reality ([#168](https://github.com/enhesa/big-agentic-brain/issues/168)) ([566afb8](https://github.com/enhesa/big-agentic-brain/commit/566afb8412f9a7e002f1ac096e3485ebf7f028cc))
+* **tasks:** keep BAB Tasks publishing after a compaction ([#164](https://github.com/enhesa/big-agentic-brain/issues/164)) ([40b8653](https://github.com/enhesa/big-agentic-brain/commit/40b8653d4eb4a35949d703e786337280abe52e6a))
+
 ## [2.31.0](https://github.com/enhesa/big-agentic-brain/compare/v2.30.0...v2.31.0) (2026-11-17)
 
 
