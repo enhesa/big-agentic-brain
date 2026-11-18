@@ -31,7 +31,8 @@ without a question to the person, and never messages anyone. It writes a checkli
 - At the end of every turn, `tasks-stop.sh` reads the local transcript. If the turn since the last
   user prompt made tool calls but no `bab_tasks` call, it blocks the stop once and asks the agent
   to publish. A turn with no tool calls passes, and so does a second stop in the same turn, so it
-  never loops. It needs only `sh`, `sed` and `awk`, and on any error it lets the turn end.
+  never loops. Tool results, meta lines, compaction summaries and background task notifications
+  do not start a turn. It needs only `sh` and `awk`, and on any error it lets the turn end.
   `BAB_TASKS_STOP_HOOK=off` turns it off. Tests: `sh plugins/bab-tasks/test/run.sh`.
 - Neither hook makes a network call.
 - The page has no settings. Deleting, exporting and report-app grants are tool actions the agent

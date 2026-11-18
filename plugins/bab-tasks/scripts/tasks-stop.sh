@@ -12,44 +12,35 @@ case "${BAB_TASKS_STOP_HOOK:-on}" in
   off|OFF|Off|0|false|no) exit 0 ;;
 esac
 
-# Read the hook JSON with shell builtins only.
-input=
-while IFS= read -r line || [ -n "$line" ]; do
-  input="$input$line"
-done
-[ -n "$input" ] || exit 0
-
-# Never block twice in a row: Claude Code sets this when the agent already continues
-# because of a Stop hook.
-case "$input" in
-  *'"stop_hook_active":true'* | *'"stop_hook_active": true'*) exit 0 ;;
-esac
-
-# The raw JSON string after "transcript_path". awk undoes its escapes.
-case "$input" in
-  *'"transcript_path"'*) ;;
-  *) exit 0 ;;
-esac
-raw=${input#*\"transcript_path\"}
-raw=${raw#*\"}
-raw=${raw%%\"*}
-[ -n "$raw" ] || exit 0
-
-# Walk the transcript (JSON Lines). A quote inside a JSON string is escaped, so an unescaped
-# "key":"value" pattern is always structure, never text someone typed.
+# awk reads the hook JSON from stdin, then the transcript it names (JSON Lines).
+# A quote inside a JSON string is escaped, so an unescaped "key":"value" pattern is always
+# structure, never text someone typed.
 # Only user and assistant lines count. Lines that start with another type (request copies,
 # titles, bookkeeping) are skipped: some hold whole earlier conversations.
-# A real user prompt is a user line that is not a tool result, not meta, not a compaction summary
-# and not a side chain; it starts a new turn. Assistant tool_use blocks after it are the turn's
-# tool calls.
-verdict=$(BAB_TASKS_TRANSCRIPT="$raw" awk '
-  BEGIN {
-    raw = ENVIRON["BAB_TASKS_TRANSCRIPT"]; path = ""
-    for (i = 1; i <= length(raw); i++) {
+# A real user prompt is a user line that is not a tool result, not meta, not a compaction summary,
+# not a background task notification and not a side chain; it starts a new turn. Assistant
+# tool_use blocks after it are the turn's tool calls.
+# Path escapes: \\ and \/ are decoded. A \uXXXX escape is not; Claude Code does not write one,
+# and a wrong path only means the file is not found, which passes.
+verdict=$(awk '
+  { input = input $0 "\n" }
+  END {
+    # Never block twice in a row: Claude Code sets this when the agent already continues
+    # because of a Stop hook.
+    if (input ~ /"stop_hook_active"[ \t\r\n]*:[ \t\r\n]*true/) { print "pass"; exit }
+    if (!match(input, /"transcript_path"[ \t\r\n]*:[ \t\r\n]*"([^"\\]|\\.)*"/)) { print "pass"; exit }
+    raw = substr(input, RSTART, RLENGTH)
+    sub(/^"transcript_path"[ \t\r\n]*:[ \t\r\n]*"/, "", raw)
+    raw = substr(raw, 1, length(raw) - 1)
+    path = ""
+    n = length(raw)
+    for (i = 1; i <= n; i++) {
       c = substr(raw, i, 1)
-      if (c == "\\" && i < length(raw)) { i++; c = substr(raw, i, 1) }
+      if (c == "\\" && i < n) { i++; c = substr(raw, i, 1) }
       path = path c
     }
+    if (path == "") { print "pass"; exit }
+
     tools = 0; tasks = 0
     while ((status = (getline line < path)) > 0) {
       if (line ~ /^\{"type": *"/ && line !~ /^\{"type": *"(user|assistant)"/) continue
@@ -58,6 +49,7 @@ verdict=$(BAB_TASKS_TRANSCRIPT="$raw" awk '
         if (line ~ /"type": *"tool_result"/) continue
         if (line ~ /"isMeta": *true/) continue
         if (line ~ /"isCompactSummary": *true/) continue
+        if (line ~ /"origin": *\{"kind": *"task-notification"/) continue
         tools = 0; tasks = 0
         continue
       }
@@ -66,6 +58,7 @@ verdict=$(BAB_TASKS_TRANSCRIPT="$raw" awk '
         if (line ~ /"name": *"[^"]*bab_tasks"/) tasks++
       }
     }
+    close(path)
     if (status < 0) { print "pass"; exit }
     if (tools > 0 && tasks == 0) print "block"; else print "pass"
   }
@@ -73,5 +66,5 @@ verdict=$(BAB_TASKS_TRANSCRIPT="$raw" awk '
 
 [ "$verdict" = "block" ] || exit 0
 
-printf '%s\n' '{"decision":"block","reason":"BAB Tasks: this turn made tool calls but did not publish to BAB Tasks. Publish or patch your initiative now with bab_tasks, with every remaining step as a task, every open question in questions, and a worked line. If the person asked you to leave BAB Tasks alone, or the bab_tasks tool is not available, say so in one line and stop."}'
+printf '%s\n' '{"decision":"block","reason":"BAB Tasks: this turn made tool calls but did not publish to BAB Tasks. Publish or patch your initiative now with bab_tasks: every remaining step as a task, every open question under questions, and a worked line. If the person asked you to leave BAB Tasks alone, or the bab_tasks tool is not available, say so in one line and stop."}'
 exit 0

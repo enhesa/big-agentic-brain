@@ -16,7 +16,9 @@ tool() { printf '{"parentUuid":"a","isSidechain":false,"message":{"model":"m","i
 result() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_%s","type":"tool_result","content":"ok"}]},"uuid":"r%s"}\n' "$1" "$1"; }
 say() { printf '{"parentUuid":"a","isSidechain":false,"message":{"model":"m","id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"%s"}]},"type":"assistant","uuid":"s1"}\n' "$1"; }
 side() { printf '{"parentUuid":"a","isSidechain":true,"type":"user","message":{"role":"user","content":"subagent prompt"},"uuid":"x1"}\n'; }
-blob() { printf '{"type":"api-request-blob","sessionId":"s","message":{"role":"user","content":[{"type":"text","text":"copy"}]}}\n'; }
+blob() { printf '{"type":"api-request-blob","sessionId":"s","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_b","name":"Bash","input":{}}]}}\n'; }
+notify() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":"task finished"},"origin":{"kind":"task-notification"},"uuid":"n1"}\n'; }
+image() { printf '{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]},"uuid":"i1"}\n'; }
 compact() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":"summary"},"isCompactSummary":true,"uuid":"c1"}\n'; }
 
 stdin_for() { printf '{"session_id":"s","transcript_path":"%s","hook_event_name":"Stop","stop_hook_active":%s}' "$1" "${2:-false}"; }
@@ -76,7 +78,11 @@ expect "a compaction summary is not a prompt" pass "$(stdin_for "$t")"
 
 t="$tmp/no-tasks.jsonl"
 expect "stop_hook_active passes" pass "$(stdin_for "$t" true)"
-expect "stop_hook_active with spaces passes" pass "{\"transcript_path\": \"$t\", \"stop_hook_active\": true}"
+expect "stop_hook_active with spaces passes" pass "{\"transcript_path\": \"$t\", \"stop_hook_active\" : true}"
+expect "stop_hook_active false still checks" block "{\"transcript_path\" : \"$t\", \"stop_hook_active\": false}"
+expect "stop_hook_active on its own line passes" pass "{\"transcript_path\":\"$t\",
+\"stop_hook_active\":
+true}"
 expect "BAB_TASKS_STOP_HOOK=off passes" pass "$(stdin_for "$t")" BAB_TASKS_STOP_HOOK=off
 
 escaped=$(printf '%s' "$t" | sed 's|/|\\/|g')
@@ -92,6 +98,32 @@ expect "empty input passes" pass ""
 expect "input that is not JSON passes" pass "not json at all"
 expect "no transcript_path passes" pass '{"stop_hook_active":false}'
 expect "a missing transcript passes" pass "$(stdin_for "$tmp/missing.jsonl")"
+
+t="$tmp/blob-chat.jsonl"
+{ prompt "go" 1; tool Bash 1; result 1; prompt "thanks" 2; blob; say "welcome"; } > "$t"
+expect "a request copy holding tool calls does not count" pass "$(stdin_for "$t")"
+
+t="$tmp/notified.jsonl"
+{ prompt "go" 1; tool mcp__plugin_bab_bab__bab_tasks 1; result 1; notify; tool Read 2; result 2; } > "$t"
+expect "a background task notification is not a prompt" pass "$(stdin_for "$t")"
+
+t="$tmp/image.jsonl"
+{ prompt "go" 1; tool mcp__plugin_bab_bab__bab_tasks 1; result 1; image; tool Read 2; result 2; } > "$t"
+expect "an image-only prompt starts a turn" block "$(stdin_for "$t")"
+
+t="$tmp/not-ending.jsonl"
+{ prompt "go" 1; tool bab_tasks_helper 1; result 1; } > "$t"
+expect "a name that only contains bab_tasks does not count" block "$(stdin_for "$t")"
+
+mkdir -p "$tmp/dir with (parens)"
+t="$tmp/dir with (parens)/x.jsonl"
+{ prompt "go" 1; tool Bash 1; result 1; } > "$t"
+expect "a path with spaces and parentheses is read" block "$(stdin_for "$t")"
+
+t="$tmp/long-line.jsonl"
+long=x; i=0; while [ $i -lt 17 ]; do long="$long$long"; i=$((i + 1)); done
+{ prompt "$long" 1; tool Bash 1; result 1; } > "$t"
+expect "a very long line is read" block "$(stdin_for "$t")"
 
 t="$tmp/garbage.jsonl"
 printf 'garbage\n{"broken":\n\000\001\n' > "$t"
