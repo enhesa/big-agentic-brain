@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-18",
     title: "BAB Tasks stays up to date after a compaction and on scheduled runs",
     changes: [
+      "The bab-tasks plugin now sends an agent back once when a turn ends without publishing to BAB Tasks.",
       "The Users list and the Health card on the usage page are now for maintainers only.",
       "The BAB Tasks audit now writes a checklist of every card first and lists any card it left unchecked.",
       "The new bab-tasks-audit skill checks your BAB Tasks against PRs, tickets and files, and closes finished tasks.",

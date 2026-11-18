@@ -22,7 +22,8 @@ for a project with work left: it erases its progress. The person must never have
 tool has an https one. `source.link` is deprecated: the page ignores it, so leave it out.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
-or declined a task.
+or declined a task. In Claude Code the bab-tasks plugin's Stop hook checks this: a turn that made
+tool calls but no `bab_tasks` call is sent back once to publish.
 
 If this skill is loaded, call `bab_tasks` `publish` with the whole initiative record (same `id` every time, `v: 1`) before the first work step
 of your first turn, with that step `in_progress`. Publish again (or `patch`, see The record) after

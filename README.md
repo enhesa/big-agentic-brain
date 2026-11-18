@@ -305,7 +305,7 @@ Few permission prompts: the plugin approves its low-risk `bab_*` tools (search, 
 - **Measured effort.** Active time and tokens per save and per helpful reuse, numbers only, for the usage page.
 - **Skills.** Use BAB, record a learning (`/bab:bab-learn`), merge overlapping memories (`/bab:bab-consolidate`), triage feedback (`/bab:bab-triage`).
 
-The separate `bab-tasks` plugin, from the same marketplace, is the opt-in for [BAB Tasks](#bab-tasks): `/plugin install bab-tasks@big-agentic-brain`. Its one hook repeats the short rule at session start and after a compaction, so agents keep publishing.
+The separate `bab-tasks` plugin, from the same marketplace, is the opt-in for [BAB Tasks](#bab-tasks): `/plugin install bab-tasks@big-agentic-brain`. One hook repeats the short rule at session start and after a compaction. A Stop hook sends the agent back once when a turn with tool calls ends without publishing (`BAB_TASKS_STOP_HOOK=off` turns it off).
 
 Setup, requirements and details: [plugins/claude-code/README.md](plugins/claude-code/README.md).
 

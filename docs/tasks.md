@@ -24,10 +24,17 @@ without a question to the person, and never messages anyone. It writes a checkli
   (`plugins/bab-tasks`, its skill also served at `/instructions/tasks.md`) is the
   opt-in: agents publish only with that skill, and the first publish creates the person's Command
   Center. The BAB plugin's own skill only names the tool.
-- The plugin has one hook (`plugins/bab-tasks/hooks/hooks.json`). At every session start, also
-  after a context compaction, it prints one fixed line: load the skill when its text is not in
-  context, and publish every turn. A compaction can drop the skill text, and agents then stop
-  publishing. The hook makes no network call.
+- The plugin has two hooks (`plugins/bab-tasks/hooks/hooks.json`). At every session start, also
+  after a context compaction, `tasks-rule.sh` prints one fixed line: load the skill when its text
+  is not in context, and publish every turn. A compaction can drop the skill text, and agents then
+  stop publishing.
+- At the end of every turn, `tasks-stop.sh` reads the local transcript. If the turn since the last
+  user prompt made tool calls but no `bab_tasks` call, it blocks the stop once and asks the agent
+  to publish. A turn with no tool calls passes, and so does a second stop in the same turn, so it
+  never loops. Tool results, meta lines, compaction summaries and background task notifications
+  do not start a turn. It needs only `sh` and `awk`, and on any error it lets the turn end.
+  `BAB_TASKS_STOP_HOOK=off` turns it off. Tests: `sh plugins/bab-tasks/test/run.sh`.
+- Neither hook makes a network call.
 - The page has no settings. Deleting, exporting and report-app grants are tool actions the agent
   runs on the person's ask, on the person's own data only (see API).
 - `BAB_TASKS=false` switches the feature off for the whole deployment.
