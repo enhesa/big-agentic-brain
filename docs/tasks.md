@@ -9,6 +9,15 @@ with the server's time, which the person can export.
 The page has a Tasks item in the navbar, after Reminders, and no footer entry. The
 bab-tasks skill also gives the person the link.
 
+## Audit skill
+
+The optional `bab-tasks-audit` skill (`plugins/bab-tasks/skills/bab-tasks-audit`, also served at
+`/instructions/tasks-audit.md`) syncs the page with reality, by hand or as a nightly scheduled task. It checks
+every active or parked card against its evidence (PR, ticket, file, doc), marks finished tasks done with the
+evidence in `worked`, and flags stale questions, silent cards, cards whose session is gone and overdue recurring
+cards. It uses `patch` and changes status only: it never removes anything, never closes a whole initiative
+without a question to the person, and never messages anyone. A scheduled run ends by patching its own recurring card.
+
 ## Opt-in is the plugin
 
 - There is no switch in BAB. Installing the optional `bab-tasks` plugin
