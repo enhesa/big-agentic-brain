@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.33.0](https://github.com/enhesa/big-agentic-brain/compare/v2.32.0...v2.33.0) (2026-11-18)
+
+
+### Features
+
+* **SOFTARCH-71:** show users and health on usage to maintainers only ([#172](https://github.com/enhesa/big-agentic-brain/issues/172)) ([abc560a](https://github.com/enhesa/big-agentic-brain/commit/abc560a8450a1cb94a1397e2fe7702ced891627f))
+* **tasks:** audit checks every card, with a checklist and coverage-based health ([#169](https://github.com/enhesa/big-agentic-brain/issues/169)) ([1758423](https://github.com/enhesa/big-agentic-brain/commit/1758423d963ac05f1f3d8951be40607e0c34c2a2))
+
 ## [2.32.0](https://github.com/enhesa/big-agentic-brain/compare/v2.31.0...v2.32.0) (2026-11-18)
 
 
