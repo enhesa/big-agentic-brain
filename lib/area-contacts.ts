@@ -53,7 +53,7 @@ export interface MyArea {
  */
 export function normalizeArea(raw: unknown): string {
   const text = String(raw ?? "");
-  // Labels are public (/usage, /api/people): an email or a token must not become one.
+  // Labels are shown to everyone (/api/people, and /usage for maintainers): an email or a token must not become one.
   if (redact(text) !== text) throw new ValidationError("area must not contain an email address, a token or other personal data");
   const area = text
     .trim()

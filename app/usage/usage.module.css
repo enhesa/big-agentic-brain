@@ -931,25 +931,11 @@ a.mini:hover {
   color: var(--u-muted);
 }
 
-.flagList {
-  margin: 0;
-  padding: 0 0 0 18px;
-  font-size: 0.9rem;
-  line-height: 1.7;
-}
-
-.flagList a,
 .table a {
   font-weight: 600;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--u-s1) 55%, transparent);
   text-underline-offset: 3px;
-}
-
-.healthNote {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--u-muted);
 }
 
 /* ------------------------------------------------------------------- tables */

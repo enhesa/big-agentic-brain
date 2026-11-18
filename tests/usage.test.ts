@@ -864,8 +864,6 @@ describe("the 5-minute cache", () => {
 /* --------------------------------------------------------------------- page */
 
 describe("/usage page", () => {
-  /** The page without its Users directory, which lists every address on purpose (it was /people, open to all). */
-  const withoutUsers = (html: string) => html.replace(/<section id="users".*?<\/section>/s, "");
 
   async function render(email: string | null, users?: string) {
     process.env.BAB_TRUST_PROXY_IDENTITY = "1";
@@ -910,14 +908,16 @@ describe("/usage page", () => {
     return s;
   }
 
-  it("shows a non-maintainer the counts and flag titles, without the personal rows", async () => {
+  it("shows a non-maintainer the totals, without the Users directory or the Health card", async () => {
     const s = await seedLoopAndFlag();
     const html = await render(B);
-    expect(html).toContain("Identify problems");
-    expect(html).toContain("Only maintainers see who is looping.");
-    expect(html).toContain(`href="/memory/${s.id}"`);
-    expect(html).toContain("Standard open zq9");
-    expect(withoutUsers(html)).not.toContain(A);
+    expect(html).toMatch(/data-testid="tile-flags"[^>]*>1</);
+    expect(html).not.toContain('href="#health"');
+    expect(html).not.toContain('id="health"');
+    expect(html).not.toContain('id="users"');
+    expect(html).not.toContain("Identify problems");
+    expect(html).not.toContain(`href="/memory/${s.id}"`);
+    expect(html).not.toContain(A);
     expect(html).not.toContain("<th>Identified as</th>");
     expect(html).not.toContain("<th>Author</th>");
     expect(html).not.toContain("/memory?author=");
@@ -928,8 +928,9 @@ describe("/usage page", () => {
     await seedLoopAndFlag();
     const html = await render(null);
     expect(html).toMatch(/data-testid="tile-flags"[^>]*>1</);
-    expect(html).toContain("Only maintainers see who is looping.");
-    expect(withoutUsers(html)).not.toContain(A);
+    expect(html).not.toContain('id="health"');
+    expect(html).not.toContain('id="users"');
+    expect(html).not.toContain(A);
     expect(html).not.toContain("<th>Identified as</th>");
   });
 
@@ -940,7 +941,9 @@ describe("/usage page", () => {
     expect(html).toContain("<th>Author</th>");
     expect(html).toContain(`href="/memory?author=${encodeURIComponent(A)}"`);
     expect(html).toContain('href="/admin"');
-    expect(html).not.toContain("Only maintainers see who is looping.");
+    expect(html).toContain('id="users"');
+    expect(html).toContain("Identify problems");
+    expect(html).toContain('href="#health"');
   });
 
   it("lists users 10 per page with Previous and Next, and clamps a bad page", async () => {
@@ -970,12 +973,19 @@ describe("/usage page", () => {
   }
   const usersOf = (html: string) => html.match(/<section id="users".*?<\/section>/s)?.[0] ?? "";
 
-  it("shows everyone message and reminder totals and each person's message counts, never the text", async () => {
+  it("shows everyone message and reminder totals, never the text", async () => {
     await seedMessageAndReminder();
     const html = await render(B);
     expect(html).toContain("Messages and reminders");
     expect(html).toMatch(/data-testid="messages-total"[^>]*>1 message in 12 months</);
     expect(html).toContain("Reminders set, done, snoozed and dropped per week");
+    expect(html).not.toContain("qx7");
+    expect(usersOf(html)).toBe("");
+  });
+
+  it("shows a maintainer each person's message counts in the Users directory, never the text", async () => {
+    await seedMessageAndReminder();
+    const html = await render(MAINT);
     expect(html).not.toContain("qx7");
     const users = usersOf(html);
     for (const th of ["Memories saved", "Memories used", "Messages exchanged", "Conversations"]) expect(users).toContain(`>${th}</th>`);
@@ -983,10 +993,10 @@ describe("/usage page", () => {
     expect(users).toContain('title="0 sent, 1 received"');
   });
 
-  it("shows an anonymous viewer the same Users columns", async () => {
+  it("hides the Users directory from an anonymous viewer", async () => {
     await seedMessageAndReminder();
     const html = await render(null);
-    expect(usersOf(html)).toContain(">Messages exchanged</th>");
+    expect(usersOf(html)).toBe("");
     expect(html).not.toContain("qx7");
   });
 

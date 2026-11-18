@@ -17,6 +17,7 @@ afterEach(async () => {
   rmSync(dataDir, { recursive: true, force: true });
   delete process.env.DATA_DIR;
   delete process.env.BAB_TRUST_PROXY_IDENTITY;
+  delete process.env.BAB_MAINTAINERS;
   vi.doUnmock("next/headers");
   vi.resetModules();
 });
@@ -48,7 +49,12 @@ describe("LiveUpdates is wired into the read-only pages", () => {
   });
 
   it("is gone from the Users section of app/usage/page.tsx (it only followed presence)", async () => {
-    vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
+    // The Users section is for maintainers only, so view the page as one.
+    process.env.BAB_TRUST_PROXY_IDENTITY = "1";
+    (await import("../lib/config"))._resetConfigForTests();
+    const maint = "mia.maint@example.com";
+    process.env.BAB_MAINTAINERS = maint;
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers({ "x-auth-request-email": maint, "x-auth-request-user": "m1" }) }));
     vi.doMock("@/app/components/shell/Shell", () => ({ default: ({ children }: { children: unknown }) => children }));
     const { default: UsagePage } = await import("../app/usage/page");
     const html = await renderHtml(await UsagePage());
