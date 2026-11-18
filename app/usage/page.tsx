@@ -29,11 +29,9 @@ import styles from "./usage.module.css";
 /**
  * /usage: how the organization uses BAB, as charts and numbers (docs/spec.md "Usage page"). Read-only and open
  * to everyone who can open the site, like /memory (an anonymous viewer is treated as a
- * non-maintainer). Plain words for everyone; tool names only in the Health card. Anything that
- * names a person or a device next to a problem (identify loop rows, flag authors) is for
- * maintainers only. The Users directory (name, email, last seen) is the exception on purpose: it was
- * the open /people page before it became a section here, so it stays open to
- * everyone who can open the site.
+ * non-maintainer). Plain words for everyone; tool names only in the Health card. The Users
+ * directory (name, email, last seen, per-person counts) and the Health card (identify loops, flag
+ * authors) are for maintainers only; everyone else sees totals and charts.
  *
  * Honest about missing data: weeks before the first activity collapse into one note, numbers that
  * only exist since USAGE_COLLECTING_SINCE say so, and an empty chart is a short note, not zeros.
@@ -231,10 +229,11 @@ export default async function UsagePage({
     coalesce: { minutes: 5 },
   });
   const maintainer = viewer !== null && isMaintainer(viewer.ownerId);
-  const usersPage = listUsersPage(Number((await searchParams)?.users));
-  const memoryCounts = learningCountsByAuthor();
-  const userCounts = activityCountsForUsers(usersPage.users.map((u) => u.id));
-  const areaCounts = areasByUser();
+  // The Users directory is for maintainers only, so nobody else pays for its queries.
+  const usersPage = maintainer ? listUsersPage(Number((await searchParams)?.users)) : null;
+  const memoryCounts = usersPage ? learningCountsByAuthor() : {};
+  const userCounts = usersPage ? activityCountsForUsers(usersPage.users.map((u) => u.id)) : {};
+  const areaCounts = usersPage ? areasByUser() : null;
 
   const report = cachedUsageReport();
   const generated = new Date(report.generatedAt);
@@ -484,7 +483,7 @@ export default async function UsagePage({
               label: `People enrolled, running total: ${shown.map((w, i) => `${dayMonth(w.week)} ${enrolled.running[i]}`).join(", ")}`,
             }}
             testId="tile-enrolled"
-            title="Everyone who has ever reached BAB as themselves, through a linked device, the sign-in or their agent, each counted once: the people in the Users directory below."
+            title="Everyone who has ever reached BAB as themselves, through a linked device, the sign-in or their agent, each counted once."
             note={{ text: "All time", title: "Counted from the Users directory, not from the last 12 months of activity.", testId: "tile-enrolled-note" }}
           />
         </section>
@@ -937,7 +936,7 @@ export default async function UsagePage({
               label="Flags waiting"
               value={formatCount(flags)}
               title="Flagged standards and decisions, and protected memories marked not helpful, waiting for a maintainer."
-              href="#health"
+              href={maintainer ? "#health" : undefined}
               tone={flags > 0 ? "warn" : undefined}
               testId="tile-flags"
             />
@@ -953,7 +952,8 @@ export default async function UsagePage({
           </div>
         </section>
 
-        {/* 8. Users */}
+        {/* 8. Users, maintainers only */}
+        {usersPage && (
         <section id="users" className={`${styles.group} ${styles.users}`} aria-labelledby="users-h">
           <h2 id="users-h" className={styles.h2}>
             Users <span className={styles.h2Note}>{plural(usersPage.total, "person", "people")}</span>
@@ -992,7 +992,7 @@ export default async function UsagePage({
                     <td>{u.name ?? u.id}</td>
                     <td className={styles.wide}>{u.email ?? "-"}</td>
                     <td>{u.home_team ? teamLabel(u.home_team) : "-"}</td>
-                    <td>{(areaCounts.get(u.id) ?? []).map((a) => a.area).join(", ") || "-"}</td>
+                    <td>{(areaCounts?.get(u.id) ?? []).map((a) => a.area).join(", ") || "-"}</td>
                     <td className={styles.nowrap}>{parseDbTime(u.last_seen_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</td>
                     <td className={styles.num}>{memoryCounts[u.id] ?? 0}</td>
                     <td className={styles.num}>{userCounts[u.id]?.used ?? 0}</td>
@@ -1027,8 +1027,10 @@ export default async function UsagePage({
             </nav>
           )}
         </section>
+        )}
 
-        {/* 9. Health */}
+        {/* 9. Health, maintainers only */}
+        {maintainer && (
         <section id="health" className={`${styles.card} ${styles.health}`} aria-labelledby="health-h">
           <header className={styles.cardHead}>
             <h2 id="health-h" className={styles.cardTitle}>
@@ -1086,16 +1088,7 @@ export default async function UsagePage({
             </div>
           </div>
 
-          {flags > 0 &&
-            (!maintainer ? (
-              <ul className={styles.flagList} data-testid="flags-list">
-                {report.flagged.map((f) => (
-                  <li key={f.id}>
-                    <Link href={`/memory/${f.id}`}>{f.title}</Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
+          {flags > 0 && (
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
@@ -1124,9 +1117,9 @@ export default async function UsagePage({
                   </tbody>
                 </table>
               </div>
-            ))}
+          )}
 
-          {maintainer && loops > 0 && (
+          {loops > 0 && (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <caption className={styles.caption}>bab_identify loops, newest first</caption>
@@ -1153,12 +1146,8 @@ export default async function UsagePage({
               </table>
             </div>
           )}
-          {!maintainer && loops > 0 && (
-            <p className={styles.healthNote} data-testid="loops-count">
-              Only maintainers see who is looping.
-            </p>
-          )}
         </section>
+        )}
       </div>
     </Shell>
   );

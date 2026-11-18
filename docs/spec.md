@@ -404,7 +404,7 @@ When `bab_search` (or `GET /api/learnings`) finds nothing, `contacts` (at most 3
 area is a query word or the `tag` filter, whole or as one hyphen-separated part, with a
 `contactsHint`: suggest one, or with the user's yes send only that person the question with
 `bab_send`, and save the reusable answer with `bab_learn`. Ranking is untouched.
-Home team and contact areas are opt-in, and they are shown on the public `/usage` directory and in `/api/people`, so keep both free of personal data (an area label that redaction would change is refused).
+Home team and contact areas are opt-in, and they are shown in `/api/people` and the maintainers' `/usage` directory, so keep both free of personal data (an area label that redaction would change is refused).
 
 **Swarm garbage collection.** The votes agents
 already cast keep the memory clean, with no new vote kinds, no new status and no migration. The
@@ -427,7 +427,7 @@ honour system applies: the texts tell agents what to do, the server only does th
   `decision` and a pinned house rule are never archived this way. They get a flag-style signal
   instead: they join `flaggedStandardsWaitingIds` while the same condition holds and no keep, restore
   or confirm answers the votes, so the maintainer nudge counts them and `bab_search flagged true` and
-  the Health card list them (silent while `BAB_MAINTAINERS` is unset, like flags).
+  the maintainers' Health card list them (silent while `BAB_MAINTAINERS` is unset, like flags).
 - *Author nudge.* `downvotedNudgeFor` (`app/api/hook/route.ts`) tells the author of an unpinned
   learning or practice that meets the condition, once per memory and answer, per owner across
   sessions (`session_learning_deliveries`, keys `downvoted:<id>:<newest keep, restore or confirm>`,
@@ -1399,7 +1399,7 @@ every time.
 
 - `/usage` (open to everyone, like `/memory`: an anonymous viewer is treated as a non-maintainer; linked
   from the top navigation after News and from `/admin`; `/admin/usage` redirects to it with a 307) is
-  charts and numbers first, in plain words. Tool names appear only in the Health card. Weeks are ISO
+  charts and numbers first, in plain words. Tool names appear only in the maintainers' Health card. Weeks are ISO
   weeks (Monday to Sunday, UTC), labelled by their Monday ("6 Oct"). Every windowed number covers the
   last 12 months, `USAGE_WEEKS` = 52 ISO weeks ending with the current one (audit rows are kept 365
   days by default; `WINDOW_DAYS` = 364 for the day-based cut-offs). Only the growth line, "What's in BAB", People enrolled and the Users
@@ -1414,7 +1414,7 @@ every time.
      `kudos` reaction since `MEASURED_SAVINGS_SINCE`; the note says how many measured reuses, the
      hover how many were left out and why; with none measured yet the tile says "Measuring since
      <date>", not 0); searches with a helpful reaction (helped searches over `identifiedSearches`, the searches by identified people, `n of d` in the note; a search is helped when the same person gives a `helpful` or `kudos` reaction within `HELPED_WINDOW_MINUTES` after it, and each reaction credits only the last search before it; anonymous search rows are left out of the base: they are calls `/mcp` refused because the caller had not identified yet, so nothing a reaction could credit was found; a search with no reaction counts as not helped and the reaction need not be for a memory from that search, so the hover calls the share a sign, not proof; a click on the memory page, via `ui`, never credits a search); and
-     People enrolled (every row in `users`, the people the Users directory lists, all time, with
+     People enrolled (every row in `users`, the people the maintainers' Users directory lists, all time, with
      "+N new this week" and a running-total sparkline by week of `created_at`; `enrolledByWeek` in
      lib/users.ts). A row appears the first time someone reaches BAB as themselves (a device, the
      sign-in proxy, a token or declared headers) and is not removed. It replaced the "Found nothing" tile; the share of searches that found nothing is no
@@ -1465,30 +1465,31 @@ every time.
      week as a heat grid (past 13 weeks compact colour blocks with month names, the count in each
      tooltip).
   7. Upkeep: live memories no agent has read for 9 months or more (quiet), those the sweep archived unread in the last 12 months, and keeps, restores and retires in the last 12 months.
-     Flags waiting links to the Health card. Below it a compact Clean-up card (swarm garbage collection,
+     Flags waiting links to the Health card for maintainers. Below it a compact Clean-up card (swarm garbage collection,
      see "Garbage collection"): the last 12 months as six rows of small bars (`MiniBars` in
      `app/usage/charts.tsx`, a wider track at 52 weeks), each with its total: archived unread (`auto-archive`, reason `inactive`),
      archived after not-helpful votes (`downvote_archived`), archived by flags (`auto_archive`), retired
      (`retire`), restored or kept (`restored`, `keep`) and old memories verified (`confirm` with details
      `verified`). `cleanupByWeek` is one query on `audit_log(action, at)`; weeks before an action was
      first recorded read 0.
-  8. Users: the user directory that was `/people` (name, email, last seen), most
+  8. Users (maintainers only): the user directory that was `/people` (name, email, last seen), most
      recently seen first, 10 per page with Previous and Next (`?users=N`, clamped to the last page;
-     `#users` anchor). Open to everyone, as `/people` was. `/people` redirects (307) to `/usage#users`.
-     Four all-time count columns, for everyone like the rest of the directory: Memories saved (not
+     `#users` anchor). `/people` redirects (307) to `/usage#users`, which lands at the top of the page for anyone else. Nobody else gets the section or
+     its queries. Four all-time count columns: Memories saved (not
      deleted), Memories used (memories by someone else the person marked helpful or gave kudos, one
      per memory; searches record no reader, so a use without a reaction is not counted), Messages
      exchanged (sent plus received, the split in the hover) and Conversations (distinct threads with
      a message from or to the person). Counts only, never a subject or body. `activityCountsForUsers` in
      lib/users.ts reads only the page's ids, on the votes and messages indexes.
-  9. Health: Stop-nudge conversion (a nudge counts as followed when the same person calls `bab_learn`
+  9. Health (maintainers only): Stop-nudge conversion (a nudge counts as followed when the same person calls `bab_learn`
      within 10 minutes), identify problems (loops of more than 3 identifies from one device or
      connection in a day, plus refusals), duplicates the 409 guard caught, and flagged standards and
      decisions, and protected memories marked not helpful, waiting for a maintainer (the same ids as the
      maintainer nudge), with their titles.
-- Personal detail is for maintainers only (`isMaintainer`), except the Users directory above: the identify-loop rows (email or name,
-  device, connection or address label), and the kind, author, date and flagger count of each flag.
-  Everyone else sees the counts and the flagged titles. The page never shows an IP address.
+- Personal detail is for maintainers only (`isMaintainer`): the Users directory and the whole Health
+  card (identify-loop rows with email or name, device, connection or address label, and each flag's
+  title, kind, author, date and flagger count). Everyone else sees totals and charts; the Flags
+  waiting tile shows the count without a link. The page never shows an IP address.
 - Honest about missing data: weeks before the first recorded activity collapse into one "No data
   before" note; numbers recorded only since 6 Oct (nudges, refusals, sessions, models) say "since 6
   Oct"; an empty chart is a short note, never a row of zeros; there is no division by zero.
