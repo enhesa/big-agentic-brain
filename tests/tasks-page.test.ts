@@ -660,6 +660,25 @@ describe("the tasks skill", () => {
   });
 });
 
+describe("the tasks audit skill", () => {
+  it("is served with the origin filled in and states its limits", async () => {
+    const { GET } = await import("../app/instructions/tasks-audit.md/route");
+    const text = await (await GET(new Request("https://bab.example.com/instructions/tasks-audit.md", { headers: { host: "bab.example.com" } }) as never)).text();
+    expect(text).toMatch(/^---\nname: tasks-audit\ndescription: .+\n---/);
+    expect(text).not.toContain("{{ORIGIN}}");
+    expect(text).toContain("Never `remove` a task, question, initiative or link.");
+    expect(text).toContain("Never message anyone");
+  });
+
+  it("the plugin skill is the served text with the placeholder swapped", () => {
+    const served = readFileSync(path.join(process.cwd(), "content/instructions/tasks-audit.md"), "utf8").replaceAll("{{ORIGIN}}", "<bab_url>");
+    const plugin = readFileSync(path.join(process.cwd(), "plugins/bab-tasks/skills/bab-tasks-audit/SKILL.md"), "utf8").replaceAll("\r\n", "\n");
+    const body = (t: string) => t.slice(t.indexOf("\n---\n") + 5);
+    expect(plugin).toMatch(/^---\nname: bab-tasks-audit\n/);
+    expect(body(plugin)).toBe(body(served));
+  });
+});
+
 it("simplifies an activity line: ticket keys and commit hashes leave the text, the tooltip keeps them", async () => {
   const cc = await import("../lib/tasks");
   cc.ccPublish(agent(ALICE), ALICE, { v: 1, id: "billing-export", title: "Billing export", worked: "ABC-12: merged the fix (3f9a1c2e7b)" }, "mcp");

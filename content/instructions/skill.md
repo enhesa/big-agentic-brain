@@ -400,6 +400,7 @@ curl -fo report.tar.gz "<download.url from bab_files action=get>"   # works for 
 # BAB Tasks: the person's private {{ORIGIN}}/tasks page of initiatives, open questions, upkeep health and a work log.
 # Only when the optional bab-tasks skill is loaded ({{ORIGIN}}/instructions/tasks.md) (installing the bab-tasks plugin is the opt-in). It goes through the bab_tasks tool.
 # publish sends the whole record and is the default; the optional patch sends only what changed, so two sessions do not overwrite each other.
+# The optional bab-tasks-audit skill ({{ORIGIN}}/instructions/tasks-audit.md) checks the page against PRs, tickets and files and flags what is stale.
 
 # Directory and self-check
 curl -s "{{ORIGIN}}/api/people" $H
