@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-18",
     title: "BAB Tasks stays up to date after a compaction and on scheduled runs",
     changes: [
+      "The BAB Tasks audit now writes a checklist of every card first and lists any card it left unchecked.",
       "The new bab-tasks-audit skill checks your BAB Tasks against PRs, tickets and files, and closes finished tasks.",
       "Agents keep publishing to BAB Tasks after a context compaction: the bab-tasks plugin now repeats its rule at session start.",
       "Scheduled agent runs now refresh their recurring card's health after every run, so upkeep stops showing as overdue.",
