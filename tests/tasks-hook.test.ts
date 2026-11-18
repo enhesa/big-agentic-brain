@@ -8,7 +8,7 @@ const plugin = path.join(process.cwd(), "plugins", "bab-tasks");
 describe("the bab-tasks session hook", () => {
   it("runs the rule script on every session start, with no matcher, so a compaction is covered", () => {
     const { hooks } = JSON.parse(readFileSync(path.join(plugin, "hooks", "hooks.json"), "utf8"));
-    expect(Object.keys(hooks)).toEqual(["SessionStart"]);
+    expect(Object.keys(hooks)).toEqual(["SessionStart", "Stop"]);
     expect(hooks.SessionStart).toHaveLength(1);
     expect(hooks.SessionStart[0].matcher).toBeUndefined();
     expect(hooks.SessionStart[0].hooks).toEqual([
@@ -34,4 +34,30 @@ describe("the bab-tasks session hook", () => {
     const text = readFileSync(path.join(plugin, "scripts", "tasks-rule.sh"), "utf8");
     expect(text).not.toMatch(/curl|wget|CLAUDE_PLUGIN_OPTION/);
   });
+});
+
+describe("the bab-tasks stop hook", () => {
+  const script = path.join(plugin, "scripts", "tasks-stop.sh");
+
+  it("runs the stop script at the end of every turn, within 10 seconds", () => {
+    const { hooks } = JSON.parse(readFileSync(path.join(plugin, "hooks", "hooks.json"), "utf8"));
+    expect(hooks.Stop).toHaveLength(1);
+    expect(hooks.Stop[0].matcher).toBeUndefined();
+    expect(hooks.Stop[0].hooks).toEqual([
+      { type: "command", command: 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/tasks-stop.sh"', timeout: 10 },
+    ]);
+  });
+
+  it("is LF, makes no network call and needs no jq, python or node", () => {
+    const text = readFileSync(script, "utf8");
+    expect(text).not.toContain("\r");
+    const code = text.split("\n").filter((line) => !line.trimStart().startsWith("#")).join("\n");
+    expect(code).not.toMatch(/curl|wget|\bjq\b|python|\bnode\b|CLAUDE_PLUGIN_OPTION/);
+  });
+
+  it("passes its own fixture tests", () => {
+    const run = spawnSync("sh", [path.join(plugin, "test", "run.sh")], { encoding: "utf8" });
+    expect(run.stdout).toMatch(/ checks, 0 failed\s*$/);
+    expect(run.status).toBe(0);
+  }, 120_000); // about twenty runs of sh and awk; process starts are slow on Windows
 });
