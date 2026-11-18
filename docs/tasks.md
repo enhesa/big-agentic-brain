@@ -16,7 +16,7 @@ The optional `bab-tasks-audit` skill (`plugins/bab-tasks/skills/bab-tasks-audit`
 every active or parked card against its evidence (PR, ticket, file, doc), marks finished tasks done with the
 evidence in `worked`, and flags stale questions, silent cards, cards whose session is gone and overdue recurring
 cards. It uses `patch` and changes status only: it never removes anything, never closes a whole initiative
-without a question to the person, and never messages anyone. A scheduled run ends by patching its own recurring card.
+without a question to the person, and never messages anyone. It writes a checklist of every card first and may close only when each card is checked or marked "could not verify" with a reason. Health is green when all cards are checked, amber when some evidence is unverifiable, red when cards are left unchecked. It reads an evidence file from the runner when one is given. A scheduled run ends by patching its own recurring card.
 
 ## Opt-in is the plugin
 
