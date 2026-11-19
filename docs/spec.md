@@ -1032,9 +1032,14 @@ optional `note` (300 characters or fewer, redacted). Only a person the message w
 answer, never its sender. The answer is stored in the request JSON as
 `answers: [{ by, option, note?, at }]`, one per person: a later pick replaces theirs and takes
 a new time. In a group each recipient answers for themselves, and every participant sees the
-picks. No migration. The sender's agent reads `request.options` and `request.answers` in
-`bab_inbox` (listing and opened thread) and in `GET /api/inbox/[threadId]`. An answer also
-sends a short reply in the thread, so the sender sees it unread like any reply. The route has
+picks. No migration. The sender's agent reads `request.options` and `request.answers` from an
+opened thread (`bab_inbox` with `threadId`) and from `GET /api/inbox/[threadId]`; the `bab_inbox`
+listing shows the reply text only. An identical re-pick (same option and note) changes nothing:
+no write, no reply, the old time stays (the route redirects with `unchanged`). A new or changed
+pick also sends a short reply in the thread, so the sender sees it unread like any reply. It is
+an ordinary reply, so in a group it reaches every other participant, and the form says so next to
+the button. The reply is best effort: if it cannot be sent, the answer stays stored and the
+answer still succeeds. The route has
 the same guards as the other form routes: `getViewer`, `sameOrigin`, `checkUiRateLimit`, 303
 with a fixed `?answered=` code.
 
@@ -1242,7 +1247,7 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   to a participant (`threadForParticipant`); "no such thread" and "not yours" read the same.
 - **Read-only.** Opening a thread marks nothing read, and the page has no way to: only the agent
   marks read (`bab_inbox`). The thread shows how many messages are unread for the viewer.
-- **Earlier threads.** A reply sent without a thread id starts a new thread titled "Re: <subject>",
+- **Earlier threads.** They show answers, but the answer form appears only when that thread is opened. A reply sent without a thread id starts a new thread titled "Re: <subject>",
   which would hide the original. Only when the current subject starts with a reply or forward
   prefix, `earlierThreads` finds the viewer's threads with the same subject (prefixes and case
   ignored, `normalizeSubject`) and exactly the same people, created before this one (insert order

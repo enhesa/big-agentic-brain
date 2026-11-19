@@ -54,8 +54,8 @@ export async function POST(request: Request) {
 
   try {
     const result = answerRequest(messageId, viewer.ownerId, { option: fields.option, note: fields.note }, "ui");
-    if (json) return notifyJson({ ok: true, answer: result.answer, changed: result.changed });
-    return back(result.changed ? "changed" : "saved");
+    if (json) return notifyJson({ ok: true, answer: result.answer, changed: result.changed, unchanged: result.unchanged });
+    return back(result.unchanged ? "unchanged" : result.changed ? "changed" : "saved");
   } catch (err) {
     // Anything that is not a refusal is a bug: let it surface as one, not as a friendly line.
     if (!(err instanceof ApiError)) throw err;

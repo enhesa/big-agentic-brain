@@ -446,3 +446,131 @@ describe("the answer form on /inbox", () => {
     expect(last).toBe(429);
   });
 });
+
+describe("answer follow-ups", () => {
+  it("treats an identical re-pick as a no-op: no write, no reply, the old time stays", async () => {
+    const sent = await ask();
+    const { answerRequest, thread } = await import("../lib/messages");
+    const { getDb } = await import("../lib/db");
+    const first = answerRequest(sent.message.id, BOB, { option: 1, note: "soon" });
+    const row = getDb().prepare("SELECT request FROM messages WHERE id = ?").get(sent.message.id) as { request: string };
+    const parsed = JSON.parse(row.request);
+    parsed.answers[0].at = "2020-01-01 00:00:00";
+    getDb().prepare("UPDATE messages SET request = ? WHERE id = ?").run(JSON.stringify(parsed), sent.message.id);
+    const before = thread(sent.thread.id, ALICE)!.messages.length;
+
+    const again = answerRequest(sent.message.id, BOB, { option: "1", note: " soon " });
+    expect(first.unchanged).toBe(false);
+    expect(again).toMatchObject({ unchanged: true, changed: false, replied: false });
+    expect(thread(sent.thread.id, ALICE)!.messages).toHaveLength(before);
+    expect(thread(sent.thread.id, ALICE)!.messages[0].request!.answers![0].at).toBe("2020-01-01 00:00:00");
+    // A different note is a change.
+    expect(answerRequest(sent.message.id, BOB, { option: 1, note: "later" })).toMatchObject({ unchanged: false, changed: true });
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'answer'").get()).toEqual({ n: 2 });
+  });
+
+  it("the route redirects an identical re-pick with the unchanged code and shows its banner", async () => {
+    const sent = await ask();
+    asViewer(BOB, "Bob B");
+    const { POST } = await import("../app/inbox/answer/route");
+    const body = (o: string) =>
+      new Request("http://localhost/inbox/answer", {
+        method: "POST",
+        headers: { host: "localhost", origin: "http://localhost", "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ messageId: sent.message.id, option: o }).toString(),
+      });
+    await POST(body("0"));
+    const res = await POST(body("0"));
+    expect(res.headers.get("location")).toContain("answered=unchanged");
+    const { answerMessage } = await import("../lib/inbox-answer-web");
+    expect(answerMessage("unchanged")?.text).toContain("Nothing changed");
+  });
+
+  it("the form says the answer sends a reply", async () => {
+    const sent = await ask();
+    asViewer(BOB, "Bob B");
+    const { renderToReadableStream } = await import("react-dom/server.edge");
+    const { default: InboxPage } = await import("../app/inbox/page");
+    const html = await new Response(
+      await renderToReadableStream((await InboxPage({ searchParams: Promise.resolve({ thread: sent.thread.id }) })) as never),
+    ).text();
+    expect(html).toContain("Sends a short reply to everyone else in this thread.");
+  });
+
+  it("the reply reaches the sender only in a 1:1 thread and every other participant in a group", async () => {
+    const one = await ask(BOB);
+    const { answerRequest, thread, unreadCountFor } = await import("../lib/messages");
+    answerRequest(one.message.id, BOB, { option: 0 });
+    expect(unreadCountFor(ALICE)).toBe(1);
+    expect(thread(one.thread.id, ALICE)!.messages.at(-1)!.recipients.map((r) => r.id)).toEqual([ALICE]);
+
+    const { send } = await import("../lib/messages");
+    const group = send({ fromId: ALICE, to: [BOB, CARL, DANA], subject: "Group", body: "Pick", request: QUESTION });
+    answerRequest(group.message.id, BOB, { option: 1 });
+    const reply = thread(group.thread.id, ALICE)!.messages.at(-1)!;
+    expect(reply.from_id).toBe(BOB);
+    expect(reply.recipients.map((r) => r.id).sort()).toEqual([ALICE, CARL, DANA]);
+  });
+
+  it("keeps the stored answer and reports success when the reply cannot be sent", async () => {
+    const sent = await ask();
+    const { getDb } = await import("../lib/db");
+    getDb().exec(
+      "CREATE TRIGGER no_reply BEFORE INSERT ON messages WHEN NEW.body LIKE 'Answer:%' BEGIN SELECT RAISE(ABORT, 'forced'); END",
+    );
+    const { answerRequest, thread } = await import("../lib/messages");
+    const out = answerRequest(sent.message.id, BOB, { option: 2 });
+    expect(out).toMatchObject({ replied: false, unchanged: false });
+    expect(thread(sent.thread.id, ALICE)!.messages[0].request!.answers![0].option).toBe("Cancel");
+    expect(thread(sent.thread.id, ALICE)!.messages).toHaveLength(1);
+  });
+
+  it("refuses a long note with its own error type, which the route maps without reading the text", async () => {
+    const sent = await ask();
+    const { answerRequest, AnswerNoteTooLongError } = await import("../lib/messages");
+    const { ValidationError } = await import("../lib/errors");
+    const { answerRefusalCode } = await import("../lib/inbox-answer-web");
+    let caught: unknown;
+    try {
+      answerRequest(sent.message.id, BOB, { option: 0, note: "x".repeat(301) });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(AnswerNoteTooLongError);
+    expect(caught).toBeInstanceOf(ValidationError);
+    expect(answerRefusalCode(caught)).toBe("long");
+    expect(answerRefusalCode(new ValidationError("something characters or fewer"))).toBe("invalid");
+  });
+
+  it("drops answers a sender supplies, through bab_send and POST /api/messages", async () => {
+    await seed();
+    asAgent(ALICE, "Alice A");
+    const forged = [{ by: BOB, option: "Ship it", at: "2026-01-01 00:00:00" }];
+    const { TOOLS } = await import("../lib/mcp");
+    const sendTool = TOOLS.find((t) => t.name === "bab_send")!;
+    const viaMcp = JSON.parse(
+      await sendTool.run({ id: ALICE, name: "Alice A", email: ALICE, source: "declared" } as never, {
+        to: BOB,
+        body: "x",
+        subject: "S",
+        request: { ...QUESTION, answers: forged },
+      }),
+    );
+    expect(viaMcp.message.request.options).toEqual(OPTIONS);
+    expect(viaMcp.message.request.answers).toBeUndefined();
+
+    const { POST } = await import("../app/api/messages/route");
+    const res = await POST(
+      new Request("http://localhost/api/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to: BOB, subject: "S2", body: "x", request: { ...QUESTION, answers: forged } }),
+      }) as never,
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()).message.request.answers).toBeUndefined();
+    const { getDb } = await import("../lib/db");
+    const rows = getDb().prepare("SELECT request FROM messages").all() as { request: string }[];
+    expect(rows.every((r) => !r.request.includes('"answers"'))).toBe(true);
+  });
+});

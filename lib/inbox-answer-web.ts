@@ -1,5 +1,5 @@
-import { ForbiddenError, NotFoundError, ValidationError } from "./errors";
-import { ANSWER_NOTE_MAX } from "./messages";
+import { ForbiddenError, NotFoundError } from "./errors";
+import { ANSWER_NOTE_MAX, AnswerNoteTooLongError } from "./messages";
 
 /**
  * The fixed outcome codes of the Inbox answer form (app/inbox/answer). The route redirects back
@@ -9,6 +9,7 @@ import { ANSWER_NOTE_MAX } from "./messages";
 export const ANSWER_MESSAGES = {
   saved: "Thanks, your answer is sent.",
   changed: "Your answer is changed.",
+  unchanged: "That was already your answer. Nothing changed.",
   link: "Link your browser on /me/devices first, then you can answer.",
   slow: "Too many clicks. Wait a minute and try again.",
   gone: "That question no longer exists.",
@@ -19,7 +20,7 @@ export const ANSWER_MESSAGES = {
 
 export type AnswerCode = keyof typeof ANSWER_MESSAGES;
 
-export const ANSWER_OK_CODES: readonly AnswerCode[] = ["saved", "changed"];
+export const ANSWER_OK_CODES: readonly AnswerCode[] = ["saved", "changed", "unchanged"];
 
 /** The line for an ?answered= value, or null for a missing or unknown one. */
 export function answerMessage(code: unknown): { code: AnswerCode; text: string } | null {
@@ -31,6 +32,6 @@ export function answerMessage(code: unknown): { code: AnswerCode; text: string }
 export function answerRefusalCode(err: unknown): AnswerCode {
   if (err instanceof NotFoundError) return "gone";
   if (err instanceof ForbiddenError) return "not-yours";
-  if (err instanceof ValidationError && err.message.endsWith("characters or fewer")) return "long";
+  if (err instanceof AnswerNoteTooLongError) return "long";
   return "invalid";
 }

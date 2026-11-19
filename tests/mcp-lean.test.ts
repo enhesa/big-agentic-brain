@@ -151,6 +151,6 @@ describe("tool description size", () => {
 // shorter bab_remind field texts (138 fewer): the list is 24486.
 // Group messages (2026-11-16): bab_send's `to` takes a string or a list, and its description says a reply
 // reaches every participant. 130 characters, the limit and errors left to the server: the list is 24616.
-// Answer options (2026-11-19): bab_send's request takes `options`. 212 characters, one property: the list is 24828.
-const CEILING_FULL = 24830;
+// Answer options (2026-11-19): bab_send's request takes `options`. 148 characters, one property: the list is 24764.
+const CEILING_FULL = 24769;
 const CEILING_LEAN = 11200;

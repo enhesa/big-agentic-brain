@@ -113,6 +113,9 @@ export function RequestCard({
             <input type="text" name="note" maxLength={300} defaultValue={mine?.note ?? ""} autoComplete="off" />
           </label>
           <button type="submit">{mine ? "Change answer" : "Send answer"}</button>
+          <span className={styles.requestMeta} data-answer-reply>
+            Sends a short reply to everyone else in this thread.
+          </span>
         </form>
       ) : null}
     </div>

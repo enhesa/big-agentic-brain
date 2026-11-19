@@ -1140,7 +1140,7 @@ export const TOOLS: Tool[] = [
             ref: { type: "string", description: "Branch, tag or commit this request concerns." },
             cwd: { type: "string", description: "Folder name (not a path) the recipient should work in." },
             links: { type: "array", items: { type: "string" }, description: "Up to 5 http(s) URLs relevant to the request." },
-            options: { type: "array", items: { type: "string" }, description: "Answer choices for a question: 2 to 6 unique strings, 60 characters or fewer. Recipients pick one in their Inbox; picks show in request.answers (bab_inbox)." },
+            options: { type: "array", items: { type: "string" }, description: "Answer choices for a question; recipients pick one in their Inbox, picks in request.answers." },
           },
           required: ["kind", "goal"],
         },

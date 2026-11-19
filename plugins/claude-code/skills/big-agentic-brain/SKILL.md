@@ -345,7 +345,9 @@ one, and whenever the user asks if anyone replied.
   exact text first; the user's "send it" is the yes. Use `request` (for example kind
   `review-pr` with the PR link) for a review or a fix. For a question with fixed answers add
   `request.options` (2 to 6 short unique strings, 60 characters or fewer, no secrets). Each
-  recipient picks one on their Inbox page; read the picks in `request.answers` with `bab_inbox`.
+  recipient picks one on their Inbox page, with an optional short note, and may change it later.
+  An option that redaction would change is refused. Read the picks in `request.answers` with
+  `bab_inbox`; an answer also arrives as a short reply in the thread.
 - **Group messages**: set `to` to a list of up to 10 emails to reach several colleagues in one
   thread. A reply reaches every participant, and everyone sees the whole thread and its
   `participants` list. There is no private reply inside a thread: for a private word, start a

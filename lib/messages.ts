@@ -192,6 +192,14 @@ function validateOptions(raw: unknown): string[] {
   return options;
 }
 
+/** The note of an answer is over ANSWER_NOTE_MAX. A class of its own so callers map on the type, not the text. */
+export class AnswerNoteTooLongError extends ValidationError {
+  constructor() {
+    super(`note must be ${ANSWER_NOTE_MAX} characters or fewer`);
+    this.name = "AnswerNoteTooLongError";
+  }
+}
+
 /**
  * Records `actorId`'s pick on a request with options, in the request JSON of the message (no
  * table: the pick travels with the message everywhere the request is read). Only a recipient may
@@ -199,15 +207,19 @@ function validateOptions(raw: unknown): string[] {
  * time. In a group message each recipient answers for themselves. `option` is the 0-based index
  * into `request.options`. `note` is optional, redacted, at most ANSWER_NOTE_MAX characters.
  *
+ * Picking the same option with the same note again changes nothing: no write, no reply, the old
+ * time stays (`unchanged`).
+ *
  * The answer also tells the sender the way a reply does: a short reply lands in the thread, so it
- * shows up as unread in the sender's inbox.
+ * shows up as unread in the sender's inbox. A reply reaches every other participant, so in a group
+ * everyone gets it. It is best effort: if it cannot be sent the answer stays stored (`replied` false).
  */
 export function answerRequest(
   messageId: string,
   actorId: string,
   input: { option: unknown; note?: unknown },
   via: AuditVia = "ui",
-): { threadId: string; answer: RequestAnswer; changed: boolean } {
+): { threadId: string; answer: RequestAnswer; changed: boolean; unchanged: boolean; replied: boolean } {
   const db = getDb();
   const index = typeof input.option === "string" && /^\d{1,2}$/.test(input.option.trim()) ? Number(input.option) : input.option;
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0) {
@@ -217,9 +229,9 @@ export function answerRequest(
   if (input.note !== undefined && input.note !== null && input.note !== "") {
     if (typeof input.note !== "string") throw new ValidationError("note must be a string");
     const trimmed = input.note.trim();
-    if (trimmed.length > ANSWER_NOTE_MAX) throw new ValidationError(`note must be ${ANSWER_NOTE_MAX} characters or fewer`);
+    if (trimmed.length > ANSWER_NOTE_MAX) throw new AnswerNoteTooLongError();
     const clean = redact(trimmed);
-    if (clean.length > ANSWER_NOTE_MAX) throw new ValidationError(`note must be ${ANSWER_NOTE_MAX} characters or fewer`);
+    if (clean.length > ANSWER_NOTE_MAX) throw new AnswerNoteTooLongError();
     if (clean) note = clean;
   }
 
@@ -235,23 +247,33 @@ export function answerRequest(
     if (index >= options.length) throw new ValidationError("option must be the number of one of the request's options");
 
     const { now } = db.prepare("SELECT datetime('now') AS now").get() as unknown as { now: string };
-    const answer: RequestAnswer = { by: actorId, option: options[index], ...(note ? { note } : {}), at: now };
     const previous = (request.answers ?? []).find((a) => a.by === actorId);
+    if (previous && previous.option === options[index] && previous.note === note) {
+      return { threadId: row.thread_id, answer: previous, changed: false, unchanged: true };
+    }
+    const answer: RequestAnswer = { by: actorId, option: options[index], ...(note ? { note } : {}), at: now };
     request.answers = [...(request.answers ?? []).filter((a) => a.by !== actorId), answer];
     db.prepare("UPDATE messages SET request = ? WHERE id = ?").run(JSON.stringify(request), messageId);
     audit(db, actorId, "answer", "message", messageId, via, { details: { option: index, replaced: previous !== undefined } });
-    return { threadId: row.thread_id, answer, changed: previous !== undefined };
+    return { threadId: row.thread_id, answer, changed: previous !== undefined, unchanged: false };
   });
 
-  send(
-    {
-      fromId: actorId,
-      threadId: result.threadId,
-      body: `${result.changed ? "Changed my answer" : "Answer"}: ${result.answer.option}${note ? ` (${note})` : ""}`,
-    },
-    via,
-  );
-  return result;
+  if (result.unchanged) return { ...result, replied: false };
+  let replied = true;
+  try {
+    send(
+      {
+        fromId: actorId,
+        threadId: result.threadId,
+        body: `${result.changed ? "Changed my answer" : "Answer"}: ${result.answer.option}${note ? ` (${note})` : ""}`,
+      },
+      via,
+    );
+  } catch {
+    // The answer is stored and is the point: a failed courtesy reply must not turn it into an error.
+    replied = false;
+  }
+  return { ...result, replied };
 }
 
 /** Most people one message may go to, not counting the sender. A constant, so error texts build from it. */
