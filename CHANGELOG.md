@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.1](https://github.com/enhesa/big-agentic-brain/compare/v2.34.0...v2.34.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* stop the public-content scan tests timing out on Windows ([#175](https://github.com/enhesa/big-agentic-brain/issues/175)) ([da709d0](https://github.com/enhesa/big-agentic-brain/commit/da709d0f8410de436c1f39a1363120d61ce1b3e1))
+
 ## [2.34.0](https://github.com/enhesa/big-agentic-brain/compare/v2.33.0...v2.34.0) (2026-11-19)
 
 
