@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.34.0](https://github.com/enhesa/big-agentic-brain/compare/v2.33.0...v2.34.0) (2026-11-19)
+
+
+### Features
+
+* **tasks:** Stop hook flags stale cards and stays quiet after a decline ([#174](https://github.com/enhesa/big-agentic-brain/issues/174)) ([75fa9bc](https://github.com/enhesa/big-agentic-brain/commit/75fa9bcccebc7993851104af5c44206b8bb0e3c7))
+* **tasks:** Stop hook sends agents back once when a turn skips BAB Tasks ([#171](https://github.com/enhesa/big-agentic-brain/issues/171)) ([9225ea0](https://github.com/enhesa/big-agentic-brain/commit/9225ea08b7853cacf49f11b0d6a17834ffb541f8))
+
 ## [2.33.0](https://github.com/enhesa/big-agentic-brain/compare/v2.32.0...v2.33.0) (2026-11-18)
 
 
