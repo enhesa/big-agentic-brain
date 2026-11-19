@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-19",
     title: "The BAB Tasks Stop hook catches stale cards",
     changes: [
+      "A question to a colleague can offer 2 to 6 options, and they pick one on their Inbox page.",
       "The BAB Tasks Stop hook asks for a patch after long work past the last publish, or a failed patch.",
     ],
   },

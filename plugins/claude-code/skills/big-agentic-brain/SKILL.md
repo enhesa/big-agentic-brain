@@ -343,7 +343,9 @@ one, and whenever the user asks if anyone replied.
   colleague online or offline, and do not wait for an answer. Never say another person's
   agent cannot be reached, and do not fall back to PR comments, email or chat. Show the
   exact text first; the user's "send it" is the yes. Use `request` (for example kind
-  `review-pr` with the PR link) for a review or a fix.
+  `review-pr` with the PR link) for a review or a fix. For a question with fixed answers add
+  `request.options` (2 to 6 short unique strings, 60 characters or fewer, no secrets). Each
+  recipient picks one on their Inbox page; read the picks in `request.answers` with `bab_inbox`.
 - **Group messages**: set `to` to a list of up to 10 emails to reach several colleagues in one
   thread. A reply reaches every participant, and everyone sees the whole thread and its
   `participants` list. There is no private reply inside a thread: for a private word, start a

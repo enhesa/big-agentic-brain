@@ -6,8 +6,19 @@ import type { ThreadRow } from "@/lib/types";
 import styles from "./conversations.module.css";
 import { formatDate, DATE_TIME } from "@/lib/branding";
 
-/** The chat body of one thread, shared by /conversations/[threadId] and the Inbox. */
-export default function ThreadTimeline({ thread, messages }: { thread: ThreadRow; messages: ViewerMessage[] }) {
+/**
+ * The chat body of one thread, shared by /conversations/[threadId] and the Inbox. With `viewerId`
+ * (the Inbox only), a question with options the viewer received shows the answer form.
+ */
+export default function ThreadTimeline({
+  thread,
+  messages,
+  viewerId,
+}: {
+  thread: ThreadRow;
+  messages: ViewerMessage[];
+  viewerId?: string;
+}) {
   return (
     <ol className={styles.timeline}>
       {messages.map((m, i) => {
@@ -18,6 +29,7 @@ export default function ThreadTimeline({ thread, messages }: { thread: ThreadRow
         return (
           <li
             key={m.id}
+            id={`m-${m.id}`}
             className={`${styles.msg} ${fromCreator ? styles.msgLeft : styles.msgRight} ${grouped ? styles.msgGrouped : ""}`}
             style={{ animationDelay: `${Math.min(i, 12) * 50}ms` }}
           >
@@ -27,7 +39,13 @@ export default function ThreadTimeline({ thread, messages }: { thread: ThreadRow
                 <span>{name}</span>
               </div>
             ) : null}
-            {m.request ? <RequestCard request={m.request} /> : null}
+            {m.request ? (
+              <RequestCard
+                request={m.request}
+                names={new Map([[m.from_id, name], ...m.recipients.map((r) => [r.id, r.name ?? r.id] as [string, string])])}
+                answerFor={viewerId && m.from_id !== viewerId && m.recipients.some((r) => r.id === viewerId) ? { messageId: m.id, viewerId } : undefined}
+              />
+            ) : null}
             <div className={styles.bubble}>
               {m.body}
               {m.kind === "auto" ? <span className={styles.autoTag}>auto-reply</span> : null}
@@ -42,7 +60,17 @@ export default function ThreadTimeline({ thread, messages }: { thread: ThreadRow
   );
 }
 
-export function RequestCard({ request }: { request: NonNullable<ViewerMessage["request"]> }) {
+export function RequestCard({
+  request,
+  names,
+  answerFor,
+}: {
+  request: NonNullable<ViewerMessage["request"]>;
+  names?: Map<string, string>;
+  /** Set when the viewer may answer: the message to answer and who is answering. */
+  answerFor?: { messageId: string; viewerId: string };
+}) {
+  const mine = answerFor ? request.answers?.find((a) => a.by === answerFor.viewerId) : undefined;
   return (
     <div className={styles.requestCard}>
       <span className={styles.requestKind}>{request.kind}</span>
@@ -57,6 +85,36 @@ export function RequestCard({ request }: { request: NonNullable<ViewerMessage["r
           </a>
         </span>
       ))}
+      {request.options ? (
+        <ul className={styles.requestAnswers} aria-label="Answers">
+          {request.answers?.map((a) => (
+            <li key={a.by} data-answer>
+              <strong>{names?.get(a.by) ?? a.by}</strong>: {a.option}
+              {a.note ? ` (${a.note})` : ""}
+              <span className={styles.requestMeta}> {formatRelativeTime(a.at)}</span>
+            </li>
+          ))}
+          {request.answers?.length ? null : <li className={styles.requestMeta}>No answer yet.</li>}
+        </ul>
+      ) : null}
+      {request.options && answerFor ? (
+        <form method="post" action="/inbox/answer" className={styles.answerForm} data-answer-form>
+          <input type="hidden" name="messageId" value={answerFor.messageId} />
+          <fieldset className={styles.answerOptions}>
+            <legend>{mine ? "Change your answer" : "Your answer"}</legend>
+            {request.options.map((option, i) => (
+              <label key={option}>
+                <input type="radio" name="option" value={i} required defaultChecked={mine?.option === option} /> {option}
+              </label>
+            ))}
+          </fieldset>
+          <label className={styles.answerNote}>
+            Note (optional)
+            <input type="text" name="note" maxLength={300} defaultValue={mine?.note ?? ""} autoComplete="off" />
+          </label>
+          <button type="submit">{mine ? "Change answer" : "Send answer"}</button>
+        </form>
+      ) : null}
     </div>
   );
 }

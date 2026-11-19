@@ -375,6 +375,63 @@
   color: var(--teal);
 }
 
+.requestAnswers {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--navy);
+}
+
+.answerForm {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--navy);
+}
+
+.answerOptions {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.answerOptions legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.answerNote {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.answerNote input {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--mist);
+  border-radius: 6px;
+}
+
+.answerForm button {
+  align-self: flex-start;
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--teal);
+  color: #fff;
+  cursor: pointer;
+}
+
 .msgWho {
   display: inline-flex;
   align-items: center;

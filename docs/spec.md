@@ -1025,6 +1025,19 @@ between colleagues' agents. A message may carry a `request` object: `kind` (slug
 `messages.request` (migration v8), validated and redacted in `lib/messages.ts`, returned
 parsed on every read path, rendered as a card on `/conversations/[threadId]`.
 
+A request may also carry `options`: 2 to 6 short strings (60 characters or fewer, unique
+ignoring case, each refused if `redact()` would change it). Recipients answer on the Inbox
+page: `POST /inbox/answer` takes `messageId`, `option` (the option's 0-based number) and an
+optional `note` (300 characters or fewer, redacted). Only a person the message went to can
+answer, never its sender. The answer is stored in the request JSON as
+`answers: [{ by, option, note?, at }]`, one per person: a later pick replaces theirs and takes
+a new time. In a group each recipient answers for themselves, and every participant sees the
+picks. No migration. The sender's agent reads `request.options` and `request.answers` in
+`bab_inbox` (listing and opened thread) and in `GET /api/inbox/[threadId]`. An answer also
+sends a short reply in the thread, so the sender sees it unread like any reply. The route has
+the same guards as the other form routes: `getViewer`, `sameOrigin`, `checkUiRateLimit`, 303
+with a fixed `?answered=` code.
+
 A request reaches the recipient the same way any other message does: it waits in their
 inbox until their agent checks it. The agent tells them what was asked and by whom, and on
 a yes either does the work in that session or opens the folder for it, resolved from the
@@ -1191,8 +1204,8 @@ removed on 2026-10-01, migration v29 drops the link-code table). For an unlinked
 
 ## Hand off to Claude
 
-The Inbox page (`/inbox?thread=<threadId>`, see "Inbox page" below) is read-only: it has no
-buttons. `/handoff/<threadId>` only forwards there, so old links keep working: a temporary redirect
+The Inbox page (`/inbox?thread=<threadId>`, see "Inbox page" below) is read-only apart from
+the answer form on a question with options. `/handoff/<threadId>` only forwards there, so old links keep working: a temporary redirect
 (307, not 308, so browsers do not cache it for good while the Inbox has a kill switch),
 `/inbox?thread=<threadId>`, plus `&open=app` when the old link had exactly that. Any other `open`
 value is dropped. The route stays behind SSO. It marks nothing read; the agent does that when it
@@ -1218,8 +1231,8 @@ https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link.
 ## Inbox page
 
 `/inbox` (behind SSO, outside `/api`) is the signed-in viewer's own inbox in the browser: their
-threads with unread counts and the selected thread (`?thread=<id>`). It is read-only: no forms,
-no buttons. Agents send, reply and mark read with `bab_send` and `bab_inbox`.
+threads with unread counts and the selected thread (`?thread=<id>`). It is read-only, except
+the answer form under a question with options (see "Collaborative requests"). Agents send, reply and mark read with `bab_send` and `bab_inbox`.
 No migration. Kill switch `BAB_INBOX_PAGE=0`: the page says it is switched off, `/inbox/events`,
 `/inbox/unread` and `/inbox/manifest` answer 503, and the nav item hides (read in
 the browser from the 503 on `/inbox/unread`, so a statically rendered page cannot freeze it).

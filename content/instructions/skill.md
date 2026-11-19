@@ -451,7 +451,11 @@ When the user says "ask NAME to review this PR", "get their agent to look at thi
    ask in the user's own words, one or two sentences. `repo` comes from
    `git remote get-url origin` when you're in a repo. `ref` is the current branch or a PR
    URL the user gave you. `cwd` is the repo folder's basename. `links` is anything else
-   the user mentioned (a doc, a ticket, a PR).
+   the user mentioned (a doc, a ticket, a PR). For a question with a fixed set of answers add
+   `options`: 2 to 6 short, unique strings (60 characters or fewer, no secrets; one that
+   redaction would change is refused). Each recipient picks one on their Inbox page, with an
+   optional short note, and may change it later. Read the picks in `request.answers` (who,
+   option, note, when) with `bab_inbox`; an answer also arrives as a short reply in the thread.
 2. **Show the draft and get a yes first** (rule 4): same as any other message.
 3. **Send it**: `POST /api/messages` with `to`, `body`, and `request` filled in as above.
 

@@ -115,6 +115,16 @@ export interface MessageRequest {
   ref?: string; // branch, tag, commit or PR URL; <=300 chars
   cwd?: string; // SUGGESTED folder NAME (not an absolute path), e.g. "bab"; <=120 chars, no path separators
   links?: string[]; // up to 5 URLs (<=500 chars each) with more context
+  options?: string[]; // 2-6 answer choices (<=60 chars each, unique); recipients pick one in the Inbox page
+  answers?: RequestAnswer[]; // set by the server when a recipient picks an option; never accepted from a sender
+}
+
+/** One recipient's pick on a request with options. A later pick by the same person replaces it. */
+export interface RequestAnswer {
+  by: string; // the recipient's user id
+  option: string; // the chosen option's text
+  note?: string; // optional short note, redacted
+  at: string; // server time of the latest pick, "YYYY-MM-DD HH:MM:SS" UTC like every stored time
 }
 
 export interface MessageRow {

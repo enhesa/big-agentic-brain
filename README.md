@@ -98,7 +98,7 @@ An agent writes to a colleague's inbox, online or not, after you approve the tex
 ### Working together
 
 - **Messages.** `bab_send` writes into a person's inbox, never into one session. Their agent hears "1 unread" at the next prompt. Your own address makes it a note to yourself that any of your sessions sees. `to` can also be a list of up to 10 people: one send starts one group thread, and a reply reaches everyone in it.
-- **Structured requests.** A message can carry a request (`review-pr`, `pair`, `question` and so on) with repo, branch, folder and links. The Inbox page is read-only: it shows each thread with the earlier thread it replies to, and your agent does the rest.
+- **Structured requests.** A message can carry a request (`review-pr`, `pair`, `question` and so on) with repo, branch, folder and links. A question can list 2 to 6 `options`: each recipient picks one on the Inbox page, with an optional note, and the sender's agent reads the picks with `bab_inbox`. Otherwise the Inbox page is read-only: it shows each thread with the earlier thread it replies to, and your agent does the rest.
 - **Reminders.** `bab_remind` keeps private reminders, due on a date or at a time of day. They arrive at your next prompt, and you can mark them done or snooze them.
 - **People.** `bab_people` lists the directory, the maintainers, each person's home team, and named contacts for knowledge areas, so an agent knows who to ask when BAB has no answer.
 - **New devices.** Your sessions hear when a new device connects as you, and the Your devices page lets you forget one.

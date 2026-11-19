@@ -17,6 +17,7 @@ import { participantsOf, unreadCountFor } from "@/lib/messages";
 import { deliveryFor, groupOutgoingStatus, outgoingStatus } from "@/lib/delivery";
 import { getUser } from "@/lib/users";
 import { earlierThreads, inboxEnabled, inboxSummary, threadForParticipant, type InboxListItem } from "@/lib/inbox-page";
+import { ANSWER_OK_CODES, answerMessage } from "@/lib/inbox-answer-web";
 import AutoOpenApp from "./AutoOpenApp";
 import InboxLive from "./InboxLive";
 import styles from "./inbox.module.css";
@@ -38,8 +39,8 @@ export async function generateMetadata(): Promise<Metadata> {
  * threads (the selected thread goes through threadForParticipant, a participant check).
  * Message text, subjects and names are rendered as React text, nothing else.
  *
- * Read-only: no forms or buttons. Opening a thread marks nothing read; only the agent does that
- * (bab_inbox). Earlier threads of the same conversation ("Re: ..." replies) show above the thread.
+ * Opening a thread marks nothing read; only the agent does that (bab_inbox). The one form is the
+ * answer to a question with options (app/inbox/answer). Earlier threads of the same conversation ("Re: ..." replies) show above the thread.
  *
  * `?thread=<id>&open=app` opens the Claude app once (the mod's "Open chat" link; /handoff/<id>
  * redirects here). Only the exact value `app` counts, and only after threadForParticipant passed,
@@ -48,7 +49,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ thread?: string | string[]; open?: string | string[]; claim?: string | string[] }>;
+  searchParams: Promise<{ thread?: string | string[]; open?: string | string[]; claim?: string | string[]; answered?: string | string[] }>;
 }) {
   const viewer = await getViewer();
   await auditRequest({ actor: viewer?.actor ?? null, method: "GET", path: "/inbox", via: "ui" });
@@ -64,7 +65,7 @@ export default async function InboxPage({
     );
   }
 
-  const { thread: threadParam, open, claim } = await searchParams;
+  const { thread: threadParam, open, claim, answered } = await searchParams;
   if (!viewer) return <SignedOut claim={claim} />;
 
   const selectedId = Array.isArray(threadParam) ? threadParam[0] : threadParam;
@@ -88,7 +89,12 @@ export default async function InboxPage({
         <ThreadList threads={summary.threads} selectedId={selectedId} />
         <div className={styles.detail}>
           {selectedId !== undefined ? (
-            <SelectedThread viewer={viewer} threadId={selectedId} autoOpenApp={open === "app"} />
+            <SelectedThread
+              viewer={viewer}
+              threadId={selectedId}
+              autoOpenApp={open === "app"}
+              answered={answerMessage(Array.isArray(answered) ? answered[0] : answered)}
+            />
           ) : (
             <p className={styles.placeholder}>
               {summary.threads.length > 0 ? "Pick a thread to read it." : "No messages yet. When a colleague's agent writes to you, it shows up here."}
@@ -155,7 +161,17 @@ function ThreadList({ threads, selectedId }: { threads: InboxListItem[]; selecte
   );
 }
 
-async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewer; threadId: string; autoOpenApp: boolean }) {
+async function SelectedThread({
+  viewer,
+  threadId,
+  autoOpenApp,
+  answered,
+}: {
+  viewer: Viewer;
+  threadId: string;
+  autoOpenApp: boolean;
+  answered: ReturnType<typeof answerMessage>;
+}) {
   const result = threadForParticipant(threadId, viewer.ownerId);
   // The same answer for "no such thread" and "not yours", so the page cannot be used to probe ids.
   if (!result) return <p className={styles.placeholder}>That thread was not found.</p>;
@@ -224,6 +240,11 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
         ) : null}
       </div>
 
+      {answered ? (
+        <p className={styles.unreadNote} role={ANSWER_OK_CODES.includes(answered.code) ? "status" : "alert"} data-answered={answered.code}>
+          {answered.text}
+        </p>
+      ) : null}
       {appUrl ? <AutoOpenApp key={appUrl} url={appUrl} /> : null}
       {earlier.map((e) => (
         <section key={e.thread.id} className={styles.earlier} aria-label={`Earlier thread: ${e.thread.subject || "(no subject)"}`}>
@@ -234,8 +255,8 @@ async function SelectedThread({ viewer, threadId, autoOpenApp }: { viewer: Viewe
         </section>
       ))}
       {earlier.length > 0 ? <p className={styles.thisThread}>This thread</p> : null}
-      <ThreadTimeline thread={thread} messages={messages} />
-      <p className={styles.readOnly}>Read-only. Agents send, reply and manage messages with bab_send and bab_inbox.</p>
+      <ThreadTimeline thread={thread} messages={messages} viewerId={viewer.ownerId} />
+      <p className={styles.readOnly}>Read-only. Agents send, reply and manage messages with bab_send and bab_inbox. The one exception: you can pick an answer to a question that has options.</p>
     </>
   );
 }

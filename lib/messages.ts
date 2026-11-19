@@ -12,6 +12,7 @@ import type {
   MessageKind,
   MessageRequest,
   MessageRow,
+  RequestAnswer,
   ThreadLease,
   ThreadRow,
 } from "./types";
@@ -26,6 +27,10 @@ const REQUEST_REF_MAX = 300;
 const REQUEST_CWD_MAX = 120;
 const REQUEST_LINK_MAX = 500;
 const REQUEST_LINKS_MAX_COUNT = 5;
+export const REQUEST_OPTIONS_MIN = 2;
+export const REQUEST_OPTIONS_MAX = 6;
+export const REQUEST_OPTION_MAX = 60;
+export const ANSWER_NOTE_MAX = 300;
 const REQUEST_KIND_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** The 400 for a new thread with no recipient. Messages go to a person's inbox, never to a session. */
@@ -153,6 +158,99 @@ export function validateRequest(input: unknown): MessageRequest {
     if (links.length > 0) result.links = links;
   }
 
+  if (record.options !== undefined) result.options = validateOptions(record.options);
+
+  return result;
+}
+
+/**
+ * The answer choices of a request: 2 to 6 short, unique strings. A choice that redaction would
+ * change is refused, not silently altered: the sender's agent must see the text a recipient picks.
+ */
+function validateOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) throw new ValidationError("request.options must be an array of strings");
+  if (raw.length < REQUEST_OPTIONS_MIN || raw.length > REQUEST_OPTIONS_MAX) {
+    throw new ValidationError(`request.options must have ${REQUEST_OPTIONS_MIN} to ${REQUEST_OPTIONS_MAX} entries`);
+  }
+  const options: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new ValidationError("request.options entries must be non-empty strings");
+    }
+    const option = entry.trim();
+    if (option.length > REQUEST_OPTION_MAX) {
+      throw new ValidationError(`request.options entries must be ${REQUEST_OPTION_MAX} characters or fewer`);
+    }
+    if (redact(option) !== option) {
+      throw new ValidationError("request.options entries must not contain secrets or personal data");
+    }
+    if (options.some((o) => o.toLowerCase() === option.toLowerCase())) {
+      throw new ValidationError("request.options entries must be unique");
+    }
+    options.push(option);
+  }
+  return options;
+}
+
+/**
+ * Records `actorId`'s pick on a request with options, in the request JSON of the message (no
+ * table: the pick travels with the message everywhere the request is read). Only a recipient may
+ * answer, never the sender. One answer per person: a later pick replaces theirs and takes the new
+ * time. In a group message each recipient answers for themselves. `option` is the 0-based index
+ * into `request.options`. `note` is optional, redacted, at most ANSWER_NOTE_MAX characters.
+ *
+ * The answer also tells the sender the way a reply does: a short reply lands in the thread, so it
+ * shows up as unread in the sender's inbox.
+ */
+export function answerRequest(
+  messageId: string,
+  actorId: string,
+  input: { option: unknown; note?: unknown },
+  via: AuditVia = "ui",
+): { threadId: string; answer: RequestAnswer; changed: boolean } {
+  const db = getDb();
+  const index = typeof input.option === "string" && /^\d{1,2}$/.test(input.option.trim()) ? Number(input.option) : input.option;
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0) {
+    throw new ValidationError("option must be the number of one of the request's options");
+  }
+  let note: string | undefined;
+  if (input.note !== undefined && input.note !== null && input.note !== "") {
+    if (typeof input.note !== "string") throw new ValidationError("note must be a string");
+    const trimmed = input.note.trim();
+    if (trimmed.length > ANSWER_NOTE_MAX) throw new ValidationError(`note must be ${ANSWER_NOTE_MAX} characters or fewer`);
+    const clean = redact(trimmed);
+    if (clean.length > ANSWER_NOTE_MAX) throw new ValidationError(`note must be ${ANSWER_NOTE_MAX} characters or fewer`);
+    if (clean) note = clean;
+  }
+
+  const result = inTransaction(db, () => {
+    const row = db.prepare("SELECT * FROM messages WHERE id = ?").get(messageId) as unknown as MessageRow | undefined;
+    if (!row) throw new NotFoundError("Message not found");
+    const isRecipient =
+      db.prepare("SELECT 1 AS n FROM message_recipients WHERE message_id = ? AND user_id = ?").get(messageId, actorId) !== undefined;
+    if (row.from_id === actorId || !isRecipient) throw new ForbiddenError("Only a recipient can answer this question");
+    const request = parseRequest(row.request);
+    const options = request?.options;
+    if (!request || !options) throw new ValidationError("This message has no options to answer");
+    if (index >= options.length) throw new ValidationError("option must be the number of one of the request's options");
+
+    const { now } = db.prepare("SELECT datetime('now') AS now").get() as unknown as { now: string };
+    const answer: RequestAnswer = { by: actorId, option: options[index], ...(note ? { note } : {}), at: now };
+    const previous = (request.answers ?? []).find((a) => a.by === actorId);
+    request.answers = [...(request.answers ?? []).filter((a) => a.by !== actorId), answer];
+    db.prepare("UPDATE messages SET request = ? WHERE id = ?").run(JSON.stringify(request), messageId);
+    audit(db, actorId, "answer", "message", messageId, via, { details: { option: index, replaced: previous !== undefined } });
+    return { threadId: row.thread_id, answer, changed: previous !== undefined };
+  });
+
+  send(
+    {
+      fromId: actorId,
+      threadId: result.threadId,
+      body: `${result.changed ? "Changed my answer" : "Answer"}: ${result.answer.option}${note ? ` (${note})` : ""}`,
+    },
+    via,
+  );
   return result;
 }
 
