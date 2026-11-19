@@ -92,6 +92,11 @@ In short:
 
 - `v: 1` is required. Unknown fields are refused with the allowed list. Too long is 400; nothing is
   cut short. Text that looks like a secret or personal data is refused and the field is named.
+- A task may carry `evidence`: at most 3 `{ label, url }` links, checked exactly like `links`
+  (`https://` only, secret check, 500 characters). It is optional and stored only when set, so a
+  record without it reads and compares as before. `list` with an `id` returns it; the page shows
+  it under the to-do; a patch to a task sets it (`evidence: []` clears it). The log and the
+  export carry text only, so evidence is not in them.
 - At most 100 initiatives and 256 KB per person, 32 KB per record (413), 256 KB per request.
 - The server owns every time except `health.checkedAt`: `updatedAt`, `seq`, a question's
   `askedAt` and `clearedAt`, a task's `startedAt` and `finishedAt`, health `receivedAt`, and the
@@ -406,6 +411,7 @@ Claude and the drawer: no switch, menu, delete, download or report-app grants.
 - A click on a card, or Enter on its title, opens a drawer at the right (a native `<dialog>`):
   status, state, priority, key and deadline tags (near and overdue in words, days counted on UTC
   dates), the ring with done/total, every open question, the open tasks with their status icon
+  (and their evidence links as small pills under the text)
   and the done ones folded under "N done", links as pills with their host, the Log, and when it was updated and who pushed last. Esc,
   the close button or a click outside closes it, and focus returns to the card. Clicks on links,
   buttons and forms on a card do not open it. The open card is client state, so a poll refresh

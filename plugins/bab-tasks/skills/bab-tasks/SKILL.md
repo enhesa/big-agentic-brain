@@ -24,6 +24,10 @@ for a project with work left: it erases its progress. The person must never have
 **Links people can open go in `links`**: the PR, the ticket, the doc, or a session link when your
 tool has an https one. `source.link` is deprecated: the page ignores it, so leave it out.
 
+**Proof of a done to-do goes in its `evidence`**: up to 3 `{ label, url }` links on the task, such as
+the merged PR or the test run. Same rules as `links`. The page shows them under the to-do, and the
+audit skill checks them first. A `patch` sets them: `evidence: []` clears them.
+
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task. In Claude Code the bab-tasks plugin's Stop hook checks this: a turn that made
 tool calls but no `bab_tasks` publish or patch, or 5 or more calls after the last one, is sent back once.
@@ -109,7 +113,7 @@ it with every patch, as on publish. The same limits and checks apply to the merg
 | `cadence` | Recurring only: `daily`, `weekly` or `drain`. |
 | `deadline` | `YYYY-MM-DD` or null. |
 | `priority` | `urgent`, `high`, `low`, `paused` or null. Paused hides its questions. |
-| `tasks` | At most 50 `{ id, text (120), status }`, status `pending`, `in_progress` or `done`. None for recurring. |
+| `tasks` | At most 50 `{ id, text (120), status, evidence? }`, status `pending`, `in_progress` or `done`. `evidence`: at most 3 `{ label (60), url }`, `https://` only. None for recurring. |
 | `questions` | At most 5 open `{ id, text (500), options }`, at most 4 options of 60. An id you leave out is cleared. |
 | `health` | Recurring only: `{ level, reason (200), checkedAt }`, level `green`, `amber`, `red` or `unknown`, checkedAt an ISO time. Send it after every run, clean or failing. |
 | `links` | At most 20 `{ label (60), url }`. `https://` only. |

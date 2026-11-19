@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "The BAB Tasks Stop hook catches stale cards",
     changes: [
       "The BAB Tasks Stop hook asks for a patch after long work past the last publish, or a failed patch.",
+      "A BAB Tasks to-do can carry up to 3 proof links, and the audit checks them first.",
     ],
   },
   {

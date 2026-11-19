@@ -348,7 +348,14 @@ function TaskItem({ t }: { t: Task }) {
     <li className={styles[`task_${t.status}`] ?? ""}>
       <TaskIcon status={t.status} />
       <span className={styles.srOnly}>{TASK_LABEL[t.status]}: </span>
-      <span>{t.text}</span>
+      {t.evidence?.length ? (
+        <span className={styles.taskBody}>
+          <span>{t.text}</span>
+          <Links links={t.evidence} label={`Evidence for ${t.text}`} className={styles.evidence} />
+        </span>
+      ) : (
+        <span>{t.text}</span>
+      )}
     </li>
   );
 }
@@ -598,9 +605,9 @@ function LogList({ log }: { log: Rec["log"] }) {
   );
 }
 
-function Links({ links }: { links: Rec["links"] }) {
+function Links({ links, label = "Links", className }: { links: Rec["links"]; label?: string; className?: string }) {
   return (
-    <ul className={styles.links} aria-label="Links">
+    <ul className={className ? `${styles.links} ${className}` : styles.links} aria-label={label}>
       {links.map((l, i) => {
         const host = hostOf(l.url);
         return (

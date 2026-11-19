@@ -572,6 +572,34 @@ describe("/tasks page", () => {
     for (const a of board.match(/<a [^>]*>/g) ?? []) expect(a).toMatch(/linkPill/);
   });
 
+  it("shows a to-do's evidence as small safe links under it, and nothing for a to-do without", async () => {
+    await seedAlice({
+      tasks: [
+        { id: "a", text: "Design", status: "done", evidence: [{ label: "<b>Merged PR</b>", url: "https://git.example.com/acme/x/pull/9" }, { label: "Tests", url: "https://ci.example.com/acme/x/runs/7" }] },
+        { id: "b", text: "Build", status: "in_progress" },
+      ],
+    });
+    asViewer(ALICE, "Alice A");
+    const html = await render();
+    const panel = panelOf(html, "billing-export");
+    // Open tasks come first, so Build is before the folded Design.
+    const design = panel.slice(panel.indexOf("Done tasks"));
+    const build = panel.slice(panel.indexOf("Open tasks"), panel.indexOf("Done tasks"));
+    expect(design).toContain('href="https://git.example.com/acme/x/pull/9"');
+    expect(design).toContain('href="https://ci.example.com/acme/x/runs/7"');
+    expect(design).toContain('aria-label="Evidence for Design"');
+    expect(design).toContain("&lt;b&gt;Merged PR&lt;/b&gt;");
+    expect(design).not.toContain("<b>Merged PR</b>");
+    for (const a of design.match(/<a [^>]*>/g) ?? []) {
+      expect(a).toMatch(/linkPill/);
+      expect(a).toContain('rel="noopener noreferrer"');
+      expect(a).toContain('target="_blank"');
+    }
+    expect(build).toContain("<span>Build</span>");
+    expect(build).not.toContain("Evidence for");
+    expect(build).not.toContain("<a ");
+  });
+
   it("shows the 3 newest Finished cards, then +N more with the rest folded", async () => {
     const cc = await import("../lib/tasks");
     for (let i = 0; i < 5; i++) {

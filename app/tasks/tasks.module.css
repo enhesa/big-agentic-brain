@@ -428,6 +428,17 @@
   margin-top: 2px;
 }
 
+.taskBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.evidence {
+  margin-top: 1px;
+}
+
 .task_done {
   color: var(--c-muted);
 }

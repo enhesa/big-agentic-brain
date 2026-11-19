@@ -47,6 +47,8 @@ export const CC_MAX_TASKS = 50;
 export const CC_MAX_OPEN_QUESTIONS = 5;
 export const CC_MAX_OPTIONS = 4;
 export const CC_MAX_LINKS = 20;
+/** Proof links per task, checked like the record's links. */
+export const CC_MAX_EVIDENCE = 3;
 /** Cleared questions kept per initiative (newest first), on top of the open ones. */
 export const CC_MAX_CLEARED_QUESTIONS = 20;
 /** Longest `worked` line. */
@@ -141,6 +143,8 @@ export interface CcTask {
   /** Server time the task was first seen in_progress, and first seen done. */
   startedAt: string | null;
   finishedAt: string | null;
+  /** Up to CC_MAX_EVIDENCE proof links. Left out when there are none, so older records read the same. */
+  evidence?: CcLink[];
 }
 
 export interface CcQuestion {
@@ -207,7 +211,7 @@ interface RecordInput {
   cadence: Cadence | null;
   deadline: string | null;
   priority: Priority | null;
-  tasks: { id: string; text: string; status: TaskStatus }[];
+  tasks: { id: string; text: string; status: TaskStatus; evidence?: CcLink[] }[];
   questions: { id: string; text: string; options: string[] }[];
   health: { level: HealthLevel; reason: string; checkedAt: string } | null;
   links: CcLink[];
@@ -230,7 +234,7 @@ export interface CcLogEntry {
 }
 
 const RECORD_FIELDS = ["v", "id", "title", "area", "key", "state", "kind", "cadence", "deadline", "priority", "tasks", "questions", "health", "links", "source", "expectSeq", "worked", "size"];
-const TASK_FIELDS = ["id", "text", "status"];
+const TASK_FIELDS = ["id", "text", "status", "evidence"];
 const QUESTION_FIELDS = ["id", "text", "options"];
 const HEALTH_FIELDS = ["level", "reason", "checkedAt"];
 const LINK_FIELDS = ["label", "url"];
@@ -316,9 +320,12 @@ function httpsUrl(raw: unknown, field: string): string {
 }
 
 function checkTask(raw: unknown, field: string): RecordInput["tasks"][number] {
-  if (!isObject(raw)) throw new ValidationError(`${field} must be an object { id, text, status }`);
+  if (!isObject(raw)) throw new ValidationError(`${field} must be an object { id, text, status, evidence? }`);
   onlyFields(raw, TASK_FIELDS, `${field}.`);
-  return { id: slug(raw.id, `${field}.id`), text: text(raw.text, `${field}.text`, 120)!, status: oneOf(raw.status, CC_TASK_STATUSES, `${field}.status`) };
+  const task: RecordInput["tasks"][number] = { id: slug(raw.id, `${field}.id`), text: text(raw.text, `${field}.text`, 120)!, status: oneOf(raw.status, CC_TASK_STATUSES, `${field}.status`) };
+  const evidence = list(raw.evidence, `${field}.evidence`, CC_MAX_EVIDENCE, "evidence links").map((l, i) => checkLink(l, `${field}.evidence[${i}]`));
+  if (evidence.length) task.evidence = evidence;
+  return task;
 }
 
 function checkQuestion(raw: unknown, field: string): RecordInput["questions"][number] {
@@ -1327,7 +1334,7 @@ function mergePatch(prev: CcRecord, patch: Record<string, unknown>): Record<stri
   // source merges field by field: a patch that sends only session keeps the stored machine and link.
   if (isObject(patch.source) && isObject(merged.source)) merged.source = { ...(prevSource(prev) ?? {}), ...patch.source };
   const current: Record<string, Record<string, unknown>[]> = {
-    tasks: prev.tasks.map((t) => ({ id: t.id, text: t.text, status: t.status })),
+    tasks: prev.tasks.map((t) => ({ id: t.id, text: t.text, status: t.status, ...(t.evidence?.length ? { evidence: t.evidence.map((e) => ({ label: e.label, url: e.url })) } : {}) })),
     // Only the open questions: a cleared one stays cleared, as on publish.
     questions: prev.questions.filter((q) => !q.clearedAt).map((q) => ({ id: q.id, text: q.text, options: q.options })),
     links: prev.links.map((l) => ({ label: l.label, url: l.url })),
