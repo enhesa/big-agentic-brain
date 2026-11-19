@@ -19,6 +19,8 @@ result() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message"
 say() { printf '{"parentUuid":"a","isSidechain":false,"message":{"model":"m","id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"%s"}]},"type":"assistant","uuid":"s1"}\n' "$1"; }
 side() { printf '{"parentUuid":"a","isSidechain":true,"type":"user","message":{"role":"user","content":"subagent prompt"},"uuid":"x1"}\n'; }
 blob() { printf '{"type":"api-request-blob","sessionId":"s","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_b","name":"Bash","input":{}}]}}\n'; }
+result_err() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_%s","type":"tool_result","content":"tasks[3].text is too long","is_error":true}]},"uuid":"r%s"}\n' "$1" "$1"; }
+stale_feedback() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":"Stop hook feedback:\\nBAB Tasks: you published early in this turn but kept working."},"isMeta":true,"uuid":"f2"}\n'; }
 notify() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":"task finished"},"origin":{"kind":"task-notification"},"uuid":"n1"}\n'; }
 image() { printf '{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"AAAA"}}]},"uuid":"i1"}\n'; }
 compact() { printf '{"parentUuid":"a","isSidechain":false,"type":"user","message":{"role":"user","content":"summary"},"isCompactSummary":true,"uuid":"c1"}\n'; }
@@ -180,6 +182,26 @@ expect "BAB Tasks switched off keeps the session quiet" pass "$(stdin_for "$t")"
 t="$tmp/off-text-elsewhere.jsonl"
 { prompt "first" 1; tool Read 1; result_off 1; prompt "second" 2; tool Bash 2; result 2; } > "$t"
 expect "the off text in another tool's result does not count" block "$(stdin_for "$t")"
+
+t="$tmp/declined-then-notified.jsonl"
+{ prompt "first" 1; tool Bash 1; result 1; feedback; say "bab_tasks is not available"; notify; tool Read 2; result 2; } > "$t"
+expect "a declined block stays quiet after a task notification" pass "$(stdin_for "$t")"
+
+t="$tmp/failed-patch.jsonl"
+{ prompt "go" 1; tool Bash 1; result 1; tool mcp__plugin_bab_bab__bab_tasks 2; result_err 2; } > "$t"
+expect "a failed patch does not count as publishing" block "$(stdin_for "$t")"
+
+t="$tmp/failed-late-patch.jsonl"
+{ prompt "go" 1; tool mcp__plugin_bab_bab__bab_tasks 1; result 1; i=2; while [ $i -le 6 ]; do tool Bash $i; result $i; i=$((i + 1)); done; tool mcp__plugin_bab_bab__bab_tasks 7; result_err 7; } > "$t"
+expect "a failed late patch leaves the card stale" stale "$(stdin_for "$t")"
+
+t="$tmp/retried-patch.jsonl"
+{ prompt "go" 1; tool Bash 1; result 1; tool mcp__plugin_bab_bab__bab_tasks 2; result_err 2; tool mcp__plugin_bab_bab__bab_tasks 3; result 3; } > "$t"
+expect "a retried patch that works counts" pass "$(stdin_for "$t")"
+
+t="$tmp/stale-ignored.jsonl"
+{ prompt "first" 1; tool mcp__plugin_bab_bab__bab_tasks 1; result 1; tool Bash 2; result 2; stale_feedback; say "the card is current"; prompt "second" 3; tool Bash 3; result 3; } > "$t"
+expect "an ignored stale reminder does not silence the hook" block "$(stdin_for "$t")"
 
 t="$tmp/garbage.jsonl"
 printf 'garbage\n{"broken":\n\000\001\n' > "$t"

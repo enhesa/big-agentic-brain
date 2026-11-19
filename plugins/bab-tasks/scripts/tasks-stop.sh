@@ -2,12 +2,13 @@
 # BAB Tasks Stop hook: at the end of a turn, checks that the turn published to BAB Tasks.
 # It blocks the stop once, with a short reason, when the turn since the last real user prompt made
 # tool calls and either
-#   - none of them was a bab_tasks publish or patch (list and export do not count), or
+#   - none of them was a bab_tasks publish or patch that succeeded (list and export do not
+#     count), or
 #   - 5 or more tool calls came after the last publish or patch (the card is likely stale).
 #     Calls that only report back (thread sends, PR watch, background waits) do not count.
 # It passes a turn with no tool calls, a second stop in the same turn (stop_hook_active, so it
 # never loops), and BAB_TASKS_STOP_HOOK=off. It stays quiet for the rest of the session once a
-# block was answered without any bab_tasks call (the tool is missing or off, or the person asked
+# "did not publish" block was answered without any bab_tasks call (the tool is missing or off, or the person asked
 # to leave BAB Tasks alone), or once bab_tasks answered that BAB Tasks is switched off.
 # Portable: POSIX sh and one awk run, nothing else (no jq, python or node), because every process
 # start is slow on Windows. Reads only the local transcript named on stdin; no network call.
@@ -61,24 +62,29 @@ verdict=$(awk '
     }
     if (path == "") { print "pass"; exit }
 
-    tools = 0; published = 0; after = 0
+    tools = 0; published = 0; after = 0; turn = 0
     quiet = 0; blocked = 0; answered = 0
     while ((status = (getline line < path)) > 0) {
       if (line ~ /^\{"type": *"/ && line !~ /^\{"type": *"(user|assistant)"/) continue
       if (line ~ /"isSidechain": *true/) continue
       if (line ~ /"type": *"user"/ && line ~ /"role": *"user"/) {
         if (line ~ /"type": *"tool_result"/) {
-          # bab_tasks answered that BAB Tasks is switched off on this BAB.
-          if (line ~ /BAB Tasks is switched off/ && match(line, /"tool_use_id": *"[^"]*"/)) {
+          if (match(line, /"tool_use_id": *"[^"]*"/)) {
             id = substr(line, RSTART, RLENGTH)
             sub(/.*"tool_use_id": *"/, "", id); sub(/"$/, "", id)
-            if (id in taskids) quiet = 1
+            # bab_tasks answered that BAB Tasks is switched off on this BAB.
+            if (id in taskids && line ~ /BAB Tasks is switched off/) quiet = 1
+            # A publish or patch that failed did not publish: undo it, and count it as a call.
+            if ((id in pubturn) && pubturn[id] == turn && line ~ /"is_error": *true/) {
+              published = prevpub[id]; after = prevafter[id] + after + 1
+            }
           }
           continue
         }
         if (line ~ /"isMeta": *true/) {
-          # Our own block, fed back to the agent. Remember it to see how the agent answers.
-          if (line ~ /Stop hook feedback/ && line ~ /BAB Tasks: /) { blocked = 1; answered = 0 }
+          # Our own "did not publish" block, fed back to the agent. Remember it to see how the
+          # agent answers. The stale reminder is not remembered: ignoring it silences nothing.
+          if (line ~ /Stop hook feedback/ && line ~ /BAB Tasks: / && line ~ /did not publish/) { blocked = 1; answered = 0 }
           continue
         }
         if (line ~ /"isCompactSummary": *true/) continue
@@ -87,6 +93,7 @@ verdict=$(awk '
         # must not publish in this session: stay quiet from here on.
         if (blocked && !answered) quiet = 1
         blocked = 0
+        turn++
         tools = 0; published = 0; after = 0
         continue
       }
@@ -97,13 +104,20 @@ verdict=$(awk '
           answered = 1
           id = toolid(line)
           if (id != "") taskids[id] = 1
-          if (line ~ /"action": *"(publish|patch)"/) { published++; after = 0 }
+          if (line ~ /"action": *"(publish|patch)"/) {
+            if (id != "") { pubturn[id] = turn; prevpub[id] = published; prevafter[id] = after }
+            published++; after = 0
+          }
         } else if (name !~ /(t3_thread_send|watch_pull_request|link_pull_requests?|t3_background_wait|send_to_user|TaskStop)$/) {
           after++
         }
       }
     }
     close(path)
+    # This stop is not the one right after our block (stop_hook_active passed that one), so a
+    # block still unanswered by any bab_tasks call was declined, even when no new prompt came
+    # yet (a background task notification wakes the agent without one).
+    if (blocked && !answered) quiet = 1
     if (status < 0 || quiet || tools == 0) { print "pass"; exit }
     if (published == 0) print "block"
     else if (after >= 5) print "stale"
