@@ -545,6 +545,15 @@ describe("current: open initiatives to create if absent", () => {
     expect(backfilled().filter((e) => e.kind === "worked").map((e) => e.initiative)).toEqual(["unassigned"]);
   });
 
+  it("drops evidence on a current record's tasks and stores none", async () => {
+    const proof = [{ label: "PR", url: "https://git.example.com/acme/x/pull/1" }];
+    const res = await post(mint().url, syncUpload([record("alpha", { tasks: [{ id: "t-1", text: "First task", status: "done", evidence: proof }] })]));
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ syncCreated: 1, syncRefused: [] });
+    expect(cc.ccGet(OWNER, "alpha").tasks[0]).not.toHaveProperty("evidence");
+    expect(String((await rawRecord("alpha") as { record: string }).record)).not.toContain("evidence");
+  });
+
   it("takes no links on a current record: the field is unknown", async () => {
     const res = await post(mint().url, syncUpload([record("alpha", { links: [] })]));
     expect(res.status).toBe(400);

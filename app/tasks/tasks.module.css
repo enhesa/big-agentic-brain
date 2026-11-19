@@ -416,7 +416,7 @@
   line-height: 18px;
 }
 
-.tasks li {
+.tasks > li {
   display: flex;
   gap: 6px;
   align-items: flex-start;

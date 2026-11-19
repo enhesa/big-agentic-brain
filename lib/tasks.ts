@@ -1082,7 +1082,7 @@ function assertFits(owner: string, next: CcRecord, prev: CcRecord | null): void 
   if (size > CC_MAX_RECORD_BYTES) {
     const cleared = next.questions.filter((q) => q.clearedAt).length;
     throw new CcTooLargeError(
-      `The record is ${Math.ceil(size / 1024)} KB; at most ${CC_MAX_RECORD_BYTES / 1024} KB per initiative. Send fewer or shorter tasks or links` +
+      `The record is ${Math.ceil(size / 1024)} KB; at most ${CC_MAX_RECORD_BYTES / 1024} KB per initiative. Send fewer or shorter tasks, links or evidence` +
         (cleared ? ` (it also keeps ${cleared} cleared questions for 7 days).` : "."),
     );
   }
@@ -1746,7 +1746,15 @@ function checkCurrentRecord(raw: unknown, index: number): CurrentRecord {
     key = raw.key;
   }
   if (raw.state !== "active") throw new ValidationError(`${where}.state must be "active": only open work is synced`);
-  const tasks = list(raw.tasks, `${where}.tasks`, CC_MAX_TASKS, "tasks").map((t, i) => checkTask(t, `${where}.tasks[${i}]`));
+  // Backfill rebuilds cards from transcripts and never has proof: evidence is dropped, not stored.
+  const tasks = list(raw.tasks, `${where}.tasks`, CC_MAX_TASKS, "tasks").map((t, i) => {
+    if (isObject(t) && "evidence" in t) {
+      const { evidence: _dropped, ...rest } = t;
+      void _dropped;
+      return checkTask(rest, `${where}.tasks[${i}]`);
+    }
+    return checkTask(t, `${where}.tasks[${i}]`);
+  });
   uniqueIds(tasks, `${where}.tasks`);
   if (Array.isArray(raw.questions) && raw.questions.length > CC_MAX_OPEN_QUESTIONS) {
     throw new ValidationError(`${where}.questions: at most ${CC_MAX_OPEN_QUESTIONS} open; leave an answered one out`);

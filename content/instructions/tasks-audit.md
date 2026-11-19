@@ -30,11 +30,10 @@ its evidence and correct the status. You change status only. The person decides 
 
 The audit runs every night. Every item it adds uses a fixed id, so a rerun never adds it twice:
 
-- `audit-owner-gone` (task), `audit-still-active` (question), `audit-quiet-<taskid>` (task), `audit-confirm-<questionid>` (task), `audit-closed-pr-<taskid>` (question).
+- `audit-owner-gone` (task), `audit-still-active` (question), `audit-quiet-<taskid>` (task), `audit-confirm-<questionid>` (task), `audit-closed-pr-<taskid>` (question), `audit-evidence-<taskid>` (question).
 - Before adding, check the record: skip an id already present, and skip a question whose id is in `dismissed` with the same text.
 - A card with 5 open questions gets no new question. Count it as a flag in your summary.
-- Task text is at most 120 characters. Cut it.
-- `audit-evidence-<taskid>` (question) is the id for a done task whose evidence does not match.
+- Task text is at most 120 characters. Cut it. A question id is a slug of at most 40 characters: cut the task id so `audit-evidence-<taskid>` (and `audit-closed-pr-<taskid>`) stays within 40.
 - Patch a card only when something really changed. Any patch counts as activity, so a needless patch keeps a dead card alive.
 
 ## Steps
@@ -49,14 +48,18 @@ The audit runs every night. Every item it adds uses a fixed id, so a rerun never
    - A ticket is closed or done: mark the task it covers `done` only when the task names that ticket. Otherwise leave it.
    - A file or doc the task says to write exists and has content: `done`. An empty or missing one stays.
    - A task is `in_progress` but its PR or branch has been quiet for 7 days: add task `audit-quiet-<taskid>`: "Quiet for 7 days: still going?". Keep the status.
-   Then check each `done` task. Read its `evidence` first (up to 3 `{ label, url }` links) and open each one with whatever you have. A `done` task whose evidence holds up is verified. A `done` task with no evidence is **not verified**, unless you find proof yourself (its PR, ticket, file or doc, as above). Say which in the checklist: `checked: evidence ok`, `checked: proof found by audit` or `checked: not verified, no evidence`. Do not reopen it and do not add a flag for it. Evidence that no longer resolves or contradicts the task is a flag: add question `audit-evidence-<taskid>`: "Evidence does not match, still done?" Never write evidence yourself. Only the agent that did the work attaches it.
-5. Flag, never clear:
+5. Check each `done` task. Read its `evidence` links first (up to 3 `{ label, url }`) and open each one with whatever you have. Tally each done task as one of:
+   - `evidence ok`: the `evidence` links open and show the work.
+   - `proof found`: it has no `evidence` links, or none you could open, but you found proof yourself (its PR, ticket, file or doc, as in step 4).
+   - `not verified`: no `evidence` links and no proof found, or the links need a login (401 or 403) and you found no other proof. Do not reopen it and do not add a flag for it.
+   Only an `evidence` link that is gone (404) or shows the work was not done is a flag: add question `audit-evidence-<taskid>`: "Evidence does not match, still done?" A link you cannot open is not a flag. A done task already tallied `proof found` needs no re-check unless its card changed. Never write `evidence` yourself. Only the agent that did the work attaches it.
+6. Flag, never clear:
    - A question older than 3 days (the page marks it possibly stale): if evidence answers it (a merged PR, a closed ticket), add task `audit-confirm-<questionid>` with a short text, such as "Confirm: PR merged, close the question?". Keep the question until the person answers.
    - A card on `active` with no publish for 7 or more days, before the page hides it at 14: add question `audit-still-active`: "Still active?" with options `Yes`, `Park it`. Skip `parked` cards.
    - A card whose owner session is gone: only when your tools can list sessions and the card's `source` session is not in the list. A card with no `source`, or a session list you cannot read, is skipped. Add task `audit-owner-gone`: "Owner session gone, adopt or park".
    - A recurring card: `list` reports `overdue`. When it is true, add question `audit-overdue`: "Overdue: check the job that owns this card". A recurring card takes no tasks, so a question is the only flag. Never write its `health` yourself.
-6. Patch one card at a time with its changed tasks, new questions and a `worked` line of at most 200 characters, such as "Audit: 2 tasks done by merged PRs, 1 flag". Put the evidence for each closed task in that line (PR title or number, checked date), shortened to fit. Skip a card with no change.
-7. Count what you did: cards checked of the step 1 total (a `could not verify` card counts as checked), tasks closed, flags added, and the ids of cards that are unchecked or could not be verified, each with its reason. The report always lists them, and also counts the `done` tasks that are not verified (no evidence, no proof found).
+7. Patch one card at a time with its changed tasks, new questions and a `worked` line of at most 200 characters, such as "Audit: 2 tasks done by merged PRs, 1 flag". Put the evidence for each closed task in that line (PR title or number, checked date), shortened to fit. Skip a card with no change.
+8. Count what you did: cards checked of the step 1 total (a `could not verify` card counts as checked), tasks closed, flags added, and the ids of cards that are unchecked or could not be verified, each with its reason. The report always lists them, and the done-task tally: "done tasks: N evidence ok, N proof found, N not verified".
 
 ## Scheduled run
 

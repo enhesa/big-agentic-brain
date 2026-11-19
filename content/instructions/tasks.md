@@ -23,7 +23,8 @@ tool has an https one. `source.link` is deprecated: the page ignores it, so leav
 
 **Proof of a done to-do goes in its `evidence`**: up to 3 `{ label, url }` links on the task, such as
 the merged PR or the test run. Same rules as `links`. The page shows them under the to-do, and the
-audit skill checks them first. A `patch` sets them: `evidence: []` clears them.
+audit skill checks them first. A `patch` sets them: `evidence: []` clears them. A `publish` keeps
+`evidence` only on tasks that send it again: leave it out and it is gone, so send it every time or use `patch`.
 
 The last call of every turn is `publish` with `worked`, even when the turn only answered a question
 or declined a task. In Claude Code the bab-tasks plugin's Stop hook checks this: a turn that made

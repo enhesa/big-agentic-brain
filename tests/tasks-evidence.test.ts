@@ -177,6 +177,14 @@ describe("patch and evidence", () => {
     expect(cc.ccGet(OWNER, "billing-export").seq).toBe(1);
   });
 
+  it("reopening a done task with a status-only patch keeps its evidence", () => {
+    publish([{ id: "a", text: "A", status: "done", evidence: [PR] }]);
+    patch([{ id: "a", status: "in_progress" }]);
+    expect(stored()[0]).toMatchObject({ status: "in_progress", finishedAt: null, evidence: [PR] });
+    patch([{ id: "a", status: "done" }]);
+    expect(stored()[0].evidence).toEqual([PR]);
+  });
+
   it("reads evidence given as JSON text on the MCP path", () => {
     publish([{ id: "a", text: "A", status: "done" }]);
     cc.runTasksMcp(ME, { action: "patch", id: "billing-export", record: { tasks: JSON.stringify([{ id: "a", evidence: [PR] }]) } }, ORIGIN);
@@ -184,7 +192,7 @@ describe("patch and evidence", () => {
   });
 });
 
-describe("the stored-record parser", () => {
+describe("the v2 snapshot importer", () => {
   const at = new Date(NOW - 86_400_000).toISOString();
   function snapshotRecord(tasks: unknown[]): Record<string, unknown> {
     return {
@@ -205,7 +213,7 @@ describe("the stored-record parser", () => {
     expect(cc.ccGet(OWNER, "alpha").tasks[0]).toEqual({ id: "t1", text: "Task", status: "done", startedAt: at, finishedAt: at });
   });
 
-  it("keeps valid evidence and drops a record whose evidence would be refused today", () => {
+  it("keeps valid evidence", () => {
     expect(importOf([{ id: "t1", text: "Task", status: "done", evidence: [PR], startedAt: at, finishedAt: at }])).toMatchObject({ imported: 1 });
     expect(cc.ccGet(OWNER, "alpha").tasks[0].evidence).toEqual([PR]);
   });
