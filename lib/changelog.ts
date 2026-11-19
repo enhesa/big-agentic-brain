@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-19",
+    title: "The BAB Tasks Stop hook catches stale cards",
+    changes: [
+      "The BAB Tasks Stop hook asks for a patch after long work past the last publish, or a failed patch.",
+    ],
+  },
+  {
     date: "2026-11-18",
     title: "BAB Tasks stays up to date after a compaction and on scheduled runs",
     changes: [

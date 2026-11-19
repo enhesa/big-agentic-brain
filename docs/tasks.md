@@ -29,11 +29,18 @@ without a question to the person, and never messages anyone. It writes a checkli
   is not in context, and publish every turn. A compaction can drop the skill text, and agents then
   stop publishing.
 - At the end of every turn, `tasks-stop.sh` reads the local transcript. If the turn since the last
-  user prompt made tool calls but no `bab_tasks` call, it blocks the stop once and asks the agent
-  to publish. A turn with no tool calls passes, and so does a second stop in the same turn, so it
-  never loops. Tool results, meta lines, compaction summaries and background task notifications
-  do not start a turn. It needs only `sh` and `awk`, and on any error it lets the turn end.
-  `BAB_TASKS_STOP_HOOK=off` turns it off. Tests: `sh plugins/bab-tasks/test/run.sh`.
+  user prompt made tool calls but no `bab_tasks` `publish` or `patch` that succeeded (`list` and
+  `export` do not count), it blocks the stop once and asks the agent to publish. It also blocks
+  once when 5 or more tool calls came after the last publish or patch, so the card is likely
+  stale; calls that only report back (thread sends, send_to_user, PR watch and links, background
+  waits, TaskStop) do not count. A turn
+  with no tool calls passes, and so does a second stop in the same turn, so it never loops. Tool
+  results, meta lines, compaction summaries and background task notifications do not start a
+  turn. It stays quiet for the rest of the session once a "did not publish" block was answered
+  without any `bab_tasks` call (the tool is missing, or the person said to leave BAB Tasks alone), or once
+  `bab_tasks` replied that BAB Tasks is switched off. It needs only `sh` and `awk`, and on any
+  error it lets the turn end. `BAB_TASKS_STOP_HOOK=off` turns it off. Tests:
+  `sh plugins/bab-tasks/test/run.sh`.
 - Neither hook makes a network call.
 - The page has no settings. Deleting, exporting and report-app grants are tool actions the agent
   runs on the person's ask, on the person's own data only (see API).
