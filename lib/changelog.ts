@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "The BAB Tasks Stop hook catches stale cards",
     changes: [
       "The BAB Tasks Stop hook asks for a patch after long work past the last publish, or a failed patch.",
+      "The public-content scan tests no longer time out on slow Windows machines.",
     ],
   },
   {
