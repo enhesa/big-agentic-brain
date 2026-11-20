@@ -48,6 +48,13 @@ async function seed() {
   db.prepare("UPDATE users SET require_confirm_until = 9999999999999, future_internal = 'secret', listening_until = datetime('now', '+1 hour'), listen_mode = 'draft'").run();
 }
 
+/** What a non-maintainer sees of a colleague in the directory. */
+const DIRECTORY_KEYS = ["areas", "email", "homeTeam", "id", "name"];
+
+function expectDirectoryOnly(user: Record<string, unknown>) {
+  expect(Object.keys(user).sort()).toEqual(DIRECTORY_KEYS);
+}
+
 function expectOnlyPublic(user: Record<string, unknown>, extra: string[] = []) {
   for (const key of INTERNAL_KEYS) expect(user, key).not.toHaveProperty(key);
   for (const key of PUBLIC_KEYS) expect(user, key).toHaveProperty(key);
@@ -75,20 +82,33 @@ describe("publicUser", () => {
 });
 
 describe("GET /api/people", () => {
-  it("lists only the allowlisted fields plus the derived ones, for every user", async () => {
-    await seed();
+  const list = async () => {
     const { GET } = await import("../app/api/people/route");
-    const body = (await (await GET(new Request("http://localhost/api/people"))).json()) as { users: Record<string, unknown>[] };
-    expect(body.users).toHaveLength(2);
-    for (const u of body.users) {
-      expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
+    return ((await (await GET(new Request("http://localhost/api/people"))).json()) as { users: Record<string, unknown>[] }).users;
+  };
+
+  it("gives a non-maintainer only id, email, name, homeTeam and areas, for every user", async () => {
+    await seed();
+    const users = await list();
+    expect(users).toHaveLength(2);
+    for (const u of users) expectDirectoryOnly(u);
+  });
+
+  it("gives a maintainer the allowlisted fields plus the derived ones, for every user", async () => {
+    await seed();
+    process.env.BAB_MAINTAINERS = ME;
+    try {
+      const users = await list();
+      expect(users).toHaveLength(2);
+      for (const u of users) expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
+    } finally {
+      delete process.env.BAB_MAINTAINERS;
     }
   });
 });
 
 describe("bab_people", () => {
-  it("lists only the allowlisted fields plus the derived ones, for every user", async () => {
-    await seed();
+  const people = async () => {
     const { POST } = await import("../app/mcp/route");
     const res = await POST(
       new Request("https://bab.example.com/mcp", {
@@ -99,12 +119,35 @@ describe("bab_people", () => {
     );
     const out = await res.json();
     expect(out.result.isError).toBeFalsy();
-    const text: string = out.result.content[0].text;
-    const users = (JSON.parse(text) as { users: Record<string, unknown>[] }).users;
-    expect(users).toHaveLength(2);
-    for (const u of users) {
-      expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
+    return out.result.content[0].text as string;
+  };
+
+  it("gives a non-maintainer only id, email, name, homeTeam and areas, and still self and maintainers", async () => {
+    await seed();
+    const parsed = JSON.parse(await people()) as { users: Record<string, unknown>[]; self: string; maintainers: unknown[] };
+    expect(parsed.users).toHaveLength(2);
+    for (const u of parsed.users) expectDirectoryOnly(u);
+    expect(parsed.self).toBe(ME);
+    expect(Array.isArray(parsed.maintainers)).toBe(true);
+  });
+
+  it("gives a maintainer the allowlisted fields plus the derived ones, for every user", async () => {
+    await seed();
+    process.env.BAB_MAINTAINERS = ME;
+    try {
+      const text = await people();
+      const users = (JSON.parse(text) as { users: Record<string, unknown>[] }).users;
+      expect(users).toHaveLength(2);
+      for (const u of users) expectOnlyPublic(u, ["learningCount", "homeTeam", "areas"]);
+      for (const key of INTERNAL_KEYS) expect(text).not.toContain(key);
+    } finally {
+      delete process.env.BAB_MAINTAINERS;
     }
+  });
+
+  it("never carries an internal column, for anyone", async () => {
+    await seed();
+    const text = await people();
     for (const key of INTERNAL_KEYS) expect(text).not.toContain(key);
   });
 });

@@ -82,7 +82,7 @@ describe("bab_people", () => {
     const out = await tool(BOB, "bab_people");
     const ada = out.users.find((u: { id: string }) => u.id === ADA.email);
     const bob = out.users.find((u: { id: string }) => u.id === BOB.email);
-    expect(ada).toMatchObject({ homeTeam: "regulatory", areas: ["toxicology"], learningCount: 0 });
+    expect(ada).toEqual({ id: ADA.email, email: ADA.email, name: expect.any(String), homeTeam: "regulatory", areas: ["toxicology"] });
     expect(bob).toMatchObject({ homeTeam: null, areas: [] });
     expect(out.self).toBe(BOB.email);
   });
