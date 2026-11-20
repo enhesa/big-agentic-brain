@@ -142,6 +142,37 @@ describe("one page width", () => {
     expect(read("app/components/shell/Shell.module.css")).not.toMatch(/\.content\s*\{[^}]*background/);
   });
 
+  it("the landing page is one paper ground with two bands, sand for installing and navy for the film", () => {
+    const css = read("app/landing.module.css");
+    // Every rule for the selector, media queries included. A selector that is gone fails the test.
+    const rule = (selector: string) => {
+      const found = css.match(new RegExp(`\\${selector}\\s*\\{[^}]*\\}`, "g"));
+      expect(found, `${selector} has a rule`).not.toBeNull();
+      return found!.join("\n");
+    };
+    expect(rule(".page")).toContain("background: var(--paper)");
+    expect(rule(".hero")).toContain("background: var(--paper)");
+    // No section paints white, a gradient or the old grey over the paper.
+    for (const section of [".section", ".tourSection", ".getSection", ".faqList"]) {
+      expect(rule(section), section).not.toMatch(/background/);
+    }
+    // A band draws its ground behind the section, so its content keeps the page's one column.
+    expect(css).toMatch(/\.band::before\s*\{[^}]*background:\s*var\(--band\)/);
+    expect(rule(".installSection")).toContain("--band: var(--sand)");
+    expect(rule(".filmSection")).toContain("--band: var(--navy)");
+    // On navy the bright teal is the one that reads.
+    expect(rule(".filmSection")).toContain("--teal-ink: var(--teal)");
+    for (const file of ["app/components/landing/GetStarted.tsx", "app/components/landing/Film.tsx"]) {
+      expect(read(file), file).toContain("styles.band");
+    }
+  });
+
+  it("the FAQ is two balanced columns of rows that never split", () => {
+    const css = read("app/landing.module.css");
+    expect(css).toMatch(/\.faqList\s*\{[^}]*columns:\s*2/);
+    expect(css).toMatch(/\.faqItem\s*\{[^}]*break-inside:\s*avoid/);
+  });
+
   it("teal words and the focus ring use the dark teal, which passes contrast on paper", () => {
     const globals = read("app/globals.css");
     const hex = globals.match(/--teal-ink:\s*(#[0-9a-f]{6})/)?.[1];

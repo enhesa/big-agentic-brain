@@ -14,7 +14,7 @@ import Reveal from "./Reveal";
 export default function GetStarted() {
   const { installCommands, installScreenshot } = branding();
   return (
-    <section className={styles.section} id="get-started">
+    <section className={`${styles.section} ${styles.band} ${styles.installSection}`} id="get-started">
       <div className={styles.wrap}>
         <div className={styles.sectionHead}>
           <span className={styles.eyebrow}>Get started</span>
@@ -24,25 +24,34 @@ export default function GetStarted() {
           </p>
         </div>
 
-        {installScreenshot ? (
-          <Reveal as="figure" className={styles.installShot}>
-            {/* Plain img: a static screenshot needs none of next/image's resizing. */}
-            <img src={installScreenshot.src} alt={installScreenshot.alt} loading="lazy" />
-          </Reveal>
-        ) : null}
+        {/* Both ways in one view: with a screenshot, the app on the left and the terminal on the right. */}
+        <div className={installScreenshot ? styles.installGrid : undefined}>
+          {installScreenshot ? (
+            <div className={styles.installWay}>
+              <h3 className={styles.cliHead}>With a few clicks</h3>
+              <p className={styles.cliSub}>Search for the plugin and add it.</p>
+              <Reveal as="figure" className={styles.installShot}>
+                {/* Plain img: a static screenshot needs none of next/image's resizing. */}
+                <img src={installScreenshot.src} alt={installScreenshot.alt} loading="lazy" />
+              </Reveal>
+            </div>
+          ) : null}
 
-        <h3 className={styles.cliHead}>{installScreenshot ? "Prefer the terminal?" : "Two commands"}</h3>
-        <p className={styles.cliSub}>Run these in Claude Code, one after the other.</p>
-        <div className={styles.cliRows}>
-          <Reveal className={styles.promptCard}>
-            <CopyPrompt text={installCommands.marketplace} />
-          </Reveal>
-          <Reveal className={styles.promptCard} delay={110}>
-            <CopyPrompt text={installCommands.install} />
-          </Reveal>
+          <div className={styles.installWay}>
+            <h3 className={styles.cliHead}>{installScreenshot ? "Prefer the terminal?" : "Two commands"}</h3>
+            <p className={styles.cliSub}>Run these in Claude Code, one after the other.</p>
+            <div className={styles.cliRows}>
+              <Reveal className={styles.promptCard}>
+                <CopyPrompt text={installCommands.marketplace} />
+              </Reveal>
+              <Reveal className={styles.promptCard} delay={110}>
+                <CopyPrompt text={installCommands.install} />
+              </Reveal>
+            </div>
+            <p className={styles.cliNote}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
+            <p className={styles.cliNote}>Few permission prompts: the plugin approves its low-risk tools. Sending a message, sharing files or deleting still asks you.</p>
+          </div>
         </div>
-        <p className={styles.cliSub}>When Claude asks for the BAB server URL, enter this site&apos;s address, without a trailing slash.</p>
-        <p className={styles.cliSub}>Few permission prompts: the plugin approves its low-risk tools. Sending a message, sharing files or deleting still asks you.</p>
       </div>
     </section>
   );

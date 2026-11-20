@@ -28,6 +28,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Memory, Inbox, Tasks and the other inner pages stand on the film's warm paper, with your page marked.",
       "On a phone the top bar links are one row you swipe, where they used to wrap.",
       "Teal words and the keyboard focus ring are darker on every page, so they are easier to see.",
+      "The landing page stands on the same paper: no white bands, and the film sits on navy.",
+      "Installing shows both ways side by side: the app steps and the two terminal commands.",
+      "The FAQ is two plain columns you read top to bottom, with every answer still shown.",
     ],
   },
   {
