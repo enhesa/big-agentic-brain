@@ -36,6 +36,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A memory's page puts its numbers beside the text on a wide screen, as one quiet list.",
       "BAB Tasks keeps up to 1000 initiatives and 20 MB per person, up from 100 and 256 KB.",
       "The people list for agents shows last seen and memory counts to maintainers only.",
+      "The plugin sends its device header without starting programs, so busy Windows machines are no longer refused.",
     ],
   },
   {

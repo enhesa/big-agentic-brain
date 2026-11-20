@@ -27,4 +27,8 @@ if "%D:~-2%"=="\_" (set "D=%D:~0,-2%") else set "D=%D:~0,-1%"
 exit /b 0
 CMDBLOCK
 
-exec sh "$(dirname "$0")/bab-headers.sh" "$@"
+# No $(dirname): a process start can take a second on a loaded machine.
+case "$0" in
+  */*) exec sh "${0%/*}/bab-headers.sh" "$@" ;;
+esac
+exec sh ./bab-headers.sh "$@"

@@ -23,6 +23,36 @@ is_hex64() {
   [ "${#1}" -eq 64 ]
 }
 
+# Fast path: the secret and the label are already there. Shell builtins only, no $(...),
+# no pipes and no external commands: under load each process start can cost a second on
+# Git Bash, and Claude Code drops a headersHelper that is too slow. Anything unusual falls
+# through to the full path below, which prints the same bytes.
+# device-label holds two lines, written by the full path: `uname -n` and the label.
+hot_read() {
+  hot_val=
+  [ -r "$1" ] || return 1
+  while IFS= read -r hot_line || [ -n "$hot_line" ]; do hot_val="$hot_val$hot_line"; done < "$1"
+}
+case "${OSTYPE:-}" in
+  msys* | cygwin*) hot_win=1 ;;
+  *) hot_win=0 ;;
+esac
+hot_dir=
+case "$1" in
+  '' | *'${'*) ;;
+  /*) hot_dir="$1" ;;
+  [A-Za-z]:[\\/]*) [ "$hot_win" -eq 1 ] && hot_dir="$1" ;;
+esac
+if [ -n "$hot_dir" ] && hot_read "$hot_dir/device-secret" && is_hex64 "$hot_val" \
+  && [ -r "$hot_dir/device-label" ] \
+  && { IFS= read -r hot_host && IFS= read -r hot_label; } < "$hot_dir/device-label" \
+  && { [ -z "${HOSTNAME:-}" ] || [ "$HOSTNAME" = "$hot_host" ]; } \
+  && [ -n "$hot_label" ] && [ "${#hot_label}" -le 60 ] \
+  && case "$hot_label" in *[!A-Za-z0-9\ ._-]*) false ;; *) true ;; esac; then
+  printf '{"X-Bab-Device":"%s","X-Bab-Device-Label":"%s"}' "$hot_val" "$hot_label"
+  exit 0
+fi
+
 # Windows-style paths (X:\... or X:/...) only make sense under Git Bash and friends.
 win=0
 case "$(uname -s)" in
@@ -91,6 +121,17 @@ if ! is_hex64 "$secret"; then
   is_hex64 "$secret" || fail no-write
 fi
 
-label=$(printf '%s %s' "$(uname -s)" "$(uname -n)" | LC_ALL=C tr -cd 'A-Za-z0-9 ._-' | cut -c1-60)
+host=$(uname -n)
+label=$(printf '%s %s' "$(uname -s)" "$host" | LC_ALL=C tr -cd 'A-Za-z0-9 ._-' | cut -c1-60)
+
+# Cache the label for the fast path. Best effort: without it every call takes the full path.
+case "$host" in
+  *'
+'*) ;;
+  *) printf '%s
+%s
+' "$host" "$label" > "$dir/device-label.$$.tmp" && mv -f "$dir/device-label.$$.tmp" "$dir/device-label" ;;
+esac
+rm -f "$dir/device-label.$$.tmp"
 
 printf '{"X-Bab-Device":"%s","X-Bab-Device-Label":"%s"}' "$secret" "$label"

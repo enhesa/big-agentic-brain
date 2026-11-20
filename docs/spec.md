@@ -675,7 +675,8 @@ repo) bundles an `.mcp.json` pointing at `POST /mcp`, `type: "command"` hooks (a
 posts the event body to `POST /api/hook`) for `UserPromptSubmit`, `Stop` and `SessionStart` on
 compaction, and thin skills that carry policy, not an API reference (the MCP tool schemas do
 that job). Identity is a device secret: a `headersHelper` (`scripts/bab-headers.cmd`, then
-`bab-headers.sh`) keeps a random secret in the plugin's data folder and sends it as
+`bab-headers.sh`) keeps a random secret in the plugin's data folder (and a label cache, so a
+later call uses shell builtins only and starts no program) and sends it as
 `X-Bab-Device` on every MCP connection (see "Identity"). The plugin's `userConfig`
 address and name are optional fallbacks, sent as `X-Bab-Actor-*` headers only when BAB does not
 know the device. The hooks carry no identity. See
