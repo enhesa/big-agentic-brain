@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.36.0](https://github.com/enhesa/big-agentic-brain/compare/v2.35.0...v2.36.0) (2026-11-20)
+
+
+### Features
+
+* put every page on the film's paper ground ([59cfc18](https://github.com/enhesa/big-agentic-brain/commit/59cfc188e5f1f3994dc97cffaace56aa170372db))
+* put the landing page on one paper ground ([#182](https://github.com/enhesa/big-agentic-brain/issues/182)) ([34e86b8](https://github.com/enhesa/big-agentic-brain/commit/34e86b851bd872bff0486cc51b409aed8c5ef616))
+
 ## [2.35.0](https://github.com/enhesa/big-agentic-brain/compare/v2.34.1...v2.35.0) (2026-11-20)
 
 
