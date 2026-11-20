@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.38.0](https://github.com/enhesa/big-agentic-brain/compare/v2.37.0...v2.38.0) (2026-11-20)
+
+
+### Features
+
+* **people:** people directory shows activity to maintainers only ([#187](https://github.com/enhesa/big-agentic-brain/issues/187)) ([2039082](https://github.com/enhesa/big-agentic-brain/commit/2039082cf98910f6a2303adec92ea8f89cd4665a))
+* put inbox, threads and reminders on sheets ([#190](https://github.com/enhesa/big-agentic-brain/issues/190)) ([4c1b052](https://github.com/enhesa/big-agentic-brain/commit/4c1b0529d6878aace37e179d51714ac10d9c194d))
+
+
+### Bug Fixes
+
+* **plugin:** headers helper answers with shell builtins only ([#189](https://github.com/enhesa/big-agentic-brain/issues/189)) ([e376d3b](https://github.com/enhesa/big-agentic-brain/commit/e376d3b92182bbf46c10aa5998be029096664858))
+
 ## [2.37.0](https://github.com/enhesa/big-agentic-brain/compare/v2.36.0...v2.37.0) (2026-11-20)
 
 
