@@ -4,6 +4,7 @@ import TopBar from "./components/landing/TopBar";
 import Hero from "./components/landing/Hero";
 import HowItWorks from "./components/landing/HowItWorks";
 import Holds from "./components/landing/Holds";
+import Film from "./components/landing/Film";
 import GetStarted from "./components/landing/GetStarted";
 import Faq from "./components/landing/Faq";
 import Footer from "./components/shell/Footer";
@@ -15,6 +16,8 @@ import Footer from "./components/shell/Footer";
  * headline should not have to scroll past the explanation to find the one line they need.
  * Then how it works, then what you get (show the mechanism before the
  * argument; the why and what-it-holds sections merged into one). Under a minute, for any team.
+ * The short film comes after the features: it retells the story for people who would rather
+ * watch, and nobody has to pass it to find the install line.
  */
 export default function Home() {
   return (
@@ -25,6 +28,7 @@ export default function Home() {
         <GetStarted />
         <HowItWorks />
         <Holds />
+        <Film />
         <Faq />
       </main>
       <Footer />

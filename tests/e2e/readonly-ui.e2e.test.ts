@@ -9,6 +9,15 @@ describe("e2e: read-only UI", () => {
     expect(text.toLowerCase()).toContain("agentic");
   });
 
+  it("serves the landing page's film and its poster", async () => {
+    const film = await fetch(`${origin()}/showcase.mp4`, { headers: { range: "bytes=0-15" } });
+    expect([200, 206]).toContain(film.status);
+    expect(film.headers.get("content-type")).toBe("video/mp4");
+    const poster = await fetch(`${origin()}/showcase-poster.png`);
+    expect(poster.status).toBe(200);
+    expect(poster.headers.get("content-type")).toBe("image/png");
+  });
+
   it("/memory returns 200; its only form is a GET search box, no write form", async () => {
     const res = await fetch(`${origin()}/memory`);
     expect(res.status).toBe(200);

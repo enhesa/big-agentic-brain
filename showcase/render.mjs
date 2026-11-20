@@ -70,12 +70,13 @@ function checkFfmpeg() {
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".woff2": "font/woff2",
 };
 
-/** Serves showcase/ and public/fonts/ only, on a free local port. */
+/** Serves showcase/, public/fonts/ and the film's story only, on a free local port. */
 function serve() {
-  const allowed = [join(root, "showcase") + sep, join(root, "public", "fonts") + sep];
+  const allowed = [join(root, "showcase") + sep, join(root, "public", "fonts") + sep, join(root, "lib", "film-story.mjs")];
   const server = createServer((req, res) => {
     let path;
     try {

@@ -58,6 +58,48 @@ describe("landing page", () => {
     for (const kind of ["Memories", "Reminders", "Messages"]) expect(html).toContain(kind);
   });
 
+  it("plays the short film as an animated drawing, with the video as a download", () => {
+    expect(html).toContain('id="film"');
+    const film = html.match(/<svg\b[^>]*id="film-svg"[^>]*>[\s\S]*?<\/svg>/)?.[0] ?? "";
+    expect(film).toMatch(/^<svg\b[^>]*role="img"[^>]*aria-label="The Big Agentic Brain film"/);
+    // The film says in drawing what the film's story module says in data.
+    for (const words of ["Every", "zero.", "swarm", "MEASURED", "12%", "79%", "Agentic"]) expect(film).toContain(words);
+    // One shared clock: every animation runs the film's 45 seconds, or the brain's own breath.
+    const clocks = new Set([...film.matchAll(/\bdur="([^"]+)"/g)].map((m) => m[1]));
+    expect([...clocks].sort()).toEqual(["2.6s", "45s"]);
+    expect(film).not.toMatch(/<script|<foreignObject|\bon[a-z]+=/);
+    // Every animation is well formed: its times run from 0 to 1 in order, with an easing per step.
+    const animations = [...film.matchAll(/<animate(?:Transform|Motion)?\b[^>]*>/g)].map((m) => m[0]);
+    expect(animations.length).toBeGreaterThan(100);
+    for (const animation of animations) {
+      const times = animation.match(/keyTimes="([^"]+)"/)?.[1].split(";").map(Number);
+      if (!times) continue; // the breath, which has no key times
+      expect(times[0], animation).toBe(0);
+      expect(times.every((t, i) => i === 0 || t > times[i - 1]), animation).toBe(true);
+      const splines = animation.match(/keySplines="([^"]+)"/)?.[1].split(";");
+      if (splines) {
+        expect(times[times.length - 1], animation).toBe(1);
+        expect(splines, animation).toHaveLength(times.length - 1);
+        for (const n of splines.join(" ").split(" ").map(Number)) expect(n >= 0 && n <= 1, animation).toBe(true);
+      }
+    }
+    // Small enough to send with the page.
+    expect(film.length).toBeLessThan(150_000);
+    // No video player: the video is a download, and nothing fetches it unasked.
+    expect(html).not.toContain("<video");
+    expect(html).toMatch(/<a\b[^>]*href="\/showcase\.mp4"[^>]*download=/);
+    // People can stop it.
+    expect(html).toMatch(/<button\b[^>]*aria-controls="film-svg"[^>]*>Pause<\/button>/);
+    expect(html).toMatch(/<button\b[^>]*aria-controls="film-svg"[^>]*>Restart<\/button>/);
+    // The film has no sound, so the page says what happens in it instead of captions.
+    expect(film).toContain('aria-describedby="film-story"');
+    expect(html).toContain('id="film-story"');
+    // And scene by scene for people who cannot see it, with the same figures the film shows.
+    const scenes = html.match(/<ol\b[^>]*aria-label="What the film shows"[^>]*>([\s\S]*?)<\/ol>/)?.[1] ?? "";
+    expect(scenes.match(/<li>/g)).toHaveLength(7);
+    expect(scenes).toContain("for bugs that need team knowledge: 12% fixed without BAB, 79% with it");
+  });
+
   it("answers the common how-do-I questions in a FAQ", () => {
     expect(html).toContain('id="faq"');
     expect(html).not.toContain("<details");
