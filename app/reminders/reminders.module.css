@@ -4,7 +4,9 @@
   margin-bottom: 20px;
 }
 
+/* One reading column: a reminder is a line or two, not a full-width banner. */
 .group {
+  max-width: 760px;
   margin-bottom: 28px;
 }
 
@@ -131,7 +133,7 @@ details[open] > .summary::before {
 .body {
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid var(--mist);
+  border-top: 1px solid var(--hairline);
   color: var(--navy);
   font-size: 0.92rem;
   line-height: 1.6;
@@ -166,7 +168,7 @@ details[open] > .summary::before {
 .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.84em;
-  background: var(--mist);
+  background: var(--sand);
   color: var(--navy);
   padding: 1px 6px;
   border-radius: 4px;
@@ -184,6 +186,7 @@ details[open] > .summary::before {
 }
 
 .empty {
+  max-width: 760px;
   color: var(--steel);
   font-size: 0.95rem;
   line-height: 1.5;
@@ -199,6 +202,7 @@ details[open] > .summary::before {
 }
 
 .privacy {
+  max-width: 760px;
   color: var(--steel);
   font-size: 0.95rem;
   line-height: 1.5;

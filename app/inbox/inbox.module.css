@@ -44,17 +44,15 @@
   background: var(--coral);
 }
 
+/* A sheet, from the shared .card class. */
 .notice {
   max-width: 640px;
-  padding: 20px;
-  border: 1px solid var(--mist);
-  border-radius: 16px;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 28px;
   align-items: start;
 }
 
@@ -66,54 +64,80 @@
 
 /* --------------------------------------------------------------------- list */
 
+/* One sheet of threads with a hairline between them, not a stack of boxes. */
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  overflow: hidden;
+}
+
+/* No threads yet: no empty box and no empty column beside the note. */
+.list:empty {
+  display: none;
+}
+
+.layout:has(> .list:empty) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.list li + li {
+  border-top: 1px solid var(--hairline);
 }
 
 .row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--mist);
-  border-radius: 14px;
-  background: #fff;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  align-items: start;
+  padding: 14px 16px;
+  transition: background 0.15s ease;
 }
 
 .row:hover {
-  border-color: rgba(0, 176, 161, 0.5);
-  transform: translateY(-1px);
+  background: rgba(233, 227, 211, 0.42);
 }
 
+/* The ring is drawn inside the row, as the sheet clips what sticks out of it. */
 .row:focus-visible {
-  outline: 2px solid var(--teal-ink);
-  outline-offset: 2px;
+  outline: 3px solid var(--teal-ink);
+  outline-offset: -3px;
+  border-radius: 0;
+}
+
+.list li:first-child .row {
+  border-top-left-radius: var(--sheet-radius);
+  border-top-right-radius: var(--sheet-radius);
+}
+
+.list li:last-child .row {
+  border-bottom-left-radius: var(--sheet-radius);
+  border-bottom-right-radius: var(--sheet-radius);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .row {
     transition: none;
   }
+}
 
-  .row:hover {
-    transform: none;
+/* The open thread: a sand row with a navy edge, like a bookmark. */
+.rowOn,
+.rowOn:hover {
+  background: var(--sand);
+  box-shadow: inset 3px 0 0 var(--navy);
+}
+
+/* Forced colours drop a background and a shadow, so the open thread gets a real edge. */
+@media (forced-colors: active) {
+  .rowOn,
+  .rowOn:hover {
+    box-shadow: none;
+    border-left: 4px solid Highlight;
   }
-}
-
-.rowOn {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.14);
-}
-
-.rowUnread {
-  border-left: 3px solid var(--coral);
 }
 
 .rowUnread .rowTitle {
@@ -123,38 +147,49 @@
 .rowMain {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .rowTop {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   align-items: baseline;
 }
 
+/* A subject takes two lines before it is cut: one line hid most of it. */
 .rowTitle {
   font-family: var(--font-head);
   font-weight: 600;
   font-size: 0.95rem;
+  line-height: 1.3;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .when {
   flex: 0 0 auto;
   font-size: 0.74rem;
   color: var(--steel);
+  white-space: nowrap;
 }
 
 .snippet {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: var(--steel);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .who {
@@ -182,22 +217,25 @@
   max-width: 760px;
 }
 
+/* Nothing open yet: a quiet sand shape, not a dashed box. */
 .placeholder {
   margin: 0;
-  padding: 20px;
-  border: 1px dashed var(--mist);
-  border-radius: 16px;
+  max-width: 420px;
+  padding: 44px 36px;
+  border-radius: 47% 53% 56% 44% / 50% 44% 56% 50%;
+  background: var(--sand);
   color: var(--steel);
+  text-align: center;
 }
 
 .threadHeader {
   margin-bottom: 16px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--mist);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .threadTitle {
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   line-height: 1.25;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
@@ -249,12 +287,13 @@
   background: var(--coral);
 }
 
+/* An earlier thread with the same people: context, so it sits on quiet sand. */
 .earlier {
   margin: 0 0 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--mist);
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.015);
+  padding: 14px 16px;
+  border: 1px solid transparent; /* shows as an edge when colours are forced */
+  border-radius: var(--sheet-radius);
+  background: var(--sand);
 }
 
 .earlierHead {
@@ -290,7 +329,7 @@
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--mist);
+  background: var(--hairline);
 }
 
 .readOnly {
