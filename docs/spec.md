@@ -1252,6 +1252,9 @@ the browser from the 503 on `/inbox/unread`, so a statically rendered page canno
   app's) is refused with 403 before anything else. `InboxLive` keeps it open even in a
   background tab, fetches `/inbox/unread`, refreshes the page, and also refreshes every minute and on
   wake, so a refused or dead stream still works. It rebuilds the stream after 70 s of silence.
+  A burst of events in a visible tab becomes one refresh after 300 ms; a hidden tab refreshes at
+  once, because the browser slows its timers (`refreshDelayMs` in `lib/inbox-live-state.ts`).
+  Under 760px an open thread takes the page: the list is not drawn and "All threads" leads back.
   Status: live, reconnecting, or stopped (reload; sign in again if the SSO session ended).
 - **Signals.** Title "(2) Inbox" (also set server side), a coral dot on the favicon (the app icon
   plus a dot, an inline data URL), the app badge when installed, and an unread badge next to
@@ -1376,6 +1379,14 @@ instructions files it, colleagues vote on what matters, and maintainers triage.
 Brand palette: navy `#1A3360`, steel `#3F5175`, mist `#EAEDF1`, teal `#00B0A1`, amber `#FFB700`,
 coral `#FF4423`, sage `#AEDAD4`. Fonts: Inter (body, 300/400/600), Urbanist (headings, 600/700/800).
 Wordmarks in `public/logo-wordmark-{navy,white}.svg`. Simple, slick, lots of whitespace, one accent per surface.
+
+Every page stands on paper (`--paper`), with cards, lists and forms drawn as sheets (`--sheet`, a
+`--hairline` edge, `--sheet-radius`) and quiet panels on `--sand`. The bright teal, amber and coral
+are fills only. Words use the darker `--teal-ink`, `--amber-ink`, `--green-ink` and `--alert-ink`,
+white text sits only on `--navy` or `--alert`, and a field's edge is `--field-edge` (3 to 1 on
+paper). No card has a shadow, no text is under 12 pixels, and every transition stops under
+`prefers-reduced-motion`. `tests/paper-style.test.ts` holds this for every stylesheet. There is
+no dark theme.
 
 ## Usage limits
 

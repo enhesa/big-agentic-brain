@@ -1,94 +1,490 @@
+/* Your devices, and the admin pages that share its tables: sheets on paper, fields with an edge
+   strong enough to find, and tables that scroll inside their sheet on a phone. */
+
 .h1 {
-  font-size: 1.7rem;
-  letter-spacing: -0.02em;
-  margin-bottom: 20px;
+  font-size: var(--page-title);
+  line-height: 1.08;
+  margin-bottom: 10px;
+}
+
+.lede {
+  max-width: 68ch;
+  margin: 0 0 28px;
+  color: var(--steel);
+  font-size: 1.02rem;
+  line-height: 1.5;
 }
 
 .h2 {
-  font-size: 1.15rem;
-  letter-spacing: -0.01em;
+  font-size: 1.3rem;
+  letter-spacing: -0.015em;
   margin: 0 0 8px;
 }
 
-.section {
-  margin-bottom: 24px;
+/* A heading that stands on paper above a sheet, on the admin pages. */
+.groupTitle {
+  font-size: 1.3rem;
+  letter-spacing: -0.015em;
+  margin: 40px 0 6px;
 }
 
-.muted {
+.groupLede {
+  max-width: 72ch;
+  margin: 0 0 16px;
   color: var(--steel);
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
-.error {
-  color: #b42318;
+.section {
+  margin-bottom: 20px;
+  padding: 26px 28px;
+}
+
+.muted {
+  max-width: 76ch;
+  color: var(--steel);
   font-size: 0.95rem;
-  margin: 0 0 12px;
+  line-height: 1.55;
+}
+
+/* A quiet line that explains, with no sheet of its own. */
+.aside {
+  max-width: 76ch;
+  margin: 28px 0 14px;
+  color: var(--steel);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.error {
+  color: var(--alert-ink);
+  background: color-mix(in srgb, var(--coral) 10%, var(--sheet));
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-size: 0.92rem;
+  font-weight: 400;
+  line-height: 1.45;
+  margin: 14px 0 0;
 }
 
 .form {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px 12px;
   align-items: center;
-  margin: 12px 0 0;
+  margin: 18px 0 0;
 }
 
 .form label {
-  font-size: 0.85rem;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--steel);
 }
 
-.form select {
+.form select,
+.form input[type="text"],
+.form input[type="email"] {
   font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--navy);
-  border-radius: 8px;
+  font-weight: 400;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
+  background-color: var(--paper);
+  color: var(--navy);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .form input[type="text"],
 .form input[type="email"] {
-  font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--navy);
-  border-radius: 8px;
-  min-width: 16rem;
-  max-width: 100%;
+  flex: 1 1 12rem;
+}
+
+.form input::placeholder {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.form select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%233f5175' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.form select:focus-visible,
+.form input:focus-visible {
+  border-color: var(--teal-ink);
+  border-radius: var(--field-radius);
+}
+
+.form .muted {
+  flex: 1 1 14rem;
+  font-size: 0.86rem;
+}
+
+/* The line between two parts of one sheet. */
+.split {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* A table scrolls inside its own box, so the page never scrolls sideways. tabindex="0" on the
+   box lets a keyboard reach the scroll. */
+.tableWrap {
+  overflow-x: auto;
+  margin: 16px -8px 0;
+  padding: 0 8px;
+}
+
+/* A table that is a sheet by itself (the admin pages). */
+.tableSheet {
+  overflow-x: auto;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  padding: 6px 20px 8px;
+}
+
+.tableWrap:focus-visible,
+.tableSheet:focus-visible {
+  outline-offset: 2px;
+}
+
+.tableSheet:focus-visible {
+  border-radius: var(--sheet-radius);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+}
+
+.table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--mist);
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--hairline);
   vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+
+.table td:last-child:has(form, button) {
+  text-align: right;
+  white-space: nowrap;
 }
 
 .table th {
   font-family: var(--font-head);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--steel);
+  white-space: nowrap;
+}
+
+.table td:first-child {
+  font-weight: 500;
+  color: var(--navy);
+}
+
+.table td {
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
+}
+
+.table td form {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.table td input[type="email"] {
+  font: inherit;
+  font-weight: 400;
+  min-height: 40px;
+  min-width: 14rem;
+  padding: 8px 12px;
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--navy);
+}
+
+.table td input[type="email"]:focus-visible {
+  border-radius: 12px;
+  border-color: var(--teal-ink);
+}
+
+.table td [role="alert"] {
+  color: var(--alert-ink);
+  font-weight: 400;
 }
 
 .expired {
-  color: #b42318;
+  color: var(--alert-ink);
 }
 
 .unlink {
+  max-width: 640px;
   margin-top: 28px;
+  padding: 20px 24px;
+  background: color-mix(in srgb, var(--sand) 62%, transparent);
+  border-radius: var(--sheet-radius);
   color: var(--steel);
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   line-height: 1.5;
 }
 
 .unlink p {
-  margin: 0 0 6px;
+  margin: 0 0 12px;
+}
+
+/* ------------------------------------------------------------ admin index */
+
+.tiles {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 22px 24px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  color: var(--steel);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  transition: border-color 0.18s ease;
+}
+
+.tile:hover {
+  border-color: var(--field-edge);
+}
+
+/* The arrow says the whole tile opens a page. */
+.tile::after {
+  content: "\2192";
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--steel);
+  transition: transform 0.18s ease;
+}
+
+.tile:hover::after {
+  color: var(--navy);
+  transform: translateX(3px);
+}
+
+.tile a {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  color: var(--navy);
+  text-decoration: none;
+}
+
+/* The whole tile is the link's target. */
+.tile a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--sheet-radius);
+}
+
+.tile a:focus-visible {
+  outline: none;
+}
+
+.tile a:focus-visible::after {
+  outline: 3px solid var(--teal-ink);
+  outline-offset: 2px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 22px 28px;
+  margin: 0;
+}
+
+.stats div {
+  min-width: 0;
+}
+
+.stats dt {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+.stats dd {
+  margin: 4px 0 0;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats dd small {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--steel);
+}
+
+/* How full the data volume is. The bar is a picture of the number beside it. */
+.meter {
+  height: 8px;
+  margin: 22px 0 10px;
+  border-radius: 999px;
+  background: var(--sand);
+  overflow: hidden;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  border-radius: 999px;
+  background: var(--teal-ink);
+}
+
+.meterBlocked span {
+  background: var(--alert);
+}
+
+.warn {
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--amber) 16%, var(--sheet));
+  color: var(--navy);
+  font-size: 0.92rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 22px 18px;
+  }
+
+  .tableSheet {
+    padding: 4px 16px 6px;
+  }
+
+  .table th,
+  .table td {
+    white-space: nowrap;
+  }
+
+  .form .muted {
+    flex-basis: 100%;
+  }
+
+  /* A label sits above its field, and the field takes the full width. */
+  .form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .form select,
+  .form input[type="text"],
+  .form input[type="email"] {
+    flex: none;
+    width: 100%;
+  }
+
+  .form label:not(:first-child) {
+    margin-top: 8px;
+  }
+
+  .form button {
+    align-self: flex-start;
+    margin-top: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .tile::after {
+    transition: none;
+  }
+
+  .tile:hover::after {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .meter {
+    border: 1px solid CanvasText;
+  }
+
+  .meter span {
+    background: Highlight;
+  }
+}
+/* An empty table: one quiet line on sand in place of an empty sheet. */
+.none {
+  max-width: 640px;
+  margin: 0;
+  padding: 16px 20px;
+  background: color-mix(in srgb, var(--sand) 62%, transparent);
+  border-radius: 16px;
+  color: var(--steel);
+  font-size: 0.95rem;
 }

@@ -27,7 +27,7 @@ export default async function ReviewPage({ searchParams }: { searchParams?: Prom
       <h2 id={id}>{`${heading} (${items.length})`}</h2>
       <p className={styles.reactHint}>{hint}</p>
       {items.length === 0 ? (
-        <p className={styles.reactHint}>Nothing here.</p>
+        <p className={styles.reviewNone}>Nothing here.</p>
       ) : (
         <ol className={styles.reviewList}>
           {items.map((i) => (
@@ -46,7 +46,7 @@ export default async function ReviewPage({ searchParams }: { searchParams?: Prom
                 <input id={`note-${i.id}`} name="note" maxLength={REVIEW_NOTE_MAX} required className={styles.commentInput} />
                 <div className={styles.reactRow}>
                   {i.authorId !== viewer.ownerId ? (
-                    <button type="submit" name="action" value="confirm" className={styles.reactBtn}>
+                    <button type="submit" name="action" value="confirm" className={`${styles.reactBtn} ${styles.reactBtnMain}`}>
                       Confirm
                     </button>
                   ) : null}
@@ -71,8 +71,8 @@ export default async function ReviewPage({ searchParams }: { searchParams?: Prom
         <Link href="/memory" className={styles.back}>
           ← Memory
         </Link>
-        <h1>Review memories</h1>
-        <p className={styles.reactHint}>
+        <h1 className="page-title">Review memories</h1>
+        <p className="page-lede">
           Optional. Agents confirm, flag and retire memories on their own; this page lets a maintainer do the same with a note.
           Every action lands in the memory&apos;s validation history.
         </p>

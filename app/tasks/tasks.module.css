@@ -1,36 +1,38 @@
-/* /tasks. Every colour is a token on .page, built from the app tokens in app/globals.css.
-   Like /usage, the dark values apply once something sets data-theme="dark" on <html>, so an OS
-   dark setting does not turn this page dark inside a light app. Text colours clear 4.5:1. */
+/* /tasks. The board stands on paper like every page: columns are sand, cards and lists are sheets,
+   and nothing casts a shadow. Every colour is a token on .page, built from the app tokens in
+   app/globals.css. Like /usage, the dark values apply once something sets data-theme="dark" on
+   <html>, so an OS dark setting does not turn this page dark inside a light app. Text colours
+   clear 4.5:1 on a sheet and on sand. */
 
 .page {
   --c-ink: var(--navy);
   --c-ink-2: var(--steel);
-  --c-muted: #5f6c84;
-  --c-line: var(--mist);
-  --c-line-2: #dfe4ea;
-  --c-surface: #fff;
-  --c-plane: #f6f8fa;
-  --c-wash: linear-gradient(180deg, #f3fbfa 0%, #fff 70%);
-  --c-shadow: 0 1px 2px rgba(26, 51, 96, 0.05), 0 4px 16px rgba(26, 51, 96, 0.06);
-  --c-shadow-hover: 0 2px 4px rgba(26, 51, 96, 0.06), 0 12px 28px rgba(26, 51, 96, 0.12);
+  --c-muted: var(--steel);
+  --c-line: var(--hairline);
+  --c-line-2: rgba(26, 51, 96, 0.3);
+  --c-surface: var(--sheet);
+  --c-plane: var(--sand);
+  --c-wash: var(--sheet);
+  --c-shadow: none;
+  --c-shadow-hover: none;
   --c-accent: var(--teal);
-  --c-accent-ink: #00665d;
-  --c-accent-wash: rgba(0, 176, 161, 0.1);
-  --c-warn: #f2780c;
-  --c-warn-ink: #9a4300;
-  --c-warn-wash: rgba(242, 120, 12, 0.1);
-  --c-bad: #d93a1f;
-  --c-bad-ink: #a3260f;
-  --c-bad-wash: rgba(255, 68, 35, 0.1);
-  --c-ok: #1f9d6b;
-  --c-ok-ink: #11704a;
-  --c-ok-wash: rgba(31, 157, 107, 0.12);
-  --c-grey: #b7c0cd;
-  --c-done: #3b6fd8;
-  --c-done-ink: #2a55ad;
-  --c-done-wash: rgba(59, 111, 216, 0.1);
-  --c-radius: 10px;
-  --c-col: #f4f5f7;
+  --c-accent-ink: var(--teal-ink);
+  --c-accent-wash: color-mix(in srgb, var(--teal) 14%, transparent);
+  --c-warn: var(--amber);
+  --c-warn-ink: var(--amber-ink);
+  --c-warn-wash: color-mix(in srgb, var(--amber) 20%, transparent);
+  --c-bad: var(--alert);
+  --c-bad-ink: var(--alert-ink);
+  --c-bad-wash: color-mix(in srgb, var(--coral) 12%, transparent);
+  --c-ok: var(--teal);
+  --c-ok-ink: var(--teal-ink);
+  --c-ok-wash: color-mix(in srgb, var(--teal) 14%, transparent);
+  --c-grey: color-mix(in srgb, var(--steel) 45%, var(--paper));
+  --c-done: var(--navy);
+  --c-done-ink: var(--navy);
+  --c-done-wash: color-mix(in srgb, var(--navy) 9%, transparent);
+  --c-radius: var(--sheet-radius);
+  --c-col: color-mix(in srgb, var(--sand) 62%, transparent);
 
   color: var(--c-ink);
   font-size: 0.875rem;
@@ -46,11 +48,10 @@
   --c-surface: #141b27;
   --c-plane: #1a2231;
   --c-wash: linear-gradient(180deg, #13262a 0%, #141b27 70%);
-  --c-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
-  --c-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.4);
   --c-accent: #13c2b2;
   --c-accent-ink: #4fd8c9;
   --c-accent-wash: rgba(19, 194, 178, 0.14);
+  --c-warn: #f2a13a;
   --c-warn-ink: #ffa65c;
   --c-warn-wash: rgba(242, 120, 12, 0.16);
   --c-bad: #ff6a4d;
@@ -85,33 +86,32 @@
 
 .top {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  margin: -8px 0 16px;
+  gap: 12px 20px;
+  margin: 0 0 24px;
 }
 
 .titleLine {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
 }
 
 .h1 {
-  font-size: 1.4rem;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
+  font-size: var(--page-title);
+  line-height: 1.08;
   margin: 0;
   color: var(--c-ink);
 }
 
 .subline {
   margin: 0;
-  color: var(--c-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
+  color: var(--c-ink-2);
+  font-size: 1.02rem;
+  line-height: 1.5;
 }
 
 /* --------------------------------------------------------------- data health */
@@ -126,13 +126,13 @@
 }
 
 .healthChip {
-  font-size: 0.75rem;
-  line-height: 18px;
-  color: var(--c-muted);
+  font-size: 0.78rem;
+  line-height: 20px;
+  color: var(--c-ink-2);
   background: var(--c-plane);
-  border: 1px solid var(--c-line);
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 1px 9px;
+  padding: 1px 10px;
   white-space: nowrap;
 }
 
@@ -161,19 +161,19 @@
 /* ------------------------------------------------------------------ sections */
 
 .section {
-  margin-bottom: 20px;
+  margin-bottom: 32px;
 }
 
 .sectionHead {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .h2 {
-  font-size: 1rem;
-  letter-spacing: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
   line-height: 1.3;
   margin: 0;
   color: var(--c-ink);
@@ -182,15 +182,14 @@
 .count {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.75rem;
-  line-height: 16px;
-  min-width: 20px;
+  font-size: 0.78rem;
+  line-height: 20px;
+  min-width: 24px;
   text-align: center;
-  padding: 0 6px;
+  padding: 0 7px;
   border-radius: 999px;
   background: var(--c-plane);
-  border: 1px solid var(--c-line);
-  color: var(--c-ink-2);
+  color: var(--c-ink);
 }
 
 .panel {
@@ -199,17 +198,35 @@
   border-radius: var(--c-radius);
 }
 
+/* A notice and the empty board are one sheet with room to read, like every empty state. */
 .notice,
 .empty {
-  padding: 14px 16px;
-  margin: 12px 0 0;
+  margin: 0;
+  max-width: 640px;
+  padding: 24px 26px;
   color: var(--c-ink-2);
+  font-size: 0.98rem;
+  line-height: 1.55;
 }
 
-.empty {
-  margin: 0;
-  border-style: dashed;
-  background: var(--c-plane);
+.notice {
+  margin-top: 20px;
+}
+
+.empty code {
+  background: var(--sand);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.9em;
+  /* A command stays in one piece; on a phone it may break, but never run off the sheet. */
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .empty code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 .icon {
@@ -224,15 +241,15 @@
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 0.75rem;
   font-weight: 500;
-  line-height: 16px;
-  padding: 1px 7px;
+  line-height: 18px;
+  padding: 1px 9px;
   border-radius: 999px;
   background: var(--c-plane);
   color: var(--c-ink-2);
-  border: 1px solid var(--c-line);
+  border: 1px solid transparent;
   white-space: nowrap;
 }
 
@@ -279,30 +296,16 @@
 .card {
   position: relative;
   background: var(--c-surface);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(26, 51, 96, 0.08), 0 1px 6px rgba(26, 51, 96, 0.04);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
   overflow: hidden;
-  transition: box-shadow 0.18s ease;
+  transition: border-color 0.18s ease;
 }
 
-/* The left edge: orange on a Needs you card, nothing on the rest. */
-.card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--c-warn);
-  opacity: 0;
-}
-
-.status_needs_you::before {
-  opacity: 1;
-}
-
-.card:hover {
-  box-shadow: var(--c-shadow);
+/* A card you can open says so with its edge, not with a shadow. */
+.card:hover,
+.card:focus-within {
+  border-color: var(--field-edge);
 }
 
 .age {
@@ -317,8 +320,8 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 10px 10px 12px;
+  gap: 8px;
+  padding: 14px 14px 14px 16px;
   flex: none;
 }
 
@@ -339,10 +342,11 @@
 
 .cardTitle {
   margin: 0;
-  font-family: var(--font-body, inherit);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.35;
+  font-family: var(--font-head);
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
   min-width: 0;
   padding-top: 1px;
 }
@@ -471,11 +475,11 @@
 }
 
 .timeline li[data-tone="done"]::before {
-  background: #1f9d6b;
+  background: var(--c-done);
 }
 
 .timeline li[data-tone="ask"]::before {
-  background: #e08a1e;
+  background: var(--c-warn);
 }
 
 .timeline li[data-tone="start"]::before {
@@ -509,7 +513,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 22px;
+  min-height: 24px;
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0 8px;
@@ -545,14 +549,9 @@
 /* Silent or paused: grey the chrome (wash, borders, tags, bar), never the text, so it keeps its
    contrast. Hover or keyboard focus inside brings the colour back. */
 .greyed:not(:hover):not(:focus-within) {
-  background: var(--c-plane);
-  box-shadow: none;
+  background: transparent;
   border-style: dashed;
   border-color: var(--c-line-2);
-}
-
-.greyed:not(:hover):not(:focus-within)::before {
-  opacity: 0;
 }
 
 .greyed:not(:hover):not(:focus-within) .tag {
@@ -582,9 +581,9 @@
 
 /* One colour set per status; the badge and the column header read it. */
 .badge_needs_you {
-  --b: var(--c-warn);
-  --b-ink: var(--c-warn-ink);
-  --b-wash: var(--c-warn-wash);
+  --b: var(--coral);
+  --b-ink: var(--alert-ink);
+  --b-wash: var(--c-bad-wash);
 }
 
 .badge_active {
@@ -652,13 +651,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 32px;
+  width: 40px;
 }
 
 .ringSvg {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
 }
 
 .ringLg,
@@ -693,7 +692,7 @@
   fill: var(--c-ink);
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: -0.04em;
 }
 
@@ -702,7 +701,7 @@
 }
 
 .ringCount {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.2;
   color: var(--c-muted);
   white-space: nowrap;
@@ -721,11 +720,10 @@
 .ask {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 5px 8px;
-  border-radius: 8px;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: var(--c-warn-wash);
-  border-left: 3px solid var(--c-warn);
 }
 
 .askText {
@@ -751,7 +749,6 @@
 /* An upkeep row with a question: orange edge, questions on their own line under it. */
 .upAsk {
   flex-wrap: wrap;
-  box-shadow: inset 3px 0 0 var(--c-warn);
 }
 
 /* Collapsed card is clickable: a hand cursor says so. */
@@ -784,16 +781,17 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border-radius: 12px;
+  border-radius: var(--sheet-radius);
+  overflow: hidden;
 }
 
 /* One line per item; the reason truncates and carries the full text in its title. */
 .upRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
-  padding: 4px 12px;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 18px;
 }
 
 .upRow + .upRow {
@@ -975,9 +973,9 @@
 }
 
 .offPage {
-  margin: 10px 0 0;
+  margin: 14px 0 0;
   font-size: 0.8125rem;
-  color: var(--c-muted);
+  color: var(--c-ink-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -994,7 +992,8 @@
 .board {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
+  align-items: start;
 }
 
 .col {
@@ -1002,19 +1001,21 @@
   flex-direction: column;
   min-width: 0;
   background: var(--c-col);
-  border-radius: 12px;
-  padding: 4px 6px 6px;
+  border-radius: var(--sheet-radius);
+  padding: 8px 8px 10px;
 }
 
 .colHead {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   margin: 0;
-  padding: 7px 6px 8px;
-  font-family: var(--font-body, inherit);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  padding: 8px 8px 10px;
+  font-family: var(--font-head);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   line-height: 1.2;
   color: var(--c-ink);
 }
@@ -1022,19 +1023,19 @@
 .colHead .badgeDot {
   width: 9px;
   height: 9px;
-  box-shadow: 0 0 0 2px var(--b-wash);
 }
 
 .colCount {
-  font-weight: 500;
-  color: var(--c-muted);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--c-ink-2);
   font-variant-numeric: tabular-nums;
 }
 
 .colBody {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   max-height: calc(100vh - 230px);
   min-height: 0;
   overflow-y: auto;
@@ -1047,9 +1048,9 @@
 
 .colEmpty {
   margin: 0;
-  padding: 2px 6px 14px;
-  font-size: 0.75rem;
-  color: var(--c-muted);
+  padding: 2px 8px 8px;
+  font-size: 0.8125rem;
+  color: var(--c-ink-2);
 }
 
 /* One muted line under the title: the task in progress, else the next one. */
@@ -1058,8 +1059,8 @@
   align-items: center;
   gap: 5px;
   margin: 0;
-  font-size: 0.75rem;
-  line-height: 16px;
+  font-size: 0.8125rem;
+  line-height: 18px;
   color: var(--c-muted);
   min-width: 0;
 }
@@ -1156,7 +1157,9 @@
 }
 
 .healthySummary:hover {
-  color: var(--c-ink-2);
+  color: var(--c-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .healthy[open] .healthySummary {
@@ -1180,17 +1183,16 @@
   height: 100dvh;
   max-height: 100dvh;
   border: 0;
-  border-left: 1px solid var(--c-line);
-  background: var(--c-surface);
+  border-left: 1px solid var(--field-edge);
+  background: var(--paper);
   color: var(--c-ink);
-  box-shadow: -12px 0 40px rgba(26, 51, 96, 0.16);
   font-size: 0.875rem;
   overscroll-behavior: contain;
   overflow-y: auto;
 }
 
 .drawer::backdrop {
-  background: rgba(16, 26, 46, 0.28);
+  background: rgba(26, 51, 96, 0.32);
 }
 
 .drawerPanel {

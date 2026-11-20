@@ -34,6 +34,21 @@
   --sheet: #fffdf8;
   --hairline: rgba(26, 51, 96, 0.14);
   --sheet-radius: 20px;
+  /* The edge of a control people type in or choose from. A hairline is 1.3 to 1 on paper, too
+     faint to be a field's only boundary. This one is 3.2 to 1 on paper and 3.5 on a sheet. */
+  --field-edge: rgba(26, 51, 96, 0.55);
+  /* Navy pressed or under the pointer. Mixed from --navy, so an operator's accent keeps its hue. */
+  --navy-deep: color-mix(in srgb, var(--navy) 82%, #000);
+  --field-radius: 14px;
+  /* Red for a count that wants attention and for an error. --coral is a fill for shapes: white on
+     it is 3.4 to 1. White on --alert is 5.4 to 1, and --alert-ink is 5.9 to 1 on paper. */
+  --alert: #c4361c;
+  --alert-ink: #b42318;
+  /* Amber, green and blue as words on paper, a sheet or sand: each is at least 4.6 to 1. */
+  --amber-ink: #8a5a00;
+  --green-ink: #0f6b47;
+  /* One title size for every page, so the eye lands on the same line from page to page. */
+  --page-title: clamp(1.9rem, 1.55rem + 1.3vw, 2.4rem);
 
   --font-body: "Inter", system-ui, sans-serif;
   --font-head: "Urbanist", var(--font-body);
@@ -105,10 +120,14 @@ h1 {
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
 [tabindex]:focus-visible {
   /* Never var(--teal) here or in a module: the bright teal is 2.4 to 1 on paper. */
   outline: 3px solid var(--teal-ink);
   outline-offset: 2px;
+  /* Soft corners for a bare link. A field, a pill or a sheet states its own radius again. */
   border-radius: 4px;
 }
 
@@ -124,40 +143,195 @@ a {
   padding: 0 var(--shell-gutter);
 }
 
-.btn-primary {
-  display: inline-block;
-  background: var(--teal);
-  color: #fff;
+/* Buttons are pills, like the nav. One filled button per form or page: the thing to do next. */
+.btn-primary,
+.btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 22px;
+  border-radius: 999px;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 14px;
-  padding: 14px 22px;
-  border-radius: 12px;
-  border: none;
+  font-size: 0.9rem;
+  line-height: 1.1;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 176, 161, 0.28);
-  transition: transform 0.15s ease;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.btn-primary {
+  background: var(--navy);
+  color: #fff;
+  border: 1px solid var(--navy);
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
+  background: var(--navy-deep);
+  border-color: var(--navy-deep);
 }
 
-.btn-ghost {
-  display: inline-block;
+.btn-quiet {
   background: transparent;
-  color: inherit;
+  color: var(--navy);
+  border: 1px solid var(--field-edge);
+}
+
+.btn-quiet:hover {
+  background: color-mix(in srgb, var(--sand) 60%, transparent);
+  border-color: var(--navy);
+}
+
+.btn-primary:focus-visible,
+.btn-quiet:focus-visible {
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.btn-primary:disabled,
+.btn-quiet:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A field: where people type or choose. A sheet with an edge strong enough to find. */
+.field {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: var(--sheet);
+  color: var(--navy);
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
+  font: inherit;
+  font-weight: 400;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+textarea.field {
+  min-height: 132px;
+  resize: vertical;
+}
+
+select.field {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%233f5175' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.field::placeholder {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.field:focus-visible {
+  border-color: var(--teal-ink);
+  border-radius: var(--field-radius);
+}
+
+/* The name above a field. */
+.field-label {
+  display: block;
+  margin: 0 0 6px;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 14px;
-  padding: 14px 22px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  cursor: pointer;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel);
 }
 
-.btn-ghost.on-light {
-  border-color: var(--mist);
+/* The top of a page: one title size, one line under it. */
+.page-title {
+  font-size: var(--page-title);
+  line-height: 1.08;
+  color: var(--navy);
+  margin: 0;
+}
+
+.page-lede {
+  margin: 8px 0 0;
+  max-width: 68ch;
+  color: var(--steel);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+
+/* Nothing to show, or nothing to show you yet: one quiet sheet that says what happens next. */
+.empty-state {
+  max-width: 640px;
+  padding: 28px 30px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  color: var(--steel);
+  line-height: 1.55;
+}
+
+.empty-state h2,
+.empty-state strong:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--navy);
+}
+
+.empty-state h2::before,
+.empty-state strong:first-child::before {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--teal);
+  transform: translateY(-1px);
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state p + p {
+  margin-top: 10px;
+}
+
+.empty-state a {
+  color: var(--teal-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.empty-state code {
+  font-size: 0.86em;
+  background: var(--sand);
+  border-radius: 6px;
+  padding: 2px 6px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .empty-state {
+    padding: 22px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary,
+  .btn-quiet {
+    transition: none;
+  }
 }
 
 .kicker {
@@ -176,4 +350,36 @@ a {
   border: 1px solid var(--hairline);
   border-radius: var(--sheet-radius);
   padding: 20px;
+}
+
+/* Text for screen readers only, such as the name of a column that holds buttons. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The way back from a page one level down: small, steel, with an arrow. */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  margin-bottom: 12px;
+  font-size: 0.84rem;
+  color: var(--steel);
+}
+
+.back-link::before {
+  content: "\2190";
+}
+
+.back-link:hover {
+  color: var(--navy);
 }

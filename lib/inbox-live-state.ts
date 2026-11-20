@@ -11,6 +11,17 @@ export const UNREAD_EVENT = "bab:inbox-unread";
 export const SILENCE_MS = 70_000;
 /** The page also refreshes by itself this often, so a refused or dead stream still works. */
 export const SAFETY_REFRESH_MS = 60_000;
+/** A burst of events in a tab somebody is looking at becomes one refresh after this long. */
+export const REFRESH_DEBOUNCE_MS = 300;
+
+/**
+ * How long a refresh of the page waits, in ms. Zero means now. A hidden tab never waits: the
+ * browser throttles a background tab's timers, and a background tab is exactly where the new
+ * title and the favicon dot are needed. The wake and the minute tick ask for `immediate`.
+ */
+export function refreshDelayMs(immediate: boolean, hidden: boolean): number {
+  return immediate || hidden ? 0 : REFRESH_DEBOUNCE_MS;
+}
 
 /**
  * "(2) Inbox" while something is unread, "Inbox" otherwise. Built from a number alone: a

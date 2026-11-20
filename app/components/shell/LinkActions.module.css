@@ -1,48 +1,73 @@
-/* Buttons for the browser-link flows (/reminders suggestion, /admin/links unlink). */
-.btn {
+/* Buttons for the browser-link flows and the devices and admin pages. Pills, like every button:
+   navy fill for the one action that matters, an outline for the rest. */
+.btn,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.82rem;
-  padding: 9px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--navy);
-  background: #fff;
-  color: var(--navy);
+  font-size: 0.86rem;
+  line-height: 1.1;
+  padding: 8px 18px;
+  border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.btn {
+  border: 1px solid var(--field-edge);
+  background: transparent;
+  color: var(--navy);
 }
 
 .btn:hover {
-  background: var(--mist);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
+  border-color: var(--navy);
+  background: var(--sand);
 }
 
 .primary {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.82rem;
-  padding: 9px 14px;
-  border-radius: 12px;
   border: 1px solid var(--navy);
   background: var(--navy);
   color: #fff;
-  cursor: pointer;
 }
 
 .primary:hover {
-  opacity: 0.9;
+  background: var(--navy-deep);
+  border-color: var(--navy-deep);
 }
 
+.btn:focus-visible,
+.primary:focus-visible {
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* A switched-off button stays readable: steel on sand is 6 to 1. */
+.btn:disabled,
 .primary:disabled {
-  opacity: 0.6;
+  border-color: var(--hairline);
+  background: var(--sand);
+  color: var(--steel);
   cursor: default;
 }
 
+/* Dark red, not the bright coral: 5.9 to 1 on paper. */
 .panelError {
-  margin: 8px 0 0;
-  color: var(--coral);
-  font-size: 0.8rem;
+  margin: 10px 0 0;
+  color: var(--alert-ink);
+  font-size: 0.86rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .primary {
+    transition: none;
+  }
 }

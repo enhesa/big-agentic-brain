@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import Shell from "@/app/components/shell/Shell";
 import { getViewer } from "@/lib/notify-auth";
@@ -11,6 +12,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import UnlinkButton from "./UnlinkButton";
 import RevokeDeviceButton from "./RevokeDeviceButton";
 import LinkForm from "./LinkForm";
+import styles from "@/app/me/devices/devices.module.css";
 
 /**
  * The refusal codes claimTypedIdentity audits, in plain words. Only "typed-sso-email" (the name
@@ -39,22 +41,27 @@ export default async function AdminLinksPage() {
   const devices = listAllDevices();
   return (
     <Shell>
-      <h1>Browser links</h1>
-      <p>
-        Each row ties one signed-in browser (sign-in user) to a BAB identity. Unlink a wrong one.
-      </p>
+      <Link href="/admin" className="back-link">
+        Admin
+      </Link>
+      <h1 className={styles.h1}>Browser links</h1>
+      <p className={styles.lede}>Each row ties one signed-in browser (sign-in user) to a BAB identity. Unlink a wrong one.</p>
       {links.length === 0 ? (
-        <p className="card">No links yet.</p>
+        <p className={styles.none}>No links yet.</p>
       ) : (
-        <table className="card">
+        <div className={styles.tableSheet} tabIndex={0} role="region" aria-label="Browser links">
+          <table className={styles.table}>
+            <caption>Browser links</caption>
           <thead>
             <tr>
-              <th>Sign-in email</th>
-              <th>Sign-in name</th>
-              <th>Sign-in user id</th>
-              <th>Linked BAB email</th>
-              <th>Linked at</th>
-              <th />
+              <th scope="col">Sign-in email</th>
+              <th scope="col">Sign-in name</th>
+              <th scope="col">Sign-in user id</th>
+              <th scope="col">Linked BAB email</th>
+              <th scope="col">Linked at</th>
+              <th scope="col">
+                <span className="sr-only">Action</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -72,26 +79,29 @@ export default async function AdminLinksPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
-      <h2>Refused sign-ins</h2>
-      <p>
+      <h2 className={styles.groupTitle}>Refused sign-ins</h2>
+      <p className={styles.groupLede}>
         These people typed an address on their devices page and were refused. Check who they are, then link their
         browser. An address or browser that is already linked must be unlinked first.
       </p>
       {refused.length === 0 ? (
-        <p className="card">No refused sign-ins.</p>
+        <p className={styles.none}>No refused sign-ins.</p>
       ) : (
-        <table className="card">
+        <div className={styles.tableSheet} tabIndex={0} role="region" aria-label="Refused sign-ins">
+          <table className={styles.table}>
+            <caption>Refused sign-ins</caption>
           <thead>
             <tr>
-              <th>Sign-in email</th>
-              <th>Sign-in name</th>
-              <th>Sign-in user id</th>
-              <th>Typed address</th>
-              <th>Why refused</th>
-              <th>Refused</th>
-              <th>Link to</th>
+              <th scope="col">Sign-in email</th>
+              <th scope="col">Sign-in name</th>
+              <th scope="col">Sign-in user id</th>
+              <th scope="col">Typed address</th>
+              <th scope="col">Why refused</th>
+              <th scope="col">Refused</th>
+              <th scope="col">Link to</th>
             </tr>
           </thead>
           <tbody>
@@ -110,22 +120,27 @@ export default async function AdminLinksPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
-      <h2>Devices</h2>
-      <p>Each row is one Claude install that told BAB who its person is. Revoke one to make it unknown until Claude identifies it again.</p>
+      <h2 className={styles.groupTitle}>Devices</h2>
+      <p className={styles.groupLede}>Each row is one Claude install that told BAB who its person is. Revoke one to make it unknown until Claude identifies it again.</p>
       {devices.length === 0 ? (
-        <p className="card">No devices yet.</p>
+        <p className={styles.none}>No devices yet.</p>
       ) : (
-        <table className="card">
+        <div className={styles.tableSheet} tabIndex={0} role="region" aria-label="Devices">
+          <table className={styles.table}>
+            <caption>Devices</caption>
           <thead>
             <tr>
-              <th>Person</th>
-              <th>Device</th>
-              <th>From</th>
-              <th>Identified</th>
-              <th>Last seen</th>
-              <th />
+              <th scope="col">Person</th>
+              <th scope="col">Device</th>
+              <th scope="col">From</th>
+              <th scope="col">Identified</th>
+              <th scope="col">Last seen</th>
+              <th scope="col">
+                <span className="sr-only">Action</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -143,6 +158,7 @@ export default async function AdminLinksPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </Shell>
   );

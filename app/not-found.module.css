@@ -1,0 +1,58 @@
+/* The not-found page and the error page: a few words on paper, set like the film's words. */
+
+.wrap {
+  max-width: 640px;
+  padding: clamp(32px, 9vh, 96px) 0 48px;
+}
+
+/* The number is a shape, not a message: a pale print on paper, with the logo's teal dot after it. */
+.code {
+  margin: 0 0 4px;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: clamp(5rem, 3rem + 12vw, 9.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  /* A warm tone a step darker than sand, so it reads on paper and on the sand shape behind. */
+  color: color-mix(in srgb, var(--amber-ink) 16%, var(--sand));
+  user-select: none;
+}
+
+.code::after {
+  content: "";
+  display: inline-block;
+  width: 0.16em;
+  height: 0.16em;
+  margin-left: 0.07em;
+  border-radius: 50%;
+  background: var(--teal);
+}
+
+.title {
+  margin-top: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 28px 0 0;
+}
+
+/* The error page has no shell around it, so it brings its own ground and gutter. */
+.bare {
+  min-height: 100vh;
+  padding: 0 var(--shell-gutter);
+  background: var(--paper);
+}
+
+.bare .wrap {
+  margin: 0 auto;
+  max-width: min(640px, 100%);
+}
+
+@media (forced-colors: active) {
+  .code {
+    color: GrayText;
+  }
+}

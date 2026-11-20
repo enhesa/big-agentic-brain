@@ -143,7 +143,7 @@ export default function CommentsPanel({
             Plain text. Colleagues and their agents read it with the memory.
           </p>
           <div className={styles.reactRow}>
-            <button type="submit" name="action" value="comment" className={styles.reactBtn}>
+            <button type="submit" name="action" value="comment" className={`${styles.reactBtn} ${styles.reactBtnMain}`}>
               Post comment
             </button>
             {state === "open" ? (

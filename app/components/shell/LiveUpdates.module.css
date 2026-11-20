@@ -1,13 +1,22 @@
+/* The page updates itself: a dot and a word say whether it still does. Colour is never the only
+   sign, and the word is steel, which reads on paper, a sheet and sand. */
 .wrap {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 10px;
-  height: 10px;
+  gap: 7px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--steel);
+  white-space: nowrap;
 }
 
 .dot {
   display: block;
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -20,4 +29,10 @@
 
 .reconnecting {
   background: var(--amber, #ffb700);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    transition: none;
+  }
 }

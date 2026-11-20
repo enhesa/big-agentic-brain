@@ -1,36 +1,39 @@
-/* /usage. Every colour is a token on .page, built from the app tokens in app/globals.css. The app
+/* /usage. The page stands on paper like every page: a card is a sheet, an inner tile is sand, and
+   nothing casts a shadow. Every colour is a token on .page, built from the app tokens in
+   app/globals.css. A chart mark is at least 3 to 1 on a sheet. The app
    has no dark theme yet; the dark values below apply once something sets data-theme="dark" on
    <html>, so an OS dark setting does not turn this page dark inside a light app. */
 
 .page {
   --u-ink: var(--navy);
   --u-ink-2: var(--steel);
-  --u-muted: #5f6c84;
-  --u-line: var(--mist);
-  --u-grid: #eef1f4;
-  --u-surface: #fff;
-  --u-plane: #f6f8fa;
-  --u-hover: rgba(234, 237, 241, 0.7);
-  /* Series, in this order (validated, see charts.tsx). */
-  --u-s1: var(--teal);
+  --u-muted: var(--steel);
+  --u-line: var(--hairline);
+  --u-grid: rgba(26, 51, 96, 0.09);
+  --u-surface: var(--sheet);
+  --u-plane: color-mix(in srgb, var(--sand) 55%, transparent);
+  --u-hover: color-mix(in srgb, var(--sand) 45%, transparent);
+  /* Series, in this order (validated, see charts.tsx). The first is the brand teal, a step darker,
+     so a bar or a line is 3.5 to 1 on a sheet. */
+  --u-s1: #00998c;
   --u-s2: var(--steel);
   --u-s3: var(--coral);
-  --u-s1-strong: #00665d;
-  --u-muted-fill: #c3cad6;
+  --u-s1-strong: var(--teal-ink);
+  --u-muted-fill: color-mix(in srgb, var(--steel) 65%, var(--sheet));
   /* Ordinal (standing): weak, fair, strong. */
-  --u-ord1: #5cc2b8;
-  --u-ord2: var(--teal);
-  --u-ord3: #00665d;
+  --u-ord1: #2f9f95;
+  --u-ord2: #00897d;
+  --u-ord3: var(--teal-ink);
   --u-on-fill: #fff;
-  /* Delta text: up, down. Both clear 4.5:1 on white. */
-  --u-up: #00665d;
+  /* Delta text: up, down. Both clear 4.5:1 on a sheet. */
+  --u-up: var(--teal-ink);
   --u-warn: var(--amber);
-  --u-warn-ink: #7a5600;
-  --u-warn-wash: rgba(255, 183, 0, 0.1);
+  --u-warn-ink: var(--amber-ink);
+  --u-warn-wash: color-mix(in srgb, var(--amber) 16%, transparent);
 
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 44px;
   color: var(--u-ink);
 }
 
@@ -71,16 +74,18 @@
   gap: 10px 24px;
 }
 
+
 .h1 {
-  font-size: 2.3rem;
-  letter-spacing: -0.02em;
-  margin: 4px 0 4px;
+  font-size: var(--page-title);
+  line-height: 1.08;
+  margin: 0;
 }
 
 .subline {
-  margin: 0;
-  color: var(--u-muted);
-  font-size: 0.95rem;
+  margin: 8px 0 0;
+  color: var(--u-ink-2);
+  font-size: 1.02rem;
+  line-height: 1.5;
 }
 
 .headerMeta {
@@ -91,18 +96,17 @@
 }
 
 .updated {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--u-muted);
   white-space: nowrap;
 }
 
 .gapNote {
-  padding: 3px 10px;
+  padding: 3px 11px;
   border-radius: 999px;
-  background: var(--u-plane);
-  border: 1px solid var(--u-line);
-  font-size: 0.76rem;
-  color: var(--u-muted);
+  background: var(--sand);
+  font-size: 0.78rem;
+  color: var(--u-ink-2);
   white-space: nowrap;
 }
 
@@ -122,8 +126,7 @@
   padding: 20px 22px 18px;
   background: var(--u-surface);
   border: 1px solid var(--u-line);
-  border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(26, 51, 96, 0.04);
+  border-radius: var(--sheet-radius);
 }
 
 .heroLabel {
@@ -152,9 +155,10 @@
 
 /* A value that is a sentence, such as "Measuring since 27 Oct": smaller, and allowed to wrap. */
 .heroValueText {
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
+  padding: 6px 0 2px;
   letter-spacing: 0;
   color: var(--u-muted);
 }
@@ -247,12 +251,12 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .h2 {
-  font-size: 1.15rem;
-  letter-spacing: -0.01em;
+  font-size: 1.35rem;
+  letter-spacing: -0.015em;
 }
 
 .h2Note {
@@ -268,11 +272,10 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  padding: 20px 22px;
+  padding: 22px 24px;
   background: var(--u-surface);
   border: 1px solid var(--u-line);
-  border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(26, 51, 96, 0.04);
+  border-radius: var(--sheet-radius);
 }
 
 .cardHead {
@@ -321,7 +324,7 @@
 }
 
 .since {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--u-muted);
   white-space: nowrap;
@@ -329,12 +332,11 @@
 
 .empty {
   margin: 0;
-  padding: 18px 16px;
-  border: 1px dashed var(--u-line);
+  padding: 14px 16px;
+  background: var(--u-plane);
   border-radius: 12px;
-  color: var(--u-muted);
+  color: var(--u-ink-2);
   font-size: 0.88rem;
-  text-align: center;
 }
 
 .code {
@@ -431,7 +433,7 @@
 
 .tick {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
   fill: var(--u-muted);
 }
 
@@ -756,7 +758,7 @@
 
 .heat th {
   font-weight: 600;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--u-muted);
   text-align: center;
   padding: 0 0 4px;
@@ -798,6 +800,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A filled cell carries a navy number: steel is 3.4 to 1 on the strongest fill. */
+.heatCell {
+  color: var(--u-ink);
+}
+
 .heatZero {
   background: var(--u-plane);
   color: var(--u-muted-fill);
@@ -806,9 +813,10 @@
 
 /* ------------------------------------------------------------- upkeep tiles */
 
+/* Eight tiles in two even rows of four, never six and two left over. */
 .minis {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -820,18 +828,15 @@
   padding: 14px 16px;
   background: var(--u-surface);
   border: 1px solid var(--u-line);
-  border-radius: 14px;
+  border-radius: 16px;
 }
 
 a.mini {
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: border-color 0.18s ease;
 }
 
 a.mini:hover {
-  border-color: color-mix(in srgb, var(--u-s1) 50%, transparent);
-  box-shadow: 0 6px 18px rgba(26, 51, 96, 0.08);
+  border-color: var(--field-edge);
 }
 
 .miniValue {
@@ -874,7 +879,7 @@ a.mini:hover {
   border-radius: 50%;
   background: var(--u-warn);
   color: #3a2a00;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -953,8 +958,9 @@ a.mini:hover {
 
 .tableWrap {
   overflow-x: auto;
+  background: var(--u-surface);
   border: 1px solid var(--u-line);
-  border-radius: 12px;
+  border-radius: 16px;
 }
 
 .table {
@@ -974,16 +980,20 @@ a.mini:hover {
 
 .table th {
   text-align: left;
-  font-weight: 600;
-  font-size: 0.76rem;
-  color: var(--u-muted);
-  padding: 8px 12px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--u-ink-2);
+  padding: 12px 14px 10px;
   border-bottom: 1px solid var(--u-line);
   white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .table td {
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--u-grid);
   vertical-align: top;
 }
@@ -1005,9 +1015,31 @@ a.mini:hover {
   vertical-align: bottom;
 }
 
+/* An address stays in one piece while the table has room; the sheet scrolls sideways when not. */
 .wide {
   min-width: 180px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+}
+
+.table tbody td:first-child {
+  white-space: nowrap;
+}
+
+/* Nine columns fit the sheet: tighter gaps between cells, the full inset at the two edges. */
+.table th,
+.table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 14px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 14px;
 }
 
 .nowrap {
@@ -1093,7 +1125,7 @@ a.mini:hover {
   }
 
   .heroValueText {
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
 
   .spark {
@@ -1155,5 +1187,11 @@ a.mini:hover {
 
   .value {
     font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a.mini {
+    transition: none;
   }
 }

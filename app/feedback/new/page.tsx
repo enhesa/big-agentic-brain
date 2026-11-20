@@ -7,6 +7,9 @@ import { auditRequest } from "@/lib/request-audit";
 import { FEEDBACK_AREAS, FEEDBACK_KINDS, isUuid } from "@/lib/feedback";
 import styles from "../feedback.module.css";
 
+/** A stored word such as "open" or "bug", shown with a capital: "Open", "Bug". */
+const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
 /** What each error code from /feedback/submit says. The URL only ever carries a code. */
 const ERROR_MESSAGES: Record<string, string> = {
   duplicate: "Looks like a duplicate of an open item. Vote on it instead, or post again if yours is genuinely different.",
@@ -32,8 +35,8 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
   return (
     <Shell>
       <div className={styles.detail}>
-        <Link href="/feedback" className={styles.back}>
-          ← Feedback
+        <Link href="/feedback" className="back-link">
+          Feedback
         </Link>
         <h1 className={styles.detailTitle}>Post feedback</h1>
         <p className={styles.subline}>
@@ -66,7 +69,7 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
             <select name="kind" defaultValue="bug" required>
               {FEEDBACK_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {cap(k)}
                 </option>
               ))}
             </select>
@@ -76,7 +79,7 @@ export default async function NewFeedbackPage({ searchParams }: { searchParams: 
             <select name="area" defaultValue="other" required>
               {FEEDBACK_AREAS.map((a) => (
                 <option key={a} value={a}>
-                  {a}
+                  {cap(a)}
                 </option>
               ))}
             </select>
