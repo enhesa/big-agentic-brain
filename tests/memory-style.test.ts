@@ -53,7 +53,7 @@ describe("the Memory pages on paper", () => {
       expect(rule(selector), selector).toContain("var(--hairline)");
     }
     // No white or grey of its own is left as a background anywhere on the Memory pages.
-    expect(css).not.toMatch(/background(-color)?:\s*(#fff|#ffffff|white)\b/i);
+    expect(css).not.toMatch(/background(-color)?:\s*(#fff|#ffffff|white|rgba?\(255,\s*255,\s*255)\b/i);
     // The quiet panels are sand, and both text colours read on it.
     const sand = globals.match(/--sand:\s*(#[0-9a-f]{6})/)![1];
     expect(ratio("#3f5175", sand)).toBeGreaterThanOrEqual(4.5);
@@ -97,8 +97,18 @@ describe("the Memory pages on paper", () => {
     // Name and value are both placed in rem, so a larger text size moves them together.
     expect(rule(".filterLabel")).toMatch(/top:\s*[\d.]+rem/);
     expect(rule(".select")).toMatch(/padding:\s*[\d.]+rem /);
-    const labelSize = Number(rule(".filterLabel").match(/font-size:\s*([\d.]+)rem/)![1]);
+    const label = rule(".filterLabel");
+    const labelSize = Number(label.match(/font-size:\s*([\d.]+)rem/)![1]);
     expect(labelSize).toBeGreaterThanOrEqual(0.7);
+    // The name ends above the value: its top, plus one line of it, is less than the padding.
+    const top = Number(label.match(/top:\s*([\d.]+)rem/)![1]);
+    const lineHeight = Number(label.match(/line-height:\s*([\d.]+);/)![1]);
+    const paddingTop = Number(rule(".select").match(/padding:\s*([\d.]+)rem /)![1]);
+    expect(top + labelSize * lineHeight).toBeLessThan(paddingTop);
+    // A name too long for a narrow filter is cut with an ellipsis, short of the arrow.
+    expect(label).toContain("text-overflow: ellipsis");
+    expect(label).toMatch(/right:\s*[\d.]+rem/);
+    expect(rule(".filterBar")).toMatch(/minmax\([\d.]+rem, 1fr\)/);
     const phone = media("(max-width: 640px)");
     expect(phone).toMatch(/\.filterBar\s*\{[^}]*grid-template-columns:\s*repeat\(2,/);
     // The label swallows no clicks, so the hint moved to the select, where a pointer rests.

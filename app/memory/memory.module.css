@@ -128,10 +128,11 @@
 /* ---------------------------------------------------------------- filters */
 
 /* One row of filters. Each is one control with its name inside it, so there is no row of
-   labels above. Two to a row on a phone. */
+   labels above. Two to a row on a phone. The least width is in rem, like the name inside,
+   so a larger text size gives fewer, wider filters and the name still fits. */
 .filterBar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -563,7 +564,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The box above already leaves 18px, and margins do not collapse between grid items. */
+/* The box above (the text, the reactions or the comments) already leaves 18px or more,
+   and margins do not collapse between grid items. */
 .notes {
   margin: 0;
 }
