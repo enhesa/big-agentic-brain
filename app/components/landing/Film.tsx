@@ -25,7 +25,7 @@ const SCENES = [
 
 export default function Film() {
   return (
-    <section className={`${styles.section} ${styles.filmSection}`} id="film">
+    <section className={`${styles.section} ${styles.band} ${styles.filmSection}`} id="film">
       <div className={styles.wrap}>
         <div className={`${styles.sectionHead} ${styles.sectionHeadCenter}`}>
           <span className={`${styles.eyebrow} ${styles.eyebrowLight}`}>45 seconds</span>

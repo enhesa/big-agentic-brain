@@ -2,9 +2,11 @@
   scroll-behavior: smooth;
 }
 
+/* The whole page stands on the film's paper. Two sections are bands on it: sand for
+   installing, navy for the film. Nothing else paints a ground. */
 .page {
   overflow-x: hidden;
-  background: #fff;
+  background: var(--paper);
 }
 
 /* Same box as the inner pages' .container: the shared tokens in app/globals.css. */
@@ -176,7 +178,7 @@
 /* ------------------------------------------------------------------- hero */
 
 .hero {
-  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 48%, var(--sand) 100%);
+  background: var(--paper);
 }
 
 .heroInner {
@@ -313,10 +315,11 @@
 
 /* ---------------------------------------------------- hero knowledge graph */
 
+/* The graph sits on one of the film's soft sand shapes, not in a box. */
 .graphPanel {
-  background: radial-gradient(circle at 50% 40%, #fff 0%, var(--mist) 78%);
-  border-radius: 28px;
-  padding: 18px;
+  background: var(--sand);
+  border-radius: 47% 53% 56% 44% / 50% 44% 56% 50%;
+  padding: 34px 30px;
   min-width: 0;
 }
 
@@ -387,6 +390,32 @@
   padding: 84px 0;
 }
 
+/* A band: a section with a ground of its own (--band). On a wide screen it is a rounded
+   panel on the paper; below that it runs edge to edge. The ground is drawn behind the
+   section, so the content keeps the page's one column. */
+.band {
+  position: relative;
+  isolation: isolate;
+}
+
+.band::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--band);
+}
+
+@media (min-width: 1300px) {
+  .band::before {
+    left: 50%;
+    right: auto;
+    width: calc(var(--shell-max-width) + 72px);
+    transform: translateX(-50%);
+    border-radius: 40px;
+  }
+}
+
 .sectionHead {
   max-width: 40rem;
   margin-bottom: 40px;
@@ -395,8 +424,8 @@
 .h2 {
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: clamp(1.8rem, 4.2vw, 2.7rem);
-  line-height: 1.1;
+  font-size: clamp(1.9rem, 4.6vw, 3.1rem);
+  line-height: 1.08;
   letter-spacing: -0.02em;
   color: var(--navy);
   margin: 10px 0 0;
@@ -419,10 +448,27 @@
 
 /* ------------------------------------------------------------ get started */
 
+.installSection {
+  --band: var(--sand);
+}
+
+/* Two ways to install, side by side: the app on the left, the terminal on the right. */
+.installGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 24px 44px;
+  align-items: start;
+}
+
+.installWay {
+  min-width: 0;
+}
+
 .promptCard {
-  background: var(--mist);
-  border-radius: 20px;
-  padding: 22px 24px;
+  background: #fff;
+  border: 1px solid var(--mist);
+  border-radius: 18px;
+  padding: 18px 20px;
 }
 
 .promptRow {
@@ -433,10 +479,11 @@
 }
 
 .promptText {
-  flex: 1 1 320px;
+  /* Low enough that Copy stays beside the command in the narrower install column. */
+  flex: 1 1 220px;
   min-width: 0;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: clamp(0.92rem, 2.1vw, 1.12rem);
+  font-size: clamp(0.9rem, 1.6vw, 1rem);
   line-height: 1.5;
   color: var(--navy);
   overflow-wrap: anywhere;
@@ -478,7 +525,7 @@
 /* The optional install screenshot (BAB_INSTALL_SCREENSHOT). Capped so its details stay legible
    without the image dominating the section on a wide screen. */
 .installShot {
-  margin: 32px 0 0;
+  margin: 0;
   max-width: 760px;
 }
 
@@ -492,7 +539,7 @@
 }
 
 .cliHead {
-  margin: 44px 0 4px;
+  margin: 0 0 4px;
   font-family: var(--font-head);
   font-weight: 700;
   font-size: 1.15rem;
@@ -508,6 +555,14 @@
 .cliRows {
   display: grid;
   gap: 12px;
+  margin-bottom: 18px;
+}
+
+.cliNote {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--steel);
 }
 
 /* ----------------------------------------------------------- architecture */
@@ -520,8 +575,9 @@
 
 /* ------------------------------------------------------------- how it works */
 
+/* How it works and the features share the paper, so they sit closer than two bands would. */
 .tourSection {
-  background: #fff;
+  padding-bottom: 36px;
 }
 
 .sectionHeadCenter {
@@ -1142,7 +1198,6 @@
    benefit-led columns and a slim row of house rules, replacing ten small cards. */
 .getSection {
   position: relative;
-  background: linear-gradient(180deg, #fff 0%, var(--mist) 100%);
 }
 
 .anchor {
@@ -1170,7 +1225,7 @@
   border-radius: 24px;
   background: #fff;
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 18px 40px rgba(26, 51, 96, 0.07);
+  box-shadow: 0 10px 28px rgba(26, 51, 96, 0.05);
   transition:
     transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
     box-shadow 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
@@ -1298,6 +1353,11 @@
 }
 
 @media (max-width: 900px) {
+  .installGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+
   .getList {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
@@ -1357,6 +1417,13 @@
     max-width: none;
   }
 
+  /* One column: the shape stays a shape, not a screen-high block. */
+  .graphPanel {
+    width: 100%;
+    max-width: 600px;
+    margin-inline: auto;
+  }
+
   .rules,
   .essentials4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1404,7 +1471,11 @@
   }
 
   .promptCard {
-    padding: 18px;
+    padding: 16px;
+  }
+
+  .promptText {
+    flex-basis: 100%;
   }
 
   .copyBtn {
@@ -1428,8 +1499,7 @@
   }
 
   .graphPanel {
-    padding: 10px;
-    border-radius: 20px;
+    padding: 22px 12px;
   }
 }
 
@@ -1554,7 +1624,7 @@
 /* ------------------------------------------------------------------ film */
 
 .filmSection {
-  background: var(--navy);
+  --band: var(--navy);
   /* On navy the bright teal is the one that reads: the dark one is 1.9 to 1 here. */
   --teal-ink: var(--teal);
 }
@@ -1664,21 +1734,17 @@
 
 /* ------------------------------------------------------------------- faq */
 
-.faqSection {
-  background: var(--mist);
-}
-
+/* Every answer is shown. Two balanced columns of plain rows, read top to bottom: no boxes,
+   and no empty cell when the count is odd. */
 .faqList {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  columns: 2;
+  column-gap: 56px;
 }
 
 .faqItem {
-  padding: 18px 20px;
-  border: 1px solid rgba(20, 40, 70, 0.08);
-  border-radius: 16px;
-  background: #fff;
+  break-inside: avoid;
+  padding: 18px 0 20px;
+  border-top: 1px solid rgba(26, 51, 96, 0.16);
 }
 
 .faqQ {
@@ -1698,6 +1764,6 @@
 
 @media (max-width: 760px) {
   .faqList {
-    grid-template-columns: minmax(0, 1fr);
+    columns: 1;
   }
 }

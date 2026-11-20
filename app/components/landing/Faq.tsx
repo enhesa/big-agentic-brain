@@ -4,7 +4,7 @@ import { branding } from "@/lib/branding";
 /**
  * Plain-language FAQ at the foot of the landing page: what BAB does and does not do, in the words a colleague outside
  * engineering would use. Questions are phrased as "how do I...",
- * and every answer is always shown, no expand or collapse. Every answer must stay true to
+ * and every answer is always shown, no expand or collapse: plain rows in two balanced columns. Every answer must stay true to
  * the product; if behaviour changes, change the answer in the same commit.
  */
 const faqs = (orgName: string) => [
@@ -73,7 +73,7 @@ const faqs = (orgName: string) => [
 export default function Faq() {
   const FAQS = faqs(branding().orgName);
   return (
-    <section className={`${styles.section} ${styles.faqSection}`} id="faq">
+    <section className={styles.section} id="faq">
       <div className={styles.wrap}>
         <div className={styles.sectionHead}>
           <span className={styles.eyebrow}>Questions</span>

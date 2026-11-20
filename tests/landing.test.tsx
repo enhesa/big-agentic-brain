@@ -107,6 +107,14 @@ describe("landing page", () => {
     expect(html).toContain("How does BAB save memories?");
   });
 
+  it("shows both ways to install in one grid: the app steps and the terminal commands", () => {
+    const grid = html.match(/<div class="[^"]*installGrid[^"]*">[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(grid).toContain("With a few clicks");
+    expect(grid).toContain("Prefer the terminal?");
+    expect(grid).toContain('src="/install/claude-app-plugins.png"');
+    expect(grid).toContain("/plugin install bab@acme-plugins");
+  });
+
   it("states the four house rules", () => {
     for (const rule of ["Acts only as you", "Asks before saving", "Reference, not orders", "Everything audited"]) {
       expect(html).toContain(rule);
