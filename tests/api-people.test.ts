@@ -38,13 +38,27 @@ describe("GET /api/people", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns the directory with learning counts", async () => {
+  it("returns the directory without activity for a non-maintainer", async () => {
     mockAgentIdentity("ada.t@example.com", "Ada");
     const { GET } = await import("../app/api/people/route");
     const res = await GET(new Request("http://localhost/api/people"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.users.some((u: { id: string }) => u.id === "ada.t@example.com")).toBe(true);
-    expect(body.users[0]).toHaveProperty("learningCount");
+    expect(body.users[0]).not.toHaveProperty("learningCount");
+    expect(body.users[0]).not.toHaveProperty("last_seen_at");
+  });
+
+  it("returns the directory with learning counts and last seen for a maintainer", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    process.env.BAB_MAINTAINERS = "ada.t@example.com";
+    try {
+      const { GET } = await import("../app/api/people/route");
+      const body = await (await GET(new Request("http://localhost/api/people"))).json();
+      expect(body.users[0]).toHaveProperty("learningCount");
+      expect(body.users[0]).toHaveProperty("last_seen_at");
+    } finally {
+      delete process.env.BAB_MAINTAINERS;
+    }
   });
 });

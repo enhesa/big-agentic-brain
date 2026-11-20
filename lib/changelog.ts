@@ -35,6 +35,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "On a phone a memory row shows its standing and warnings, and the filters sit two to a row.",
       "A memory's page puts its numbers beside the text on a wide screen, as one quiet list.",
       "BAB Tasks keeps up to 1000 initiatives and 20 MB per person, up from 100 and 256 KB.",
+      "The people list for agents shows last seen and memory counts to maintainers only.",
     ],
   },
   {

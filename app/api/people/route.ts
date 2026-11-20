@@ -1,12 +1,12 @@
 import { requireActorForApi } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { listUsers, learningCountsByAuthor, publicUser } from "@/lib/users";
-import { areasByUser, contactsForArea, normalizeArea } from "@/lib/area-contacts";
+import { contactsForArea, normalizeArea } from "@/lib/area-contacts";
+import { peopleDirectory } from "@/lib/people-directory";
 import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/people — the user directory; ?area= lists the contacts for one knowledge area instead. */
+/** GET /api/people: the user directory (activity and standing for maintainers only); ?area= lists the contacts for one knowledge area instead. */
 export async function GET(req: Request) {
   let user;
   try {
@@ -27,14 +27,5 @@ export async function GET(req: Request) {
     }
   }
 
-  const counts = learningCountsByAuthor();
-  const areas = areasByUser();
-  const users = listUsers().map((u) => ({
-    ...publicUser(u),
-    learningCount: counts[u.id] ?? 0,
-    homeTeam: u.home_team,
-    areas: (areas.get(u.id) ?? []).map((a) => a.area),
-  }));
-
-  return Response.json({ users });
+  return Response.json({ users: peopleDirectory(user.id) });
 }
