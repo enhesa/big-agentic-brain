@@ -470,7 +470,7 @@
 
 .project:hover {
   border-color: var(--teal);
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .signals {
@@ -488,7 +488,7 @@
   gap: 4px;
   font-size: 0.76rem;
   font-weight: 600;
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .signal svg {
@@ -555,7 +555,7 @@
 
 .standing_strong {
   background: rgba(0, 176, 161, 0.14);
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .standing_fair {
@@ -635,7 +635,7 @@
 
 .badgeActive {
   background: rgba(0, 176, 161, 0.14);
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .badgeExpired,
@@ -666,7 +666,7 @@
 }
 
 .emptyBody a {
-  color: var(--teal);
+  color: var(--teal-ink);
   font-weight: 600;
 }
 
@@ -781,7 +781,7 @@
 }
 
 .link {
-  color: var(--teal);
+  color: var(--teal-ink);
   font-weight: 600;
 }
 
@@ -955,7 +955,7 @@
 }
 
 .reactBtn:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
 }
 
@@ -982,7 +982,7 @@
 }
 
 .reactHint a {
-  color: var(--teal);
+  color: var(--teal-ink);
   font-weight: 600;
 }
 
@@ -1057,7 +1057,7 @@
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
-  color: var(--teal);
+  color: var(--teal-ink);
   background: none;
   border: 0;
   padding: 6px 0;
@@ -1068,7 +1068,7 @@
 
 .commentAction:focus-visible,
 .commentInput:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
 }
 

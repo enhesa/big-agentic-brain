@@ -130,6 +130,67 @@ describe("one page width", () => {
     }
   });
 
+  it("every page stands on the film's paper, and both bars are solid paper", () => {
+    const globals = read("app/globals.css");
+    expect(globals).toMatch(/--paper:\s*#f5f2ea/);
+    expect(globals).toMatch(/--sand:\s*#e9e3d3/);
+    expect(globals).toMatch(/body\s*\{[^}]*background:\s*var\(--paper\)/);
+    for (const file of ["app/components/shell/Shell.module.css", "app/landing.module.css"]) {
+      expect(read(file), file).toMatch(/\.topbar\s*\{[^}]*background:\s*var\(--paper\)/);
+    }
+    // The shell no longer paints the page white over the paper.
+    expect(read("app/components/shell/Shell.module.css")).not.toMatch(/\.content\s*\{[^}]*background/);
+  });
+
+  it("teal words and the focus ring use the dark teal, which passes contrast on paper", () => {
+    const globals = read("app/globals.css");
+    const hex = globals.match(/--teal-ink:\s*(#[0-9a-f]{6})/)?.[1];
+    expect(hex, "--teal-ink is defined").toBeTruthy();
+    const lum = (h: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const c = parseInt(h.slice(i, i + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    for (const ground of ["#f5f2ea", "#e9e3d3", "#ffffff"]) {
+      expect(ratio(hex!, ground), `teal ink on ${ground}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(globals).toMatch(/:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--teal-ink\)/);
+    expect(globals).toMatch(/\.kicker\s*\{[^}]*color:\s*var\(--teal-ink\)/);
+    // The bright teal is a fill. No stylesheet sets it as a text colour or a focus ring.
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const full = path.join(dir, name);
+        return statSync(full).isDirectory() ? walk(full) : name.endsWith(".css") ? [full] : [];
+      });
+    for (const file of walk(path.join(ROOT, "app"))) {
+      const src = readFileSync(file, "utf8");
+      expect(src, file).not.toMatch(/^\s*(color|outline|text-decoration-color):[^;]*var\(--teal\);/m);
+    }
+  });
+
+  it("the page you are on is marked by weight and a shape, never by colour alone", () => {
+    const shell = read("app/components/shell/Shell.module.css");
+    expect(shell).toMatch(/\.navLinkOn,\s*\.navLinkOn:hover\s*\{[^}]*font-weight:\s*600[^}]*background:\s*var\(--sand\)/);
+    expect(read("app/components/shell/TopNav.tsx")).toContain('aria-current={current ? "page" : undefined}');
+  });
+
+  it("on a phone the inner bar's links are one row that scrolls, and the current page is brought into view", () => {
+    const shell = read("app/components/shell/Shell.module.css");
+    const phone = shell.slice(shell.indexOf("@media (max-width: 640px)"));
+    expect(phone).toMatch(/\.nav\s*\{[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/);
+    expect(phone).toMatch(/\.navLink\s*\{[^}]*flex:\s*none/);
+    const nav = read("app/components/shell/TopNav.tsx");
+    expect(nav).toContain("row.scrollLeft =");
+    // It must move the row only: scrollIntoView would also scroll the page.
+    expect(nav).not.toContain("scrollIntoView(");
+  });
+
   it("no stylesheet outside the token hard-codes the old page widths", () => {
     const cssFiles: string[] = [];
     const walk = (dir: string) => {

@@ -8,7 +8,7 @@
   top: 0;
   z-index: 20;
   /* Solid, not translucent: the page scrolls under this bar and must not show through it. */
-  background: #fff;
+  background: var(--paper);
   border-bottom: 1px solid var(--mist);
 }
 
@@ -52,15 +52,21 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px 26px;
+  /* Each link carries its own 12px of padding, so the words sit 26px apart as before. */
+  gap: 4px 2px;
   flex-wrap: wrap;
+  margin-right: -12px;
 }
 
 .navLink {
   position: relative;
   font-size: 0.92rem;
   color: var(--steel);
-  transition: color 0.18s ease;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
   white-space: nowrap;
 }
 
@@ -81,24 +87,16 @@
 
 .navLink:hover {
   color: var(--navy);
+  background: color-mix(in srgb, var(--sand) 60%, transparent);
 }
 
 /* The page you are on. A landing page has no such state, so this is the one addition:
-   weight plus a teal underline, never colour alone. */
-.navLinkOn {
+   weight plus a sand shape behind the word, never colour alone. */
+.navLinkOn,
+.navLinkOn:hover {
   color: var(--navy);
   font-weight: 600;
-}
-
-.navLinkOn::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -6px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--teal);
+  background: var(--sand);
 }
 
 .btnNavy {
@@ -124,7 +122,7 @@
 }
 
 .btnNavy:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
 }
 
@@ -134,11 +132,40 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* Its own stacking context, so the two shapes below sit behind the page and above the paper. */
+  isolation: isolate;
+}
+
+/* The film's two soft shapes, top left and bottom right. They stay put while the page scrolls.
+   Decoration only: nothing reads them, nothing sits on them that needs their contrast. */
+.frame::before,
+.frame::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  background: var(--sand);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.frame::before {
+  top: -150px;
+  left: -170px;
+  width: 540px;
+  height: 440px;
+  border-radius: 46% 54% 62% 38% / 52% 44% 56% 48%;
+}
+
+.frame::after {
+  right: -200px;
+  bottom: -190px;
+  width: 680px;
+  height: 560px;
+  border-radius: 58% 42% 40% 60% / 46% 58% 42% 54%;
 }
 
 .content {
   flex: 1 0 auto;
-  background: #fff;
   padding: 32px 0 64px;
 }
 
@@ -147,12 +174,52 @@
     display: none;
   }
 
+  .topbarInner {
+    gap: 6px;
+    padding-top: 12px;
+    padding-bottom: 6px;
+  }
+
+  /* One row that scrolls sideways, edge to edge, where it used to wrap onto two or three rows
+     and take a fifth of a phone's screen. The right edge fades so the row reads as longer than
+     the screen, and TopNav scrolls the page you are on into view. */
   .nav {
-    gap: 8px 16px;
+    flex-wrap: nowrap;
+    gap: 0;
+    width: calc(100% + 2 * var(--shell-gutter));
+    margin: 0 calc(-1 * var(--shell-gutter));
+    /* Room for the focus ring: a scrolling box clips whatever leaves it. */
+    padding: 6px 30px 6px calc(var(--shell-gutter) - 8px);
+    overflow-x: auto;
+    /* Keyboard focus stops clear of the two faded edges. */
+    scroll-padding-inline: 30px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
   }
 
   .navLink {
+    flex: none;
     font-size: 0.86rem;
+    padding: 6px 8px;
+  }
+
+  .frame::before {
+    top: -120px;
+    left: -150px;
+    width: 340px;
+    height: 300px;
+  }
+
+  .frame::after {
+    right: -160px;
+    bottom: -150px;
+    width: 380px;
+    height: 340px;
   }
 }
 

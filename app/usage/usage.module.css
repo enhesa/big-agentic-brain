@@ -1,6 +1,6 @@
 /* /usage. Every colour is a token on .page, built from the app tokens in app/globals.css. The app
    has no dark theme yet; the dark values below apply once something sets data-theme="dark" on
-   <html>, so an OS dark setting does not turn this page dark inside a white app. */
+   <html>, so an OS dark setting does not turn this page dark inside a light app. */
 
 .page {
   --u-ink: var(--navy);

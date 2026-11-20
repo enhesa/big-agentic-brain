@@ -29,7 +29,8 @@ export async function GET() {
     start_url: "/inbox",
     scope: "/",
     display: "standalone",
-    background_color: "#ffffff",
+    // The paper every page stands on (--paper in app/globals.css).
+    background_color: "#f5f2ea",
     theme_color: config().branding.accentColor,
     icons: [
       // The 192 and 512 pixel PNGs are what Chrome's install check looks for (rendered from public/branding/icon.svg).
