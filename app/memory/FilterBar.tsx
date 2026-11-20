@@ -119,7 +119,7 @@ export default function FilterBar({ values, fields }: FilterBarProps) {
       <div className={styles.filterBar}>
         {fields.map((f) => (
           <div key={f.name} className={styles.filterField}>
-            <label htmlFor={f.id} className={styles.filterLabel} title={f.description}>
+            <label htmlFor={f.id} className={styles.filterLabel}>
               {f.label}
             </label>
             <select
@@ -128,6 +128,7 @@ export default function FilterBar({ values, fields }: FilterBarProps) {
               value={draft[f.name]}
               onChange={(e) => controller.changed(update(f.name, e.target.value))}
               className={styles.select}
+              title={f.description}
               aria-description={f.description}
             >
               {f.options.map((o) =>

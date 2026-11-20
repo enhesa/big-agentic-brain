@@ -31,6 +31,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The landing page stands on the same paper: no white bands, and the film sits on navy.",
       "Installing shows both ways side by side: the app steps and the two terminal commands.",
       "The FAQ is two plain columns you read top to bottom, with every answer still shown.",
+      "Memory is one sheet of rows: full titles, two lines of text, and quieter standing labels.",
+      "On a phone a memory row shows its standing and warnings, and the filters sit two to a row.",
+      "A memory's page puts its numbers beside the text on a wide screen, as one quiet list.",
     ],
   },
   {

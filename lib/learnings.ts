@@ -807,6 +807,17 @@ function stripMarkdownMarkers(raw: string): string {
     .replace(/\s*\n\s*/g, " ");
 }
 
+/** The start of a body for a list row without a search. A cut text ends in "…", as a search
+ *  snippet does, so a reader can tell it goes on. */
+export function leadingText(plain: string, max = 200): string {
+  if (plain.length <= max) return plain;
+  let cut = plain.slice(0, max);
+  // Never end on half of a two-unit character (an emoji), which would show as a broken glyph.
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}…`;
+}
+
 /** Pure helper: turns a raw FTS5 snippet (with control-char markers) into safe HTML. */
 export function renderSnippetHtml(raw: string): string {
   return escapeHtml(stripMarkdownMarkers(raw))
@@ -997,7 +1008,7 @@ export function search(
       ...r,
       ...ageInfo(r),
       ...appliesToFields(r, filters.stack),
-      snippet: escapeHtml(markdownToPlainText(r.body).slice(0, 200)),
+      snippet: escapeHtml(leadingText(markdownToPlainText(r.body))),
       authorName: authorNames.get(r.author_id) ?? null,
       supersededBy: supersededByIds.get(r.id),
       ...standingFields(standings.get(r.id)!),

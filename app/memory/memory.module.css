@@ -88,7 +88,7 @@
 
 .searchIcon {
   position: absolute;
-  left: 14px;
+  left: 17px;
   width: 18px;
   height: 18px;
   color: var(--steel);
@@ -100,45 +100,64 @@
   min-width: 0;
   font-family: var(--font-body);
   font-size: 0.95rem;
-  padding: 12px 14px 12px 40px;
-  border: 1px solid var(--mist);
-  border-radius: 12px;
+  padding: 13px 18px 13px 44px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   color: var(--navy);
-  background: #fff;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  background: var(--sheet);
+  transition: border-color 0.15s ease;
 }
 
-.search:focus {
-  outline: none;
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.18);
+/* The ring is the one every page has (globals.css). The border only darkens with it. */
+.search:focus-visible,
+.select:focus-visible {
+  border-color: var(--teal-ink);
+}
+
+/* The global rule squares a focused control's corners and does not cover a select. */
+.search:focus-visible {
+  border-radius: 999px;
+}
+
+.select:focus-visible {
+  outline: 3px solid var(--teal-ink);
+  outline-offset: 2px;
+  border-radius: 0.875rem;
 }
 
 /* ---------------------------------------------------------------- filters */
 
+/* One row of filters. Each is one control with its name inside it, so there is no row of
+   labels above. Two to a row on a phone. The least width is in rem, like the name inside,
+   so a larger text size gives fewer, wider filters and the name still fits. */
 .filterBar {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 8px;
   margin-bottom: 14px;
 }
 
 .filterField {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1 1 160px;
-  min-width: 140px;
+  position: relative;
+  min-width: 0;
 }
 
+/* Drawn over the select's top edge. Clicks fall through to the select. Offsets are in rem,
+   like the select's padding, so the name and the value never meet at a larger text size. */
 .filterLabel {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.875rem;
+  right: 1.9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.66rem;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--steel);
 }
@@ -149,32 +168,30 @@
   -moz-appearance: none;
   width: 100%;
   font-family: var(--font-body);
-  font-size: 0.86rem;
-  padding: 12px 30px 12px 12px;
-  border: 1px solid var(--mist);
-  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 1.5rem 1.9rem 0.5rem 0.8125rem;
+  border: 1px solid var(--hairline);
+  border-radius: 0.875rem;
   color: var(--navy);
-  background-color: #fff;
+  text-overflow: ellipsis;
+  background-color: var(--sheet);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%233f5175' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 13px;
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
-.select:focus {
-  outline: none;
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(0, 176, 161, 0.18);
+.select:hover {
+  border-color: rgba(26, 51, 96, 0.4);
 }
 
 .resultsCount {
   color: var(--steel);
   font-size: 0.82rem;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .activeFilters {
@@ -191,7 +208,7 @@
   gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--mist);
+  background: var(--sand);
   color: var(--navy);
   font-size: 0.76rem;
   font-weight: 600;
@@ -201,9 +218,10 @@
     color 0.15s ease;
 }
 
+/* Removing a filter is not an error: the pill turns navy, not red. */
 .pill:hover {
-  background: rgba(255, 68, 35, 0.12);
-  color: var(--coral);
+  background: var(--navy);
+  color: #fff;
 }
 
 .clearAll {
@@ -226,20 +244,28 @@
   color: var(--steel);
 }
 
-.pageLink {
+.pageLink,
+.pageDisabled {
+  padding: 8px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   font-weight: 600;
+}
+
+.pageLink {
+  background: var(--sheet);
   color: var(--navy);
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .pageLink:hover {
-  color: var(--coral);
+  border-color: var(--navy);
 }
 
+/* Steel at this strength is 3.2 to 1 on paper: enough for a control that does nothing. */
 .pageDisabled {
-  font-weight: 600;
   color: var(--steel);
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 /* ------------------------------------------------------------------- chips */
@@ -257,8 +283,8 @@
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid var(--mist);
-  background: #fff;
+  border: 1px solid var(--hairline);
+  background: transparent;
   color: var(--navy);
   font-size: 0.78rem;
   font-weight: 600;
@@ -268,10 +294,12 @@
 }
 
 .chip:hover {
-  border-color: var(--teal);
+  border-color: var(--navy);
+  background: var(--sheet);
 }
 
-.chipOn {
+.chipOn,
+.chipOn:hover {
   background: var(--navy);
   border-color: var(--navy);
   color: #fff;
@@ -297,13 +325,19 @@
 
 /* -------------------------------------------------------------------- list */
 
+/* One sheet of rows with a hairline between them, not a stack of boxes. */
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  overflow: hidden;
+}
+
+.row + .row {
+  border-top: 1px solid var(--hairline);
 }
 
 .row {
@@ -329,31 +363,24 @@
      inside it without nesting an <a> inside an <a>. */
   position: relative;
   display: grid;
-  grid-template-columns: 4px minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: stretch;
-  background: #fff;
-  border: 1px solid var(--mist);
-  border-radius: 14px;
-  padding: 12px 14px 12px 0;
-  overflow: hidden;
-  transition:
-    transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1),
-    box-shadow 0.18s ease,
-    border-color 0.18s ease;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 6px 14px;
+  align-items: start;
+  padding: 16px 22px;
+  transition: background 0.15s ease;
 }
 
 .rowLink:hover {
-  transform: translateY(-1px);
-  border-color: rgba(0, 176, 161, 0.5);
-  box-shadow: 0 10px 28px rgba(26, 51, 96, 0.08);
+  background: rgba(233, 227, 211, 0.42);
 }
 
+/* The team's colour is a dot beside the title, like the dot in the logo. */
 .accent {
   display: block;
-  width: 4px;
-  border-radius: 0 3px 3px 0;
-  margin: -12px 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 6px;
 }
 
 .rowMain {
@@ -362,22 +389,43 @@
 
 .rowTop {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   min-width: 0;
 }
 
+/* A long title wraps. It is the memory's whole point, so it is never cut. */
 .title {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.98rem;
+  font-size: 1.06rem;
   line-height: 1.3;
   color: var(--navy);
   text-decoration: none;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+/* Keyboard focus rings the whole row, as the whole row is the link. */
+.title:focus-visible {
+  outline: none;
+}
+
+.title:focus-visible::after {
+  outline: 3px solid var(--teal-ink);
+  outline-offset: -3px;
+}
+
+/* The sheet clips its rows, so the ring takes the sheet's corners on the first and last row. */
+.row:first-child .title::after {
+  border-top-left-radius: var(--sheet-radius);
+  border-top-right-radius: var(--sheet-radius);
+}
+
+.row:last-child .title::after {
+  border-bottom-left-radius: var(--sheet-radius);
+  border-bottom-right-radius: var(--sheet-radius);
 }
 
 /* Stretches the title's own link to cover the whole (positioned) row card,
@@ -389,14 +437,19 @@
   z-index: 1;
 }
 
+/* Two lines of the text: enough to tell whether to open it. */
 .snippet {
   color: var(--steel);
-  font-size: 0.86rem;
-  line-height: 1.45;
-  margin: 3px 0 6px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 4px 0 10px;
+  max-width: 86ch;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .snippet mark {
@@ -469,7 +522,7 @@
 }
 
 .project:hover {
-  border-color: var(--teal);
+  border-color: var(--teal-ink);
   color: var(--teal-ink);
 }
 
@@ -477,9 +530,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
+  gap: 7px;
   min-width: 44px;
+  padding-top: 3px;
 }
 
 .signal {
@@ -497,8 +550,9 @@
   fill: currentColor;
 }
 
+/* 5.9 to 1 on a sheet. */
 .signalKudos {
-  color: #b08000;
+  color: #8a5c00;
 }
 
 .score {
@@ -510,8 +564,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The box above (the text, the reactions or the comments) already leaves 18px or more,
+   and margins do not collapse between grid items. */
 .notes {
-  margin: 18px 0 0;
+  margin: 0;
 }
 
 .notes h2 {
@@ -541,31 +597,48 @@
   overflow-wrap: anywhere;
 }
 
-/* Standing replaces the raw score chip in the list: a word is clearer than a number. */
+/* Standing replaces the raw score chip in the list: a word is clearer than a number.
+   Plain words with a dot: the dot carries the colour, so a page of new memories is not a
+   column of amber badges. */
 .standing {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.66rem;
   font-weight: 700;
   font-family: var(--font-head);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  color: var(--steel);
+  white-space: nowrap;
+}
+
+.standing::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--steel);
 }
 
 .standing_strong {
-  background: rgba(0, 176, 161, 0.14);
   color: var(--teal-ink);
 }
 
+.standing_strong::before {
+  background: var(--teal);
+}
+
 .standing_fair {
-  background: rgba(26, 51, 96, 0.08);
   color: var(--navy);
 }
 
-.standing_weak {
-  background: rgba(255, 183, 0, 0.16);
-  color: #8a5c00;
+.standing_fair::before {
+  background: var(--navy);
+}
+
+.standing_weak::before {
+  background: var(--amber);
 }
 
 /* The trust warning next to standing (lib/trust.ts): unchecked or due a check, or flagged. */
@@ -578,6 +651,7 @@
   font-family: var(--font-head);
   border: 1px solid rgba(63, 81, 117, 0.3);
   color: var(--steel);
+  white-space: nowrap;
 }
 
 .trustChipFlagged {
@@ -646,9 +720,14 @@
 
 /* -------------------------------------------------------------------- empty */
 
+/* Nothing to show: one of the film's soft sand shapes holds the words. */
 .empty {
   text-align: center;
-  padding: 56px 0;
+  max-width: 560px;
+  margin: 36px auto 24px;
+  padding: 64px 48px;
+  background: var(--sand);
+  border-radius: 47% 53% 56% 44% / 50% 44% 56% 50%;
 }
 
 .emptyTitle {
@@ -672,12 +751,44 @@
 
 /* ------------------------------------------------------------------- detail */
 
+/* One column of reading. From 1000px the facts stand beside it instead of between the
+   text and the comments. Every child stays a direct child, so the order on a phone and
+   for a screen reader is the order in the page. A page without facts (the review queue)
+   stays one column. */
 .detail {
-  max-width: 760px;
+  display: grid;
+  grid-template-columns: minmax(0, 760px);
+}
+
+.detail > * {
+  grid-column: 1;
+  min-width: 0;
+}
+
+@media (min-width: 1000px) {
+  .detail:has(> .facts) {
+    grid-template-columns: minmax(0, 720px) minmax(260px, 320px);
+    justify-content: space-between;
+    column-gap: 48px;
+  }
+
+  /* Spans more rows than the page has. The spare rows are empty and take no room. On a
+     short screen the box scrolls inside itself instead of running off the bottom. */
+  .detail:has(> .facts) > .facts {
+    grid-column: 2;
+    grid-row: 1 / span 30;
+    align-self: start;
+    position: sticky;
+    top: 88px;
+    max-height: calc(100vh - 104px);
+    overflow: auto;
+    margin: 34px 0 0;
+  }
 }
 
 .back {
   display: inline-flex;
+  justify-self: start;
   align-items: center;
   gap: 6px;
   font-size: 0.82rem;
@@ -707,8 +818,8 @@
 }
 
 .detailTop h1 {
-  font-size: 1.5rem;
-  line-height: 1.25;
+  font-size: clamp(1.5rem, 3vw, 2.05rem);
+  line-height: 1.18;
   letter-spacing: -0.02em;
   flex: 1 1 auto;
   min-width: 0;
@@ -733,31 +844,52 @@
 
 .body {
   overflow-wrap: anywhere;
-  font-size: 1rem;
+  font-size: 1.05rem;
   line-height: 1.65;
   color: var(--navy);
-  margin: 0 0 20px;
-  padding: 18px 20px;
-  background: var(--mist);
-  border-radius: 14px;
+  margin: 0 0 22px;
+  padding: 22px 26px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
 }
 
+/* The numbers behind a memory: a quiet list on sand, name left and value right. */
 .facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 8px;
-  margin: 0 0 18px;
-  padding: 0;
+  margin: 0 0 22px;
+  padding: 8px 20px;
   list-style: none;
+  background: var(--sand);
+  border-radius: var(--sheet-radius);
 }
 
+/* A value too long for its line (a trust sentence, a model id) takes the next one. */
 .fact {
-  /* A grid item will not shrink below its content: a long repo name or model id would spill
-     out of the tile without this. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 16px;
   min-width: 0;
-  border: 1px solid var(--mist);
-  border-radius: 10px;
-  padding: 8px 12px;
+  padding: 9px 0;
+  break-inside: avoid;
+}
+
+.fact + .fact {
+  border-top: 1px solid rgba(26, 51, 96, 0.1);
+}
+
+/* Between a phone and the two-column page the list is wide, so it runs in two columns. */
+@media (min-width: 620px) and (max-width: 999px) {
+  .facts {
+    columns: 2;
+    column-gap: 40px;
+  }
+
+  /* Each column starts with a line, so the two start alike. */
+  .fact:first-child {
+    border-top: 1px solid rgba(26, 51, 96, 0.1);
+  }
 }
 
 .factK {
@@ -772,9 +904,12 @@
 
 .factV {
   display: block;
+  min-width: 0;
+  margin-left: auto;
+  text-align: right;
   font-size: 0.9rem;
+  font-weight: 500;
   color: var(--navy);
-  margin-top: 2px;
   /* "anywhere" only breaks inside a word when the word cannot fit its line, so a model id like
      claude-sonnet-5-5 is not split at a hyphen while the tile is wide enough. */
   overflow-wrap: anywhere;
@@ -791,6 +926,11 @@
   margin: 6px 0;
 }
 
+/* Margins do not collapse between grid items, so the second line gives its own up. */
+.related + .related {
+  margin-top: 0;
+}
+
 .apiNote {
   color: var(--steel);
   font-size: 0.78rem;
@@ -804,26 +944,40 @@
   border-radius: 6px;
 }
 
-@media (max-width: 640px) {
-  .rowLink {
-    grid-template-columns: 4px minmax(0, 1fr);
-  }
-
-  .signals {
-    display: none;
-  }
-
-  .title,
-  .snippet {
-    white-space: normal;
+/* Six filters in two even rows, not four and two. */
+@media (min-width: 641px) and (max-width: 980px) {
+  .filterBar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 480px) {
-  .filterField {
-    flex: 1 1 100%;
+@media (max-width: 640px) {
+  .filterBar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .rowLink {
+    grid-template-columns: 10px minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  /* Standing and the warnings stay on a phone, as one line under the row. */
+  .signals {
+    grid-column: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    padding-top: 0;
+  }
+
+  .empty {
+    padding: 48px 28px;
+  }
+
+  .body {
+    padding: 18px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -837,6 +991,7 @@
   .search,
   .select,
   .pill,
+  .reactBtn,
   .filters ~ * {
     transition: none;
   }
@@ -917,9 +1072,10 @@
 /* ------------------------------------------------------------- reactions */
 
 .react {
-  border: 1px solid var(--mist);
-  border-radius: 14px;
-  padding: 14px 16px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  padding: 20px 22px;
   margin: 0 0 18px;
 }
 
@@ -942,16 +1098,18 @@
   font-weight: 700;
   font-size: 0.85rem;
   min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 12px;
+  padding: 8px 18px;
+  border-radius: 999px;
   border: 1px solid var(--steel);
-  background: #fff;
+  background: transparent;
   color: var(--navy);
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .reactBtn:hover {
   border-color: var(--navy);
+  background: var(--sand);
 }
 
 .reactBtn:focus-visible {
@@ -1088,9 +1246,11 @@
   width: 100%;
   box-sizing: border-box;
   min-height: 72px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--steel);
-  border-radius: 10px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--navy);
   resize: vertical;
 }
 
@@ -1134,9 +1294,15 @@
 }
 
 .reviewItem {
-  border: 1px solid rgba(63, 81, 117, 0.18);
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+/* The note is one line here, so its box is one line high. */
+.reviewForm .commentInput {
+  min-height: 44px;
 }
 
 .reviewItem + .reviewItem {

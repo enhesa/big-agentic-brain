@@ -85,6 +85,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Answer a plain form post with a 303 redirect (`lib/feedback-web.ts:40`). Answer a JSON caller with JSON.
 - A device secret never drives an SSO page or route (`lib/session.ts:40-41`).
 - Check the rate limit with `checkUiRateLimit(viewer.ownerId)` (`app/inbox/unread/route.ts`).
+- A page stands on paper. Draw a card, a list or a field as a sheet: `var(--sheet)`, a `var(--hairline)` edge and `var(--sheet-radius)` (`app/globals.css`). Use `var(--sand)` for a quiet panel, never a white or grey of your own (`tests/memory-style.test.ts`).
 
 ## Plugin changes
 
