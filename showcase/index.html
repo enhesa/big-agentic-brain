@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Big Agentic Brain: showcase film</title>
+    <style>
+      @font-face {
+        font-family: "Urbanist";
+        font-weight: 600 800;
+        src: url("../public/fonts/urbanist-latin.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Inter";
+        font-weight: 300 600;
+        src: url("../public/fonts/inter-latin.woff2") format("woff2");
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #f5f2ea;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        display: block;
+        width: min(100vw, calc(100vh * 16 / 9));
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="film" width="1280" height="720" role="img" aria-label="Big Agentic Brain showcase film"></canvas>
+    <script src="film.js"></script>
+  </body>
+</html>

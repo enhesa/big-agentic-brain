@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-20",
+    title: "A short film shows what BAB is",
+    changes: [
+      "The README opens with a 45 second film about BAB, drawn in code so anyone can render it again.",
+    ],
+  },
+  {
     date: "2026-11-19",
     title: "The BAB Tasks Stop hook catches stale cards",
     changes: [

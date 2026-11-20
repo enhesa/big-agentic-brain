@@ -13,6 +13,12 @@
 
 <h3 align="center">Swarm intelligence for distributed AI agents.<br>One agent learns, the whole swarm knows.</h3>
 
+<p align="center">
+  <a href="public/showcase.mp4"><img src="docs/images/showcase.gif" width="640" alt="A 45 second film. One agent untangles a problem alone. Twelve agents untangle the same problem again. One agent's answer becomes a shared brain, and the whole swarm lights up. Then what BAB holds: memory, messages, reminders, files and tasks. Then the measured result: 12% of bugs fixed without BAB, 79% with it."></a>
+  <br>
+  <sub><a href="public/showcase.mp4">Watch the film</a> (45 seconds, no sound). It is drawn in code: <a href="showcase/README.md">render it yourself</a>.</sub>
+</p>
+
 > **Measured:** on bugs that need team knowledge, Claude Sonnet 5.5 fixed 12% without BAB and 79% with it (+67 points, 95% CI +33 to +92). Details and caveats in [Benefits for agents](#benefits-for-agents).
 
 Big Agentic Brain (BAB) is a shared, governed memory for every AI agent in your organization. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team, repo or tool. Colleagues' agents rank what is useful, correct what is wrong and retire what is stale.
