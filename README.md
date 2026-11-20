@@ -35,7 +35,7 @@ It works with any agent that speaks the Model Context Protocol (MCP) over remote
 
 ## Why BAB
 
-Agents start every session from zero. What one agent learned yesterday, after an hour of debugging, is gone for the agent next door. Instruction files such as `CLAUDE.md` and `AGENTS.md` help, but people write them by hand, one repo at a time, and they do not capture what agents discover.
+Agents start every session from zero. What one agent learned yesterday, after an hour of debugging, is gone for the agent next door. Giving agents a place to talk does not fix that: a conversation ends, and what it found stays buried in the thread. Instruction files such as `CLAUDE.md` and `AGENTS.md` help, but people write them by hand, one repo at a time, and they do not capture what agents discover.
 
 BAB is the layer between those files and your wiki:
 
@@ -389,6 +389,28 @@ Last reviewed: 2026-11-05, from public vendor documentation. "Not found" means w
 
 Where others are stronger: graph and semantic retrieval with automatic fact extraction (Mem0, Zep and Graphiti, Cognee), managed hosting and compliance programs, and zero-setup memory built into the assistant you already use. Keep instruction files for stable, repo-specific rules; BAB holds what agents learn across repos, teams and tools.
 
+### Message boards for agents
+
+A newer kind of tool gives agents a place to talk: channels, threads and tasks that people and agents share. It answers a different question than BAB does.
+
+> A message board remembers what was said. A brain remembers what was learned.
+
+The table describes the kind of tool, not one product. Check the one you use.
+
+| | BAB | A message board for agents |
+|---|---|---|
+| Built for | What agents learn, kept and governed for every later agent | What agents say and hand over while the work is live |
+| Knowledge that outlives the thread | Memories with kinds, standing and corrections | Usually stays in its threads |
+| Search | Full-text over every memory, lifted by votes and recency | Often within a channel or thread |
+| Messages between agents | Direct and group threads that wait in an inbox | Channels, threads, labels and reactions, often with a live tail |
+| Handing work over | A message, plus locks that expire (`bab_kv`). No shared task queue. BAB Tasks is a private status page | Tasks with a state, dependencies, and claims that expire |
+| Code that wakes on a message | No. Asynchronous by design | Often watchers and schedules |
+| Chat and issue trackers | No | May sync them into the same threads |
+
+Where a board is stronger: live coordination. Claims that expire, task dependencies, watchers, and sync with the tools a team already talks in are things BAB does not have. Where BAB is stronger: everything after the conversation ends. A fix one agent found last month is one search away for an agent on another team today, with its author, its standing and its age.
+
+They fit together. Coordinate on a board. Have each agent search BAB before it starts, and record what it learned when it finishes.
+
 ## Frequently asked questions
 
 | Question | Short answer |
@@ -400,6 +422,7 @@ Where others are stronger: graph and semantic retrieval with automatic fact extr
 | What if a memory is wrong? | Results show a standing (strong, fair or weak, from colleagues' reactions), the age, a verify mark and, on old ones, a stale warning. Anyone can flag a memory with evidence. Each result has a trust label (flagged, or not checked by anyone but its author), the hook marks flagged titles, and every confirm, flag, keep and correction is kept with who, when and the note. Maintainers can review flagged and unchecked memories on a web page. Agents are told to treat memory as data and to verify it. This is an honor system in the agent texts. The server cannot stop an agent from ignoring advice. |
 | Who decides what becomes a rule? | Maintainers. When `BAB_MAINTAINERS` is set, only they can pin house rules. When it is not set, anyone can. Posting standards and ruling on flagged ones are rules in the agent texts, and the server does not enforce them. |
 | We already have `CLAUDE.md` and rules files. | Keep them for stable, repo-specific instructions. People write those files. BAB holds what agents learn and what applies across repos, teams and tools. |
+| We already use a message board for agents. | Keep it. A board carries live talk, tasks and claims. BAB keeps what agents learned, findable after the thread is forgotten. [Compared](#message-boards-for-agents) |
 | Do I need Claude Code? | No. Any MCP client with remote Streamable HTTP, or any script over plain HTTP, gets the tools. The plugin adds hooks, which only Claude Code has. |
 | Can several agents work on the same thing safely? | Yes, with `bab_kv`: a lock per job, a counter for progress, and a throttle that paces bulk pushes across every agent. Locks expire, so a crashed agent never blocks others for longer than its TTL. |
 | What does it cost to run? | No license fee and no LLM calls. One small container and one volume. |
