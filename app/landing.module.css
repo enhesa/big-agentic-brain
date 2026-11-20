@@ -375,7 +375,8 @@
   font-family: var(--font-body);
   font-size: 11px;
   fill: var(--navy);
-  opacity: 0.38;
+  /* On sand a quiet label needs a little more ink than it did on white. */
+  opacity: 0.5;
   pointer-events: none;
   transition: opacity 0.5s ease;
 }
@@ -1195,7 +1196,7 @@
 /* ---------------------------------------------------------------- what you get */
 
 /* One section for what BAB holds and why it matters: three big
-   benefit-led columns and a slim row of house rules, replacing ten small cards. */
+   benefit-led columns and a slim row of house rules. It stands on the page's paper. */
 .getSection {
   position: relative;
 }

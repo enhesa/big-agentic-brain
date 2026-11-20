@@ -69,6 +69,9 @@ describe("branding", () => {
     html = await renderHome();
     expect(html).not.toContain("claude-app-plugins.png");
     expect(html).toContain("Two commands");
+    // With no screenshot there is one way to install, so no two-column grid.
+    expect(html).not.toContain("installGrid");
+    expect(html).not.toContain("With a few clicks");
   });
 
   it("shows the configured install screenshot above the commands, with its alt text escaped", async () => {

@@ -144,7 +144,12 @@ describe("one page width", () => {
 
   it("the landing page is one paper ground with two bands, sand for installing and navy for the film", () => {
     const css = read("app/landing.module.css");
-    const rule = (selector: string) => css.match(new RegExp(`\\${selector}\\s*\\{[^}]*\\}`))?.[0] ?? "";
+    // Every rule for the selector, media queries included. A selector that is gone fails the test.
+    const rule = (selector: string) => {
+      const found = css.match(new RegExp(`\\${selector}\\s*\\{[^}]*\\}`, "g"));
+      expect(found, `${selector} has a rule`).not.toBeNull();
+      return found!.join("\n");
+    };
     expect(rule(".page")).toContain("background: var(--paper)");
     expect(rule(".hero")).toContain("background: var(--paper)");
     // No section paints white, a gradient or the old grey over the paper.
