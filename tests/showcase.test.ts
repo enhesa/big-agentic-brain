@@ -33,19 +33,26 @@ describe("the showcase film", () => {
   });
 
   it("repeats the measured figures of the README", () => {
-    const film = read("showcase/film.js");
+    const story = read("lib/film-story.mjs");
     const readme = read("README.md");
     expect(readme).toContain("fixed 12% without BAB and 79% with it");
-    expect(film).toContain("share: 0.12");
-    expect(film).toContain("share: 0.79");
-    expect(film).toContain("Claude Sonnet 5.5");
+    expect(story).toContain("share: 0.12");
+    expect(story).toContain("share: 0.79");
+    expect(story).toContain("Claude Sonnet 5.5");
   });
 
   it("draws every frame from its number alone, so a render is repeatable", () => {
     const film = read("showcase/film.js");
     expect(film).not.toMatch(/Math\.random\(|Date\.now\(/);
+    // The story it draws is plain data and pure functions.
+    expect(read("lib/film-story.mjs")).not.toMatch(/Math\.random\(|Date\.now\(|performance\.now\(|document\./);
     // performance.now() drives only the in-browser preview loop, never a rendered frame.
     expect(film.match(/performance\.now\(/g)).toHaveLength(1);
+  });
+
+  it("tells one story to the video and to the landing page", () => {
+    expect(read("showcase/film.js")).toContain('from "../lib/film-story.mjs"');
+    expect(read("app/components/landing/FilmSvg.tsx")).toContain('from "@/lib/film-story.mjs"');
   });
 
   it("stays out of the container image, except for the rendered film", () => {
