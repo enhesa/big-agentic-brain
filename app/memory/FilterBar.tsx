@@ -128,6 +128,7 @@ export default function FilterBar({ values, fields }: FilterBarProps) {
               value={draft[f.name]}
               onChange={(e) => controller.changed(update(f.name, e.target.value))}
               className={styles.select}
+              title={f.description}
               aria-description={f.description}
             >
               {f.options.map((o) =>

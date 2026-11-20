@@ -46,7 +46,7 @@ function describeProjectFilter(project: string): string {
   return project === GENERAL_PROJECT_KEY ? "General" : project;
 }
 
-/** Team tag -> accent, so a glance at the left edge says whose world a row is from. */
+/** Team tag -> accent, so a glance at the dot beside the title says whose world a row is from. */
 export const TEAM_COLORS: Record<string, string> = {
   marketing: "var(--teal)",
   sales: "var(--amber)",
@@ -73,8 +73,8 @@ function badgeClass(state: string) {
   return styles.badgeExpired;
 }
 
-/** The memory list, compact and scannable: one row per entry, accent by team, title +
- *  one-line snippet, then who/when/signals. Tag filters stay chips (click to toggle);
+/** The memory list, one sheet of rows: a dot in the team colour, the whole title, two lines
+ *  of the text, then who/when/signals. Tag filters stay chips (click to toggle);
  *  the search box and selects are one filter bar (FilterBar) that applies as it changes and
  *  keeps every combination a plain, linkable, no-JS-required URL. */
 export default async function BoardPage({

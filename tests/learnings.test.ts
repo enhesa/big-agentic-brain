@@ -76,6 +76,23 @@ describe("learnings.search", () => {
     expect(results[0].title).toContain("runTest.sh");
     expect(results[0].snippet).toBeTruthy();
   });
+
+  it("a list row's text ends in an ellipsis when the body was cut, and only then", async () => {
+    await seedUsers();
+    const { create, search, leadingText } = await import("../lib/learnings");
+    create({ authorId: "author-1", title: "A long one", body: `${"word ".repeat(60)}end` });
+    create({ authorId: "author-1", title: "A short one", body: "Fits on the row." });
+
+    const rows = search("");
+    const long = rows.find((r) => r.title === "A long one")!;
+    const short = rows.find((r) => r.title === "A short one")!;
+    expect(long.snippet.endsWith("…")).toBe(true);
+    expect(long.snippet.length).toBeLessThanOrEqual(201);
+    // No space before the ellipsis, even when the cut lands after one.
+    expect(long.snippet).not.toMatch(/\s…$/);
+    expect(short.snippet).toBe("Fits on the row.");
+    expect(leadingText("x".repeat(200))).toBe("x".repeat(200));
+  });
 });
 
 // Search used to ORDER BY vote score alone, ignoring how well a row matched at all,
