@@ -38,8 +38,8 @@ import type { AuditVia } from "./types";
 // Limits and vocabularies
 // ---------------------------------------------------------------------------
 
-export const CC_MAX_INITIATIVES = 100;
-export const CC_MAX_BYTES_PER_PERSON = 256 * 1024;
+export const CC_MAX_INITIATIVES = 1000;
+export const CC_MAX_BYTES_PER_PERSON = 20 * 1024 * 1024;
 export const CC_MAX_RECORD_BYTES = 32 * 1024;
 /** Largest request body the BAB Tasks routes accept. */
 export const CC_MAX_BODY_BYTES = 256 * 1024;
@@ -1085,7 +1085,7 @@ function assertFits(owner: string, next: CcRecord, prev: CcRecord | null): void 
   }
   const total = usage.bytes - (prev ? bytesOf(prev) : 0) + size;
   if (total > CC_MAX_BYTES_PER_PERSON) {
-    throw new CcTooLargeError(`Your initiatives would take ${Math.ceil(total / 1024)} KB; at most ${CC_MAX_BYTES_PER_PERSON / 1024} KB per person. Remove or shorten one first.`);
+    throw new CcTooLargeError(`Your initiatives would take ${(total / (1024 * 1024)).toFixed(1)} MB; at most ${CC_MAX_BYTES_PER_PERSON / (1024 * 1024)} MB per person. Remove or shorten one first.`);
   }
 }
 

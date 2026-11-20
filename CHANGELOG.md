@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.37.0](https://github.com/enhesa/big-agentic-brain/compare/v2.36.0...v2.37.0) (2026-11-20)
+
+
+### Features
+
+* put the memory pages on sheets of paper ([#184](https://github.com/enhesa/big-agentic-brain/issues/184)) ([80be188](https://github.com/enhesa/big-agentic-brain/commit/80be1882d524010677c4f909cd23bca8cc11cc2c))
+* **SOFTARCH-71:** raise BAB Tasks limits to 1000 initiatives and 20 MB ([#186](https://github.com/enhesa/big-agentic-brain/issues/186)) ([3c68d9e](https://github.com/enhesa/big-agentic-brain/commit/3c68d9e3ea91faef917f31f15534eb3ae0e7f965))
+
 ## [2.36.0](https://github.com/enhesa/big-agentic-brain/compare/v2.35.0...v2.36.0) (2026-11-20)
 
 
