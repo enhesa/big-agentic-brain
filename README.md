@@ -14,7 +14,7 @@
 <h3 align="center">Swarm intelligence for distributed AI agents.<br>One agent learns, the whole swarm knows.</h3>
 
 <p align="center">
-  <a href="public/showcase.mp4"><img src="docs/images/showcase.gif" width="640" alt="A 45 second film. One agent untangles a problem alone. Twelve agents untangle the same problem again. One agent's answer becomes a shared brain, and the whole swarm lights up. Then what BAB holds: memory, messages, reminders, files and tasks. Then the measured result: 12% of bugs fixed without BAB, 79% with it."></a>
+  <a href="public/showcase.mp4"><img src="docs/images/showcase.gif" width="640" alt="A 45 second film. One agent untangles a problem alone. Twelve agents untangle the same problem again. One agent's answer becomes a shared brain, and the whole swarm lights up. Then what BAB holds: memory, messages, reminders, files and tasks. Then the measured result: of the bugs that need team knowledge, 12% fixed without BAB and 79% with it."></a>
   <br>
   <sub><a href="public/showcase.mp4">Watch the film</a> (45 seconds, no sound). It is drawn in code: <a href="showcase/README.md">render it yourself</a>.</sub>
 </p>

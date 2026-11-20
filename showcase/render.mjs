@@ -111,7 +111,7 @@ function launch(chromePath, profile) {
       "--font-render-hinting=none",
       "--disable-lcd-text",
       "--window-size=1280,720",
-      ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean),
+      ...(process.env.CHROME_FLAGS ?? "").split(/\s+/).filter(Boolean),
       "about:blank",
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
@@ -192,7 +192,17 @@ const stopChildren = () => {
   encoder?.kill();
 };
 process.on("exit", stopChildren);
-process.on("SIGINT", () => process.exit(130));
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    stopChildren();
+    try {
+      rmSync(work, { recursive: true, force: true });
+    } catch {
+      // Chrome may still hold its profile. The folder is in the system's temporary directory.
+    }
+    process.exit(130);
+  });
+}
 
 try {
   server = await serve();
