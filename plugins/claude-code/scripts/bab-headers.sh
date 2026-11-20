@@ -46,7 +46,9 @@ esac
 if [ -n "$hot_dir" ] && hot_read "$hot_dir/device-secret" && is_hex64 "$hot_val" \
   && [ -r "$hot_dir/device-label" ] \
   && { IFS= read -r hot_host && IFS= read -r hot_label; } < "$hot_dir/device-label" \
-  && { [ -z "${HOSTNAME:-}" ] || [ "$HOSTNAME" = "$hot_host" ]; }; then
+  && { [ -z "${HOSTNAME:-}" ] || [ "$HOSTNAME" = "$hot_host" ]; } \
+  && [ -n "$hot_label" ] && [ "${#hot_label}" -le 60 ] \
+  && case "$hot_label" in *[!A-Za-z0-9\ ._-]*) false ;; *) true ;; esac; then
   printf '{"X-Bab-Device":"%s","X-Bab-Device-Label":"%s"}' "$hot_val" "$hot_label"
   exit 0
 fi

@@ -66,6 +66,16 @@ describe.skipIf(!hasSh)("bab-headers.sh", { timeout: 300_000 }, () => {
     expect(JSON.parse(run(dir))["X-Bab-Device"]).toBe(SECRET);
   });
 
+  it("ignores a damaged label cache and rewrites it on the full path", () => {
+    const good = run(dir);
+    for (const bad of ['bad"label\\x', "x".repeat(61), ""]) {
+      writeFileSync(path.join(dir, "device-label"), `host\n${bad}\n`);
+      // No commands: the fast path refuses the cache, and the full path cannot name the machine.
+      expect(run(dir, true)).not.toContain(bad || "never");
+      expect(run(dir)).toBe(good);
+    }
+  });
+
   it("refuses a bad data dir as before", () => {
     expect(run("relative/dir")).toBe('{"X-Bab-Device-Error":"bad-dir"}');
     expect(run("${CLAUDE_PLUGIN_DATA}")).toBe('{"X-Bab-Device-Error":"bad-dir"}');
