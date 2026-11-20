@@ -94,6 +94,12 @@ BAB as `X-Bab-Device`, with a label (OS and computer name). BAB stores only a ha
 secret. The secret stays on your computer and is sent only to your BAB server. The
 label is visible to you on `<bab_url>/me/devices` and to BAB maintainers.
 
+Once the secret exists, the script also caches the label in `device-label` and answers from
+the two files with shell builtins only. It starts no other program, so it stays fast on a
+busy Windows machine, where every program start can take a second and Claude Code drops a slow
+`headersHelper`. Where the shell sets `HOSTNAME` (bash, Git Bash) a renamed computer refreshes
+the cache by itself; elsewhere, delete `device-label` to make it read the computer name again.
+
 If the script cannot get or store a secret, it sends `X-Bab-Device-Error` with a code
 (`no-shell`, `no-random`, `no-write`, `bad-dir`). BAB names the code in its answer; Claude
 still identifies you for the session and tells you a restart may fix it. Include the code
