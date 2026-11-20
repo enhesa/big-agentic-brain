@@ -6,7 +6,7 @@ import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/people — the user directory (activity and standing for maintainers only); ?area= lists the contacts for one knowledge area instead. */
+/** GET /api/people: the user directory (activity and standing for maintainers only); ?area= lists the contacts for one knowledge area instead. */
 export async function GET(req: Request) {
   let user;
   try {
