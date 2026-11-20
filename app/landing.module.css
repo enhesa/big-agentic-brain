@@ -56,7 +56,7 @@
 }
 
 .btnNavy:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
 }
 
@@ -70,17 +70,17 @@
   font-family: var(--font-head);
   font-weight: 700;
   font-size: 14px;
-  color: var(--teal);
+  color: var(--teal-ink);
   padding: 15px 4px;
   border-bottom: 1px solid transparent;
 }
 
 .textLink:hover {
-  border-bottom-color: var(--teal);
+  border-bottom-color: var(--teal-ink);
 }
 
 .textLink:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
   border-radius: 4px;
 }
@@ -170,7 +170,7 @@
 
 .navLink:hover {
   color: var(--navy);
-  background: rgba(233, 227, 211, 0.6);
+  background: color-mix(in srgb, var(--sand) 60%, transparent);
 }
 
 /* ------------------------------------------------------------------- hero */
@@ -1574,7 +1574,7 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 20px;
-  background: #f5f2ea center / cover no-repeat;
+  background: var(--paper) center / cover no-repeat;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
 }
 

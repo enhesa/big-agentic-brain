@@ -76,7 +76,7 @@
 }
 
 .page summary:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -361,7 +361,7 @@
 }
 
 .cardOpen:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
 }
 
@@ -1239,7 +1239,7 @@
 }
 
 .drawerClose:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 1px;
 }
 
@@ -1373,6 +1373,6 @@
 }
 
 .upOpen:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
 }

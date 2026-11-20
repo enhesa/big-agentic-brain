@@ -49,7 +49,7 @@ details[open] > .summary::before {
 }
 
 .summary:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 2px;
 }
 

@@ -162,6 +162,16 @@ describe("one page width", () => {
     }
     expect(globals).toMatch(/:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--teal-ink\)/);
     expect(globals).toMatch(/\.kicker\s*\{[^}]*color:\s*var\(--teal-ink\)/);
+    // The bright teal is a fill. No stylesheet sets it as a text colour or a focus ring.
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const full = path.join(dir, name);
+        return statSync(full).isDirectory() ? walk(full) : name.endsWith(".css") ? [full] : [];
+      });
+    for (const file of walk(path.join(ROOT, "app"))) {
+      const src = readFileSync(file, "utf8");
+      expect(src, file).not.toMatch(/^\s*(color|outline|text-decoration-color):[^;]*var\(--teal\);/m);
+    }
   });
 
   it("the page you are on is marked by weight and a shape, never by colour alone", () => {

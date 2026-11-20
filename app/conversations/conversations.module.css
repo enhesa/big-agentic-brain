@@ -233,7 +233,7 @@
 }
 
 .emptyBody a {
-  color: var(--teal);
+  color: var(--teal-ink);
   font-weight: 600;
 }
 
@@ -372,7 +372,7 @@
 }
 
 .requestMeta a {
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .msgWho {

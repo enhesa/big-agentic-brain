@@ -64,12 +64,12 @@
 .md a {
   color: var(--navy);
   text-decoration: underline;
-  text-decoration-color: var(--teal);
+  text-decoration-color: var(--teal-ink);
   text-underline-offset: 2px;
 }
 
 .md a:hover {
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .md code {

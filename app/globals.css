@@ -42,6 +42,12 @@
   --shell-gutter: 24px;
 }
 
+/* On a dark ground the bright teal is the one that reads. Nothing sets this theme yet: the
+   Tasks and Usage pages carry dark values for the day something does. */
+:root[data-theme="dark"] {
+  --teal-ink: var(--teal);
+}
+
 @media (max-width: 640px) {
   :root {
     --shell-gutter: 18px;
@@ -95,6 +101,7 @@ a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
+  /* Never var(--teal) here or in a module: the bright teal is 2.4 to 1 on paper. */
   outline: 3px solid var(--teal-ink);
   outline-offset: 2px;
   border-radius: 4px;

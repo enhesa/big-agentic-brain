@@ -87,7 +87,7 @@
 
 .navLink:hover {
   color: var(--navy);
-  background: rgba(233, 227, 211, 0.6);
+  background: color-mix(in srgb, var(--sand) 60%, transparent);
 }
 
 /* The page you are on. A landing page has no such state, so this is the one addition:
@@ -122,7 +122,7 @@
 }
 
 .btnNavy:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
 }
 
@@ -191,6 +191,8 @@
     /* Room for the focus ring: a scrolling box clips whatever leaves it. */
     padding: 6px 30px 6px calc(var(--shell-gutter) - 8px);
     overflow-x: auto;
+    /* Keyboard focus stops clear of the two faded edges. */
+    scroll-padding-inline: 30px;
     scrollbar-width: none;
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
     mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);

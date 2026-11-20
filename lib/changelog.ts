@@ -25,9 +25,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The README opens with a 45 second film about BAB, drawn in code so anyone can render it again.",
       "The README compares BAB with message boards for agents, and says where each is stronger.",
       "The landing page plays the film as a live drawing. You can pause it, restart it, or download the video.",
-      "Every page now stands on the film's warm paper, with the page you are on marked in the top bar.",
+      "Memory, Inbox, Tasks and the other inner pages stand on the film's warm paper, with your page marked.",
       "On a phone the top bar links are one row you swipe, where they used to wrap.",
-      "Small teal labels and the keyboard focus ring are darker, so they are easier to see.",
+      "Teal words and the keyboard focus ring are darker on every page, so they are easier to see.",
     ],
   },
   {
