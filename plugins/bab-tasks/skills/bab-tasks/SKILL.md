@@ -118,7 +118,7 @@ it with every patch, as on publish. The same limits and checks apply to the merg
 | `size` | Optional with `worked`: `small`, `medium` or `large`. No time estimates. |
 | `expectSeq` | Optional, on publish and patch. The `seq` you last saw; a mismatch is 409 with the current record to merge. Every answer gives the new `seq`. |
 
-At most 100 initiatives and 256 KB per person, 32 KB per record. Unknown fields, bad values and
+At most 1000 initiatives and 20 MB per person, 32 KB per record. Unknown fields, bad values and
 text that is too long are refused with a sentence that names the field and the fix. Nothing is cut
 short. The server sets every time itself, so send none except `health.checkedAt`.
 

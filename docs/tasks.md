@@ -92,7 +92,7 @@ In short:
 
 - `v: 1` is required. Unknown fields are refused with the allowed list. Too long is 400; nothing is
   cut short. Text that looks like a secret or personal data is refused and the field is named.
-- At most 100 initiatives and 256 KB per person, 32 KB per record (413), 256 KB per request.
+- At most 1000 initiatives and 20 MB per person, 32 KB per record (413), 256 KB per request.
 - The server owns every time except `health.checkedAt`: `updatedAt`, `seq`, a question's
   `askedAt` and `clearedAt`, a task's `startedAt` and `finishedAt`, health `receivedAt`, and the
   time of every log entry. Clock skew between machines never shows.

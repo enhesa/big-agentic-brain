@@ -317,7 +317,7 @@ describe("POST /api/tasks/backfill/:token", () => {
     expect(backfilled()).toEqual([]);
   });
 
-  it("creates a parked record for an unknown initiative with a title, once, and counts it against the 100 cap", async () => {
+  it("creates a parked record for an unknown initiative with a title, once, and counts it against the initiative cap", async () => {
     for (let i = 0; i < cc.CC_MAX_INITIATIVES - 1; i++) await storeRecord(OWNER, `init-${i}`);
     const res = await post(
       mint().url,
@@ -667,11 +667,11 @@ describe("current: open initiatives to create if absent", () => {
     expect(refused.every((r) => r.reason.includes("one upload creates at most 20 initiatives"))).toBe(true);
   });
 
-  it("respects the 100 initiative cap per person: the rest go to syncRefused", async () => {
+  it("respects the initiative cap per person: the rest go to syncRefused", async () => {
     for (let i = 0; i < cc.CC_MAX_INITIATIVES - 1; i++) await storeRecord(OWNER, `init-${i}`);
     const res = await post(mint().url, syncUpload([record("last-one"), record("one-too-many")]));
     expect(res.json).toMatchObject({ syncCreated: 1, syncSkipped: 0 });
-    expect(res.json.syncRefused).toEqual([{ index: 1, id: "one-too-many", reason: expect.stringMatching(/could not be created: You have 100 initiatives/) }]);
+    expect(res.json.syncRefused).toEqual([{ index: 1, id: "one-too-many", reason: expect.stringMatching(new RegExp(`could not be created: You have ${cc.CC_MAX_INITIATIVES} initiatives`)) }]);
     expect(() => cc.ccGet(OWNER, "one-too-many")).toThrow(/No initiative/);
   });
 

@@ -244,9 +244,9 @@ describe("publish", () => {
     expect(JSON.stringify(got)).not.toMatch(/secret/i);
   });
 
-  it("caps a person at 100 initiatives", () => {
-    for (let i = 0; i < 100; i++) cc.ccPublish(ME, OWNER, record({ id: `i${i}`, questions: [] }), "mcp");
-    expect(refusal(() => cc.ccPublish(ME, OWNER, record({ id: "one-more" }), "mcp")).message).toMatch(/100 initiatives/);
+  it("caps a person at CC_MAX_INITIATIVES initiatives", () => {
+    for (let i = 0; i < cc.CC_MAX_INITIATIVES; i++) cc.ccPublish(ME, OWNER, record({ id: `i${i}`, questions: [] }), "mcp");
+    expect(refusal(() => cc.ccPublish(ME, OWNER, record({ id: "one-more" }), "mcp")).message).toMatch(new RegExp(`${cc.CC_MAX_INITIATIVES} initiatives`));
   });
 });
 
