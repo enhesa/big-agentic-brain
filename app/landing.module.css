@@ -1555,6 +1555,8 @@
 
 .filmSection {
   background: var(--navy);
+  /* On navy the bright teal is the one that reads: the dark one is 1.9 to 1 here. */
+  --teal-ink: var(--teal);
 }
 
 .filmLede {

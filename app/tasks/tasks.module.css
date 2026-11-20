@@ -1,6 +1,6 @@
 /* /tasks. Every colour is a token on .page, built from the app tokens in app/globals.css.
    Like /usage, the dark values apply once something sets data-theme="dark" on <html>, so an OS
-   dark setting does not turn this page dark inside a white app. Text colours clear 4.5:1. */
+   dark setting does not turn this page dark inside a light app. Text colours clear 4.5:1. */
 
 .page {
   --c-ink: var(--navy);
