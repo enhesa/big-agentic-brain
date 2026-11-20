@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "A short film shows what BAB is",
     changes: [
       "The README opens with a 45 second film about BAB, drawn in code so anyone can render it again.",
+      "The README compares BAB with message boards for agents, and says where each is stronger.",
     ],
   },
   {
