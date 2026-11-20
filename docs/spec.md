@@ -396,7 +396,8 @@ characters, redacted like other user text) says what to ask. At most 3 contacts 
 areas per person (a 400 otherwise). A person sets only their own home team and areas;
 a maintainer may also remove anyone from an area, never add one. Every change is audited
 (`home_team_set`, `area_contact_add`, `area_contact_update`, `area_contact_remove`); no realtime event is emitted
-(events never carry person names). `bab_people` lists each person's `homeTeam` and `areas`;
+(events never carry person names). `bab_people` lists each person's id, email, name, `homeTeam` and `areas`
+(maintainers also get roles, created_at, last_seen_at, trust and `learningCount`, like the `/usage` Users list);
 `area` lists the contacts for one area; `action` `set_home_team`, `add_contact` or
 `remove_contact` changes the caller's own profile. `GET /api/people` (`?area=`), `POST /api/me/team`,
 `GET`, `POST` and `DELETE /api/me/areas` mirror them, and `/me/devices` has a form for the signed-in person.

@@ -38,6 +38,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Messages in a thread sit on paper and on sand, so you see who wrote what.",
       "Cards on Reminders, Devices and Docs are warm sheets, where they used to be stark white.",
       "BAB Tasks keeps up to 1000 initiatives and 20 MB per person, up from 100 and 256 KB.",
+      "The people list for agents shows last seen and memory counts to maintainers only.",
     ],
   },
   {
