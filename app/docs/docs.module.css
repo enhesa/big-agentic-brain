@@ -18,8 +18,8 @@
 }
 
 /* Everything is drawn from theme tokens, never hard-coded colours. */
-.boxFill { fill: #fff; }
-.boxStroke { stroke: var(--mist); }
+.boxFill { fill: var(--paper); }
+.boxStroke { stroke: var(--hairline); }
 .brainFill { fill: rgba(0, 176, 161, 0.08); }
 .brainStroke { stroke: var(--teal); }
 .label { fill: var(--navy); font-family: var(--font-head); font-weight: 700; font-size: 12.5px; }

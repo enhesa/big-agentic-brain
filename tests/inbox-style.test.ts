@@ -3,10 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (file: string) => readFileSync(join(process.cwd(), file), "utf8").replace(/\r\n/g, "\n");
-const globals = read("app/globals.css");
-const inbox = read("app/inbox/inbox.module.css");
-const thread = read("app/conversations/conversations.module.css");
-const reminders = read("app/reminders/reminders.module.css");
+/** A stylesheet without its comments, so a class named only in a comment does not count as a rule. */
+const sheet = (file: string) => read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+const globals = sheet("app/globals.css");
+const inbox = sheet("app/inbox/inbox.module.css");
+const thread = sheet("app/conversations/conversations.module.css");
+const reminders = sheet("app/reminders/reminders.module.css");
 
 /** Every rule for the selector in one stylesheet. A selector that is gone fails the test. */
 function rule(css: string, selector: string): string {
@@ -41,7 +43,7 @@ function expectDefined(css: string, files: string[]) {
   for (const file of files) {
     const { names, prefixes } = used(file);
     expect(names.length, `${file} uses the stylesheet`).toBeGreaterThan(0);
-    for (const name of names) expect(css, `${file} uses .${name}`).toMatch(new RegExp(`\\.${name}\\b`));
+    for (const name of names) expect(css, `${file} uses .${name}`).toMatch(new RegExp(`\\.${name}(?![A-Za-z0-9_-])`));
     for (const prefix of prefixes) expect(css, `${file} uses .${prefix}*`).toMatch(new RegExp(`\\.${prefix}[a-z]+\\b`));
   }
 }
@@ -66,8 +68,9 @@ describe("Inbox, a thread and Reminders on paper", () => {
     expect(list).toContain("var(--hairline)");
     expect(list).toContain("border-radius: var(--sheet-radius)");
     expect(rule(inbox, ".list li + li")).toContain("border-top: 1px solid var(--hairline)");
-    // An inbox without threads draws no empty box.
-    expect(rule(inbox, ".list:empty")).toMatch(/border:\s*none/);
+    // An inbox without threads draws no empty box, and the note takes the whole width.
+    expect(rule(inbox, ".list:empty")).toMatch(/display:\s*none/);
+    expect(rule(inbox, ".layout:has(> .list:empty)")).toContain("grid-template-columns: minmax(0, 1fr)");
   });
 
   it("a row's focus ring is drawn inside the sheet that clips it, and follows its corners", () => {
@@ -85,6 +88,10 @@ describe("Inbox, a thread and Reminders on paper", () => {
     expect(on).toContain("var(--navy)");
     expect(rule(inbox, ".rowUnread .rowTitle")).toContain("font-weight: 700");
     expect(inbox).not.toMatch(/\.rowUnread\s*\{/);
+    // Forced colours drop the surface and the shadow: the open thread keeps a real edge.
+    const forced = media(inbox, "(forced-colors: active)");
+    expect(forced).toContain(".rowOn");
+    expect(forced).toMatch(/border-left:\s*\d+px solid Highlight/);
   });
 
   it("a subject and its last message show two lines, and a long word cannot widen the row", () => {
@@ -113,6 +120,10 @@ describe("Inbox, a thread and Reminders on paper", () => {
     expectDefined(inbox, ["app/inbox/page.tsx", "app/inbox/InboxLive.tsx", "app/inbox/AutoOpenApp.tsx"]);
     expectDefined(thread, ["app/conversations/ThreadTimeline.tsx", "app/conversations/[threadId]/page.tsx"]);
     expectDefined(reminders, ["app/reminders/page.tsx", "app/reminders/ReminderBody.tsx"]);
+    // The live line picks its dot by status, a name built at run time.
+    for (const status of ["live", "connecting", "reconnecting", "stopped"]) {
+      expect(inbox, status).toMatch(new RegExp(`\\.live_${status}(?![a-z])`));
+    }
   });
 
   it("a phone gets one column and wider messages", () => {

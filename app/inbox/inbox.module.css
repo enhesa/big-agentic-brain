@@ -75,10 +75,13 @@
   overflow: hidden;
 }
 
-/* No threads yet: no empty box. */
+/* No threads yet: no empty box and no empty column beside the note. */
 .list:empty {
-  border: none;
-  background: none;
+  display: none;
+}
+
+.layout:has(> .list:empty) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .list li + li {
@@ -126,6 +129,15 @@
 .rowOn:hover {
   background: var(--sand);
   box-shadow: inset 3px 0 0 var(--navy);
+}
+
+/* Forced colours drop a background and a shadow, so the open thread gets a real edge. */
+@media (forced-colors: active) {
+  .rowOn,
+  .rowOn:hover {
+    box-shadow: none;
+    border-left: 4px solid Highlight;
+  }
 }
 
 .rowUnread .rowTitle {
@@ -279,6 +291,7 @@
 .earlier {
   margin: 0 0 8px;
   padding: 14px 16px;
+  border: 1px solid transparent; /* shows as an edge when colours are forced */
   border-radius: var(--sheet-radius);
   background: var(--sand);
 }
