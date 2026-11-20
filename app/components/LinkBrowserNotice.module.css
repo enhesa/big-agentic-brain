@@ -1,45 +1,64 @@
+/* The one card that asks who you are. A sheet on paper, with the logo's teal dot before its title
+   in place of the old coloured side bar. */
 .card {
   max-width: 640px;
   margin: 0 0 24px;
-  border-left: 4px solid var(--teal);
+  padding: 28px 30px;
 }
 
 .title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-family: var(--font-head);
-  font-size: 1.2rem;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  font-size: 1.3rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
   color: var(--navy);
   margin: 0 0 8px;
 }
 
-.lede {
-  color: var(--steel);
-  font-size: 0.95rem;
-  line-height: 1.5;
-  margin: 0 0 16px;
+.title::before {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--teal);
+  transform: translateY(-1px);
 }
 
+.lede {
+  color: var(--steel);
+  font-size: 0.98rem;
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+
+/* Dark red on a red wash: 5.3 to 1. */
 .error {
-  color: #b42318;
-  background: #fef3f2;
-  border: 1px solid #fecdca;
-  border-radius: 10px;
-  padding: 10px 12px;
+  color: var(--alert-ink);
+  background: color-mix(in srgb, var(--coral) 10%, var(--sheet));
+  border-radius: 14px;
+  padding: 12px 16px;
   font-size: 0.92rem;
+  font-weight: 400;
   line-height: 1.45;
-  margin: 0 0 16px;
+  margin: 0 0 18px;
 }
 
 .suggest {
-  padding: 14px 16px;
-  margin: 0 0 16px;
-  background: var(--mist);
-  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 0 0 20px;
+  background: var(--sand);
+  border-radius: 16px;
 }
 
 .suggest > div > p:first-child {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: var(--navy);
+  font-weight: 400;
 }
 
 .form {
@@ -48,45 +67,78 @@
 
 .label {
   display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--navy);
-  margin: 0 0 6px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel);
+  margin: 0 0 8px;
 }
 
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
 .input {
   font: inherit;
+  font-weight: 400;
   flex: 1 1 16rem;
   min-width: 0;
   max-width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--navy);
-  border-radius: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
+  background: var(--paper);
+  color: var(--navy);
+}
+
+.input::placeholder {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.input:focus-visible {
+  border-color: var(--teal-ink);
+  border-radius: var(--field-radius);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--alert-ink);
 }
 
 .help {
   color: var(--steel);
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   line-height: 1.45;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
 }
 
 .foot {
   color: var(--steel);
-  font-size: 0.85rem;
-  margin: 16px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--mist);
+  font-size: 0.86rem;
+  margin: 20px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
 }
 
 .foot a {
-  color: var(--navy);
+  color: var(--teal-ink);
+  font-weight: 500;
   text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 22px 18px;
+  }
+
+  .row > button {
+    flex: 1 1 100%;
+  }
 }

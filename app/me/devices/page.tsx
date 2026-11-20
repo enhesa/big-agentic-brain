@@ -41,13 +41,15 @@ export default async function DevicesPage({ searchParams }: { searchParams?: Pro
   return (
     <Shell>
       <h1 className={styles.h1}>Your devices</h1>
+      <p className={styles.lede}>The Claude installs that told BAB they are you, your home team and the areas you are a contact for.</p>
       {viewer ? (
         <LinkedView email={viewer.ownerId} profileError={profileError} showUnlink={!!proxy && getLinkedUserId(proxy.id) !== null} />
       ) : proxy ? (
         <WhoAreYou proxy={proxy} claim={claim} stale={getLinkedUserId(proxy.id) !== null} />
       ) : (
-        <div className="card">
-          <p className={styles.muted}>Sign in through the BAB web UI to see your devices.</p>
+        <div className="empty-state">
+          <strong>You are not signed in</strong>
+          <p>Sign in through the BAB web UI to see your devices.</p>
         </div>
       )}
     </Shell>
@@ -61,26 +63,30 @@ function LinkedView({ email, showUnlink, profileError }: { email: string; showUn
     <>
       <Profile email={email} error={profileError} />
 
-      <div className={`card ${styles.section}`}>
-        <p className={styles.muted}>
+      <h2 className={styles.groupTitle}>Devices</h2>
+      <p className={styles.groupLede}>
           {`A device is one Claude install that told BAB it is ${email} (Claude does that by itself, with bab_identify; there is nothing to type or copy). If one is not yours, or you no longer use it, forget it: it is unknown again until Claude identifies it.`}
-        </p>
-      </div>
+      </p>
 
       {devices.length === 0 ? (
-        <div className="card">
-          <p className={styles.muted}>No devices yet. Install the bab plugin and Claude tells BAB who you are by itself.</p>
+        <div className="empty-state">
+          <strong>No devices yet</strong>
+          <p>Install the bab plugin and Claude tells BAB who you are by itself.</p>
         </div>
       ) : (
         <div className={`card ${styles.section}`}>
+          <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Your devices">
           <table className={styles.table}>
+            <caption>Your devices</caption>
             <thead>
               <tr>
-                <th>Device</th>
-                <th>From</th>
-                <th>Identified</th>
-                <th>Last seen</th>
-                <th />
+                <th scope="col">Device</th>
+                <th scope="col">From</th>
+                <th scope="col">Identified</th>
+                <th scope="col">Last seen</th>
+                <th scope="col">
+                  <span className="sr-only">Action</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -102,7 +108,8 @@ function LinkedView({ email, showUnlink, profileError }: { email: string; showUn
               ))}
             </tbody>
           </table>
-          <form method="post" action="/me/devices/revoke" className={styles.form}>
+          </div>
+          <form method="post" action="/me/devices/revoke" className={`${styles.form} ${styles.split}`}>
             <input type="hidden" name="all" value="1" />
             <button type="submit" className={buttons.btn}>
               Forget all my devices
@@ -114,15 +121,18 @@ function LinkedView({ email, showUnlink, profileError }: { email: string; showUn
 
       {connections.length > 0 ? (
         <div className={`card ${styles.section}`}>
+          <h2 className={styles.h2}>Connections</h2>
           <p className={styles.muted}>
             {`Connections that told BAB they are you in the last ${CONNECTION_TTL_DAYS} days (a Claude session without a device). They end by themselves, or all at once with Forget all my devices. Forgetting one device does not touch them.`}
           </p>
+          <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Recent connections">
           <table className={styles.table}>
+            <caption>Recent connections</caption>
             <thead>
               <tr>
-                <th>Connection</th>
-                <th>Started</th>
-                <th>Last seen</th>
+                <th scope="col">Connection</th>
+                <th scope="col">Started</th>
+                <th scope="col">Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -135,6 +145,7 @@ function LinkedView({ email, showUnlink, profileError }: { email: string; showUn
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ) : null}
 
@@ -176,12 +187,16 @@ function Profile({ email, error }: { email: string; error: boolean }) {
         </button>
       </form>
       {areas.length > 0 ? (
+        <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Your areas">
         <table className={styles.table}>
+          <caption>Your areas</caption>
           <thead>
             <tr>
-              <th>Area</th>
-              <th>Ask me about</th>
-              <th />
+              <th scope="col">Area</th>
+              <th scope="col">Ask me about</th>
+              <th scope="col">
+                  <span className="sr-only">Action</span>
+                </th>
             </tr>
           </thead>
           <tbody>
@@ -202,8 +217,9 @@ function Profile({ email, error }: { email: string; error: boolean }) {
             ))}
           </tbody>
         </table>
+        </div>
       ) : null}
-      <form method="post" action="/me/devices/profile" className={styles.form}>
+      <form method="post" action="/me/devices/profile" className={`${styles.form} ${styles.split}`}>
         <input type="hidden" name="action" value="add" />
         <label htmlFor="area">Area</label>
         <input id="area" name="area" type="text" maxLength={AREA_MAX} placeholder="toxicology" required />

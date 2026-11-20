@@ -410,7 +410,11 @@ export default async function UsagePage({
       <div className={styles.page}>
         <header className={styles.header}>
           <div>
-            <span className="kicker">{maintainer ? <Link href="/admin">Admin</Link> : "BAB"}</span>
+            {maintainer && (
+              <Link href="/admin" className="back-link">
+                Admin
+              </Link>
+            )}
             <h1 className={styles.h1}>Usage</h1>
             <p className={styles.subline}>How {branding().orgName} uses BAB, over the last 12 months.</p>
           </div>
@@ -875,7 +879,8 @@ export default async function UsagePage({
                           {r.name}
                         </th>
                         {r.counts.map((c, i) => {
-                          const share = heatMax === 0 || c === 0 ? 0 : 0.18 + 0.82 * (c / heatMax);
+                          // The fill stops at half strength, so the navy number on it is always 5 to 1 or better.
+                          const share = heatMax === 0 || c === 0 ? 0 : 0.12 + 0.38 * (c / heatMax);
                           return (
                             <td
                               key={teams[i].week}
@@ -885,7 +890,6 @@ export default async function UsagePage({
                                   ? undefined
                                   : {
                                       background: `color-mix(in srgb, var(--u-s1-strong) ${Math.round(share * 100)}%, var(--u-surface))`,
-                                      color: share > 0.55 ? "var(--u-on-fill)" : undefined,
                                     }
                               }
                               title={`${r.name}, ${weekOf(teams[i].week).toLowerCase()}: ${plural(c, "author")}`}

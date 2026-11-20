@@ -1,108 +1,186 @@
+/* Feedback stands on paper like every page: the list is one sheet of rows, a field is a sheet with
+   an edge strong enough to find, a button is a pill and a status is a dot with a word. */
+
 .header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 16px 24px;
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
+}
+
+.header > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .h1 {
-  font-size: 1.7rem;
-  letter-spacing: -0.02em;
+  font-size: var(--page-title);
+  line-height: 1.08;
 }
 
 .subline {
-  margin: 4px 0 0;
+  margin: 8px 0 0;
+  max-width: 68ch;
   color: var(--steel);
-  font-size: 0.92rem;
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: 1.02rem;
+  line-height: 1.5;
+  letter-spacing: 0;
 }
 
 .primary {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
   background: var(--navy);
   color: #fff;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.85rem;
-  padding: 11px 16px;
-  border-radius: 12px;
-  border: none;
+  font-size: 0.9rem;
+  line-height: 1.1;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid var(--navy);
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.18s ease;
 }
 
 .primary:hover {
-  background: #12294f;
+  background: var(--navy-deep);
 }
+
+.primary:focus-visible {
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* ----------------------------------------------------------------- filters */
 
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .filters select,
 .filters input {
+  min-height: 44px;
   font: inherit;
-  font-size: 0.85rem;
-  padding: 9px 10px;
-  border: 1px solid var(--mist);
-  border-radius: 10px;
-  background: #fff;
+  font-weight: 400;
+  font-size: 0.92rem;
+  padding: 10px 16px;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
+  background-color: var(--sheet);
   color: var(--navy);
 }
 
 .filters input {
-  flex: 1 1 180px;
+  flex: 1 1 220px;
   min-width: 0;
+  border-radius: 999px;
+  padding-left: 20px;
 }
 
+.filters input::placeholder {
+  color: var(--steel);
+  opacity: 1;
+}
+
+.filters select,
+.form select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%233f5175' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+/* The global ring squares the corners, so each control states its own again. */
+.filters select:focus-visible,
+.form select:focus-visible,
+.form input[type="text"]:focus-visible,
+.form textarea:focus-visible {
+  border-color: var(--teal-ink);
+  border-radius: var(--field-radius);
+}
+
+.filters input:focus-visible {
+  border-color: var(--teal-ink);
+  border-radius: 999px;
+}
+
+/* -------------------------------------------------------------------- list */
+
+/* One sheet of rows. It clips nothing that needs to stick out: the links inside are plain text. */
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
 }
 
 .row {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   align-items: flex-start;
-  padding: 12px 14px;
-  border: 1px solid var(--mist);
-  border-radius: 14px;
-  background: #fff;
+  padding: 18px 22px;
 }
 
+.row + .row {
+  border-top: 1px solid var(--hairline);
+}
+
+/* The vote count: a number on sand, like a stamp. */
 .votes {
   flex: 0 0 auto;
-  min-width: 38px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  min-height: 56px;
+  border-radius: 16px;
+  background: var(--sand);
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: 1.05rem;
+  font-size: 1.3rem;
+  line-height: 1;
   color: var(--navy);
+  font-variant-numeric: tabular-nums;
 }
 
 .votes small {
   display: block;
-  font-family: var(--font-body);
-  font-weight: 400;
-  font-size: 0.68rem;
+  margin-top: 4px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
   color: var(--steel);
 }
 
 .main {
   min-width: 0;
   flex: 1 1 auto;
+  padding-top: 3px;
 }
 
 .title {
-  font-weight: 600;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.06rem;
+  line-height: 1.3;
   color: var(--navy);
   text-decoration: none;
   overflow-wrap: anywhere;
@@ -110,6 +188,8 @@
 
 .title:hover {
   text-decoration: underline;
+  text-decoration-color: var(--teal-ink);
+  text-underline-offset: 4px;
 }
 
 .meta {
@@ -117,48 +197,94 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  margin-top: 6px;
-  font-size: 0.78rem;
+  margin-top: 8px;
+  font-size: 0.84rem;
   color: var(--steel);
 }
 
+.meta a {
+  color: var(--teal-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A tag: sand, like the tags on a memory. */
 .chip {
-  display: inline-block;
-  padding: 2px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
   border-radius: 999px;
-  background: var(--mist);
+  background: var(--sand);
   color: var(--navy);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.5;
 }
 
-.chipOpen {
-  background: var(--sage);
+/* A status is a dot and a word. The word is always navy on sand, 9 to 1, so the dot's colour
+   is never the only sign. */
+.chipOpen::before,
+.chipPlanned::before,
+.chipDone::before,
+.chipWontfix::before,
+.chipDuplicate::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--steel);
 }
 
-.chipPlanned {
+.chipOpen,
+.chipPlanned,
+.chipDone,
+.chipWontfix,
+.chipDuplicate {
+  font-family: var(--font-head);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chipOpen::before {
+  background: var(--teal);
+}
+
+.chipPlanned::before {
   background: var(--amber);
 }
 
-.chipDone {
-  background: var(--teal);
-  color: #fff;
+.chipDone::before {
+  background: var(--navy);
 }
 
 .chipWontfix,
 .chipDuplicate {
-  background: var(--mist);
   color: var(--steel);
 }
 
 .empty {
-  padding: 28px 18px;
-  text-align: center;
+  max-width: 640px;
+  padding: 28px 30px;
   color: var(--steel);
+  line-height: 1.55;
+}
+
+.empty a,
+.more a,
+.note a,
+.error a {
+  color: var(--teal-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .more {
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 /* ------------------------------------------------------------------ detail */
@@ -167,29 +293,42 @@
   max-width: 760px;
 }
 
-.back {
-  display: inline-block;
+.detail .header {
+  align-items: flex-start;
   margin-bottom: 14px;
-  font-size: 0.82rem;
-  color: var(--steel);
 }
 
 .detailTitle {
-  font-size: 1.45rem;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.6rem, 1.35rem + 0.9vw, 2rem);
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
 .bodyText {
-  margin: 16px 0;
+  margin: 20px 0;
+  padding: 22px 26px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.55;
+  font-size: 1.02rem;
+  line-height: 1.65;
 }
 
 .voteForm {
-  margin: 14px 0 24px;
+  margin: 0 0 36px;
+}
+
+/* The heading above the comments: a small label, not a second title. */
+.detail h2.subline {
+  margin: 0 0 12px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--steel);
 }
 
 .thread {
@@ -202,21 +341,22 @@
 }
 
 .comment {
-  padding: 10px 14px;
-  border: 1px solid var(--mist);
-  border-radius: 12px;
+  padding: 16px 20px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
 }
 
+/* A change of status is an event, not a comment: one quiet line on sand. */
 .statusEntry {
-  padding: 8px 14px;
-  border-left: 3px solid var(--amber);
-  background: var(--mist);
-  border-radius: 0 12px 12px 0;
-  font-size: 0.85rem;
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--sand) 62%, transparent);
+  border-radius: 16px;
+  font-size: 0.92rem;
 }
 
 .commentWho {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--steel);
   margin-bottom: 4px;
 }
@@ -224,12 +364,20 @@
 .commentBody {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  line-height: 1.55;
 }
 
 .note {
-  margin-top: 24px;
-  font-size: 0.78rem;
+  margin-top: 28px;
+  font-size: 0.84rem;
   color: var(--steel);
+}
+
+.note code {
+  background: var(--sand);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.92em;
 }
 
 /* -------------------------------------------------------------------- form */
@@ -237,47 +385,168 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   max-width: 640px;
+  margin-top: 28px;
+  padding: 28px 30px 30px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
 }
 
 .form label {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  gap: 7px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel);
 }
 
 .form select,
 .form input[type="text"],
 .form textarea {
+  min-height: 44px;
   font: inherit;
+  font-family: var(--font-body);
   font-weight: 400;
-  padding: 10px 12px;
-  border: 1px solid var(--mist);
-  border-radius: 10px;
-  background: #fff;
+  font-size: 0.98rem;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 10px 14px;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
+  background-color: var(--paper);
   color: var(--navy);
 }
 
 .form textarea {
-  min-height: 160px;
+  min-height: 170px;
   resize: vertical;
+  line-height: 1.5;
 }
 
-.checkRow {
-  flex-direction: row !important;
-  align-items: center;
-  gap: 8px !important;
-  font-weight: 400 !important;
-  color: var(--steel);
+.form label.checkRow {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: 0.92rem;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.45;
+  cursor: pointer;
 }
 
+/* The tick box is drawn here: paper with the field edge, navy with a white tick when ticked. */
+.checkRow input {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid var(--field-edge);
+  border-radius: 7px;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.checkRow input::before {
+  content: "";
+  width: 11px;
+  height: 6px;
+  margin-top: -3px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) scale(0);
+}
+
+.checkRow input:checked {
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.checkRow input:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.checkRow input:focus-visible {
+  border-radius: 7px;
+}
+
+@media (forced-colors: active) {
+  .checkRow input {
+    appearance: auto;
+  }
+
+  .checkRow input::before {
+    display: none;
+  }
+}
+
+/* An error is dark red on a red wash: 5.3 to 1. The bright coral is a fill, never a word. */
 .error {
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #fff1ee;
-  color: var(--coral);
-  font-size: 0.88rem;
+  max-width: 640px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--coral) 10%, var(--sheet));
+  color: var(--alert-ink);
+  font-weight: 400;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .header > div:last-child {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .filters select {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 0;
+  }
+
+  .filters .primary {
+    flex: 1 1 100%;
+  }
+
+  .row {
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .votes {
+    width: 48px;
+    min-height: 48px;
+    font-size: 1.1rem;
+  }
+
+  .bodyText,
+  .form {
+    padding: 20px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .chipOpen::before,
+  .chipPlanned::before,
+  .chipDone::before,
+  .chipWontfix::before,
+  .chipDuplicate::before {
+    background: CanvasText;
+  }
 }

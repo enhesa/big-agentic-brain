@@ -5,9 +5,10 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--coral, #ff4423);
+  /* White on --coral is 3.4 to 1. On --alert it is 5.4 to 1. */
+  background: var(--alert);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 18px;
   text-align: center;

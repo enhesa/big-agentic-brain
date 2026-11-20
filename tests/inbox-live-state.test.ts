@@ -9,8 +9,36 @@ import {
   isSilent,
   statusText,
   SILENCE_MS,
+  REFRESH_DEBOUNCE_MS,
+  refreshDelayMs,
   type LiveStatus,
 } from "../lib/inbox-live-state";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+describe("refreshDelayMs", () => {
+  it("refreshes a hidden tab at once, where the browser throttles timers", () => {
+    expect(refreshDelayMs(false, true)).toBe(0);
+    expect(refreshDelayMs(true, true)).toBe(0);
+  });
+
+  it("gathers a burst of events in a visible tab into one refresh", () => {
+    expect(refreshDelayMs(false, false)).toBe(REFRESH_DEBOUNCE_MS);
+    expect(REFRESH_DEBOUNCE_MS).toBeGreaterThan(0);
+    expect(REFRESH_DEBOUNCE_MS).toBeLessThanOrEqual(1000);
+  });
+
+  it("never waits on a wake or the minute tick", () => {
+    expect(refreshDelayMs(true, false)).toBe(0);
+  });
+
+  it("is what the Inbox page asks, with the tab's own hidden state", () => {
+    const src = readFileSync(path.join(process.cwd(), "app/inbox/InboxLive.tsx"), "utf8");
+    expect(src).toContain("refreshDelayMs(immediate, document.hidden)");
+    // The stream stays open in a hidden tab: nothing closes it on visibilitychange.
+    expect(src).not.toMatch(/document\.hidden\)\s*source\?*\.close/);
+  });
+});
 
 describe("inboxTitle", () => {
   it("is the plain name with nothing unread and (n) Inbox otherwise", () => {

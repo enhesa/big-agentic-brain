@@ -83,9 +83,9 @@
 .md pre {
   margin: 0 0 0.75em;
   padding: 12px 14px;
-  background: #fff;
-  border: 1px solid rgba(26, 51, 96, 0.12);
-  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
   overflow-x: auto;
   line-height: 1.5;
 }

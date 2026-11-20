@@ -431,7 +431,7 @@ function Initiative({ r }: { r: Rec }) {
   const main = r.tasks.find((t) => t.status === "in_progress") ?? r.tasks.find((t) => t.status === "pending");
   const late = overdueDays(r);
   const lateText = `Overdue by ${late} ${late === 1 ? "day" : "days"}`;
-  const cls = [styles.card, styles[`status_${r.status}`] ?? "", r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].join(" ");
+  const cls = [styles.card, r.silent || paused ? styles.greyed : "", r.status === "finished" ? styles.isDone : ""].filter(Boolean).join(" ");
   return (
     <article className={cls} data-initiative={r.id} data-card={r.id} data-status={r.status} aria-labelledby={`cc-i-${r.id}`}>
       <div className={styles.cardHead}>

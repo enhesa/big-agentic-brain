@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   SAFETY_REFRESH_MS,
   UNREAD_EVENT,
+  refreshDelayMs,
   faviconDotHref,
   inboxTitle,
   isSilent,
@@ -15,7 +16,6 @@ import {
 } from "@/lib/inbox-live-state";
 import styles from "./inbox.module.css";
 
-const REFRESH_DEBOUNCE_MS = 300;
 const WATCHDOG_MS = 10_000;
 
 /**
@@ -106,8 +106,10 @@ export default function InboxLive({ unread, accent }: { unread: number; accent: 
     function refreshSoon(immediate = false) {
       void fetchCount();
       if (refreshTimer) clearTimeout(refreshTimer);
-      if (immediate || document.hidden) routerRef.current?.refresh();
-      else refreshTimer = setTimeout(() => routerRef.current?.refresh(), REFRESH_DEBOUNCE_MS);
+      // A hidden tab refreshes at once (lib/inbox-live-state.ts refreshDelayMs).
+      const delay = refreshDelayMs(immediate, document.hidden);
+      if (delay === 0) routerRef.current?.refresh();
+      else refreshTimer = setTimeout(() => routerRef.current?.refresh(), delay);
     }
 
     function connect() {

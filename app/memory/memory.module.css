@@ -10,14 +10,14 @@
 }
 
 .h1 {
-  font-size: 1.7rem;
-  letter-spacing: -0.02em;
+  font-size: var(--page-title);
+  line-height: 1.08;
 }
 
 .subline {
-  margin: 4px 0 0;
+  margin: 8px 0 0;
   color: var(--steel);
-  font-size: 0.92rem;
+  font-size: 1.02rem;
 }
 
 /* ------------------------------------------------------------------ search */
@@ -155,7 +155,7 @@
   pointer-events: none;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.2;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -314,7 +314,7 @@
 .chipN {
   font-weight: 400;
   opacity: 0.7;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 /* Project filter chips reuse .chip's mechanics but read as a scope, not a
@@ -479,7 +479,7 @@
 
 .repo {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .tags {
@@ -494,7 +494,7 @@
   color: var(--navy);
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -513,7 +513,7 @@
   border: 1px solid rgba(26, 51, 96, 0.2);
   border-radius: 5px;
   padding: 1px 7px;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-head);
   text-transform: uppercase;
@@ -604,7 +604,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-head);
   text-transform: uppercase;
@@ -646,7 +646,7 @@
   display: inline-block;
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-head);
   border: 1px solid rgba(63, 81, 117, 0.3);
@@ -700,7 +700,7 @@
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-head);
   text-transform: uppercase;
@@ -896,7 +896,7 @@
   display: block;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--steel);
@@ -952,6 +952,12 @@
 }
 
 @media (max-width: 640px) {
+  /* A filter chip is a tap target on a phone. */
+  .chip {
+    min-height: 34px;
+    padding: 6px 13px;
+  }
+
   .filterBar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1008,7 +1014,7 @@
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-head);
   text-transform: uppercase;
@@ -1023,7 +1029,7 @@
   border: 1px solid var(--mist);
   border-radius: 5px;
   padding: 1px 7px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--steel);
 }
 
@@ -1048,7 +1054,7 @@
   color: #fff;
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-decoration: none;
 }
@@ -1065,7 +1071,7 @@
   color: var(--navy);
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -1115,12 +1121,19 @@
 .reactBtn:focus-visible {
   outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
+  border-radius: 999px;
 }
 
-.reactBtn[aria-pressed="true"] {
+.reactBtn[aria-pressed="true"],
+.reactBtnMain {
   background: var(--navy);
   border-color: var(--navy);
   color: #fff;
+}
+
+.reactBtnMain:hover {
+  background: var(--navy-deep);
+  border-color: var(--navy-deep);
 }
 
 .reactLabel {
@@ -1228,6 +1241,7 @@
 .commentInput:focus-visible {
   outline: 2px solid var(--teal-ink);
   outline-offset: 2px;
+  border-radius: var(--field-radius);
 }
 
 .commentForm {
@@ -1246,9 +1260,9 @@
   width: 100%;
   box-sizing: border-box;
   min-height: 72px;
-  padding: 10px 12px;
-  border: 1px solid var(--steel);
-  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--field-edge);
+  border-radius: var(--field-radius);
   background: var(--paper);
   color: var(--navy);
   resize: vertical;
@@ -1277,27 +1291,43 @@
 /* --------------------------------------------------------- review page */
 
 .reviewSection {
-  margin: 22px 0 0;
+  margin: 40px 0 0;
 }
 
 .reviewSection h2 {
   font-family: var(--font-head);
-  font-size: 1rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.015em;
   color: var(--navy);
   margin: 0 0 4px;
 }
 
+.reviewSection > .reactHint {
+  font-size: 0.95rem;
+}
+
+/* An empty queue: one quiet line on sand in place of an empty sheet. */
+.reviewNone {
+  max-width: 640px;
+  margin: 12px 0 0;
+  padding: 14px 18px;
+  background: color-mix(in srgb, var(--sand) 62%, transparent);
+  border-radius: 16px;
+  color: var(--steel);
+  font-size: 0.95rem;
+}
+
 .reviewList {
   list-style: none;
-  margin: 10px 0 0;
+  margin: 14px 0 0;
   padding: 0;
 }
 
 .reviewItem {
   background: var(--sheet);
   border: 1px solid var(--hairline);
-  border-radius: 16px;
-  padding: 16px 18px;
+  border-radius: var(--sheet-radius);
+  padding: 20px 22px;
 }
 
 /* The note is one line here, so its box is one line high. */
@@ -1315,11 +1345,46 @@
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  font-family: var(--font-head);
   font-weight: 700;
+  font-size: 1.06rem;
+  line-height: 1.3;
 }
 
 .reviewForm {
   display: grid;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.reviewForm .reactRow {
+  margin: 4px 0 0;
+}
+
+/* A title is navy ink, like a row on the Memory page; teal is for a link inside a sentence. */
+.reviewTitle .link {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.reviewTitle .link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* "No comments yet." and the form under it are two things: a gap says so. */
+.reactHint + .commentForm {
+  margin-top: 18px;
+}
+
+/* Forced colours drop fills: the chosen chip and a pressed reaction keep a mark of their own. */
+@media (forced-colors: active) {
+  .chipOn,
+  .reactBtn[aria-pressed="true"],
+  .reactBtnMain {
+    border: 2px solid Highlight;
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
 }

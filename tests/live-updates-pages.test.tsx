@@ -33,7 +33,7 @@ describe("LiveUpdates is wired into the read-only pages", () => {
     vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
     const { default: MemoryPage } = await import("../app/memory/page");
     const html = await renderHtml(MemoryPage({ searchParams: Promise.resolve({}) }));
-    expect(html).toMatch(/title="Reconnecting"|title="Live"/);
+    expect(html).toMatch(/>(Connecting|Reconnecting|Live)<\/span>/);
   });
 
   it("renders on app/memory/[id]/page.tsx", async () => {
@@ -45,7 +45,7 @@ describe("LiveUpdates is wired into the read-only pages", () => {
 
     const { default: LearningDetailPage } = await import("../app/memory/[id]/page");
     const html = await renderHtml(LearningDetailPage({ params: Promise.resolve({ id: learning.id }) }));
-    expect(html).toMatch(/title="Reconnecting"|title="Live"/);
+    expect(html).toMatch(/>(Connecting|Reconnecting|Live)<\/span>/);
   });
 
   it("is gone from the Users section of app/usage/page.tsx (it only followed presence)", async () => {
@@ -59,7 +59,7 @@ describe("LiveUpdates is wired into the read-only pages", () => {
     const { default: UsagePage } = await import("../app/usage/page");
     const html = await renderHtml(await UsagePage());
     expect(html).toContain('id="users"');
-    expect(html).not.toMatch(/id="users"[\s\S]*(title="Reconnecting"|title="Live")/);
+    expect(html).not.toMatch(/id="users"[\s\S]*>(Connecting|Reconnecting|Live)<\/span>/);
   });
 
   it("renders on app/conversations/[threadId]/page.tsx, for a signed-in participant", async () => {
@@ -83,6 +83,6 @@ describe("LiveUpdates is wired into the read-only pages", () => {
 
     const { default: ConversationDetailPage } = await import("../app/conversations/[threadId]/page");
     const html = await renderHtml(ConversationDetailPage({ params: Promise.resolve({ threadId: thread.id }) }));
-    expect(html).toMatch(/title="Reconnecting"|title="Live"/);
+    expect(html).toMatch(/>(Connecting|Reconnecting|Live)<\/span>/);
   });
 });

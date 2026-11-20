@@ -47,7 +47,11 @@ export default function TopNav({ orgName }: { orgName: string }) {
           {NAV_ITEMS.map((item) => {
             // The Inbox item hides while BAB_INBOX_PAGE=0 and carries the unread count.
             if (item.href === "/inbox" && inbox.off) return null;
-            const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            // A thread's own page (/conversations/<id>) belongs to the Inbox: it has no item of its own.
+            const current =
+              pathname === item.href ||
+              pathname.startsWith(`${item.href}/`) ||
+              (item.href === "/inbox" && pathname.startsWith("/conversations/"));
             return (
               <Link
                 key={item.href}

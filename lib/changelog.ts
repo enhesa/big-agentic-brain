@@ -40,6 +40,11 @@ export const CHANGELOG: ChangelogEntry[] = [
       "BAB Tasks keeps up to 1000 initiatives and 20 MB per person, up from 100 and 256 KB.",
       "The people list for agents shows last seen and memory counts to maintainers only.",
       "The plugin sends its device header without starting programs, so busy Windows machines are no longer refused.",
+      "Tasks, Usage, News, Feedback, Devices and Admin stand on paper too, with pill buttons and clearer fields.",
+      "A wrong address shows a page with a way back, where it used to be blank white.",
+      "The unread count is a darker red that is easier to read, and live updates say their state in words.",
+      "Small print is never under 12 pixels, and a thread's own page marks Inbox in the top bar.",
+      "On a phone an open Inbox thread takes the page, with a link back to the list.",
     ],
   },
   {

@@ -8,6 +8,9 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import StatusChip from "./StatusChip";
 import styles from "./feedback.module.css";
 
+/** A stored word such as "open" or "bug", shown with a capital: "Open", "Bug". */
+const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
 const PAGE_SIZE = 20;
 
 type Params = { status?: string; kind?: string; area?: string; sort?: string; q?: string; offset?: string };
@@ -63,7 +66,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
           <option value="all">Every status</option>
           {FEEDBACK_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {cap(s)}
             </option>
           ))}
         </select>
@@ -71,7 +74,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
           <option value="">Any kind</option>
           {FEEDBACK_KINDS.map((k) => (
             <option key={k} value={k}>
-              {k}
+              {cap(k)}
             </option>
           ))}
         </select>
@@ -79,7 +82,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
           <option value="">Any area</option>
           {FEEDBACK_AREAS.map((a) => (
             <option key={a} value={a}>
-              {a}
+              {cap(a)}
             </option>
           ))}
         </select>
