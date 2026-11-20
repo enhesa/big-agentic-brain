@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.35.0](https://github.com/enhesa/big-agentic-brain/compare/v2.34.1...v2.35.0) (2026-11-20)
+
+
+### Features
+
+* add a showcase film, drawn in code ([#177](https://github.com/enhesa/big-agentic-brain/issues/177)) ([c187241](https://github.com/enhesa/big-agentic-brain/commit/c187241776c7107b05ea9916df6f7bf6f72ca96c))
+* **SOFTARCH-71:** play the film as an animated SVG on the landing page ([#180](https://github.com/enhesa/big-agentic-brain/issues/180)) ([77d5440](https://github.com/enhesa/big-agentic-brain/commit/77d54407fa247c3f29822be7cef2d104d3828f9b))
+
 ## [2.34.1](https://github.com/enhesa/big-agentic-brain/compare/v2.34.0...v2.34.1) (2026-11-19)
 
 
