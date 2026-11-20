@@ -24,7 +24,8 @@ function scan(mode: "--text" | "--commit-messages", input: string) {
 const at = "@";
 const dot = ".";
 
-// Every test spawns bash, which can take seconds each on a loaded Windows machine.
+// Every test spawns bash, and each scan forks many small tools. On a loaded Windows machine one
+// scan can take 15 seconds, and a test runs up to four, so a test gets four minutes.
 describe("public repository guardrails", () => {
   it("keeps the Public repository section identical in CLAUDE.md and AGENTS.md", () => {
     expect(section("AGENTS.md")).toBe(section("CLAUDE.md"));
@@ -78,4 +79,4 @@ describe("public repository guardrails", () => {
     expect(scan("--text", `db${dot}example${dot}prod${dot}internal\n`).status).toBe(1);
     expect(scan("--text", `git${at}github${dot}com:acme/repo\n`).status).toBe(0);
   });
-}, 60_000);
+}, 240_000);
