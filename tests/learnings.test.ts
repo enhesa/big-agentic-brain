@@ -92,6 +92,10 @@ describe("learnings.search", () => {
     expect(long.snippet).not.toMatch(/\s…$/);
     expect(short.snippet).toBe("Fits on the row.");
     expect(leadingText("x".repeat(200))).toBe("x".repeat(200));
+    // An emoji is two units. A cut between them drops the whole emoji, not half of it.
+    const emoji = String.fromCodePoint(0x1f600);
+    expect(leadingText(`${"x".repeat(199)}${emoji} more`)).toBe(`${"x".repeat(199)}…`);
+    expect(leadingText(`${"x".repeat(198)}${emoji} more`)).toBe(`${"x".repeat(198)}${emoji}…`);
   });
 });
 

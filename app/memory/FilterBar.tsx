@@ -119,7 +119,7 @@ export default function FilterBar({ values, fields }: FilterBarProps) {
       <div className={styles.filterBar}>
         {fields.map((f) => (
           <div key={f.name} className={styles.filterField}>
-            <label htmlFor={f.id} className={styles.filterLabel} title={f.description}>
+            <label htmlFor={f.id} className={styles.filterLabel}>
               {f.label}
             </label>
             <select

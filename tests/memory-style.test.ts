@@ -52,8 +52,12 @@ describe("the Memory pages on paper", () => {
       expect(rule(selector), selector).toContain("background: var(--sheet)");
       expect(rule(selector), selector).toContain("var(--hairline)");
     }
-    // No stark white card on paper is left in the list.
-    expect(rule(".rowLink")).not.toMatch(/background:\s*#fff/);
+    // No white or grey of its own is left as a background anywhere on the Memory pages.
+    expect(css).not.toMatch(/background(-color)?:\s*(#fff|#ffffff|white)\b/i);
+    // The quiet panels are sand, and both text colours read on it.
+    const sand = globals.match(/--sand:\s*(#[0-9a-f]{6})/)![1];
+    expect(ratio("#3f5175", sand)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio("#1a3360", sand)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("the list is one sheet of rows, and a row never cuts its title", () => {
@@ -67,17 +71,34 @@ describe("the Memory pages on paper", () => {
     expect(rule(".title:focus-visible::after")).toContain("outline: 3px solid var(--teal-ink)");
     // The project chip stays its own link above the stretched one.
     expect(rule(".project")).toMatch(/z-index:\s*2/);
+    // The sheet clips its rows, so the ring takes the sheet's corners where a row meets them.
+    expect(rule(".list")).toContain("overflow: hidden");
+    expect(rule(".row:first-child .title::after")).toContain("border-top-left-radius: var(--sheet-radius)");
+    expect(rule(".row:last-child .title::after")).toContain("border-bottom-right-radius: var(--sheet-radius)");
   });
 
   it("the search box and the filters keep the keyboard focus ring every page has", () => {
     expect(css).not.toMatch(/\.(search|select):focus[^{]*\{[^}]*outline:\s*none/);
     expect(rule(".search:focus-visible,\n.select:focus-visible")).toContain("border-color: var(--teal-ink)");
-    expect(globals).toMatch(/:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--teal-ink\)/);
+    // The global ring covers an input, not a select, so the select draws the same ring itself.
+    const ring = globals.match(/([^{}]*):focus-visible\s*\{[^}]*outline:\s*3px solid var\(--teal-ink\)[^}]*\}/)?.[0];
+    expect(ring, "the global focus ring").toBeTruthy();
+    expect(ring).toContain("input:focus-visible");
+    expect(rule(".select:focus-visible")).toContain("outline: 3px solid var(--teal-ink)");
+    // The global rule also squares the corners, so each control states its own again.
+    expect(ring).toMatch(/border-radius:\s*4px/);
+    expect(rule(".search:focus-visible")).toContain("border-radius: 999px");
+    expect(rule(".select:focus-visible")).toMatch(/border-radius:\s*0\.875rem/);
   });
 
   it("each filter carries its name inside the control, two to a row on a phone", () => {
     expect(rule(".filterLabel")).toMatch(/position:\s*absolute/);
     expect(rule(".filterLabel")).toContain("pointer-events: none");
+    // Name and value are both placed in rem, so a larger text size moves them together.
+    expect(rule(".filterLabel")).toMatch(/top:\s*[\d.]+rem/);
+    expect(rule(".select")).toMatch(/padding:\s*[\d.]+rem /);
+    const labelSize = Number(rule(".filterLabel").match(/font-size:\s*([\d.]+)rem/)![1]);
+    expect(labelSize).toBeGreaterThanOrEqual(0.7);
     const phone = media("(max-width: 640px)");
     expect(phone).toMatch(/\.filterBar\s*\{[^}]*grid-template-columns:\s*repeat\(2,/);
     // The label swallows no clicks, so the hint moved to the select, where a pointer rests.
@@ -105,9 +126,19 @@ describe("the Memory pages on paper", () => {
 
   it("a memory's page reads in one column, with its facts beside it on a wide screen", () => {
     expect(rule(".detail")).toContain("display: grid");
+    expect(rule(".detail")).toMatch(/grid-template-columns:\s*minmax\(0, 760px\);/);
     const wide = media("(min-width: 1000px)");
-    expect(wide).toMatch(/\.detail > \.facts\s*\{[^}]*grid-column:\s*2/);
-    expect(wide).toMatch(/\.detail > \.facts\s*\{[^}]*position:\s*sticky/);
+    const facts = wide.match(/\.detail:has\(> \.facts\) > \.facts\s*\{[^}]*\}/)?.[0];
+    expect(facts, "the facts rule on a wide screen").toBeTruthy();
+    expect(facts).toMatch(/grid-column:\s*2/);
+    expect(facts).toMatch(/position:\s*sticky/);
+    // A facts box taller than the screen scrolls inside itself.
+    expect(facts).toMatch(/max-height:\s*calc\(100vh - \d+px\)/);
+    expect(facts).toMatch(/overflow:\s*auto/);
+    // Two columns only where there are facts: the review queue shares .detail and stays one column.
+    expect(wide).toMatch(/\.detail:has\(> \.facts\)\s*\{[^}]*grid-template-columns/);
+    expect(wide).not.toMatch(/(^|\n)\s*\.detail\s*\{/);
+    expect(read("app/memory/review/page.tsx")).not.toContain("styles.facts");
     // The facts stay a direct child of .detail: the order on a phone is the order in the page.
     const page = read("app/memory/[id]/page.tsx");
     expect(page.indexOf("className={styles.body}")).toBeLessThan(page.indexOf("className={styles.facts}"));
@@ -117,8 +148,11 @@ describe("the Memory pages on paper", () => {
 
   it("motion is off for every transition when the reader asks for less", () => {
     const calm = media("(prefers-reduced-motion: reduce)");
-    for (const selector of [".rowLink", ".chip", ".search", ".select", ".pill", ".reactBtn"]) {
-      expect(calm, selector).toContain(selector);
+    const still = calm.match(/([^{}]*)\{\s*transition:\s*none;\s*\}/)?.[1];
+    expect(still, "one rule turns every transition off").toBeTruthy();
+    const listed = still!.split(",").map((s) => s.trim());
+    for (const selector of [".rowLink", ".chip", ".search", ".select", ".pill", ".reactBtn", ".filters ~ *"]) {
+      expect(listed, selector).toContain(selector);
     }
     expect(calm).toMatch(/\.row\s*\{[^}]*animation:\s*none/);
   });

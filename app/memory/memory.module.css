@@ -114,6 +114,17 @@
   border-color: var(--teal-ink);
 }
 
+/* The global rule squares a focused control's corners and does not cover a select. */
+.search:focus-visible {
+  border-radius: 999px;
+}
+
+.select:focus-visible {
+  outline: 3px solid var(--teal-ink);
+  outline-offset: 2px;
+  border-radius: 0.875rem;
+}
+
 /* ---------------------------------------------------------------- filters */
 
 /* One row of filters. Each is one control with its name inside it, so there is no row of
@@ -130,15 +141,21 @@
   min-width: 0;
 }
 
-/* Drawn over the select's top edge. Clicks fall through to the select. */
+/* Drawn over the select's top edge. Clicks fall through to the select. Offsets are in rem,
+   like the select's padding, so the name and the value never meet at a larger text size. */
 .filterLabel {
   position: absolute;
-  top: 8px;
-  left: 14px;
+  top: 0.5rem;
+  left: 0.875rem;
+  right: 1.9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   pointer-events: none;
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--steel);
@@ -152,9 +169,9 @@
   font-family: var(--font-body);
   font-size: 0.88rem;
   font-weight: 500;
-  padding: 23px 30px 8px 13px;
+  padding: 1.5rem 1.9rem 0.5rem 0.8125rem;
   border: 1px solid var(--hairline);
-  border-radius: 14px;
+  border-radius: 0.875rem;
   color: var(--navy);
   text-overflow: ellipsis;
   background-color: var(--sheet);
@@ -399,6 +416,17 @@
   outline-offset: -3px;
 }
 
+/* The sheet clips its rows, so the ring takes the sheet's corners on the first and last row. */
+.row:first-child .title::after {
+  border-top-left-radius: var(--sheet-radius);
+  border-top-right-radius: var(--sheet-radius);
+}
+
+.row:last-child .title::after {
+  border-bottom-left-radius: var(--sheet-radius);
+  border-bottom-right-radius: var(--sheet-radius);
+}
+
 /* Stretches the title's own link to cover the whole (positioned) row card,
    so the row stays fully clickable with only one real <a> in the DOM. */
 .title::after {
@@ -535,8 +563,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The box above already leaves 18px, and margins do not collapse between grid items. */
 .notes {
-  margin: 18px 0 0;
+  margin: 0;
 }
 
 .notes h2 {
@@ -722,7 +751,8 @@
 
 /* One column of reading. From 1000px the facts stand beside it instead of between the
    text and the comments. Every child stays a direct child, so the order on a phone and
-   for a screen reader is the order in the page. */
+   for a screen reader is the order in the page. A page without facts (the review queue)
+   stays one column. */
 .detail {
   display: grid;
   grid-template-columns: minmax(0, 760px);
@@ -734,19 +764,22 @@
 }
 
 @media (min-width: 1000px) {
-  .detail {
+  .detail:has(> .facts) {
     grid-template-columns: minmax(0, 720px) minmax(260px, 320px);
     justify-content: space-between;
     column-gap: 48px;
   }
 
-  /* Spans more rows than the page has. The spare rows are empty and take no room. */
-  .detail > .facts {
+  /* Spans more rows than the page has. The spare rows are empty and take no room. On a
+     short screen the box scrolls inside itself instead of running off the bottom. */
+  .detail:has(> .facts) > .facts {
     grid-column: 2;
     grid-row: 1 / span 30;
     align-self: start;
     position: sticky;
     top: 88px;
+    max-height: calc(100vh - 104px);
+    overflow: auto;
     margin: 34px 0 0;
   }
 }
@@ -889,6 +922,11 @@
   font-size: 0.9rem;
   color: var(--steel);
   margin: 6px 0;
+}
+
+/* Margins do not collapse between grid items, so the second line gives its own up. */
+.related + .related {
+  margin-top: 0;
 }
 
 .apiNote {
@@ -1061,7 +1099,7 @@
   padding: 8px 18px;
   border-radius: 999px;
   border: 1px solid var(--steel);
-  background: #fff;
+  background: transparent;
   color: var(--navy);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -1209,7 +1247,7 @@
   padding: 10px 12px;
   border: 1px solid var(--steel);
   border-radius: 12px;
-  background: #fff;
+  background: var(--paper);
   color: var(--navy);
   resize: vertical;
 }
