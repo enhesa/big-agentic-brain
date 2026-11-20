@@ -16,11 +16,19 @@
 :root {
   --navy: var(--accent, #1a3360);
   --steel: #3f5175;
-  --mist: #eaedf1;
+  /* Hairlines and quiet fills. A warm grey, so a line sits on paper without turning blue. */
+  --mist: #e6e0d0;
   --teal: #00b0a1;
   --amber: #ffb700;
   --coral: #ff4423;
   --sage: #aedad4;
+  /* The film's ground (showcase/, lib/film-story.mjs): every page stands on paper, and
+     sand is the one soft shape colour on it. */
+  --paper: #f5f2ea;
+  --sand: #e9e3d3;
+  /* Teal for words and focus rings. --teal is a fill: as text on paper it is 2.4 to 1.
+     This one is 5.7 to 1 on paper, 5.0 on sand and 6.4 on white. */
+  --teal-ink: #006b61;
 
   --font-body: "Inter", system-ui, sans-serif;
   --font-head: "Urbanist", var(--font-body);
@@ -62,7 +70,7 @@ body {
   font-family: var(--font-body);
   font-weight: 300;
   color: var(--navy);
-  background: #fff;
+  background: var(--paper);
 }
 
 h1,
@@ -76,12 +84,18 @@ h6 {
   margin: 0;
 }
 
+/* A page's title is set like the film's words: heavy and tight. */
+h1 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
 /* Keyboard focus: one brand treatment everywhere (landing buttons set their own). */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
-  outline: 3px solid var(--teal);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -141,7 +155,7 @@ a {
   font-size: 0.78rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 
 .card {

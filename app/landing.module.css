@@ -92,7 +92,7 @@
   top: 0;
   z-index: 20;
   /* Solid, not translucent: the page scrolls under this bar and must not show through it. */
-  background: #fff;
+  background: var(--paper);
   border-bottom: 1px solid var(--mist);
 }
 
@@ -136,14 +136,20 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px 26px;
+  /* Each link carries its own 12px of padding, so the words sit 26px apart as before. */
+  gap: 4px 2px;
   flex-wrap: wrap;
+  margin-right: -12px;
 }
 
 .navLink {
   font-size: 0.92rem;
   color: var(--steel);
-  transition: color 0.18s ease;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
   white-space: nowrap;
 }
 
@@ -164,12 +170,13 @@
 
 .navLink:hover {
   color: var(--navy);
+  background: rgba(233, 227, 211, 0.6);
 }
 
 /* ------------------------------------------------------------------- hero */
 
 .hero {
-  background: linear-gradient(180deg, #fff 0%, #fff 48%, var(--mist) 100%);
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 48%, var(--sand) 100%);
 }
 
 .heroInner {
@@ -1405,9 +1412,15 @@
   }
 
   .nav {
-    margin-left: 0;
+    /* The links carry 8px of padding here, so the row starts 8px early to line up with the logo. */
+    margin-left: -8px;
+    margin-right: 0;
     width: 100%;
-    gap: 12px 18px;
+    gap: 4px 2px;
+  }
+
+  .navLink {
+    padding: 6px 8px;
   }
 
   .navCta {

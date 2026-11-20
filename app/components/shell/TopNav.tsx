@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import styles from "./Shell.module.css";
 import { NAV_ITEMS } from "../nav-items";
 import InboxBadge from "./InboxBadge";
@@ -9,7 +10,7 @@ import { useInboxUnread } from "./useInboxUnread";
 
 /**
  * The inner-page bar, deliberately identical in style to the landing page's TopBar
- * (app/components/landing/TopBar.tsx): the same light sticky bar, solid white so the page
+ * (app/components/landing/TopBar.tsx): the same light sticky bar, solid paper so the page
  * does not show through it, the same navy wordmark, the same steel links. The bar keeps one size at every
  * scroll position: it used to shrink on scroll, which was jumpy, so that is gone. Decided: "the navbar on the inner pages the same as the homepage".
  *
@@ -19,6 +20,18 @@ import { useInboxUnread } from "./useInboxUnread";
 export default function TopNav({ orgName }: { orgName: string }) {
   const pathname = usePathname() ?? "";
   const inbox = useInboxUnread();
+  const nav = useRef<HTMLElement>(null);
+
+  // On a phone the links are one row that scrolls sideways (Shell.module.css). Bring the page
+  // you are on into the middle of it, so you never land on a page whose link is off screen.
+  // It moves the row only, never the page, and does nothing where the row fits.
+  useEffect(() => {
+    const row = nav.current;
+    const on = row?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!row || !on || row.scrollWidth <= row.clientWidth) return;
+    const left = on.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft;
+    row.scrollLeft = Math.max(0, left - (row.clientWidth - on.offsetWidth) / 2);
+  }, [pathname, inbox.off]);
 
   return (
     <header className={styles.topbar}>
@@ -30,7 +43,7 @@ export default function TopNav({ orgName }: { orgName: string }) {
           <span className={styles.brandName}>Big Agentic Brain</span>
         </Link>
 
-        <nav className={styles.nav} aria-label="Primary">
+        <nav ref={nav} className={styles.nav} aria-label="Primary">
           {NAV_ITEMS.map((item) => {
             // The Inbox item hides while BAB_INBOX_PAGE=0 and carries the unread count.
             if (item.href === "/inbox" && inbox.off) return null;
