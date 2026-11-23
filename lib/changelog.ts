@@ -19,6 +19,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-23",
+    title: "A landing page you scroll like a film",
+    changes: [
+      "On a wide screen the landing page pins the film: scrolling plays it, act by act.",
+      "The two install commands are on the first screen of the landing page.",
+      "On a phone the film is a player, with its seven acts listed in words under it.",
+    ],
+  },
+  {
     date: "2026-11-20",
     title: "A short film shows what BAB is",
     changes: [

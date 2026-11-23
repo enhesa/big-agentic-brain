@@ -2,10 +2,14 @@
   scroll-behavior: smooth;
 }
 
-/* The whole page stands on the film's paper. Two sections are bands on it: sand for
-   installing, navy for the film. Nothing else paints a ground. */
+/* The whole page stands on the film's paper, and the film is drawn straight on it. One
+   section is a band: sand, for installing. Nothing else paints a ground.
+   clip, not hidden: hidden would make the page its own scroll box, and nothing could be
+   pinned to the window (the top bar, the film). */
 .page {
-  overflow-x: hidden;
+  /* The top bar's height: what a pinned thing has to stay below. */
+  --bar: 68px;
+  overflow-x: clip;
   background: var(--paper);
 }
 
@@ -25,10 +29,6 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--steel);
-}
-
-.eyebrowLight {
-  color: var(--sage);
 }
 
 /* --------------------------------------------------------------- buttons */
@@ -176,26 +176,31 @@
 /* ------------------------------------------------------------------- hero */
 
 .hero {
+  position: relative;
   background: var(--paper);
 }
 
 .heroInner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
   gap: 48px;
   align-items: center;
-  min-height: max(640px, calc(100svh - 68px));
-  padding-block: 40px 56px;
+  min-height: max(680px, calc(100svh - var(--bar)));
+  padding-block: 40px 84px;
 }
 
 .heroCopy {
   min-width: 0;
 }
 
+.heroArt {
+  min-width: 0;
+}
+
 .h1 {
   font-family: var(--font-head);
   font-weight: 800;
-  font-size: clamp(2.9rem, 7.4vw, 5.2rem);
+  font-size: clamp(2.9rem, 7.4vw, 5.6rem);
   line-height: 1;
   letter-spacing: -0.03em;
   color: var(--navy);
@@ -278,29 +283,6 @@
   }
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 20px 0 0;
-  padding: 0;
-  list-style: none;
-  opacity: 0;
-  animation: fadeUp 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.72s forwards;
-}
-
-.chip {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.76rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--navy);
-  background: rgba(174, 218, 212, 0.4);
-  border-radius: 999px;
-  padding: 7px 15px;
-}
-
 .ctaRow {
   display: flex;
   flex-wrap: wrap;
@@ -308,7 +290,57 @@
   gap: 6px 20px;
   margin-top: 26px;
   opacity: 0;
+  animation: fadeUp 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.72s forwards;
+}
+
+/* The two install commands, on the first screen: one sheet, one command per row. */
+.heroInstall {
+  max-width: 540px;
+  margin-top: 28px;
+  padding: 14px 16px 12px 20px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  opacity: 0;
   animation: fadeUp 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.88s forwards;
+}
+
+.heroInstallLabel {
+  display: block;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+.heroInstallRows > * {
+  padding: 9px 0;
+}
+
+.heroInstallRows > * + * {
+  border-top: 1px solid var(--hairline);
+}
+
+.heroInstall .promptText {
+  flex-basis: 180px;
+  font-size: 0.88rem;
+}
+
+.heroInstallMore {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--teal-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Says that scrolling plays the film. Shown only where it does. */
+.scrollCue {
+  display: none;
 }
 
 /* ---------------------------------------------------- hero knowledge graph */
@@ -428,10 +460,6 @@
   letter-spacing: -0.02em;
   color: var(--navy);
   margin: 10px 0 0;
-}
-
-.h2Light {
-  color: #fff;
 }
 
 .sub {
@@ -959,7 +987,8 @@
     padding-block: 48px 64px;
   }
 
-  .lede {
+  .lede,
+  .heroInstall {
     max-width: none;
   }
 
@@ -1054,7 +1083,7 @@
   .wordInner,
   .underline path,
   .lede,
-  .chips,
+  .heroInstall,
   .ctaRow,
   .revealed .ink1,
   .revealed .ink2,
@@ -1093,7 +1122,7 @@
   }
 
   .lede,
-  .chips,
+  .heroInstall,
   .ctaRow {
     opacity: 1;
   }
@@ -1118,17 +1147,15 @@
 
 /* ------------------------------------------------------------------ film */
 
+/* The film is drawn on the page's own paper, with no band behind it. Here it is a player in
+   the page: a framed stage, its buttons, and the acts as a numbered list. A wide screen pins
+   it and lets the scroll play it (the media query below). */
 .filmSection {
-  --band: var(--navy);
-  /* On navy the bright teal is the one that reads: the dark one is 1.9 to 1 here. */
-  --teal-ink: var(--teal);
+  padding: 84px 0;
 }
 
-.filmLede {
-  margin: 14px 0 0;
-  font-size: 1.1rem;
-  line-height: 1.5;
-  color: var(--sage);
+.filmHead {
+  margin-bottom: 32px;
 }
 
 .filmFrame {
@@ -1140,9 +1167,9 @@
 .filmStage {
   aspect-ratio: 16 / 9;
   overflow: hidden;
+  border: 1px solid var(--hairline);
   border-radius: 20px;
   background: var(--paper) center / cover no-repeat;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
 }
 
 .filmSvg {
@@ -1151,13 +1178,26 @@
   height: 100%;
 }
 
+.filmStory {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--steel);
+}
+
+.filmStrip {
+  max-width: 960px;
+  margin: 22px auto 0;
+}
+
 .filmBar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 10px 18px;
-  margin-top: 16px;
+  margin-top: 26px;
 }
 
 .filmControls {
@@ -1169,10 +1209,10 @@
   min-width: 92px;
   min-height: 40px;
   padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--field-edge);
   border-radius: 999px;
   background: transparent;
-  color: #fff;
+  color: var(--navy);
   font: 600 0.92rem var(--font-body);
   cursor: pointer;
   transition:
@@ -1181,33 +1221,85 @@
 }
 
 .filmButton:hover {
-  border-color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--navy);
+  background: color-mix(in srgb, var(--sand) 60%, transparent);
 }
 
 .filmButton:focus-visible,
 .filmLink:focus-visible {
-  outline: 2px solid var(--amber);
+  outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
 }
 
 .filmLink {
-  color: var(--sage);
+  color: var(--teal-ink);
   font-size: 0.92rem;
   font-weight: 600;
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .filmLink:hover {
-  color: #fff;
+  color: var(--navy);
 }
 
-.filmStory {
-  margin: 14px 0 0;
-  text-align: center;
-  font-size: 0.92rem;
+/* A way past the pinned film. Nothing to skip while the film is a player. */
+.filmSkip {
+  display: none;
+}
+
+/* The acts in words. */
+.actList {
+  display: grid;
+  gap: 16px 40px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.act {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  gap: 0 12px;
+  align-items: baseline;
+}
+
+.actNo {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--teal-ink);
+}
+
+.actWords,
+.actTitle,
+.actText {
+  display: block;
+}
+
+.actTitle {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.02rem;
+  color: var(--navy);
+}
+
+.actText {
+  margin-top: 2px;
+  font-size: 0.95rem;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--steel);
+}
+
+.rail {
+  display: none;
+}
+
+@media (min-width: 700px) {
+  .actList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Less motion asked for: the still poster stands in for the film, until someone presses Play. */
@@ -1234,6 +1326,242 @@
 @media (max-width: 760px) {
   .filmStage {
     border-radius: 12px;
+  }
+}
+
+/* -------------------------------------------------- the film, played by scroll */
+
+/* A wide and tall enough window, motion welcome, script running: the film is pinned under the
+   top bar and the page's scroll is its clock (FilmScroll). The same words are SCRUB_QUERY in
+   lib/film-scroll.ts; tests/film-scroll.test.ts keeps the two in step. */
+@media (min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  /* The length of the scroll that plays the film: about one window per act. */
+  .filmSection {
+    height: 760vh;
+    padding: 0;
+  }
+
+  .filmPin {
+    position: sticky;
+    top: var(--bar);
+    height: calc(100svh - var(--bar));
+  }
+
+  .filmInner {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100%;
+    padding-block: 16px 24px;
+  }
+
+  /* The acts name the film here. The heading stays for screen readers. */
+  .filmHead,
+  .filmStory {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .filmFrame {
+    display: grid;
+    place-items: center;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+  }
+
+  /* No frame: the film's paper is the page's paper, and its soft shapes run past its edge. */
+  .filmStage {
+    width: min(100%, calc((100svh - var(--bar) - 190px) * 16 / 9));
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .filmSvg {
+    overflow: visible;
+  }
+
+  .filmStrip {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  /* One act at a time, in the same place: each dissolves into the next. */
+  .actList {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-right: 300px;
+  }
+
+  .act {
+    grid-area: 1 / 1;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0 22px;
+    align-items: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition:
+      opacity 0.3s ease,
+      transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .actOn {
+    opacity: 1;
+    transform: none;
+  }
+
+  .actNo {
+    font-size: clamp(2.8rem, 5vw, 3.8rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .actTitle {
+    font-size: 1.4rem;
+    line-height: 1.15;
+  }
+
+  .actText {
+    margin-top: 4px;
+    font-size: 1rem;
+  }
+
+  /* How far the film is, with a notch where each act begins. */
+  .rail {
+    position: relative;
+    display: block;
+    height: 3px;
+    margin-top: 18px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--mist);
+  }
+
+  .railFill {
+    position: absolute;
+    inset: 0;
+    background: var(--teal);
+    transform: scaleX(var(--film-at, 0));
+    transform-origin: left;
+  }
+
+  .railMark {
+    position: absolute;
+    top: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--paper);
+    transform: translateX(-50%);
+  }
+
+  .filmBar {
+    position: absolute;
+    top: 10px;
+    right: 0;
+    margin: 0;
+  }
+
+  .filmControls {
+    display: none;
+  }
+
+  .filmSkip {
+    display: inline;
+  }
+
+  .scrollCue {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    transform: translateX(-50%);
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+
+  .scrollCueLine {
+    width: 1px;
+    height: 30px;
+    background: var(--navy);
+    transform-origin: top;
+    animation: cue 1.8s ease-in-out infinite;
+  }
+
+  /* Leaving the first screen: the words lift away and the graph comes closer, so the film
+     seems to start inside it. Tied to the scroll where the browser can do that; elsewhere
+     the hero simply scrolls away. */
+  @supports (animation-timeline: view()) {
+    .hero {
+      view-timeline: --hero block;
+    }
+
+    .heroCopy {
+      animation: heroLift linear both;
+      animation-timeline: --hero;
+      animation-range: exit 0% exit 85%;
+    }
+
+    .heroArt {
+      transform-origin: 50% 60%;
+      animation: heroPush linear both;
+      animation-timeline: --hero;
+      animation-range: exit 0% exit 100%;
+    }
+
+    .scrollCue {
+      animation: heroFade linear both;
+      animation-timeline: --hero;
+      animation-range: exit 0% exit 25%;
+    }
+  }
+}
+
+@keyframes cue {
+  0% {
+    transform: scaleY(0);
+  }
+  55% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+@keyframes heroLift {
+  to {
+    opacity: 0;
+    transform: translateY(-110px);
+  }
+}
+
+@keyframes heroPush {
+  to {
+    opacity: 0.12;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes heroFade {
+  to {
+    opacity: 0;
   }
 }
 

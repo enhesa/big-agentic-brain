@@ -142,7 +142,7 @@ describe("one page width", () => {
     expect(read("app/components/shell/Shell.module.css")).not.toMatch(/\.content\s*\{[^}]*background/);
   });
 
-  it("the landing page is one paper ground with two bands, sand for installing and navy for the film", () => {
+  it("the landing page is one paper ground with one band, sand for installing, and the film drawn on the paper", () => {
     const css = read("app/landing.module.css");
     // Every rule for the selector, media queries included. A selector that is gone fails the test.
     const rule = (selector: string) => {
@@ -159,12 +159,12 @@ describe("one page width", () => {
     // A band draws its ground behind the section, so its content keeps the page's one column.
     expect(css).toMatch(/\.band::before\s*\{[^}]*background:\s*var\(--band\)/);
     expect(rule(".installSection")).toContain("--band: var(--sand)");
-    expect(rule(".filmSection")).toContain("--band: var(--navy)");
-    // On navy the bright teal is the one that reads.
-    expect(rule(".filmSection")).toContain("--teal-ink: var(--teal)");
-    for (const file of ["app/components/landing/GetStarted.tsx", "app/components/landing/Film.tsx"]) {
-      expect(read(file), file).toContain("styles.band");
-    }
+    expect(read("app/components/landing/GetStarted.tsx")).toContain("styles.band");
+    // The film has no band and no ground of its own: its paper is the page's paper.
+    expect(rule(".filmSection")).not.toMatch(/--band|background/);
+    expect(read("app/components/landing/Film.tsx")).not.toContain("styles.band");
+    // Where the scroll plays it, the film has no frame either, and its soft shapes run past its edge.
+    expect(rule(".filmStage")).toContain("overflow: visible");
   });
 
   it("the FAQ is two balanced columns of rows that never split", () => {

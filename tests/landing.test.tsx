@@ -58,6 +58,22 @@ describe("landing page", () => {
     for (const kind of ["Memories", "Reminders", "Messages"]) expect(html).toContain(kind);
   });
 
+  it("puts the install commands on the first screen, before the film", () => {
+    const hero = html.slice(0, html.indexOf('id="film"'));
+    expect(hero).toContain("Install in Claude Code");
+    expect(hero).toContain("/plugin marketplace add acme/claude-plugins");
+    expect(hero).toContain("/plugin install bab@acme-plugins");
+    expect(hero).toMatch(/<a\b[^>]*href="#film"/);
+    expect(hero).toMatch(/<a\b[^>]*href="#get-started"/);
+  });
+
+  it("tells the story in film order: the film, how it works, what you get, installing, questions", () => {
+    const at = (id: string) => html.indexOf(`id="${id}"`);
+    const order = ["film", "how-it-works", "what-it-holds", "get-started", "faq"].map(at);
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it("plays the short film as an animated drawing, with the video as a download", () => {
     expect(html).toContain('id="film"');
     const film = html.match(/<svg\b[^>]*id="film-svg"[^>]*>[\s\S]*?<\/svg>/)?.[0] ?? "";
@@ -94,10 +110,13 @@ describe("landing page", () => {
     // The film has no sound, so the page says what happens in it instead of captions.
     expect(film).toContain('aria-describedby="film-story"');
     expect(html).toContain('id="film-story"');
-    // And scene by scene for people who cannot see it, with the same figures the film shows.
+    // And act by act in words, for everyone: the scroll shows one at a time, a phone lists them.
     const scenes = html.match(/<ol\b[^>]*aria-label="What the film shows"[^>]*>([\s\S]*?)<\/ol>/)?.[1] ?? "";
-    expect(scenes.match(/<li>/g)).toHaveLength(7);
+    expect(scenes.match(/<li\b/g)).toHaveLength(7);
     expect(scenes).toContain("for bugs that need team knowledge: 12% fixed without BAB, 79% with it");
+    // There is a way past the film, and a heading for it.
+    expect(html).toMatch(/<a\b[^>]*href="#how-it-works"[^>]*>Skip the film<\/a>/);
+    expect(html).toContain("One agent learns. The whole swarm knows.");
   });
 
   it("answers the common how-do-I questions in a FAQ", () => {

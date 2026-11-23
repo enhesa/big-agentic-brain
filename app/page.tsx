@@ -10,14 +10,17 @@ import Faq from "./components/landing/Faq";
 import Footer from "./components/shell/Footer";
 
 /**
- * The landing page is the demo, so nobody has to record one.
- * Order is the order a newcomer needs: what it is and how it works (hero + tour), what
- * Installation comes straight after the hero: someone sold by the
- * headline should not have to scroll past the explanation to find the one line they need.
- * Then how it works, then what you get (show the mechanism before the
- * argument; the why and what-it-holds sections merged into one). Under a minute, for any team.
- * The short film comes after the features: it retells the story for people who would rather
- * watch, and nobody has to pass it to find the install line.
+ * The landing page is the demo, so nobody has to record one. It is laid out like a short film,
+ * in the order a newcomer needs:
+ *
+ * 1. The first screen says what it is and holds the two install commands: someone sold by the
+ *    headline does not have to scroll to find them.
+ * 2. The film tells the story. On a wide screen it is pinned and the scroll plays it, act by
+ *    act; elsewhere it is a player in the page.
+ * 3. How it works shows the mechanism as a diagram, then what you get makes the argument.
+ * 4. Installation again, in full, and the questions people ask.
+ *
+ * Under a minute, for any team.
  */
 export default function Home() {
   return (
@@ -25,10 +28,10 @@ export default function Home() {
       <TopBar orgName={branding().orgName} />
       <main>
         <Hero />
-        <GetStarted />
+        <Film />
         <HowItWorks />
         <Holds />
-        <Film />
+        <GetStarted />
         <Faq />
       </main>
       <Footer />

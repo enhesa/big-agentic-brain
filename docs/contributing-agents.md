@@ -92,6 +92,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Darken a navy fill on hover with `var(--navy-deep)`, never a hex of your own: it is mixed from the accent an operator may set.
 - Write errors in `var(--alert-ink)` and put white text only on `var(--alert)` or `var(--navy)`. The bright `var(--coral)`, `var(--amber)` and `var(--teal)` are fills, never text or a ground for white text.
 - Set no text below `0.75rem`, give a card no `box-shadow`, and guard every transition with `prefers-reduced-motion` (`tests/paper-style.test.ts`).
+- The landing page pins its film and plays it by scroll only under `SCRUB_QUERY` (`lib/film-scroll.ts`). `app/landing.module.css` repeats that query: change both together (`tests/film-scroll.test.ts`). Everything the scroll shows must also be in the page without it.
 - There is no dark theme. Tasks and Usage keep unused dark values; do not add more until the whole app has one.
 - An address that leads nowhere renders `app/not-found.tsx` in the shell. A page that fails renders `app/error.tsx`, which shows no detail of the failure.
 

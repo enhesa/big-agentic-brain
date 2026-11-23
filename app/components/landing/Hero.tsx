@@ -1,5 +1,6 @@
 import styles from "../../landing.module.css";
 import { branding } from "@/lib/branding";
+import CopyPrompt from "./CopyPrompt";
 import KnowledgeGraph from "./KnowledgeGraph";
 import MagneticButton from "./MagneticButton";
 
@@ -14,9 +15,16 @@ function Word({ children, i }: { children: React.ReactNode; i: number }) {
   );
 }
 
-const CHIPS = ["Memories", "Reminders", "Messages"];
-
+/**
+ * The first screen: the name of the thing, what it is in one line, the two commands that install
+ * it, and the way on. Someone sold by the headline finds the install lines without scrolling.
+ *
+ * As the page scrolls on, the words lift away and the graph comes closer, so the film that
+ * follows seems to start inside it (landing.module.css, where the browser can tie an animation
+ * to the scroll; elsewhere the hero simply scrolls away).
+ */
 export default function Hero() {
+  const { orgName, installCommands } = branding();
   return (
     <section className={styles.hero}>
       <div className={`${styles.wrap} ${styles.heroInner}`}>
@@ -46,27 +54,38 @@ export default function Hero() {
           </h1>
 
           <p className={styles.lede}>
-            One shared memory for every {branding().orgName} agent: memories, reminders and messages, available to all.
+            One shared memory for every {orgName} agent: memories, reminders and messages, available to all.
           </p>
-
-          <ul className={styles.chips}>
-            {CHIPS.map((c) => (
-              <li key={c} className={styles.chip}>
-                {c}
-              </li>
-            ))}
-          </ul>
 
           <div className={styles.ctaRow}>
             <MagneticButton href="/memory">Open the memory</MagneticButton>
-            <a className={styles.textLink} href="#get-started">
-              Get started &rarr;
+            <a className={styles.textLink} href="#film">
+              Watch the film &darr;
+            </a>
+          </div>
+
+          <div className={styles.heroInstall}>
+            <span className={styles.heroInstallLabel}>Install in Claude Code</span>
+            <div className={styles.heroInstallRows}>
+              <CopyPrompt text={installCommands.marketplace} />
+              <CopyPrompt text={installCommands.install} />
+            </div>
+            <a className={styles.heroInstallMore} href="#get-started">
+              More ways to install
             </a>
           </div>
         </div>
 
-        <KnowledgeGraph />
+        <div className={styles.heroArt}>
+          <KnowledgeGraph />
+        </div>
       </div>
+
+      {/* Shown only where scrolling plays the film. */}
+      <a className={styles.scrollCue} href="#film" aria-hidden="true" tabIndex={-1}>
+        <span>Scroll to play the film</span>
+        <span className={styles.scrollCueLine} />
+      </a>
     </section>
   );
 }
