@@ -27,14 +27,19 @@ const LEAD = 0.85;
  */
 const RISE = 0.03;
 /** The last share of the scroll rests on the closing frame. */
-const HOLD = 0.06;
+export const HOLD = 0.06;
 /**
  * The latest moment shown: the closing frame, fully drawn. In its last half second the film
  * fades out to loop, and at its very end the clock wraps to the first frame.
  */
 export const LAST_SECOND = FILM.seconds - 0.6;
-/** How much of the gap to the scroll position the film closes each frame: it glides, it does not jump. */
+/**
+ * How much of the gap to the scroll position the film closes in one frame of a 60 Hz screen:
+ * it glides, it does not jump.
+ */
 export const GLIDE = 0.2;
+/** One frame of a 60 Hz screen, in milliseconds. */
+export const FRAME = 1000 / 60;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -83,7 +88,13 @@ export function nightAt(seconds: number): boolean {
 /** Where each act after the first begins on the progress rail, as a share of its length. */
 export const ACT_MARKS: number[] = SCENES.slice(1).map((scene, i) => (scene.start + SCENES[i].end) / 2 / LAST_SECOND);
 
-/** Moves the film a step from where it is toward where the scroll says, and lands when it is close. */
-export function glide(now: number, goal: number): number {
-  return Math.abs(goal - now) < 0.02 ? goal : now + (goal - now) * GLIDE;
+/**
+ * Moves the film a step from where it is toward where the scroll says, and lands when it is
+ * close. ms: how long the last frame took. The glide takes the same time on a fast screen as
+ * on a slow one: two frames of 120 Hz close as much of the gap as one frame of 60 Hz.
+ */
+export function glide(now: number, goal: number, ms: number = FRAME): number {
+  if (Math.abs(goal - now) < 0.02) return goal;
+  const share = 1 - Math.pow(1 - GLIDE, Math.max(0, ms) / FRAME);
+  return now + (goal - now) * share;
 }

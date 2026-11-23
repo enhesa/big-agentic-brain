@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FILM, SCENES } from "../lib/film-story.mjs";
-import { ACT_MARKS, LAST_SECOND, SCRUB_QUERY, actAt, filmTimeAt, glide, nightAt, scrollProgress } from "../lib/film-scroll";
+import { ACT_MARKS, FRAME, HOLD, LAST_SECOND, SCRUB_QUERY, actAt, filmTimeAt, glide, nightAt, scrollProgress } from "../lib/film-scroll";
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
@@ -33,7 +33,7 @@ describe("the film played by scroll", () => {
     // While pinned it moves with the scroll, evenly.
     expect(at(-1000) - at(0)).toBeCloseTo(at(-2000) - at(-1000), 10);
     // Every act gets a fair stretch of scroll: none flashes by.
-    const perSecond = (pin - (viewport - height)) / (LAST_SECOND / (1 - 0.06));
+    const perSecond = (pin - (viewport - height)) / (LAST_SECOND / (1 - HOLD));
     expect(((SCENES[1].start + first.end) / 2 - filmTimeAt(at(pin))) * perSecond).toBeGreaterThan(400);
     // Without a top bar the pin is the top of the window.
     expect(scrollProgress(0, height, viewport)).toBeCloseTo(at(pin), 6);
@@ -114,6 +114,12 @@ describe("the film played by scroll", () => {
     expect(now).toBe(10);
     // Backwards too.
     expect(glide(10, 0)).toBeLessThan(10);
+    // As fast on a fast screen as on a slow one: two half frames make one frame.
+    expect(glide(glide(0, 10, FRAME / 2), 10, FRAME / 2)).toBeCloseTo(glide(0, 10), 10);
+    expect(glide(0, 10, FRAME * 2)).toBeGreaterThan(glide(0, 10));
+    // A frame that took no time moves nothing.
+    expect(glide(0, 10, 0)).toBe(0);
+    expect(glide(0, 10, -5)).toBe(0);
   });
 
   it("the page pins the film under the same conditions the script plays it", () => {
@@ -141,5 +147,12 @@ describe("the film played by scroll", () => {
     expect(scroll).toContain("svg.pauseAnimations()");
     expect(scroll).toContain("svg.setCurrentTime(now)");
     expect(scroll).toContain('{ passive: true }');
+    // The film is pinned under the top bar as tall as it really is, and measured again when the page changes shape.
+    expect(scroll).toContain('section.style.setProperty("--bar"');
+    expect(scroll).toContain("new ResizeObserver(size)");
+    // It tidies up: no observer, no frame and no borrowed styles are left behind.
+    for (const part of ["shape?.disconnect()", "cancelAnimationFrame(frame)", 'section.style.removeProperty("--bar")', "svg.setCurrentTime(0)"]) {
+      expect(scroll, part).toContain(part);
+    }
   });
 });
