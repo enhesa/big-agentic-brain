@@ -77,7 +77,7 @@ export function actAt(seconds: number): number {
  */
 export function nightAt(seconds: number): boolean {
   const night = SCENES.find((scene) => scene.id === "knows");
-  return night !== undefined && seconds >= night.start + 0.45 && seconds < night.end - 0.2;
+  return night !== undefined && seconds >= night.start + 0.58 && seconds < night.end - 0.2;
 }
 
 /** Where each act after the first begins on the progress rail, as a share of its length. */
