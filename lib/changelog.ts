@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-23",
+    title: "Tests on Windows",
+    changes: [
+      "The test of the plugin's headers helper passes on Windows, where it failed before it reached the helper.",
+    ],
+  },
+  {
     date: "2026-11-20",
     title: "A short film shows what BAB is",
     changes: [

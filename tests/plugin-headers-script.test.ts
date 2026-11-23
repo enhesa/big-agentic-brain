@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  * the label cache exist it must answer with shell builtins only, and print the same bytes as the
  * full path.
  */
-const SCRIPT = path.resolve("plugins/claude-code/scripts/bab-headers.sh");
+// Forward slashes: on Windows, sh cannot run a script it is handed as "$0" with backslashes in its path.
+const SCRIPT = path.resolve("plugins/claude-code/scripts/bab-headers.sh").replace(/\\/g, "/");
 const hasSh = spawnSync("sh", ["-c", "true"]).status === 0;
 const SECRET = "a".repeat(32) + "0123456789abcdef0123456789abcdef";
 
