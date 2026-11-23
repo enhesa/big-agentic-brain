@@ -1537,7 +1537,8 @@ every time.
 
 - `/live` (open to everyone, like `/memory` and `/usage`; linked from the top navigation after Usage) draws
   the brain at work over the last `LIVE_WINDOW_HOURS` (24): the brain in the middle with the count of live
-  memories, and dots for the people whose agents did something. It is read-only and has no controls.
+  memories, and dots for the people whose agents did something. It is read-only. Its one control is
+  the Replay button.
 - A beat is one audit row (`lib/live-brain.ts`): a memory saved (`create`), reused (`helpful`, `kudos`,
   `confirm`) or flagged, a message sent, or a search (the `bab_search` tool or a `GET /api/learnings`, the
   same rule as the Usage page). Rows by `anonymous` and `system` are left out. The page shows how often each
@@ -1575,6 +1576,37 @@ every time.
   and serves one snapshot to everyone for `LIVE_CACHE_MS` (2 seconds). A signed-in browser spends its own
   browser bucket. Anyone else spends the anonymous bucket of their address, and only when the address is
   verified (`BAB_CLIENT_IP_HEADER`); without one the cached snapshot is the only limit.
+- **Replay.** The button "Replay how the brain grew" under the picture swaps it for the whole history,
+  played in `REPLAY_SECONDS` (45) seconds as a brain that grows, drawn in three dimensions. It is there for
+  the joy of it and tells nothing the other pages do not. Each memory is a drop of ink on a white sheet. It
+  sits with its project group: at most `REPLAY_CLUSTERS_MAX` (48) groups, and the smallest projects share
+  the last one. Threads join a memory to its neighbours in the group, to the memory before it under each of
+  its first `REPLAY_TAG_LINKS` (2) tags, and to the memory it replaced. A spark runs for each reuse, flag,
+  search and message. At most `REPLAY_PULSES_MAX` (120,000) sparks are drawn: with more, the newest reuses
+  and flags and an even share of the searches and messages. A memory that is no longer live fades to grey.
+  The last `REPLAY_TAIL_SECONDS` (1.6) seconds hold nothing new, so the replay ends on the finished brain.
+  The date and the running counts stand beside the picture.
+- The viewer can pause, drag the time, turn the brain (drag, or the arrow keys), zoom (the wheel, or plus and
+  minus), go full screen and go back to the live picture. The brain turns by itself while the replay plays
+  and after it ends, never while it is paused. The replay takes the keyboard focus when it opens and gives
+  it back to the Replay button when it closes. Under `prefers-reduced-motion` the finished brain is shown
+  and nothing moves until Play is pressed.
+- `GET /live/replay` returns the history as plain numbers (`lib/live-replay.ts`). For each memory: the hour it
+  was saved, the hour it stopped being live, its kind and the number of its group. Then the threads, the
+  reuses and flags by day, and the searches and messages as a count per day. **It holds no person, no id, no
+  title, no project name and no tag text**, and nothing worked out from who did something, so it cannot say
+  who did what. Deleted memories are left out. With more than `REPLAY_NEURONS_MAX` (60,000) memories the
+  newest are sent, and of the reuses and flags at most `REPLAY_FIRES_MAX` (150,000). Searches come from the
+  audit log, which is kept for a year, so older searches are not counted.
+- `/live/replay` is open like the page and writes no audit row. The answer can be several megabytes, so it
+  has limits of its own and every caller meets one: `REPLAY_LIMIT_PER_MINUTE` (30) for a signed-in browser
+  and for a verified address (`BAB_CLIENT_IP_HEADER`), and one shared bucket of
+  `REPLAY_UNKNOWN_LIMIT_PER_MINUTE` (120) for callers without a verified address. The history is read and
+  written as text once, and that one answer serves everyone for `REPLAY_CACHE_MS` (10 minutes).
+- The replay is drawn with three.js, which the browser loads on the first press and not with the page.
+  Every point is placed by rule (`lib/replay-scene.ts`), so the same history gives the same brain. The whole
+  picture is five sets of points and lines that the graphics card moves from one clock value, so dragging
+  the time costs nothing. At rest (paused, or the still picture) nothing is drawn again.
 
 ## Chats list removed
 

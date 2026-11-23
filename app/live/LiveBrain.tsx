@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { BeatKind, LiveBeat, LiveBrain as LiveBrainData } from "@/lib/live-brain";
 import { BEAT_WORDS, CORE, PICTURE, arcPath, coreCount, coreEdge, dotPlace, otherSeat, seatOf, smoothClosed, type Point } from "@/lib/live-picture";
 import { blobPoints } from "@/lib/film-story.mjs";
+import BrainReplay from "./BrainReplay";
 import styles from "./live.module.css";
 
 /** How long one beat moves, and how far apart beats that arrive together start. */
@@ -89,6 +90,15 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
   const [status, setStatus] = useState<"connecting" | "live" | "reconnecting">("connecting");
   const lastId = useRef(initial.beats.reduce((m, b) => Math.max(m, b.id), 0));
   const nextKey = useRef(1);
+  /** The Replay button swaps the picture for the whole history, drawn as a brain that grows. */
+  const [replaying, setReplaying] = useState(false);
+  const replayButton = useRef<HTMLButtonElement>(null);
+  const wasReplaying = useRef(false);
+  // The replay took the keyboard focus when it opened. Closing it hands the focus back.
+  useEffect(() => {
+    if (wasReplaying.current && !replaying) replayButton.current?.focus();
+    wasReplaying.current = replaying;
+  }, [replaying]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   const play = useCallback((beats: LiveBeat[]) => {
@@ -183,7 +193,8 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
 
   return (
     <div className={styles.live}>
-      <div className={styles.stage}>
+      {replaying ? <BrainReplay onClose={() => setReplaying(false)} /> : null}
+      <div className={styles.stage} hidden={replaying}>
         <svg className={styles.picture} viewBox={`0 0 ${PICTURE.width} ${PICTURE.height}`} role="img" aria-label={summary}>
           <g className={styles.spokes}>
             {places.map((p, i) => {
@@ -254,10 +265,17 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
         </p>
       </div>
 
-      <p className={styles.status}>
-        <span className={`${styles.statusDot} ${status === "live" ? styles.statusLive : styles.statusWaiting}`} aria-hidden="true" />
-        {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Reconnecting"}
-      </p>
+      <div className={styles.bar}>
+        <p className={styles.status}>
+          <span className={`${styles.statusDot} ${status === "live" ? styles.statusLive : styles.statusWaiting}`} aria-hidden="true" />
+          {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Reconnecting"}
+        </p>
+        {replaying ? null : (
+          <button type="button" className="btn-primary" ref={replayButton} onClick={() => setReplaying(true)}>
+            Replay how the brain grew
+          </button>
+        )}
+      </div>
 
       <dl className={styles.tiles}>
         {tiles.map((t) => (

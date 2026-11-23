@@ -20,7 +20,9 @@ export function dotPlace(index: number, total: number): Point {
   const inner = total > ONE_RING_MAX && index % 2 === 1;
   const rx = total > ONE_RING_MAX ? (inner ? 360 : 540) : 470;
   const ry = total > ONE_RING_MAX ? (inner ? 168 : 262) : 232;
-  return { x: CORE.x + Math.cos(angle) * rx, y: CORE.y + Math.sin(angle) * ry };
+  // Rounded: the server and the browser do not agree on the last digit of a sine, and the page
+  // must draw the same picture on both.
+  return { x: Math.round((CORE.x + Math.cos(angle) * rx) * 100) / 100, y: Math.round((CORE.y + Math.sin(angle) * ry) * 100) / 100 };
 }
 
 /** The point on the brain's edge that faces `from`. */

@@ -207,6 +207,146 @@
   }
 }
 
+/* ---------- the row under the picture: the state of the live line, and the Replay button ---------- */
+
+/* While the replay plays, the live picture steps aside. */
+.stage[hidden] {
+  display: none;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---------- the replay: the whole history, drawn in ink on a sheet ---------- */
+
+.replay {
+  position: relative;
+  aspect-ratio: 2 / 1;
+  min-height: 440px;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  background: var(--sheet);
+  color: var(--navy);
+}
+
+.replay:fullscreen {
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.replayCanvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The drawing reads this colour and clears to it. */
+  background-color: var(--sheet);
+  cursor: grab;
+  /* A swipe up or down scrolls the page. A swipe to the side turns the brain. */
+  touch-action: pan-y;
+}
+
+.replayCanvas:active {
+  cursor: grabbing;
+}
+
+.replayNote {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  font-family: var(--font-head);
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+.replayTop {
+  position: absolute;
+  left: 22px;
+  top: 18px;
+  right: 22px;
+  display: grid;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.replayTop p {
+  margin: 0;
+}
+
+.replayDate {
+  font-family: var(--font-head);
+  font-size: clamp(1.25rem, 0.8rem + 2vw, 2.25rem);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.replayCounts {
+  font-size: 0.9375rem;
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
+}
+
+.replayHint {
+  font-size: 0.8125rem;
+  color: var(--steel);
+}
+
+.replayBar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.replaySpace {
+  flex: 1;
+}
+
+.replayTime {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  accent-color: var(--teal-ink);
+}
+
+/* A quiet button, filled: it stands on the drawing, and the brain may pass behind it. */
+.replayButton {
+  background: var(--sheet);
+}
+
+.replayButton:hover {
+  background: var(--sand);
+}
+
+@media (max-width: 640px) {
+  .replay {
+    aspect-ratio: 3 / 4;
+  }
+
+  .replayHint {
+    display: none;
+  }
+}
+
 /* ---------- under the picture ---------- */
 
 .status {

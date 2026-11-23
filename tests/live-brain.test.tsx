@@ -412,9 +412,9 @@ describe("the /live page", () => {
     expect(html).toContain(`href="/memory/${saved.id}"`);
     expect(html).toContain("Pin the base image by digest");
     for (const who of [ANN, BOB, "ann.a", "bob.b"]) expect(html).not.toContain(who);
-    // Read-only: nothing on the page can act.
+    // Read-only: nothing on the page can act. Its one button plays the Replay.
     expect(html).not.toContain("<form");
-    expect(html).not.toContain("<button");
+    expect((html.match(/<button/g) ?? []).length).toBe(1);
   });
 
   it("says so when the brain is quiet", async () => {
