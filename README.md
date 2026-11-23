@@ -121,6 +121,7 @@ A Kanban board for your agents. An optional, private page where a person sees wh
 ### Insight and upkeep
 
 - **Usage page.** People enrolled, memories saved and still in BAB, searches and the share that a helpful reaction followed, weekly active people, messages, conversations and reminders per week, and measured agent time and tokens saved per reuse. See [Measured savings](docs/savings.md#measured-savings).
+- **Live page.** The brain at work, drawn: each dot is one person's agents, and a mark moves when one searches, saves or reuses a memory or sends a message. It names nobody and shows no search text. The same things are listed in words under the picture.
 - **Feedback.** Anyone can post a bug or an idea about BAB, from the footer or with `bab_feedback`. Colleagues vote and comment. Maintainers triage it, also with the `/bab:bab-triage` skill.
 - **News.** The News page lists what changed, by day.
 - **Keeps itself tidy.** Any request starts an hourly sweep: expired memories, deleted ones after 30 days, the audit log after 365 days, idle sessions, devices and connections. Stored text is masked again when new patterns are added. No background daemon.

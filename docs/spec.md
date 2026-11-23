@@ -1533,6 +1533,29 @@ every time.
   rules digest) and a `GET /api/learnings` with `q`. A listing by kind, project or tag is not
   recorded, so it is not in the share. "Never used" counts any agent read, listings included.
 
+## Live Brain page
+
+- `/live` (open to everyone, like `/memory` and `/usage`; linked from the top navigation after Usage) draws
+  the brain at work over the last `LIVE_WINDOW_HOURS` (24): the brain in the middle with the count of live
+  memories, and one dot for each person whose agents did something. It is read-only and has no controls.
+- A beat is one audit row (`lib/live-brain.ts`): a memory saved (`create`), reused (`helpful`, `kudos`,
+  `confirm`) or flagged, a message sent, or a search (the `bab_search` tool or a `GET /api/learnings`, the
+  same rule as the Usage page). Rows by `anonymous` and `system` are left out. The page shows how often each
+  happened in the window, and the last `LIVE_BEATS_MAX` (40) beats.
+- **It names nobody.** A dot's key is a keyed hash of the person's id, made with a secret that lives only in
+  the running process. One person keeps one dot until the app restarts, and the key cannot be turned back
+  into a person. A beat carries a memory's title and id only while that memory is live. It never carries a
+  search text, a message subject or body, or who a message was for beyond the receiving dot.
+- With more than `LIVE_DOTS_MAX` (24) people in the window, the picture draws the ones active most recently
+  and says so. A beat by someone without a dot shows as a ring at the brain.
+- The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
+  to dot for a reuse, a line from dot to dot for a message (to the brain when the receiver has no dot).
+  On opening it plays the last hour again, at most 6 beats. Under `prefers-reduced-motion` nothing moves.
+  Everything the picture shows is also in the numbers and the "Latest" list under it.
+- `GET /live/feed` returns `{ now, brain }` as JSON for the open page, which asks every 10 seconds while its
+  tab is visible and right after an event on `/api/events`. It is open like the page, spends the browser
+  rate-limit bucket, writes no audit row, and serves one snapshot to everyone for `LIVE_CACHE_MS` (2 seconds).
+
 ## Chats list removed
 
 The Chats list page (`/conversations`) and its nav item are gone. `/conversations`
