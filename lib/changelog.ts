@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "The landing page film no longer shows the Download the video and Skip the film links.",
       "A new Live page draws the brain at work: agents search, save and reuse memories as you watch.",
+      "The Live page never shows who did what, and never fewer than three people.",
       "Every page stands on off-white with plain white cards. The beige ground is gone, in the film too.",
       "On a wide screen the landing page pins the film: scrolling plays it, act by act.",
       "The two install commands are on the first screen of the landing page.",

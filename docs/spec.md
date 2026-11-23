@@ -1537,24 +1537,44 @@ every time.
 
 - `/live` (open to everyone, like `/memory` and `/usage`; linked from the top navigation after Usage) draws
   the brain at work over the last `LIVE_WINDOW_HOURS` (24): the brain in the middle with the count of live
-  memories, and one dot for each person whose agents did something. It is read-only and has no controls.
+  memories, and dots for the people whose agents did something. It is read-only and has no controls.
 - A beat is one audit row (`lib/live-brain.ts`): a memory saved (`create`), reused (`helpful`, `kudos`,
   `confirm`) or flagged, a message sent, or a search (the `bab_search` tool or a `GET /api/learnings`, the
   same rule as the Usage page). Rows by `anonymous` and `system` are left out. The page shows how often each
   happened in the window, and the last `LIVE_BEATS_MAX` (40) beats.
-- **It names nobody.** A dot's key is a keyed hash of the person's id, made with a secret that lives only in
-  the running process. One person keeps one dot until the app restarts, and the key cannot be turned back
-  into a person. A beat carries a memory's title and id only while that memory is live. It never carries a
-  search text, a message subject or body, or who a message was for beyond the receiving dot.
-- With more than `LIVE_DOTS_MAX` (24) people in the window, the picture draws the ones active most recently
-  and says so. A beat by someone without a dot shows as a ring at the brain.
+- **It never says who did what.** The snapshot holds one count of people and, per beat, its kind, its time
+  and, for a memory that is live, that memory's title and id. No actor id and no key made from one is sent.
+  The reason: a memory page names its author and its voters, so one beat that tied a save to a dot would
+  name that dot, and with it that person's searches and messages. A beat never carries a search text, a
+  message subject or body, or who a message was for.
+- **The count of people is kept vague.** An exact small count does the harm of a name: "one person at work"
+  makes every beat that person's. So with any beat in the window the count is at least
+  `LIVE_PEOPLE_FLOOR` (3), and the page shows it as "3 or fewer". The count changes only on a clock of
+  `LIVE_PEOPLE_STEP_MINUTES` (5): it covers a window that ends at the last mark. So apart from going from 0
+  when the first beat arrives and back to 0 when the last one leaves the page, it neither rises with a beat nor
+  falls at the second a beat turns 24 hours old. That window is longer than the page's by
+  `LIVE_PEOPLE_SLACK_MINUTES` (60), so a daily job that runs a little later than the day before does not leave
+  the count and come back. A change cannot be matched to one beat when more than one beat fell in those
+  minutes. Above the floor, a step with a single beat still marks that beat as someone's first or last, not
+  whose. There is no count of who is at work right now. On an installation with three people or fewer, anyone who
+  knows that can still narrow a beat to those people: the page cannot be live and hide that. The Usage
+  page shows how many people used BAB in each week, so in a week with one person it already says so; the
+  floor keeps the Live page from adding a count by the day or the minute to that.
+- **A dot is a seat, not a person.** The picture draws one dot per counted person, at most
+  `LIVE_DOTS_MAX` (24), all alike. Each mark moves to a seat drawn by lot from the beat's id (`lib/live-picture.ts`). The
+  page says so under the picture.
 - The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
-  to dot for a reuse, a line from dot to dot for a message (to the brain when the receiver has no dot).
-  On opening it plays the last hour again, at most 6 beats. Under `prefers-reduced-motion` nothing moves.
-  Everything the picture shows is also in the numbers and the "Latest" list under it.
+  to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Under `prefers-reduced-motion` nothing
+  moves. Everything the picture shows is also in the numbers and the "Latest" list under it.
+- The window is read as a range of audit row ids: the lowest id at or after the start of the people's window,
+  which is earlier than the page's, bounds it
+  (read from the index over `at`), and the two reads (the counts, the last beats) walk only the rows after
+  it, never the whole table.
 - `GET /live/feed` returns `{ now, brain }` as JSON for the open page, which asks every 10 seconds while its
-  tab is visible and right after an event on `/api/events`. It is open like the page, spends the browser
-  rate-limit bucket, writes no audit row, and serves one snapshot to everyone for `LIVE_CACHE_MS` (2 seconds).
+  tab is visible and right after an event on `/api/events`. It is open like the page, writes no audit row,
+  and serves one snapshot to everyone for `LIVE_CACHE_MS` (2 seconds). A signed-in browser spends its own
+  browser bucket. Anyone else spends the anonymous bucket of their address, and only when the address is
+  verified (`BAB_CLIENT_IP_HEADER`); without one the cached snapshot is the only limit.
 
 ## Chats list removed
 
