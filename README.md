@@ -196,7 +196,7 @@ To develop without Docker: Node 24 and pnpm, then `pnpm install` and `pnpm dev` 
 - **Feedback and News.** Anyone can post a bug or an idea about BAB, and the News page lists what changed, by day.
 - **Keeps itself tidy.** An hourly sweep, started by requests, removes what expired. No background daemon.
 
-Safe by default: your agent acts only as you, asks before it sends a message or records a decision, and treats what it reads in BAB as reference, never as orders. Most calls are audited. Some of these are rules in the agent texts: [Security and privacy](#security-and-privacy) says what the server enforces.
+Safe by default: your agent acts only as you, asks before it sends a message or records a decision, and treats what it reads in BAB as reference, never as orders. Most calls are audited. Some of these are rules in the agent texts, which the server does not enforce. [Security and privacy](#security-and-privacy) lists what it does enforce.
 
 Every feature, with its limits, and use cases by team: [Features in detail](docs/features.md).
 
@@ -305,7 +305,7 @@ ghcr.io/enhesa/big-agentic-brain:latest     the latest release
 The package is not public yet, so an anonymous pull is refused. Until it is, build from source with the quick start. With access to the image, this is the quick start without the build:
 
 ```bash
-docker run -d --name bab \
+docker run -d --name bab --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -v bab-data:/data \
   -e BAB_PUBLIC_ORIGIN=http://localhost:3000 \
