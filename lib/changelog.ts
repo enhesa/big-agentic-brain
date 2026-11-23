@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "A whiter page",
     changes: [
       "Every page stands on off-white with plain white cards. The beige ground is gone, in the film too.",
+      "The test of the plugin's headers helper passes on Windows, where it failed before it reached the helper.",
     ],
   },
   {
