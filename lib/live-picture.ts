@@ -1,0 +1,77 @@
+/**
+ * The geometry and the words of the Live Brain picture (/live). Pure functions, no clock and no
+ * DOM, so the page and its tests agree on where a dot sits and what a beat is called.
+ */
+
+export type Point = { x: number; y: number };
+
+/** The drawing's own units. The brain sits in the middle. */
+export const PICTURE = { width: 1280, height: 640 };
+export const CORE = { x: 640, y: 320, r: 84 };
+
+/** Up to this many dots stand on one ring. More take turns on an outer and an inner ring. */
+export const ONE_RING_MAX = 12;
+
+const TAU = Math.PI * 2;
+
+/** Where dot number `index` of `total` sits: evenly around the brain, the first one at the top. */
+export function dotPlace(index: number, total: number): Point {
+  const angle = -Math.PI / 2 + (total > 0 ? index / total : 0) * TAU;
+  const inner = total > ONE_RING_MAX && index % 2 === 1;
+  const rx = total > ONE_RING_MAX ? (inner ? 360 : 540) : 470;
+  const ry = total > ONE_RING_MAX ? (inner ? 168 : 262) : 232;
+  return { x: CORE.x + Math.cos(angle) * rx, y: CORE.y + Math.sin(angle) * ry };
+}
+
+/** The point on the brain's edge that faces `from`. */
+export function coreEdge(from: Point): Point {
+  const dx = from.x - CORE.x;
+  const dy = from.y - CORE.y;
+  const d = Math.hypot(dx, dy) || 1;
+  return { x: CORE.x + (dx / d) * CORE.r, y: CORE.y + (dy / d) * CORE.r };
+}
+
+/** A curve from one dot to another that bends away from the brain, as an SVG path. */
+export function arcPath(from: Point, to: Point): string {
+  const mx = (from.x + to.x) / 2;
+  const my = (from.y + to.y) / 2;
+  let ox = mx - CORE.x;
+  let oy = my - CORE.y;
+  if (Math.hypot(ox, oy) < 40) {
+    // Opposite dots: the middle is the brain itself, so bend sideways instead.
+    ox = -(to.y - from.y);
+    oy = to.x - from.x;
+  }
+  const d = Math.hypot(ox, oy) || 1;
+  const bend = 0.28 * Math.hypot(to.x - from.x, to.y - from.y) + 30;
+  const cx = mx + (ox / d) * bend;
+  const cy = my + (oy / d) * bend;
+  const n = (v: number) => Math.round(v * 10) / 10;
+  return `M ${n(from.x)} ${n(from.y)} Q ${n(cx)} ${n(cy)} ${n(to.x)} ${n(to.y)}`;
+}
+
+/** A closed, smooth outline through the given corner points, as an SVG path. */
+export function smoothClosed(points: Array<[number, number]>): string {
+  const n = (v: number) => Math.round(v * 10) / 10;
+  const mid = (a: [number, number], b: [number, number]) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const last = points[points.length - 1];
+  const start = mid(last, points[0]);
+  let d = `M ${n(start[0])} ${n(start[1])}`;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const m = mid(p, points[(i + 1) % points.length]);
+    d += ` Q ${n(p[0])} ${n(p[1])} ${n(m[0])} ${n(m[1])}`;
+  }
+  return `${d} Z`;
+}
+
+export type BeatWord = "save" | "search" | "reuse" | "message" | "flag";
+
+/** What a beat is called in the list under the picture. Nobody is named. */
+export const BEAT_WORDS: Record<BeatWord, string> = {
+  save: "An agent saved a memory",
+  search: "An agent searched the brain",
+  reuse: "An agent reused a memory",
+  message: "An agent sent a message",
+  flag: "An agent flagged a memory",
+};

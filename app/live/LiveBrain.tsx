@@ -1,0 +1,302 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
+import type { BeatKind, LiveBeat, LiveBrain as LiveBrainData } from "@/lib/live-brain";
+import { BEAT_WORDS, CORE, PICTURE, arcPath, coreEdge, dotPlace, smoothClosed, type Point } from "@/lib/live-picture";
+import { blobPoints } from "@/lib/film-story.mjs";
+import styles from "./live.module.css";
+
+/** How long one beat moves, and how far apart beats that arrive together start. */
+export const BEAT_MS = 1900;
+export const STAGGER_MS = 420;
+/** The page asks for a new snapshot this often while it is visible, and shortly after a live event. */
+export const POLL_MS = 10_000;
+const EVENT_DEBOUNCE_MS = 400;
+/** On opening, the page plays again what happened in the last hour: at most this many beats. */
+export const REPLAY_MAX = 6;
+const REPLAY_WINDOW_MS = 3_600_000;
+/** Beats that arrive in one snapshot and are played. More than this would be a blur. */
+const PLAY_MAX = 12;
+/** A dot is awake when its agent did something this recently. */
+const AWAKE_MS = 15 * 60_000;
+/** Rows in the list under the picture. */
+export const LATEST_MAX = 12;
+
+/** The live events worth a new snapshot (lib/events.ts). A search has no event: the poll finds it. */
+const EVENT_TYPES = ["learning.created", "learning.updated", "message.created", "kudos", "vote", "flag"];
+
+const SWATCH: Record<BeatKind, string> = {
+  save: styles.teal,
+  search: styles.steel,
+  reuse: styles.amber,
+  message: styles.navy,
+  flag: styles.coral,
+};
+
+interface Playing {
+  key: number;
+  beat: LiveBeat;
+  delay: number;
+}
+
+function ago(iso: string, now: number): string {
+  const sec = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  return `${Math.floor(min / 60)} hr ago`;
+}
+
+function count(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+/** The start and end of a moving mark, handed to the stylesheet. */
+function flight(from: Point, to: Point, delay: number): CSSProperties {
+  return {
+    "--x0": `${from.x}px`,
+    "--y0": `${from.y}px`,
+    "--x1": `${to.x}px`,
+    "--y1": `${to.y}px`,
+    animationDelay: `${delay}ms`,
+  } as CSSProperties;
+}
+
+const BRAIN_PATH = smoothClosed(blobPoints(CORE.x, CORE.y, CORE.r, CORE.r * 0.94, 3, 0, 0.05, 11) as Array<[number, number]>);
+
+export interface LiveBrainProps {
+  initial: LiveBrainData;
+  /** The server's clock at render, so the first paint says the same times on both sides. */
+  initialNow: string;
+  dotsMax: number;
+}
+
+/**
+ * The Live Brain picture and the list under it. It draws the snapshot it was given, plays the last
+ * hour again, then follows along: a new snapshot from /live/feed every few seconds and right after
+ * a live event. Everything the picture shows is also in the list, so nothing depends on motion.
+ */
+export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainProps) {
+  const [brain, setBrain] = useState(initial);
+  const [now, setNow] = useState(() => Date.parse(initialNow));
+  const [playing, setPlaying] = useState<Playing[]>([]);
+  const [status, setStatus] = useState<"connecting" | "live" | "reconnecting">("connecting");
+  const lastId = useRef(initial.beats.reduce((m, b) => Math.max(m, b.id), 0));
+  const nextKey = useRef(1);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  const play = useCallback((beats: LiveBeat[]) => {
+    if (beats.length === 0) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const batch = beats.slice(-PLAY_MAX).map((beat, i) => ({ key: nextKey.current++, beat, delay: i * STAGGER_MS }));
+    setPlaying((p) => [...p, ...batch]);
+    const keys = new Set(batch.map((b) => b.key));
+    const timer = setTimeout(
+      () => {
+        timers.current.delete(timer);
+        setPlaying((p) => p.filter((b) => !keys.has(b.key)));
+      },
+      batch[batch.length - 1].delay + BEAT_MS + 400,
+    );
+    timers.current.add(timer);
+  }, []);
+
+  useEffect(() => {
+    const held = timers.current;
+    let stopped = false;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+
+    const start = Date.parse(initialNow);
+    play(initial.beats.filter((b) => start - Date.parse(b.at) < REPLAY_WINDOW_MS).slice(-REPLAY_MAX));
+
+    async function load() {
+      if (stopped || document.hidden) return;
+      try {
+        const res = await fetch("/live/feed", { cache: "no-store" });
+        if (!res.ok || stopped) return;
+        const body = (await res.json()) as { now: string; brain: LiveBrainData };
+        const fresh = body.brain.beats.filter((b) => b.id > lastId.current);
+        lastId.current = body.brain.beats.reduce((m, b) => Math.max(m, b.id), lastId.current);
+        setBrain(body.brain);
+        setNow(Date.parse(body.now));
+        play(fresh);
+      } catch {
+        // A failed poll changes nothing: the next one tries again.
+      }
+    }
+
+    function soon() {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(load, EVENT_DEBOUNCE_MS);
+    }
+
+    const source = new EventSource("/api/events");
+    source.onopen = () => setStatus("live");
+    source.onerror = () => setStatus("reconnecting");
+    for (const type of EVENT_TYPES) source.addEventListener(type, soon);
+    const poll = setInterval(load, POLL_MS);
+    document.addEventListener("visibilitychange", soon);
+
+    return () => {
+      stopped = true;
+      source.close();
+      clearInterval(poll);
+      if (debounce) clearTimeout(debounce);
+      document.removeEventListener("visibilitychange", soon);
+      for (const t of held) clearTimeout(t);
+      held.clear();
+    };
+    // The first snapshot is read once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const places = useMemo(() => new Map(brain.dots.map((key, i) => [key, dotPlace(i, brain.dots.length)])), [brain.dots]);
+  const awake = useMemo(() => {
+    const keys = new Set<string>();
+    for (const b of brain.beats) if (b.agent && now - Date.parse(b.at) < AWAKE_MS) keys.add(b.agent);
+    return keys;
+  }, [brain.beats, now]);
+  const latest = useMemo(() => [...brain.beats].reverse().slice(0, LATEST_MAX), [brain.beats]);
+
+  const tiles: Array<{ label: string; value: number; swatch?: string }> = [
+    { label: "People with agents at work", value: brain.agents },
+    { label: "Searches", value: brain.counts.search, swatch: styles.steel },
+    { label: "Memories saved", value: brain.counts.save, swatch: styles.teal },
+    { label: "Memories reused", value: brain.counts.reuse, swatch: styles.amber },
+    { label: "Messages", value: brain.counts.message, swatch: styles.navy },
+  ];
+
+  const summary =
+    brain.agents === 0
+      ? "The brain, with no agents at work in the last 24 hours."
+      : `The brain with ${brain.dots.length} dots around it, one for each person whose agents were at work. What they did is in the list below.`;
+
+  return (
+    <div className={styles.live}>
+      <div className={styles.stage}>
+        <svg className={styles.picture} viewBox={`0 0 ${PICTURE.width} ${PICTURE.height}`} role="img" aria-label={summary}>
+          <g className={styles.spokes}>
+            {brain.dots.map((key) => {
+              const p = places.get(key)!;
+              const e = coreEdge(p);
+              return <line key={key} x1={e.x} y1={e.y} x2={p.x} y2={p.y} />;
+            })}
+          </g>
+
+          <g>
+            {playing.map(({ key, beat, delay }) => {
+              const from = beat.agent ? places.get(beat.agent) : undefined;
+              const to = beat.to ? places.get(beat.to) : undefined;
+              const edge = from ? coreEdge(from) : undefined;
+              const pulse = (tone: string, wait: number) => (
+                <circle className={`${styles.pulse} ${tone}`} cx={CORE.x} cy={CORE.y} r={CORE.r} style={{ animationDelay: `${delay + wait}ms` }} />
+              );
+              if (beat.kind === "message") {
+                const a = from ?? CORE;
+                const b = to ?? (from ? coreEdge(from) : CORE);
+                if (a === b) return <g key={key}>{pulse(styles.navy, 0)}</g>;
+                return (
+                  <g key={key}>
+                    <path className={styles.arc} d={arcPath(a, b)} pathLength={1} style={{ animationDelay: `${delay}ms` }} />
+                  </g>
+                );
+              }
+              if (!from || !edge) {
+                return <g key={key}>{pulse(SWATCH[beat.kind], 0)}</g>;
+              }
+              if (beat.kind === "reuse") {
+                return (
+                  <g key={key}>
+                    <circle className={`${styles.fly} ${styles.amber}`} r={8} style={flight(edge, from, delay)} />
+                    <circle className={`${styles.halo} ${styles.amber}`} cx={from.x} cy={from.y} r={12} style={{ animationDelay: `${delay + BEAT_MS * 0.55}ms` }} />
+                  </g>
+                );
+              }
+              if (beat.kind === "search") {
+                return (
+                  <g key={key}>
+                    <circle className={`${styles.fly} ${styles.steel}`} r={5} style={flight(from, edge, delay)} />
+                    <circle className={`${styles.fly} ${styles.sage}`} r={5} style={flight(edge, from, delay + BEAT_MS * 0.5)} />
+                  </g>
+                );
+              }
+              const tone = beat.kind === "flag" ? styles.coral : styles.teal;
+              return (
+                <g key={key}>
+                  <circle className={`${styles.fly} ${tone}`} r={8} style={flight(from, edge, delay)} />
+                  {pulse(tone, BEAT_MS * 0.55)}
+                </g>
+              );
+            })}
+          </g>
+
+          <path className={styles.brain} d={BRAIN_PATH} />
+
+          <g>
+            {brain.dots.map((key) => {
+              const p = places.get(key)!;
+              return <circle key={key} className={`${styles.dot} ${awake.has(key) ? styles.awake : ""}`} cx={p.x} cy={p.y} r={11} />;
+            })}
+          </g>
+        </svg>
+
+        <p className={styles.core}>
+          <span className={styles.coreCount}>{count(brain.memories)}</span>
+          <span className={styles.coreLabel}>{brain.memories === 1 ? "memory" : "memories"}</span>
+        </p>
+      </div>
+
+      <p className={styles.status}>
+        <span className={`${styles.statusDot} ${status === "live" ? styles.statusLive : styles.statusWaiting}`} aria-hidden="true" />
+        {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Reconnecting"}
+      </p>
+
+      <dl className={styles.tiles}>
+        {tiles.map((t) => (
+          <div key={t.label} className={styles.tile}>
+            <dt>
+              {t.swatch ? <span className={`${styles.swatch} ${t.swatch}`} aria-hidden="true" /> : null}
+              {t.label}
+            </dt>
+            <dd>{count(t.value)}</dd>
+          </div>
+        ))}
+      </dl>
+      {brain.agents > brain.dots.length ? (
+        <p className={styles.note}>
+          The picture shows the {dotsMax} people whose agents were at work most recently, of {count(brain.agents)}.
+        </p>
+      ) : null}
+
+      <section className={styles.latest} aria-labelledby="live-latest">
+        <h2 id="live-latest" className={styles.latestTitle}>
+          Latest
+        </h2>
+        {latest.length === 0 ? (
+          <p className="empty-state">Quiet for the last 24 hours. The picture moves when an agent searches, saves or reuses a memory.</p>
+        ) : (
+          <ol className={styles.list}>
+            {latest.map((b) => (
+              <li key={b.id} className={styles.row}>
+                <span className={`${styles.swatch} ${SWATCH[b.kind]}`} aria-hidden="true" />
+                <span className={styles.what}>
+                  {BEAT_WORDS[b.kind]}
+                  {b.memory ? (
+                    <>
+                      {": "}
+                      <Link href={`/memory/${encodeURIComponent(b.memory.id)}`}>{b.memory.title}</Link>
+                    </>
+                  ) : null}
+                </span>
+                <time className={styles.when} dateTime={b.at}>
+                  {ago(b.at, now)}
+                </time>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </div>
+  );
+}

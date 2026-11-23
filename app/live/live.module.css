@@ -1,0 +1,362 @@
+/* /live: the brain at work, drawn on paper. The picture has no frame. The numbers and the list
+   under it are sheets, like every other page. */
+
+.header {
+  margin-bottom: 8px;
+}
+
+.live {
+  display: grid;
+  gap: 20px;
+}
+
+/* One colour per kind of beat, shared by the marks in the picture and the swatches beside words. */
+.teal {
+  --tone: var(--teal);
+}
+.steel {
+  --tone: var(--steel);
+}
+.amber {
+  --tone: var(--amber);
+}
+.navy {
+  --tone: var(--navy);
+}
+.coral {
+  --tone: var(--coral);
+}
+.sage {
+  --tone: var(--sage);
+}
+
+/* ---------- the picture ---------- */
+
+.stage {
+  position: relative;
+}
+
+.picture {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.spokes line {
+  stroke: var(--hairline);
+  stroke-width: 1.5;
+}
+
+.brain {
+  fill: var(--navy);
+}
+
+.dot {
+  fill: var(--steel);
+  opacity: 0.4;
+  transition:
+    fill 0.3s ease,
+    opacity 0.3s ease;
+}
+
+.awake {
+  fill: var(--navy);
+  opacity: 1;
+}
+
+/* A mark that travels between a dot and the brain. Its ends come from the component. */
+.fly {
+  fill: var(--tone);
+  opacity: 0;
+  animation: fly 1000ms ease-in-out both;
+}
+
+@keyframes fly {
+  0% {
+    opacity: 0;
+    transform: translate(var(--x0), var(--y0));
+  }
+  12%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x1), var(--y1));
+  }
+}
+
+/* A ring that leaves the brain. */
+.pulse {
+  fill: none;
+  stroke: var(--tone);
+  stroke-width: 5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse 900ms ease-out forwards;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* A ring around the dot that got something back. */
+.halo {
+  fill: none;
+  stroke: var(--tone);
+  stroke-width: 4;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo 800ms ease-out forwards;
+}
+
+@keyframes halo {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* A message: a line drawn from one dot to another, then gone. */
+.arc {
+  fill: none;
+  stroke: var(--navy);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  animation: arc 1900ms ease-in-out forwards;
+}
+
+@keyframes arc {
+  0% {
+    opacity: 1;
+    stroke-dashoffset: 1;
+  }
+  60% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The count inside the brain is page text, not drawing text, so it never shrinks below 12 pixels. */
+.core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  color: #fff;
+  font-family: var(--font-head);
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;
+}
+
+.coreCount {
+  font-size: clamp(0.8rem, 0.3rem + 2.2vw, 2rem);
+  font-weight: 800;
+}
+
+.coreLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 720px) {
+  .coreLabel {
+    display: none;
+  }
+
+  /* The drawing shrinks with the screen. A stroke in the mark's own colour keeps it visible. */
+  .dot {
+    stroke: var(--steel);
+    stroke-width: 12;
+  }
+
+  .awake {
+    stroke: var(--navy);
+  }
+
+  .fly {
+    stroke: var(--tone);
+    stroke-width: 10;
+  }
+
+  .spokes line {
+    stroke-width: 3;
+  }
+
+  .arc {
+    stroke-width: 7;
+  }
+
+  .pulse,
+  .halo {
+    stroke-width: 10;
+  }
+}
+
+/* ---------- under the picture ---------- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--steel);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+.statusLive {
+  background: var(--teal);
+}
+
+.statusWaiting {
+  background: var(--amber);
+}
+
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--tone);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.tile {
+  padding: 16px 18px;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+}
+
+.tile dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--steel);
+}
+
+.tile dd {
+  margin: 6px 0 0;
+  font-family: var(--font-head);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--navy);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--steel);
+}
+
+.latestTitle {
+  margin: 8px 0 12px;
+  font-family: var(--font-head);
+  font-size: 1.25rem;
+  color: var(--navy);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--sheet);
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.9375rem;
+  color: var(--navy);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.what {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.what a {
+  color: var(--teal-ink);
+}
+
+.when {
+  flex: none;
+  font-size: 0.8125rem;
+  color: var(--steel);
+  white-space: nowrap;
+}
+
+/* Less motion: the picture stands still, and the list still says what happened. */
+@media (prefers-reduced-motion: reduce) {
+  .fly,
+  .pulse,
+  .halo,
+  .arc {
+    display: none;
+    animation: none;
+  }
+
+  .dot,
+  .statusDot {
+    transition: none;
+  }
+}
