@@ -81,7 +81,11 @@ describe("branding", () => {
     expect(html).toContain('src="/branding/install.png"');
     expect(html).toContain('alt="Step 1: open &quot;Customize&quot; &lt;then&gt; add"');
     expect(html).toContain("Prefer the terminal?");
-    expect(html.indexOf('src="/branding/install.png"')).toBeLessThan(html.indexOf("/plugin marketplace add"));
+    // The hero has the commands too, on the first screen. In the install section the picture comes first.
+    const install = html.slice(html.indexOf('id="get-started"'));
+    expect(html.indexOf("/plugin marketplace add")).toBeLessThan(html.indexOf('id="get-started"'));
+    expect(install.indexOf('src="/branding/install.png"')).toBeGreaterThan(0);
+    expect(install.indexOf('src="/branding/install.png"')).toBeLessThan(install.indexOf("/plugin marketplace add"));
   });
 
   it("refuses an install screenshot that is not a site path or an https URL", async () => {
