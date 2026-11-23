@@ -16,9 +16,11 @@ import { parseDbTime } from "@/lib/dates";
  * name: "one person at work" makes every beat that person's, and one of them may be a save that
  * the memory page signs. So the count is never under LIVE_PEOPLE_FLOOR, and there is no count of
  * who is at work right now. And it changes only on a LIVE_PEOPLE_STEP_MINUTES clock: people are
- * counted over the 24 hours that end at the last mark, so the count neither rises with a beat nor
+ * counted over a window that ends at the last mark, so the count neither rises with a beat nor
  * falls at the second a beat turns 24 hours old. A fall at that second would say that the person
  * who signed yesterday's beat has done nothing since, or only in the minutes after the mark.
+ * That window is LIVE_PEOPLE_SLACK_MINUTES longer than the page's, so a daily job that runs a
+ * little later than the day before does not leave the count and come back.
  */
 
 /** How far back the page looks, in hours. */
@@ -31,8 +33,10 @@ export const LIVE_BEATS_MAX = 40;
 export const LIVE_CACHE_MS = 2000;
 /** With any beat in the window the count of people is at least this, so it never shows one person alone. */
 export const LIVE_PEOPLE_FLOOR = 3;
-/** The count of people changes only on this clock, in minutes: it covers the LIVE_WINDOW_HOURS that end at the last mark. */
+/** The count of people changes only on this clock, in minutes: it covers a window that ends at the last mark. */
 export const LIVE_PEOPLE_STEP_MINUTES = 5;
+/** People are counted over this much more than LIVE_WINDOW_HOURS, in minutes, so a daily job that runs late moves nothing. */
+export const LIVE_PEOPLE_SLACK_MINUTES = 60;
 
 const SEARCH_TOOL_PATH = "/mcp#tools/call:bab_search";
 const SEARCH_API_PATH = "/api/learnings";
@@ -55,8 +59,8 @@ export interface LiveBeat {
 export interface LiveBrain {
   /**
    * People whose agents did one of the five things: 0 with no beat in the window, else at least
-   * LIVE_PEOPLE_FLOOR, counted over the LIVE_WINDOW_HOURS that end at the last
-   * LIVE_PEOPLE_STEP_MINUTES mark.
+   * LIVE_PEOPLE_FLOOR, counted over the LIVE_WINDOW_HOURS and LIVE_PEOPLE_SLACK_MINUTES that end
+   * at the last LIVE_PEOPLE_STEP_MINUTES mark.
    */
   agents: number;
   /** Live memories right now. */
@@ -84,8 +88,8 @@ function kindOf(row: { action: string; entity: string }): BeatKind {
  * The rows that count as a beat: a memory saved, reused (helpful, kudos, confirm) or flagged, a
  * message sent, and a search (the bab_search tool or a GET on /api/learnings, as on /usage).
  *
- * The window is read as a range of row ids. Ids rise with time, so the lowest id in the window
- * bounds it, and every read walks only the rows after it. NOT INDEXED keeps it that way: left to
+ * The window is read as a range of row ids. Ids rise with time, so the lowest id in the people's
+ * window, which starts before the page's, bounds both, and every read walks only the rows after it. NOT INDEXED keeps it that way: left to
  * choose, the planner reads every audit row a memory ever got, or the whole table. The time is
  * still checked per row, for a row written out of order.
  */
@@ -103,8 +107,7 @@ const BEAT_FROM = `FROM audit_log a NOT INDEXED WHERE a.id >= ? AND a.at >= ? AN
 const FIRST_SQL = "SELECT MIN(id) AS id FROM audit_log INDEXED BY idx_audit_at WHERE at >= ?";
 /**
  * One pass for the counts and the people. It reads from the start of the people's window, which is
- * up to LIVE_PEOPLE_STEP_MINUTES earlier than the page's, so `n` counts only the rows from the
- * page's window on. The actor ids it groups by are counted here and go no further.
+ * earlier than the page's, so `n` counts only the rows from the page's window on. The actor ids it groups by are counted here and go no further.
  */
 const TALLY_SQL = `SELECT a.actor_id AS actor, a.action AS action, a.entity AS entity, SUM(CASE WHEN a.at >= ? THEN 1 ELSE 0 END) AS n, MIN(a.at) AS first ${BEAT_FROM} GROUP BY a.actor_id, a.action, a.entity`;
 const BEATS_SQL = `SELECT a.id, a.at, a.action, a.entity, a.entity_id ${BEAT_FROM} ORDER BY a.id DESC LIMIT ?`;
@@ -124,12 +127,12 @@ export function liveBrain(now: Date = new Date()): LiveBrain {
   const memories = Number((db.prepare("SELECT COUNT(*) AS n FROM learnings WHERE status = 'active'").get() as { n: number | bigint }).n);
 
   const fromTime = sqlTime(since);
-  // People are counted over the 24 hours that end at the last mark of the clock. Both ends are
+  // People are counted over a window that ends at the last mark of the clock. Both ends are
   // stepped, so the count changes only at a mark: not with a new beat, not when a beat ages out.
   const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
   const markAt = Math.floor(now.getTime() / step) * step;
   const mark = sqlTime(new Date(markAt));
-  const peopleFromTime = sqlTime(new Date(markAt - LIVE_WINDOW_HOURS * 3_600_000));
+  const peopleFromTime = sqlTime(new Date(markAt - LIVE_WINDOW_HOURS * 3_600_000 - LIVE_PEOPLE_SLACK_MINUTES * 60_000));
 
   // The people's window starts first, so its first row bounds every read.
   const first = db.prepare(FIRST_SQL).get(peopleFromTime) as { id: number | bigint | null };

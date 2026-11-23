@@ -1550,10 +1550,13 @@ every time.
 - **The count of people is kept vague.** An exact small count does the harm of a name: "one person at work"
   makes every beat that person's. So with any beat in the window the count is at least
   `LIVE_PEOPLE_FLOOR` (3), and the page shows it as "3 or fewer". The count changes only on a clock of
-  `LIVE_PEOPLE_STEP_MINUTES` (5): it covers the 24 hours that end at the last mark, so it neither rises with a
-  beat nor falls at the second a beat turns 24 hours old. A change cannot be matched to one beat when more than
-  one beat fell in those minutes. Above the floor, a step with a single beat still marks that beat as someone's
-  first or last, not whose. There is no count of who is at work right now. On an installation with three people or fewer, anyone who
+  `LIVE_PEOPLE_STEP_MINUTES` (5): it covers a window that ends at the last mark. So apart from going from 0
+  when the first beat arrives and back to 0 when the last one leaves the page, it neither rises with a beat nor
+  falls at the second a beat turns 24 hours old. That window is longer than the page's by
+  `LIVE_PEOPLE_SLACK_MINUTES` (60), so a daily job that runs a little later than the day before does not leave
+  the count and come back. A change cannot be matched to one beat when more than one beat fell in those
+  minutes. Above the floor, a step with a single beat still marks that beat as someone's first or last, not
+  whose. There is no count of who is at work right now. On an installation with three people or fewer, anyone who
   knows that can still narrow a beat to those people: the page cannot be live and hide that. The Usage
   page shows how many people used BAB in each week, so in a week with one person it already says so; the
   floor keeps the Live page from adding a count by the day or the minute to that.
@@ -1563,7 +1566,8 @@ every time.
 - The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
   to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Under `prefers-reduced-motion` nothing
   moves. Everything the picture shows is also in the numbers and the "Latest" list under it.
-- The window is read as a range of audit row ids: the lowest id at or after the window's start bounds it
+- The window is read as a range of audit row ids: the lowest id at or after the start of the people's window,
+  which is earlier than the page's, bounds it
   (read from the index over `at`), and the two reads (the counts, the last beats) walk only the rows after
   it, never the whole table.
 - `GET /live/feed` returns `{ now, brain }` as JSON for the open page, which asks every 10 seconds while its

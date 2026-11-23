@@ -204,25 +204,31 @@ describe("liveBrain", () => {
     for (let i = 0; i < 4; i++) await search(`p${i}@example.com`, at(-(30 + i) * 60_000));
     await row(CAT, "confirm", at(-day + 40_000), { entity: "learning", entityId: "m-daily" });
     await search(CAT, at(20_000));
+    // Bob's job ran a little later today: yesterday's confirm was 10 seconds before this mark.
+    await row(BOB, "confirm", at(-day - 10_000), { entity: "learning", entityId: "m-daily" });
+    await search(BOB, at(20_000));
 
     const seen = (ms: number) => liveBrain(new Date(mark + ms));
-    expect(seen(30_000).agents).toBe(5);
+    expect(seen(30_000).agents).toBe(6);
     expect(seen(30_000).counts.reuse).toBe(1);
-    // The confirm is now 24 hours old and leaves the counts. The count of people does not move.
+    // Cat's confirm is now 24 hours old and leaves the counts. The count of people does not move.
     expect(seen(41_000).counts.reuse).toBe(0);
-    expect(seen(41_000).agents).toBe(5);
-    expect(seen(step - 1000).agents).toBe(5);
-    // At the next mark today's search is counted in its place.
-    expect(seen(step).agents).toBe(5);
+    expect(seen(41_000).agents).toBe(6);
+    expect(seen(step - 1000).agents).toBe(6);
+    // At the next mark today's searches are counted, and yesterday's confirms still are.
+    expect(seen(step).agents).toBe(6);
   });
 
   it("lets a person leave the count only at a mark of the clock, and goes back to 0 when nothing is left", async () => {
-    const { liveBrain, LIVE_PEOPLE_STEP_MINUTES, LIVE_WINDOW_HOURS } = await import("../lib/live-brain");
+    const { liveBrain, LIVE_PEOPLE_STEP_MINUTES, LIVE_PEOPLE_SLACK_MINUTES, LIVE_WINDOW_HOURS } = await import("../lib/live-brain");
     const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
+    const slack = LIVE_PEOPLE_SLACK_MINUTES * 60_000;
+    expect(slack % step).toBe(0);
     const mark = Math.floor(NOW.getTime() / step) * step;
     const day = LIVE_WINDOW_HOURS * 3_600_000;
+    const hours = 3_600_000;
     const at = (ms: number) => sql(new Date(mark + ms));
-    for (let i = 0; i < 4; i++) await search(`p${i}@example.com`, at(-day + 6 * 60 * 60_000 + i * 60_000));
+    for (let i = 0; i < 4; i++) await search(`p${i}@example.com`, at(-day + 6 * hours + i * 60_000));
     // Cat's only beat turns 24 hours old 40 seconds after the mark.
     await search(CAT, at(-day + 40_000));
 
@@ -230,13 +236,17 @@ describe("liveBrain", () => {
     expect(seen(30_000).agents).toBe(5);
     expect(seen(41_000).counts.search).toBe(4);
     expect(seen(41_000).agents).toBe(5);
-    expect(seen(step - 1000).agents).toBe(5);
-    expect(seen(step).agents).toBe(4);
-    // Once every beat is older than the window the page is empty again.
-    const later = seen(7 * 60 * 60_000);
+    // Cat stays counted for the slack, and leaves at a mark.
+    expect(seen(slack + step - 1000).agents).toBe(5);
+    expect(seen(slack + step).agents).toBe(4);
+    // Once every beat is older than the page's window the page is empty again, at once: the four
+    // are still inside the slack, and the count of people must not outlive the beats.
+    const later = seen(6 * hours + 4 * 60_000);
     expect(later.agents).toBe(0);
     expect(later.beats).toEqual([]);
-    expect(later.counts.search).toBe(0);
+    expect(later.counts).toEqual({ save: 0, search: 0, reuse: 0, message: 0, flag: 0 });
+    // And it is still empty once they are out of the slack too.
+    expect(seen(8 * hours).agents).toBe(0);
   });
 
   it("is empty and whole when nothing happened", async () => {
@@ -506,11 +516,13 @@ describe("where the page is told", () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
     expect(NAV_ITEMS.map((i) => i.href as string)).toContain("/live");
     expect(read("README.md")).toContain("**Live page.**");
-    const { LIVE_WINDOW_HOURS, LIVE_DOTS_MAX, LIVE_BEATS_MAX, LIVE_CACHE_MS, LIVE_PEOPLE_FLOOR, LIVE_PEOPLE_STEP_MINUTES } = await import("../lib/live-brain");
+    const { LIVE_WINDOW_HOURS, LIVE_DOTS_MAX, LIVE_BEATS_MAX, LIVE_CACHE_MS, LIVE_PEOPLE_FLOOR, LIVE_PEOPLE_STEP_MINUTES, LIVE_PEOPLE_SLACK_MINUTES } =
+      await import("../lib/live-brain");
     const spec = read("docs/spec.md");
     expect(spec).toContain("## Live Brain page");
     expect(spec).toContain(`\`LIVE_PEOPLE_FLOOR\` (${LIVE_PEOPLE_FLOOR})`);
     expect(spec).toContain(`\`LIVE_PEOPLE_STEP_MINUTES\` (${LIVE_PEOPLE_STEP_MINUTES})`);
+    expect(spec).toContain(`\`LIVE_PEOPLE_SLACK_MINUTES\` (${LIVE_PEOPLE_SLACK_MINUTES})`);
     expect(spec).toContain(`\`LIVE_WINDOW_HOURS\` (${LIVE_WINDOW_HOURS})`);
     expect(spec).toContain(`\`LIVE_DOTS_MAX\` (${LIVE_DOTS_MAX})`);
     expect(spec).toContain(`\`LIVE_BEATS_MAX\` (${LIVE_BEATS_MAX})`);
