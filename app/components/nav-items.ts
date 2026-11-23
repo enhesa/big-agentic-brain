@@ -20,5 +20,6 @@ export const NAV_ITEMS = [
   { href: "/tasks", label: "Tasks" },
   { href: "/changelog", label: "News" },
   { href: "/usage", label: "Usage" },
+  { href: "/live", label: "Live" },
   { href: "/#get-started", label: "Get started" },
 ] as const;
