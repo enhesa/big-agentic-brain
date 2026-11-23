@@ -153,7 +153,7 @@ describe("one page width", () => {
     expect(rule(".page")).toContain("background: var(--paper)");
     expect(rule(".hero")).toContain("background: var(--paper)");
     // No section paints white, a gradient or the old grey over the paper.
-    for (const section of [".section", ".tourSection", ".getSection", ".faqList"]) {
+    for (const section of [".section", ".getSection", ".faqList"]) {
       expect(rule(section), section).not.toMatch(/background/);
     }
     // A band draws its ground behind the section, so its content keeps the page's one column.

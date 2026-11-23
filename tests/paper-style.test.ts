@@ -118,13 +118,11 @@ describe("the paper look on every page", () => {
     for (const file of ALL) {
       for (const m of sheet(file).matchAll(/box-shadow:\s*([^;]+);/g)) {
         const value = m[1].trim();
-        // A ring (no blur, no offset) and an inset line are marks, not shadows. The film's
-        // stage sits on the navy band, the one place a shadow is drawn.
-        const ok = value === "none" || value.startsWith("inset") || /^0 0 0 /.test(value) || (file === "app/landing.module.css" && value.startsWith("0 30px 80px"));
+        // A ring (no blur, no offset) and an inset line are marks, not shadows.
+        const ok = value === "none" || value.startsWith("inset") || /^0 0 0 /.test(value);
         expect(ok, `${file}: box-shadow: ${value}`).toBe(true);
       }
-      // The pointer in the landing tour's drawing is the one drop shadow.
-      if (file !== "app/components/landing/tour.module.css") expect(sheet(file), file).not.toMatch(/drop-shadow\(/);
+      expect(sheet(file), file).not.toMatch(/drop-shadow\(/);
     }
   });
 

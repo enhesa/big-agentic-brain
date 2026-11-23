@@ -25,6 +25,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "On a wide screen the landing page pins the film: scrolling plays it, act by act.",
       "The two install commands are on the first screen of the landing page.",
       "On a phone the film is a player, with its seven acts listed in words under it.",
+      "The five-step diagram is gone from the landing page: the film tells that story once.",
     ],
   },
   {

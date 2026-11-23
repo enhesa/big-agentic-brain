@@ -2,7 +2,6 @@ import styles from "./landing.module.css";
 import { branding } from "@/lib/branding";
 import TopBar from "./components/landing/TopBar";
 import Hero from "./components/landing/Hero";
-import HowItWorks from "./components/landing/HowItWorks";
 import Holds from "./components/landing/Holds";
 import Film from "./components/landing/Film";
 import GetStarted from "./components/landing/GetStarted";
@@ -15,9 +14,9 @@ import Footer from "./components/shell/Footer";
  *
  * 1. The first screen says what it is and holds the two install commands: someone sold by the
  *    headline does not have to scroll to find them.
- * 2. The film tells the story. On a wide screen it is pinned and the scroll plays it, act by
- *    act; elsewhere it is a player in the page.
- * 3. How it works shows the mechanism as a diagram, then what you get makes the argument.
+ * 2. The film tells the story, once: why agents need a shared brain and how it works. On a
+ *    wide screen it is pinned and the scroll plays it, act by act; elsewhere it is a player.
+ * 3. What you get: one example of each thing it holds, and the house rules.
  * 4. Installation again, in full, and the questions people ask.
  *
  * Under a minute, for any team.
@@ -29,7 +28,6 @@ export default function Home() {
       <main>
         <Hero />
         <Film />
-        <HowItWorks />
         <Holds />
         <GetStarted />
         <Faq />

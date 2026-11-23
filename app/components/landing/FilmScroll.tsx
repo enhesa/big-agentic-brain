@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "../../landing.module.css";
-import { ACT_MARKS, LAST_SECOND, actAt, filmTimeAt, glide, scrollProgress } from "@/lib/film-scroll";
+import { ACT_MARKS, LAST_SECOND, actAt, filmTimeAt, glide, nightAt, scrollProgress } from "@/lib/film-scroll";
 import { useScrub } from "./useScrub";
 
 export type Act = { title: string; text: string };
@@ -10,6 +10,7 @@ export type Act = { title: string; text: string };
 /**
  * The film's acts in words, and the film's clock on a wide screen.
  *
+ * The acts say what each scene means; what it draws is said elsewhere, for screen readers.
  * Every act is in the page from the server, so it reads as a numbered list on a phone, for
  * people who ask for less motion, and without script. On a wide screen (useScrub) the film is
  * pinned and this component is its projector: it reads how far the page has scrolled through
@@ -39,6 +40,8 @@ export default function FilmScroll({ target, acts }: { target: string; acts: Act
       svg.setCurrentTime(now);
       root.current?.style.setProperty("--film-at", (now / LAST_SECOND).toFixed(4));
       setAct(actAt(now));
+      // The film's night spills over the page: the words beside it turn light while it lasts.
+      section.toggleAttribute("data-night", nightAt(now));
       if (now !== goal) frame = requestAnimationFrame(draw);
     };
     const measure = () => {
@@ -53,12 +56,13 @@ export default function FilmScroll({ target, acts }: { target: string; acts: Act
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
       cancelAnimationFrame(frame);
+      section.removeAttribute("data-night");
     };
   }, [scrub, target]);
 
   return (
     <div className={styles.filmActs} ref={root}>
-      <ol className={styles.actList} aria-label="What the film shows">
+      <ol className={styles.actList} aria-label="The film, act by act">
         {acts.map((a, i) => (
           <li key={a.title} className={`${styles.act} ${i === act ? styles.actOn : ""}`}>
             <span className={styles.actNo} aria-hidden="true">

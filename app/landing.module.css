@@ -589,22 +589,10 @@
 
 /* ----------------------------------------------------------- architecture */
 
-/* ------------------------------------------------------------- how it works */
-
-/* How it works and the features share the paper, so they sit closer than two bands would. */
-.tourSection {
-  padding-bottom: 36px;
-}
-
 .sectionHeadCenter {
   margin-left: auto;
   margin-right: auto;
   text-align: center;
-}
-
-.tourWrap {
-  max-width: 1000px;
-  margin: 0 auto;
 }
 
 /* --------------------------------------------------------------- essentials */
@@ -1151,6 +1139,8 @@
    the page: a framed stage, its buttons, and the acts as a numbered list. A wide screen pins
    it and lets the scroll play it (the media query below). */
 .filmSection {
+  /* For the anchor that old links to "how it works" land on. */
+  position: relative;
   padding: 84px 0;
 }
 
@@ -1467,6 +1457,39 @@
     top: 10px;
     right: 0;
     margin: 0;
+  }
+
+  /* In one scene the film's navy ground spills over the page. The words beside it turn light. */
+  .actTitle,
+  .actText,
+  .actNo,
+  .filmLink,
+  .rail,
+  .railMark {
+    transition:
+      color 0.3s ease,
+      background-color 0.3s ease;
+  }
+
+  .filmSection[data-night] .actTitle,
+  .filmSection[data-night] .filmLink {
+    color: var(--paper);
+  }
+
+  .filmSection[data-night] .actText {
+    color: color-mix(in srgb, var(--paper) 84%, var(--navy));
+  }
+
+  .filmSection[data-night] .actNo {
+    color: var(--sage);
+  }
+
+  .filmSection[data-night] .rail {
+    background: color-mix(in srgb, var(--paper) 28%, var(--navy));
+  }
+
+  .filmSection[data-night] .railMark {
+    background: var(--navy);
   }
 
   .filmControls {

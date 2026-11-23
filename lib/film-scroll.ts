@@ -16,8 +16,11 @@ import { FILM, SCENES } from "./film-story.mjs";
 export const SCRUB_QUERY =
   "(min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) and (scripting: enabled)";
 
-/** The film starts when its section has risen this far into the window, as a share of its height. */
-const LEAD = 0.5;
+/**
+ * The film starts when its section has risen this far into the window, as a share of the
+ * window's height: early, so the first lines are already being drawn as the stage comes up.
+ */
+const LEAD = 0.85;
 /** The last share of the scroll rests on the closing frame. */
 const HOLD = 0.06;
 /**
@@ -36,9 +39,10 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
  * height. viewport: the window's height.
  */
 export function scrollProgress(top: number, height: number, viewport: number): number {
+  // A section no taller than the window is not pinned: there is nothing to scroll through.
+  if (!(height > viewport)) return 0;
   const lead = viewport * LEAD;
   const span = height - viewport + lead;
-  if (!(span > 0)) return 0;
   return clamp01((lead - top) / span);
 }
 
@@ -54,6 +58,16 @@ export function actAt(seconds: number): number {
     if (i > 0 && seconds >= (scene.start + SCENES[i - 1].end) / 2) act = i;
   });
   return act;
+}
+
+/**
+ * Whether the film's night covers the page at this moment. In one scene a navy ground spreads
+ * from the brain past the edges of the stage, so the words beside the film must turn light.
+ * It takes a moment to reach them, and leaves as the scene fades.
+ */
+export function nightAt(seconds: number): boolean {
+  const night = SCENES.find((scene) => scene.id === "knows");
+  return night !== undefined && seconds >= night.start + 0.6 && seconds < night.end - 0.25;
 }
 
 /** Where each act after the first begins on the progress rail, as a share of its length. */

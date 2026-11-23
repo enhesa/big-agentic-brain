@@ -2,18 +2,21 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FILM, SCENES } from "../lib/film-story.mjs";
-import { ACT_MARKS, LAST_SECOND, SCRUB_QUERY, actAt, filmTimeAt, glide, scrollProgress } from "../lib/film-scroll";
+import { ACT_MARKS, LAST_SECOND, SCRUB_QUERY, actAt, filmTimeAt, glide, nightAt, scrollProgress } from "../lib/film-scroll";
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 /** The landing page's film is played by scrolling. These are the sums behind it. */
 describe("the film played by scroll", () => {
-  it("starts when the film has risen half a window and ends where the pin lets go", () => {
+  it("starts as the film rises into the window and ends where the pin lets go", () => {
     const viewport = 900;
     const height = 6840;
-    // Still below the middle of the window: not started.
+    // Below the window, or only just in it: not started.
     expect(scrollProgress(900, height, viewport)).toBe(0);
-    expect(scrollProgress(450, height, viewport)).toBe(0);
+    expect(scrollProgress(800, height, viewport)).toBe(0);
+    // Risen a good way in, but not yet pinned: the first lines are already being drawn.
+    expect(scrollProgress(450, height, viewport)).toBeGreaterThan(0);
+    expect(scrollProgress(450, height, viewport)).toBeLessThan(0.08);
     // The section's bottom meets the window's bottom: the pin lets go, the film is over.
     expect(scrollProgress(viewport - height, height, viewport)).toBe(1);
     expect(scrollProgress(-99999, height, viewport)).toBe(1);
@@ -27,6 +30,7 @@ describe("the film played by scroll", () => {
 
   it("is still, not broken, when the section is no taller than the window", () => {
     expect(scrollProgress(0, 400, 900)).toBe(0);
+    expect(scrollProgress(-100, 900, 900)).toBe(0);
     expect(scrollProgress(0, 0, 0)).toBe(0);
   });
 
@@ -64,6 +68,25 @@ describe("the film played by scroll", () => {
   it("marks where each act after the first begins on the rail, in order", () => {
     expect(ACT_MARKS).toHaveLength(SCENES.length - 1);
     expect(ACT_MARKS.every((m, i) => m > 0 && m < 1 && (i === 0 || m > ACT_MARKS[i - 1]))).toBe(true);
+  });
+
+  it("knows when the film's night covers the page, so the words beside it can turn light", () => {
+    const night = SCENES.find((scene) => scene.id === "knows")!;
+    expect(nightAt(0)).toBe(false);
+    // The navy ground needs a moment to spread, and leaves as the scene fades.
+    expect(nightAt(night.start)).toBe(false);
+    expect(nightAt(night.start + 1)).toBe(true);
+    expect(nightAt((night.start + night.end) / 2)).toBe(true);
+    expect(nightAt(night.end)).toBe(false);
+    expect(nightAt(LAST_SECOND)).toBe(false);
+    // The page turns the act's words, the links and the rail light, only while pinned.
+    const css = read("app/landing.module.css");
+    const scrub = css.slice(css.indexOf(`@media ${SCRUB_QUERY} {`));
+    for (const part of [".actTitle", ".actText", ".actNo", ".filmLink", ".rail"]) {
+      expect(scrub, part).toContain(`.filmSection[data-night] ${part}`);
+    }
+    expect(css.slice(0, css.indexOf(`@media ${SCRUB_QUERY} {`))).not.toContain("data-night");
+    expect(read("app/components/landing/FilmScroll.tsx")).toContain('section.toggleAttribute("data-night", nightAt(now))');
   });
 
   it("glides toward the scroll position and lands on it", () => {
