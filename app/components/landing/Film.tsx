@@ -13,8 +13,8 @@ import FilmSvg, { FILM_SVG_ID } from "./FilmSvg";
  * and the story moves, act by act, with each act named beside it. On a phone, for people who
  * ask for less motion and without script it is a player in the page: it plays by itself,
  * FilmControls adds pause, play and restart, and the acts are a numbered list under it. People
- * who ask for less motion get the still poster until they press Play. Everyone can download
- * the same film as a video. It has no sound, so it needs no captions.
+ * who ask for less motion get the still poster until they press Play. It has no sound, so it
+ * needs no captions.
  *
  * ACTS is what the page says beside each scene: what the scene means, not what it draws.
  * SCENES says in words what each scene shows, for people who cannot see it. Keep both in step
@@ -65,12 +65,6 @@ export default function Film() {
             <FilmScroll target={FILM_SVG_ID} acts={ACTS} />
             <div className={styles.filmBar}>
               <FilmControls target={FILM_SVG_ID} />
-              <a className={styles.filmLink} href="/showcase.mp4" download="big-agentic-brain.mp4">
-                Download the video
-              </a>
-              <a className={`${styles.filmLink} ${styles.filmSkip}`} href="#what-it-holds">
-                Skip the film
-              </a>
             </div>
           </div>
           {/* The film in words, scene by scene, for people who cannot see it. */}

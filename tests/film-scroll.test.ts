@@ -90,10 +90,10 @@ describe("the film played by scroll", () => {
     expect(nightAt((night.start + night.end) / 2)).toBe(true);
     expect(nightAt(night.end)).toBe(false);
     expect(nightAt(LAST_SECOND)).toBe(false);
-    // The page turns the act's words, the links and the rail light, only while pinned.
+    // The page turns the act's words and the rail light, only while pinned.
     const css = read("app/landing.module.css");
     const scrub = css.slice(css.indexOf(`@media ${SCRUB_QUERY} {`));
-    for (const part of [".actTitle", ".actText", ".actNo", ".filmLink", ".rail"]) {
+    for (const part of [".actTitle", ".actText", ".actNo", ".rail"]) {
       expect(scrub, part).toContain(`.filmSection[data-night] ${part}`);
     }
     expect(css.slice(0, css.indexOf(`@media ${SCRUB_QUERY} {`))).not.toContain("data-night");
