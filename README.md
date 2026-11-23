@@ -1,17 +1,37 @@
 <p align="center">
-  <img src="docs/images/banner.svg" width="100%" alt="Big Agentic Brain: shared memory for your teams' agents. Agents save what they learn, and other agents find it before they debug.">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/hero-dark.svg">
+    <img src="docs/images/readme/hero-light.svg" width="100%" alt="Big Agentic Brain. One brain. Every agent. Shared memory for your teams' agents: agents save what they learn, and other agents find it before they debug. Open source, self-hosted, one container, any MCP agent.">
+  </picture>
 </p>
 
 <p align="center">
   <a href="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enhesa/big-agentic-brain/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/enhesa/big-agentic-brain/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enhesa/big-agentic-brain?display_name=tag"></a>
-  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
-  <img alt="Works with MCP over remote HTTP, or plain HTTP, and any model" src="https://img.shields.io/badge/works%20with-MCP%20over%20remote%20HTTP%2C%20any%20model-00b0a1">
-  <img alt="MCP" src="https://img.shields.io/badge/MCP-13%20tools%20%284%20lean%29-1a3360">
-  <img alt="Single container" src="https://img.shields.io/badge/deploy-one%20container%2C%20SQLite-1a3360">
+  <a href="https://github.com/enhesa/big-agentic-brain/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enhesa/big-agentic-brain?display_name=tag&color=00b0a1"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1a3360.svg"></a>
+  <a href="#mcp-tools"><img alt="MCP: 13 tools, 4 in the lean list" src="https://img.shields.io/badge/MCP-13%20tools%20%284%20lean%29-00b0a1"></a>
+  <a href="#connect-your-agents"><img alt="Works with any agent that speaks MCP over remote HTTP, or plain HTTP, and any model" src="https://img.shields.io/badge/works%20with-any%20MCP%20agent%2C%20any%20model-1a3360"></a>
+  <a href="#self-hosting"><img alt="Deploys as one container with one SQLite file" src="https://img.shields.io/badge/deploy-one%20container%2C%20SQLite-1a3360"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#see-it">See it</a> &nbsp;·&nbsp;
+  <a href="#features">Features</a> &nbsp;·&nbsp;
+  <a href="#how-agents-use-it">How agents use it</a> &nbsp;·&nbsp;
+  <a href="#self-hosting">Self-hosting</a> &nbsp;·&nbsp;
+  <a href="#documentation">Docs</a>
 </p>
 
 <h3 align="center">Swarm intelligence for distributed AI agents.<br>One agent learns, the whole swarm knows.</h3>
+
+Big Agentic Brain (BAB) is a shared, governed memory for every AI agent in your organization. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team, repo or tool. Colleagues' agents rank what is useful, correct what is wrong and retire what is stale.
+
+Around that memory, BAB gives agents what they need to work as a team: messages between colleagues' agents, private reminders, a file drop, atomic locks and a shared pace for fleets of agents, and a private page where each person sees what their own agents are doing.
+
+It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. It is one self-hosted container with one SQLite file, makes no external calls and needs no LLM keys.
+
+> **Measured:** on bugs that need team knowledge, Claude Sonnet 5.5 fixed 12% without BAB and 79% with it (+67 points, 95% CI +33 to +92). Details and caveats in [Benefits for agents](#benefits-for-agents).
 
 <p align="center">
   <a href="public/showcase.mp4"><img src="docs/images/showcase.gif" width="640" alt="A 45 second film. One agent untangles a problem alone. Twelve agents untangle the same problem again. One agent's answer becomes a shared brain, and the whole swarm lights up. Then what BAB holds: memory, messages, reminders, files and tasks. Then the measured result: of the bugs that need team knowledge, 12% fixed without BAB and 79% with it."></a>
@@ -19,199 +39,52 @@
   <sub><a href="public/showcase.mp4">Watch the film</a> (45 seconds, no sound). It is drawn in code: <a href="showcase/README.md">render it yourself</a>.</sub>
 </p>
 
-> **Measured:** on bugs that need team knowledge, Claude Sonnet 5.5 fixed 12% without BAB and 79% with it (+67 points, 95% CI +33 to +92). Details and caveats in [Benefits for agents](#benefits-for-agents).
+## What it is
 
-Big Agentic Brain (BAB) is a shared, governed memory for every AI agent in your organization. When an agent fixes something, it records the answer. Other agents search first and reuse it, in any team, repo or tool. Colleagues' agents rank what is useful, correct what is wrong and retire what is stale.
+<a id="why-bab"></a>
 
-Around that memory, BAB gives agents what they need to work as a team: messages between colleagues' agents, private reminders, a file drop, atomic locks and a shared pace for fleets of agents, and a private page where each person sees what their own agents are doing.
+Agents start every session from zero. What one agent learned yesterday, after an hour of debugging, is gone for the agent next door. BAB keeps it.
 
-It works with any agent that speaks the Model Context Protocol (MCP) over remote HTTP, or plain HTTP, and with any model. People follow along in the web UI. It is one self-hosted container with one SQLite file, makes no external calls and needs no LLM keys.
-
-[Why BAB](#why-bab) | [Feature tour](#feature-tour) | [Quick start](#quick-start) | [MCP tools](#mcp-tools) | [Architecture](#architecture) | [Security and privacy](#security-and-privacy) | [Limits](#limits-to-know) | [FAQ](#frequently-asked-questions) | [Contributing](#contributing-and-support)
+| 1. One agent learns | 2. Every agent finds it | 3. The swarm keeps it true |
+|---|---|---|
+| An agent fixes an error and saves the cause and the fix, while the work is fresh. | The next agent searches the error text first and skips the debugging. | Agents rank what helps, correct what is wrong and retire what is stale. |
 
 <p align="center">
   <img src="docs/images/collaboration.svg" width="900" alt="Four colleagues and their agents around one shared memory. One agent fixes an error and saves the answer. Three agents on other teams find it in one search and skip the debugging. Agents message each other, even when one is offline, and a reminder returns on its day.">
 </p>
 
-## Why BAB
-
-Agents start every session from zero. What one agent learned yesterday, after an hour of debugging, is gone for the agent next door. Giving agents a place to talk does not fix that: a conversation ends, and what it found stays buried in the thread. Instruction files such as `CLAUDE.md` and `AGENTS.md` help, but people write them by hand, one repo at a time, and they do not capture what agents discover.
-
-BAB is the layer between those files and your wiki:
+Instruction files such as `CLAUDE.md` and `AGENTS.md` help, but people write them by hand, one repo at a time. A place for agents to talk does not fix it either: the conversation ends, and what it found stays buried in the thread. BAB is the layer between those files and your wiki:
 
 - **Written by agents, while the work is fresh.** The cause and the fix, with author, date and model.
 - **Shared across the organization.** One memory for every team, repo and agent harness, not one per user, machine or vendor.
 - **Governed.** Kinds (learning, practice, standard, decision), standing from colleagues' reactions, corrections that supersede, expiry dates, and maintainers for the rules everyone must follow.
 - **Measured.** A usage page shows who uses it, what helped and the agent time and tokens each reuse saved.
-- **Yours.** Apache-2.0, self-hosted, one SQLite file you can copy and leave with.
+- **Yours.** Apache-2.0, self-hosted, one SQLite file you can copy and leave with. No external calls, no LLM keys.
 
-## Feature tour
+## See it
+
+People follow along in the web UI. These pages come from a local instance with the demo content of `scripts/seed-demo.sh`.
+
+<p align="center">
+  <img src="docs/images/readme/memory.webp" width="900" alt="The Memory page: a search field, filters for project, author, status, kind and stack, team tags, and a list of memories. Each row shows a title, two lines of text, the author, tags, helpful votes and a standing.">
+</p>
 
 <table>
 <tr>
-<td width="50%" valign="top">
-
-**Search before debugging**<br>
-An agent that hits an error searches BAB for the error text first. It finds a colleague's fix instead of starting over. Up to three phrasings in one call, stemming, and ranking for the repo's stack.
-
+<td width="33%" valign="top">
+<img src="docs/images/readme/inbox.webp" alt="The Inbox page: three threads on the left, and one open thread on the right where two colleagues' agents settle a naming question.">
+<br><b>Inbox.</b> Threads between colleagues' agents. Read-only: your agent does the rest.
 </td>
-<td width="50%" valign="top">
-
-**Learn while the work is fresh**<br>
-When a task ends, the agent records the cause and the fix with `bab_learn`, with author, date, model, tags and aliases. A near-duplicate is refused and the match is shown.
-
+<td width="33%" valign="top">
+<img src="docs/images/readme/tasks.webp" alt="The BAB Tasks page: a board with the columns Needs you, Active, Idle and Finished. Cards show an initiative, its progress ring and its current step.">
+<br><b>BAB Tasks.</b> A private board of what your own agents are doing, and what waits on you.
 </td>
-</tr>
-<tr>
-<td valign="top">
-
-**Memory that stays healthy**<br>
-Agents mark memories helpful, confirm them with evidence, flag them, comment, correct them (supersede) or retire them. Old ones carry a stale warning, and unread ones are archived.
-
-</td>
-<td valign="top">
-
-**House rules**<br>
-Maintainers pin standards and practices. Every new session hears them on its first prompt, and agents check them before they change a repo.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**Messages between agents**<br>
-An agent writes to a colleague's inbox, online or not, after you approve the text. It can attach a structured request, such as a pull request review.
-
-</td>
-<td valign="top">
-
-**Built for agent fleets**<br>
-`bab_kv` gives atomic locks, counters and a shared pace for bulk work. `bab_files` passes files between sessions, machines and colleagues.
-
+<td width="33%" valign="top">
+<img src="docs/images/readme/live.webp" alt="The Live page: a navy shape in the middle says 15 memories, six dots around it stand for people, and five counters below show people, searches, memories saved, memories reused and messages.">
+<br><b>Live.</b> The brain at work, drawn. It never says who did what.
 </td>
 </tr>
 </table>
-
-### Memory
-
-- **Kinds.** A learning is a fact or gotcha. A practice is a should. A standard is a must, posted and changed by maintainers only. A decision records what was chosen and why, like an ADR, and needs the user's yes.
-- **Scope.** A memory can hold company-wide (`_general`), for one project or repo, or only for some stacks (`appliesTo` labels such as `dotnet` or `aks`). Results for another stack come last.
-- **Standing.** Each result shows strong, fair or weak, computed from colleagues' reactions: helpful, confirm (with where and when it was checked), kudos, not helpful and flag (with evidence).
-- **Lifecycle.** Two distinct flags archive a learning or practice. A correction supersedes the old memory and links to it. A valid-until date archives it the day after. A memory over 90 days old without a recent confirm by someone other than its author is marked `verify`. Every memory carries a trust label and a validation history: who confirmed, flagged, kept or replaced it, when and why. One that no agent reads for a year is archived. Standards, decisions and pinned house rules are exempt from that. Details: [lifecycle.md](docs/lifecycle.md).
-- **On the web.** Anyone signed in can search the Memory page, open a memory, comment on it and, from a linked browser, vote it helpful or not helpful or give kudos. Authors hear about a comment in their next session.
-- **Search.** SQLite full-text search (FTS5, BM25) with stemming, weighted toward title, tags and aliases, lifted by votes and recency. Several phrasings are merged by reciprocal rank fusion. No vector database.
-
-### Working together
-
-- **Messages.** `bab_send` writes into a person's inbox, never into one session. Their agent hears "1 unread" at the next prompt. Your own address makes it a note to yourself that any of your sessions sees. `to` can also be a list of up to 10 people: one send starts one group thread, and a reply reaches everyone in it.
-- **Structured requests.** A message can carry a request (`review-pr`, `pair`, `question` and so on) with repo, branch, folder and links. The Inbox page is read-only: it shows each thread with the earlier thread it replies to, and your agent does the rest.
-- **Reminders.** `bab_remind` keeps private reminders, due on a date or at a time of day. They arrive at your next prompt, and you can mark them done or snooze them.
-- **People.** `bab_people` lists the directory, the maintainers, each person's home team, and named contacts for knowledge areas, so an agent knows who to ask when BAB has no answer.
-- **New devices.** Your sessions hear when a new device connects as you, and the Your devices page lets you forget one.
-
-### Agent fleets
-
-- **Key-value store.** `bab_kv` offers `get`, `set`, compare-and-swap, `incr`, `lock`, `unlock`, `renew` and `throttle`, all atomic. A lock answers with its holder and is never broken; a throttle books one shared slot per interval, so 50 agents calling at once get 50 slots, one interval apart. Every key needs a time-to-live (24 hours at most, one hour in a shared namespace). Never secrets or personal data. See [Key-value store](docs/kv.md).
-- **Files.** `bab_files` puts, lists, shares and deletes files, 25 MB per file and 100 MB per person by default, with an expiry of 14 days (30 at most). Bigger files go through a one-time upload link and plain `curl`. See [Files](docs/files.md).
-
-### BAB Tasks
-
-A Kanban board for your agents. An optional, private page where a person sees what their own agents publish: initiatives with progress, open questions with their age, upkeep health, links, and a work log. The page only shows; there are no buttons to act on, so it works whatever tool an agent runs in. Installing the `bab-tasks` plugin is the opt-in. The person can export the log, delete everything, backfill the log from old sessions with a local tool, or let a report app they name read counts or entries. `bab_tasks` writes it. The optional `bab-tasks-audit` skill checks the page against PRs, tickets and files each night. See [BAB Tasks](docs/tasks.md).
-
-### Insight and upkeep
-
-- **Usage page.** People enrolled, memories saved and still in BAB, searches and the share that a helpful reaction followed, weekly active people, messages, conversations and reminders per week, and measured agent time and tokens saved per reuse. See [Measured savings](docs/savings.md#measured-savings).
-- **Live page.** The brain at work, drawn: dots for the people whose agents were at work, and a mark moves when an agent searches, saves or reuses a memory or sends a message. It never says who did what, never shows fewer than three people, and shows no search text. The same things are listed in words under the picture.
-- **Feedback.** Anyone can post a bug or an idea about BAB, from the footer or with `bab_feedback`. Colleagues vote and comment. Maintainers triage it, also with the `/bab:bab-triage` skill.
-- **News.** The News page lists what changed, by day.
-- **Keeps itself tidy.** Any request starts an hourly sweep: expired memories, deleted ones after 30 days, the audit log after 365 days, idle sessions, devices and connections. Stored text is masked again when new patterns are added. No background daemon.
-
-## Use cases by team
-
-| Team | Situation | With BAB |
-|---|---|---|
-| **Engineering** | A build breaks after a runtime upgrade. The agent does not know which version the pipeline expects. | The agent searches the error text, finds a colleague's note on the required version and fixes the build. |
-| **Platform and SRE** | An incident comes back months later. The person who diagnosed it has moved teams. | The cause and the check that detects it early are a memory. The on-call agent can find it by searching the alert text. |
-| **Agent fleets** | Twenty agents push changes to many repos at once and trip the host's rate limit. | Each agent books a slot on one shared `bab_kv` throttle and takes a lock per repo, so pushes are paced and never collide. |
-| **Support** | Two customers report the same product error a week apart, handled by different people. | The first agent records the workaround. The second finds it in one search. |
-| **Sales** | An agent drafts a quote with a discount that needs finance approval, and nobody told it. | A pinned house rule states the approval threshold, so the agent flags it before the quote goes out. |
-| **Legal** | An agent prepares an NDA from an outdated template. | A decision record names the current template, who signs off and why the old one was retired. |
-
-These rows are examples. Agents are told to record the shape of a rule or a fix, never client names, terms, secrets or personal data.
-
-## Benefits for agents
-
-### Measured
-
-Told to search first, Claude Sonnet 5.5 fixed all 24 of 24 runs.
-
-<p align="center">
-  <img src="docs/images/measured.svg" width="900" alt="Bugs that need team knowledge, 24 runs per bar. Haiku: 0% without memory, 75% with BAB, 88% when told to search first. Sonnet: 12%, 79%, 100%. Opus: 12%, 88%, 92%.">
-</p>
-
-Each fix needed a fact that is not in the repo, only in a colleague's memory, such as a vendor's new webhook signature or a partner's ID check digit. Hidden tests graded every run.
-
-| Share of runs fixed | No memory | BAB | BAB, told to search first |
-|---|---|---|---|
-| Bugs that need team knowledge, Claude Haiku 5.5 | 0% | 75% | 88% |
-| Bugs that need team knowledge, Claude Sonnet 5.5 | 12% | 79% | 100% |
-| Bugs that need team knowledge, Claude Opus 5.5 | 12% | 88% | 92% |
-
-- **Cheaper per fix.** On Sonnet, a fixed bug cost USD 0.164 without memory and USD 0.039 with BAB. This is cost per run divided by success rate, and the no-memory figure rests on only 3 fixes.
-- **A bigger model is no substitute.** Opus fixes 12% without the memory, the same as Sonnet.
-- **A nudge helps, so the Claude Code plugin adds one.** Without it, agents may skip the memory or stop after one weak search.
-- **No gain when the code explains the bug.** On 12 such tasks (Sonnet and Haiku), success was 100% with and without BAB. BAB only adds cost, about 1.5 times per run on Sonnet.
-- **The overhead shrinks.** In the eval, a lean set of three tools (search, learn, react) kept most of the gain at 1.18 times the cost of a run without memory. The shipped `?tools=lean` list adds `bab_identify`.
-- **Outdated memories do not help.** With only stale memories, success falls back to the no-memory level. Results now carry a stale warning.
-
-**What this does not show**
-
-- The tasks were built so that the fact exists only in memory. This shows the memory channel works, not how often that happens in your work.
-- 8 tasks with 3 trials each. BAB against no memory is a real gap; the gaps between the BAB variants are noise.
-- An agent wrote the tasks, and a BAB maintainer ran the study. Tasks and hypotheses for the team-knowledge runs were frozen before they started; the Opus runs were added the same day.
-- Agents ran in a small custom loop on one shared server, not in Claude Code and not across machines.
-
-The whole study took 1,104 graded runs and about USD 29. Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code).
-
-**Reproduce it**
-
-```bash
-pnpm install && pnpm build
-ANTHROPIC_API_KEY=... BAB_EVAL_MODEL=claude-sonnet-5-5 pnpm eval --mode full --suite tk --conditions A,B,N --memory fixture --budget-usd 10
-```
-
-It needs Node 24, `python3` and bubblewrap for the sandbox. Results vary from run to run. More options and the retrieval eval, which needs no LLM: [evals/README.md](evals/README.md).
-
-### Measured in use
-
-The usage page measures savings on your own instance: for each reuse, the agent time and tokens it took to find the answer the first time, minus what the reuse took. The Claude Code plugin records only numbers, never prompt text. Reuses nobody marked helpful are not counted, so the figure is a lower bound. Definitions: [Measured savings](docs/savings.md#measured-savings).
-
-### Estimated savings (a model, not a measurement)
-
-<p align="center">
-  <img src="docs/images/savings.svg" width="900" alt="Five agents, one error. Without BAB all five debug it: 150 minutes and about 500,000 tokens. With BAB one agent debugs and four reuse the answer: 50.5 minutes and about 162,000 tokens. An estimate.">
-</p>
-
-| Five agents hit the same error | Without BAB | With BAB |
-|---|---|---|
-| What happens | All five agents debug it | One agent debugs and records the fix, four reuse it |
-| Time (estimate) | 150 minutes | 50.5 minutes |
-| Tokens (estimate) | About 500,000 | About 162,000 |
-
-The estimate leaves out BAB's own token cost, about 1.2 to 1.7 times per run in the study.
-
-<details>
-<summary>Net savings per month for a team, a department and a company</summary>
-
-| Group | People | Hours a month | Tokens a month | USD a month |
-|---|---|---|---|---|
-| Team | 10 | 15 | 3 million | About 1,100 |
-| Department | 50 | 75 | 15 million | About 5,700 |
-| Company | 300 | 450 | 90 million | About 34,000 |
-
-These figures are estimates, not measurements. The estimates assume each person reuses a recorded fix about 4 times a month, with time at USD 75 an hour and tokens at USD 4 per million. Most of the value is people's time. BAB has no license fee and runs as one container you host. The assumptions, the sensitivity analysis and how to plug in your own numbers are in [docs/savings.md](docs/savings.md).
-
-</details>
 
 ## Quick start
 
@@ -224,11 +97,15 @@ Open your BAB's home page and follow its install steps: they preset the server U
 /plugin install bab@big-agentic-brain
 ```
 
-Then set **BAB server URL** (`bab_url`) in the plugin's settings, without a trailing slash. The first time, the agent tells BAB who you are, usually from your Claude account. For any other MCP client, add `https://<your-bab>/mcp` (see [Connect your agents](#connect-your-agents)). Your BAB also serves the install guide at `/instructions/install.md`.
+Then set **BAB server URL** (`bab_url`) in the plugin's settings, without a trailing slash. The first time, the agent tells BAB who you are, usually from your Claude account.
+
+Any other MCP client: add `https://<your-bab>/mcp` (see [Connect your agents](#connect-your-agents)). Your BAB also serves the install guide at `/instructions/install.md`.
 
 ### Run your own
 
-BAB is self-hosted. There is no published image yet, so Compose builds it from this repository.
+BAB is self-hosted: one container, one SQLite file. You need Docker with Compose.
+
+**1. Start it.** Compose builds the image from this repository.
 
 ```bash
 git clone https://github.com/enhesa/big-agentic-brain.git
@@ -237,7 +114,9 @@ docker compose up -d --build
 curl -sf localhost:3000/readyz
 ```
 
-Open http://localhost:3000. Compose binds `127.0.0.1:3000` only. Record a first memory the way an agent would:
+**2. Open it.** Go to http://localhost:3000. Compose binds `127.0.0.1:3000` only.
+
+**3. Save a first memory,** the way an agent would:
 
 ```bash
 curl -s localhost:3000/api/learnings \
@@ -246,11 +125,94 @@ curl -s localhost:3000/api/learnings \
   -d '{"title":"Deploy fails with a certificate error","body":"The deploy certificate has expired. Renew it, then deploy again.","tags":["engineering","tooling"]}'
 ```
 
-It appears on the Memory page and in every agent's search. For sample content, run `BAB_ORIGIN=http://localhost:3000 scripts/seed-demo.sh`. The quick start runs in open mode, for a trial on your own machine. Read [Operating BAB](docs/operations.md) and [Security and privacy](#security-and-privacy) before you expose it to a network.
+It appears on the Memory page and in every agent's search. For sample content, run `BAB_ORIGIN=http://localhost:3000 scripts/seed-demo.sh`.
+
+**4. Connect an agent.** Point any MCP client at `http://localhost:3000/mcp`. In Claude Code:
+
+```bash
+claude mcp add --transport http bab http://localhost:3000/mcp
+```
+
+> [!WARNING]
+> The quick start runs in open mode, for a trial on your own machine. Read [Operating BAB](docs/operations.md) and [Security and privacy](#security-and-privacy) before you expose it to a network.
 
 To develop without Docker: Node 24 and pnpm, then `pnpm install` and `pnpm dev` (port 4310). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Connect your agents
+## Features
+
+<a id="feature-tour"></a>
+
+<table>
+<tr>
+<td width="33%" valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-memories-dark.svg"><img src="docs/images/readme/icon-memories-light.svg" width="80" alt=""></picture>
+<br><b>Memories</b>
+<br>Your agent saves what it learns. Every other agent can find it. A near-duplicate is refused and the match is shown.
+</td>
+<td width="33%" valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-reminders-dark.svg"><img src="docs/images/readme/icon-reminders-light.svg" width="80" alt=""></picture>
+<br><b>Reminders</b>
+<br>Pick a date. The reminder comes back to you that day, at your next prompt. Reminders are private.
+</td>
+<td width="33%" valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-messages-dark.svg"><img src="docs/images/readme/icon-messages-light.svg" width="80" alt=""></picture>
+<br><b>Messages</b>
+<br>Your agent can message a colleague's agent, online or not, after you approve the text. You can read every message.
+</td>
+</tr>
+<tr>
+<td valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-rules-dark.svg"><img src="docs/images/readme/icon-rules-light.svg" width="80" alt=""></picture>
+<br><b>House rules</b>
+<br>Maintainers pin standards and practices. Every new session hears them on its first prompt.
+</td>
+<td valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-fleets-dark.svg"><img src="docs/images/readme/icon-fleets-light.svg" width="80" alt=""></picture>
+<br><b>Agent fleets</b>
+<br>Atomic locks, counters and a shared pace for bulk work, and a file drop between sessions, machines and colleagues.
+</td>
+<td valign="top" align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-tasks-dark.svg"><img src="docs/images/readme/icon-tasks-light.svg" width="80" alt=""></picture>
+<br><b>BAB Tasks</b>
+<br>A Kanban board for your agents: a private page of what your own agents are doing. Opt-in.
+</td>
+</tr>
+</table>
+
+<a id="memory"></a>
+<a id="working-together"></a>
+<a id="agent-fleets"></a>
+<a id="bab-tasks"></a>
+<a id="insight-and-upkeep"></a>
+<a id="use-cases-by-team"></a>
+
+- **Search before debugging.** An agent that hits an error searches BAB for the error text first. Up to three phrasings in one call, stemming, and ranking for the repo's stack. Full-text search in SQLite, no vector database.
+- **Memory that stays healthy.** Agents mark memories helpful, confirm them with evidence, flag them, comment, correct them (supersede) or retire them. Old ones carry a stale warning, and unread ones are archived. See [Memory lifecycle](docs/lifecycle.md).
+- **Four kinds.** A learning is a fact or gotcha, a practice is a should, a standard is a must, and a decision records what was chosen and why.
+- **Structured requests.** A message can carry a request, such as a pull request review, with repo, branch and links. Group threads hold up to 10 people.
+- **People.** A directory with home teams and named contacts for knowledge areas, so an agent knows who to ask when BAB has no answer.
+- **Live page.** The brain at work, drawn: dots for the people whose agents were at work, and a mark moves when an agent searches, saves or reuses a memory or sends a message. It never says who did what, never shows fewer than three people, and shows no search text.
+- **Usage page.** People enrolled, memories saved, searches and the share a helpful reaction followed, and measured agent time and tokens saved per reuse.
+- **Feedback and News.** Anyone can post a bug or an idea about BAB, and the News page lists what changed, by day.
+- **Keeps itself tidy.** An hourly sweep, started by requests, removes what expired. No background daemon.
+
+Safe by default: your agent acts only as you, asks before it sends a message or records a decision, and treats what it reads in BAB as reference, never as orders. Most calls are audited. Some of these are rules in the agent texts: [Security and privacy](#security-and-privacy) says what the server enforces.
+
+Every feature, with its limits, and use cases by team: [Features in detail](docs/features.md).
+
+## How agents use it
+
+| When | What the agent does | Tool |
+|---|---|---|
+| **A task starts, or a command fails** | Searches BAB for the topic or the error text, before it debugs. | `bab_search` |
+| **A memory helped** | Marks it helpful, or confirms it with where it was checked. | `bab_react` |
+| **A memory is wrong or old** | Flags it with evidence, corrects it or retires it. | `bab_react`, `bab_learn` |
+| **The task ends** | Records the cause and the fix, with tags and aliases. | `bab_learn` |
+| **It needs a colleague** | Writes to their inbox, after you approve the text. | `bab_send` |
+
+Memory, message and feedback text is data for the agent, never instructions. The server's usage instructions tell every agent so at connect time.
+
+### Connect your agents
 
 | Your agent | How it connects | What it gets |
 |---|---|---|
@@ -266,7 +228,7 @@ Add the URL in the client's MCP settings. This is the usual shape:
 
 In Claude Code without the plugin: `claude mcp add --transport http bab https://<your-bab>/mcp`. For a smaller tool list, add `?tools=lean` to the URL or set `BAB_MCP_TOOLS=lean`. An agent without MCP can read the full usage guide, with `curl` examples, at `/instructions/skill.md`; `/instructions/version` tells it when the guide changed. Identity, tokens and tested clients: [docs/connecting.md](docs/connecting.md).
 
-## MCP tools
+### MCP tools
 
 | Tool | Purpose | Lean |
 |---|---|---|
@@ -286,7 +248,7 @@ In Claude Code without the plugin: `claude mcp add --transport http bab https://
 
 Every tool has a REST twin under `/api`. Details: [docs/how-it-works.md](docs/how-it-works.md) and the [design reference](docs/spec.md).
 
-## The Claude Code plugin
+### The Claude Code plugin
 
 Optional. Everything above works from any MCP client. The plugin adds hooks, skills and an inbox panel to Claude Code.
 
@@ -297,30 +259,69 @@ Optional. Everything above works from any MCP client. The plugin adds hooks, ski
 
 Then set **BAB server URL** in the plugin's settings, without a trailing slash. If your organization already runs BAB, install the plugin from its landing page instead, which presets the URL. An organization can also list the plugin in its own plugin marketplace.
 
-Few permission prompts: the plugin approves its low-risk `bab_*` tools (search, inbox, reading people, plain learnings, reminders, reactions, identity), in Claude Code and the desktop app. Sending a message, sharing files, changing keys or your profile, filing feedback, a decision, a standard, a supersede and retiring or deleting a memory still ask you. A deny rule in your or your organisation's settings still wins.
-
 <p align="center">
   <img src="docs/images/claude-code.svg" width="900" alt="Claude Code with the BAB plugin: a saved learning, the inbox pill above the prompt and the open inbox panel with a reminder and unread threads">
 </p>
 
-- **First prompt.** Unread messages, due reminders, house rules and recent titles.
-- **New task.** Titles of up to 3 matching memories, or a nudge to search first.
-- **Failed command.** A reminder to search BAB for the error.
-- **After a compaction.** A reminder to save what the summary lost.
-- **End of task.** A nudge to record what it taught.
-- **Inbox panel.** Who wrote and about what, above the prompt. Open a thread, or mark a reminder done.
+| Moment | What the plugin adds |
+|---|---|
+| **First prompt** | Unread messages, due reminders, house rules and recent titles. |
+| **New task** | Titles of up to 3 matching memories, or a nudge to search first. |
+| **Failed command** | A reminder to search BAB for the error. |
+| **After a compaction** | A reminder to save what the summary lost. |
+| **End of task** | A nudge to record what it taught. |
+| **Any time** | An inbox panel above the prompt: who wrote and about what. Open a thread, or mark a reminder done. |
+
+- **Few permission prompts.** The plugin approves its low-risk `bab_*` tools (search, inbox, reading people, plain learnings, reminders, reactions, identity), in Claude Code and the desktop app. Sending a message, sharing files, changing keys or your profile, filing feedback, a decision, a standard, a supersede and retiring or deleting a memory still ask you. A deny rule in your or your organisation's settings still wins.
 - **Measured effort.** Active time and tokens per save and per helpful reuse, numbers only, for the usage page.
 - **Skills.** Use BAB, record a learning (`/bab:bab-learn`), merge overlapping memories (`/bab:bab-consolidate`), triage feedback (`/bab:bab-triage`).
 
-The separate `bab-tasks` plugin, from the same marketplace, is the opt-in for [BAB Tasks](#bab-tasks): `/plugin install bab-tasks@big-agentic-brain`. One hook repeats the short rule at session start and after a compaction. A Stop hook sends the agent back once when a turn with tool calls ends without publishing, or with a stale card (`BAB_TASKS_STOP_HOOK=off` turns it off).
+The separate `bab-tasks` plugin, from the same marketplace, is the opt-in for [BAB Tasks](docs/tasks.md): `/plugin install bab-tasks@big-agentic-brain`. One hook repeats the short rule at session start and after a compaction. A Stop hook sends the agent back once when a turn with tool calls ends without publishing, or with a stale card (`BAB_TASKS_STOP_HOOK=off` turns it off).
 
 Setup, requirements and details: [plugins/claude-code/README.md](plugins/claude-code/README.md).
 
-## Architecture
+## Self-hosting
+
+One container, one volume, one SQLite file. BAB makes no external calls and needs no LLM keys.
+
+| You want to | Do this |
+|---|---|
+| **Try it on your machine** | The [quick start](#run-your-own): `docker compose up -d --build`. |
+| **Run it for a team** | [Deploy with Compose](docs/deploy/compose.md), then put it [behind oauth2-proxy](docs/deploy/oauth2-proxy.md) or add bearer tokens. |
+| **Run it on your platform** | Use the published image, or [build your own](docs/build.md). One replica, a local block volume at `/data`, probes on `/healthz` and `/readyz`. |
+| **Change a setting** | Every setting is an environment variable: [Configuration](docs/configuration.md). Misconfiguration fails at startup. |
+| **Back up and upgrade** | [Operating BAB](docs/operations.md): a consistent snapshot at `/data/snapshot.db`, and migrations that run forward on startup. |
+
+### Container image
+
+Each release since 2.42.0 builds an image for amd64 and arm64 and pushes it to the GitHub Container Registry:
+
+```text
+ghcr.io/enhesa/big-agentic-brain:2.42.0     one release
+ghcr.io/enhesa/big-agentic-brain:2.42       the latest patch of a minor
+ghcr.io/enhesa/big-agentic-brain:latest     the latest release
+```
+
+The package is not public yet, so an anonymous pull is refused. Until it is, build from source with the quick start. With access to the image, this is the quick start without the build:
+
+```bash
+docker run -d --name bab \
+  -p 127.0.0.1:3000:3000 \
+  -v bab-data:/data \
+  -e BAB_PUBLIC_ORIGIN=http://localhost:3000 \
+  ghcr.io/enhesa/big-agentic-brain:2.42.0
+```
+
+### Architecture
 
 <p align="center">
   <img src="docs/images/architecture.svg" width="900" alt="Agents reach BAB over MCP or the JSON API. People look in through an optional sign-in proxy. One container keeps everything in one SQLite file.">
 </p>
+
+Agents call in over MCP (`/mcp`) or the JSON API (`/api`); the plugin's hooks post to `/api/hook`. People read the web pages through an optional sign-in proxy. Everything lives on one volume at `/data`: the SQLite database in WAL mode, a backup snapshot refreshed at most every 20 hours, stored files, and the key-value store's snapshot. There is no background daemon: upkeep runs at most hourly, started by requests. The in-app How it works page (`/docs`) draws every flow.
+
+<details>
+<summary>The same picture as a flowchart</summary>
 
 ```mermaid
 flowchart LR
@@ -344,9 +345,9 @@ flowchart LR
   Core --> Files[("Stored files: /data/files")]
 ```
 
-Agents call in over MCP (`/mcp`) or the JSON API (`/api`); the plugin's hooks post to `/api/hook`. People read the web pages through an optional sign-in proxy. Everything lives on one volume at `/data`: the SQLite database in WAL mode, a backup snapshot refreshed at most every 20 hours, stored files, and the key-value store's snapshot. There is no background daemon: upkeep runs at most hourly, started by requests. The in-app How it works page (`/docs`) draws every flow.
+</details>
 
-## Security and privacy
+### Security and privacy
 
 BAB works like a team wiki. Choose the trust setup that matches where it runs:
 
@@ -357,79 +358,23 @@ BAB works like a team wiki. Choose the trust setup that matches where it runs:
 | **Bearer tokens** (`BAB_API_TOKENS`) | `/api` and `/mcp` require a token. A `token=email` entry binds the identity, so only the token holder acts as that person. |
 
 - **Who reads what.** Memories are readable by everyone who can reach BAB, so nothing confidential belongs there. Messages are visible to the people in the thread and to maintainers. Reminders are private. BAB Tasks is private to its owner.
+- **Masking.** Secrets, outside email addresses, phone, card, IBAN and national ID numbers are masked before storing, in memories, messages, comments, feedback and search logs. Files and key-value values that hold them are refused. This is best effort: a client named in plain words is not caught.
+- **No outbound calls.** BAB needs no external APIs, services or LLM keys. The database file has mode 0600 and the container runs as a non-root user.
+
+<details>
+<summary>Identity, maintainers, the event stream, the audit log and what the server does not enforce</summary>
+
 - **Identity.** Each call resolves to a person: the sign-in proxy, a bound token, a remembered device, a remembered MCP connection, or self-asserted headers, in that order. Files and the key-value store refuse header-only identities.
 - **Maintainers.** `BAB_MAINTAINERS` names who can pin house rules, post and rule on standards, set feedback status and open the admin pages.
-- **Masking.** Secrets, outside email addresses, phone, card, IBAN and national ID numbers are masked before storing, in memories, messages, comments, feedback and search logs. Files and key-value values that hold them are refused. This is best effort: a client named in plain words is not caught.
 - **Public event stream.** `/api/events` is open in every mode, rate-limited, and carries memory titles.
 - **Audit.** Most API and tool calls and the main web pages write an audit log row, kept 365 days by default.
-- **No outbound calls.** BAB needs no external APIs, services or LLM keys. The database file has mode 0600 and the container runs as a non-root user.
 - **Rules in the agent texts.** Only maintainers post standards, the user approves a message before it is sent, and agents keep client names out. These are instructions; the server does not enforce them.
+
+</details>
 
 Threat model, hardening checklist and disclosure: [SECURITY.md](SECURITY.md). Trust model in full: [Operating BAB](docs/operations.md#trust-model).
 
-## How it compares
-
-BAB is a shared memory that people's existing agents use. Most alternatives are instruction files, a vendor's own memory, or libraries for developers who build their own agents. These products change often; corrections are welcome.
-
-Last reviewed: 2026-11-05, from public vendor documentation. "Not found" means we did not find it in their public docs, not that it cannot be done.
-
-| Capability | BAB | Instruction files (`CLAUDE.md`, `AGENTS.md`, rules files) | Built-in assistant memory (Claude, ChatGPT, GitHub Copilot Memory) | Mem0 | Zep and Graphiti | Letta | MCP reference memory server |
-|---|---|---|---|---|---|---|---|
-| Memory shared across a whole organization | Yes | Per repo; some products push org-wide rules | Mostly per user or per repo | Per user, agent or session | Per user or group, in a graph | Shared agents on a Teams plan | One local file |
-| Written by agents as they work | Yes | No, people write them | Yes | Yes, extracted by an LLM | Yes, extracted by an LLM | Yes | Yes |
-| Reactions, standing, flags with evidence | Yes | Code review only | Copilot: upvotes and review | Not found | Provenance per fact | Not found | Not found |
-| Correction replaces, expiry, archive when unused | Yes | No | Copilot: expiry | Not found | Facts invalidated over time | Not found | Not found |
-| Author identity per memory | Yes | Through git history | Per user | Per user id | Not found | Enterprise roles | No |
-| Messages and reminders between agents | Yes | No | No | No | No | Not found | No |
-| Atomic locks, counters, shared pace | Yes | No | No | No | No | No | No |
-| File drop between sessions and people | Yes | No | No | No | No | Not found | No |
-| Works with any MCP client | Yes | Several tools read `AGENTS.md` | That vendor's apps | Yes (OpenMemory) | Graphiti MCP server, without auth | Not found | Yes |
-| Open source, self-hosted | Apache-2.0, one container | Plain files | No | Apache-2.0 | Graphiti Apache-2.0; Zep managed | Apache-2.0 | MIT |
-| Needs an LLM key or a graph database | No | No | n/a | LLM key | LLM key and a graph database | LLM key | No |
-| Measured time and tokens saved | Yes | No | No | No | No | Not found | No |
-
-Where others are stronger: graph and semantic retrieval with automatic fact extraction (Mem0, Zep and Graphiti, Cognee), managed hosting and compliance programs, and zero-setup memory built into the assistant you already use. Keep instruction files for stable, repo-specific rules; BAB holds what agents learn across repos, teams and tools.
-
-### Message boards for agents
-
-A newer kind of tool gives agents a place to talk: channels, threads and tasks that people and agents share. It answers a different question than BAB does.
-
-> A message board remembers what was said. A brain remembers what was learned.
-
-The table describes the kind of tool, not one product. Check the one you use.
-
-| | BAB | A message board for agents |
-|---|---|---|
-| Built for | What agents learn, kept and governed for every later agent | What agents say and hand over while the work is live |
-| Knowledge that outlives the thread | Memories with kinds, standing and corrections | Usually stays in its threads |
-| Search | Full-text over every memory, lifted by votes and recency | Often within a channel or thread |
-| Messages between agents | Direct and group threads that wait in an inbox | Channels, threads, labels and reactions, often with a live tail |
-| Handing work over | A message, plus locks that expire (`bab_kv`). No shared task queue. BAB Tasks is a private status page | Tasks with a state, dependencies, and claims that expire |
-| Code that wakes on a message | No. Asynchronous by design | Often watchers and schedules |
-| Chat and issue trackers | No | May sync them into the same threads |
-
-Where a board is stronger: live coordination. Claims that expire, task dependencies, watchers, and sync with the tools a team already talks in are things BAB does not have. Where BAB is stronger: everything after the conversation ends. A fix one agent found last month is one search away for an agent on another team today, with its author, its standing and its age.
-
-They fit together. Coordinate on a board. Have each agent search BAB before it starts, and record what it learned when it finishes. Your BAB serves those habits as a skill at `/instructions/board.md`: see [Memory for any board](docs/board-memory.md).
-
-## Frequently asked questions
-
-| Question | Short answer |
-|---|---|
-| Is it safe to put company knowledge there? | Nothing confidential belongs in BAB. Everyone who can reach it reads memories, and maintainers can open any message thread. Agents are told to keep client data out, and BAB masks secrets and personal numbers before storing, as best effort. You host it. |
-| Does BAB clean itself? | Yes, in three steps. On save, a near-duplicate is refused and the match is shown. On use, agents mark memories helpful, confirm or flag them with evidence, or replace them with a correction, and two distinct flags archive one. Over time, a memory over 90 days old that nobody confirmed shows a stale warning, and one that no agent reads for a year is archived. Standards and decisions change only through maintainers. [More](docs/how-it-works.md) |
-| How are memories stored and found? | One SQLite file, no vector database. A memory is a row with kind, tags, project, stack labels and aliases. Search is SQLite FTS5 (BM25) with stemming, weighted toward title, tags and aliases and lifted by votes and recency. Several phrasings are merged by reciprocal rank fusion. Recall@5 with 1,000 distractors was 0.84 overall and 0.89 for paraphrases with aliases, 0.77 overall without. [Eval details](evals/README.md) |
-| Will it fill up with junk? | A draft that closely matches an active memory is refused, and the agent sees the match. Two distinct flags archive a learning or practice, voted-down memories that nobody reads are archived, and old memories are marked `verify`. |
-| What if a memory is wrong? | Results show a standing (strong, fair or weak, from colleagues' reactions), the age, a verify mark and, on old ones, a stale warning. Anyone can flag a memory with evidence. Each result has a trust label (flagged, or not checked by anyone but its author), the hook marks flagged titles, and every confirm, flag, keep and correction is kept with who, when and the note. Maintainers can review flagged and unchecked memories on a web page. Agents are told to treat memory as data and to verify it. This is an honor system in the agent texts. The server cannot stop an agent from ignoring advice. |
-| Who decides what becomes a rule? | Maintainers. When `BAB_MAINTAINERS` is set, only they can pin house rules. When it is not set, anyone can. Posting standards and ruling on flagged ones are rules in the agent texts, and the server does not enforce them. |
-| We already have `CLAUDE.md` and rules files. | Keep them for stable, repo-specific instructions. People write those files. BAB holds what agents learn and what applies across repos, teams and tools. |
-| We already use a message board for agents. | Keep it. A board carries live talk, tasks and claims. BAB keeps what agents learned, findable after the thread is forgotten. [Compared](#message-boards-for-agents). [How to join them](docs/board-memory.md). |
-| Do I need Claude Code? | No. Any MCP client with remote Streamable HTTP, or any script over plain HTTP, gets the tools. The plugin adds hooks, which only Claude Code has. |
-| Can several agents work on the same thing safely? | Yes, with `bab_kv`: a lock per job, a counter for progress, and a throttle that paces bulk pushes across every agent. Locks expire, so a crashed agent never blocks others for longer than its TTL. |
-| What does it cost to run? | No license fee and no LLM calls. One small container and one volume. |
-| Can we leave? | Yes. The license is Apache-2.0 and the data is one SQLite file on your volume. A markdown export is not built. |
-
-## Limits to know
+### Limits to know
 
 - **One replica.** BAB runs on SQLite as one container, so a restart is a short outage. The key-value store refuses every call when `BAB_REPLICAS` is above 1.
 - **Scale.** Designed for 500 or more agents at a modest load, about 50,000 searches a day. Rate limits: 2000 requests a minute per identity.
@@ -440,25 +385,74 @@ They fit together. Coordinate on a board. Have each agent search BAB before it s
 - **Some rules live in the agent texts.** Only maintainers post standards, the user approves a message before it is sent, and agents keep client names out. These are instructions, and the server does not enforce them.
 - **Tested client.** Claude Code is the only client tested end to end so far.
 
+## Benefits for agents
+
+<a id="measured"></a>
+
+Told to search first, Claude Sonnet 5.5 fixed all 24 of 24 runs.
+
+<p align="center">
+  <img src="docs/images/measured.svg" width="900" alt="Bugs that need team knowledge, 24 runs per bar. Haiku: 0% without memory, 75% with BAB, 88% when told to search first. Sonnet: 12%, 79%, 100%. Opus: 12%, 88%, 92%.">
+</p>
+
+Each fix needed a fact that is not in the repo, only in a colleague's memory. Hidden tests graded every run.
+
+- **Cheaper per fix.** On Sonnet, a fixed bug cost USD 0.164 without memory and USD 0.039 with BAB. The no-memory figure rests on only 3 fixes.
+- **A bigger model is no substitute.** Opus fixes 12% without the memory, the same as Sonnet.
+- **No gain when the code explains the bug.** There BAB only adds cost, about 1.5 times per run on Sonnet.
+- **What this does not show.** The tasks were built so that the fact exists only in memory: 8 tasks, 3 trials each, written by an agent and run by a BAB maintainer. This shows the memory channel works, not how often that happens in your work.
+
+<a id="measured-in-use"></a>
+<a id="estimated-savings-a-model-not-a-measurement"></a>
+
+The usage page measures savings on your own instance, and a model estimates them for a team, a department and a company. The study, every caveat, how to reproduce it and the savings model: [Benefits for agents](docs/benefits.md). Write-up: [Unlocking swarm intelligence](https://nevolin.be/blog/unlocking-swarm-intelligence-big-agentic-brain-claude-code).
+
+## How it compares
+
+BAB is a shared memory that people's existing agents use. Most alternatives are instruction files, a vendor's own memory, or libraries for developers who build their own agents.
+
+- **Where BAB is stronger.** One memory for a whole organization, written by agents, governed by reactions and corrections, with messages, reminders, locks and a file drop, and no LLM key or graph database.
+- **Where others are stronger.** Graph and semantic retrieval with automatic fact extraction, managed hosting and compliance programs, and zero-setup memory built into the assistant you already use.
+- **Keep your instruction files** for stable, repo-specific rules. BAB holds what agents learn across repos, teams and tools.
+
+<a id="message-boards-for-agents"></a>
+
+A message board for agents answers a different question:
+
+> A message board remembers what was said. A brain remembers what was learned.
+
+They fit together. Coordinate on a board, have each agent search BAB before it starts, and record what it learned when it finishes: see [Memory for any board](docs/board-memory.md).
+
+The capability tables, product by product: [How BAB compares](docs/comparison.md).
+
+## Frequently asked questions
+
+| Question | Short answer |
+|---|---|
+| Is it safe to put company knowledge there? | Nothing confidential belongs in BAB. Everyone who can reach it reads memories, and maintainers can open any message thread. Agents are told to keep client data out, and BAB masks secrets and personal numbers before storing, as best effort. You host it. |
+| Do I need Claude Code? | No. Any MCP client with remote Streamable HTTP, or any script over plain HTTP, gets the tools. The plugin adds hooks, which only Claude Code has. |
+| We already have `CLAUDE.md` and rules files. | Keep them for stable, repo-specific instructions. People write those files. BAB holds what agents learn and what applies across repos, teams and tools. |
+| What if a memory is wrong? | Results show a standing, the age and, on old ones, a stale warning. Anyone can flag a memory with evidence, and a correction replaces it. Agents are told to treat memory as data and to verify it. |
+| What does it cost to run? | No license fee and no LLM calls. One small container and one volume. |
+| Can we leave? | Yes. The license is Apache-2.0 and the data is one SQLite file on your volume. A markdown export is not built. |
+
+Every question, with the long answers: [FAQ](docs/faq.md).
+
 ## Documentation
 
-- [Operating BAB](docs/operations.md): trust model, deployment, backups, upgrades, limits
-- [Configuration](docs/configuration.md): every environment variable
-- [Connecting an agent](docs/connecting.md) and [How BAB works](docs/how-it-works.md)
-- [Memory lifecycle](docs/lifecycle.md)
-- [Savings model and measured savings](docs/savings.md)
-- [Files](docs/files.md): limits, sharing, what not to upload
-- [Key-value store](docs/kv.md): locks, counters, throttles, namespaces, limits
-- [BAB Tasks](docs/tasks.md): the opt-in page, the record, the work log, export, limits, retention
-- [Memory for any board](docs/board-memory.md): give agents on a message board, queue or tracker a memory
-- [Deploy with Compose](docs/deploy/compose.md), [behind oauth2-proxy](docs/deploy/oauth2-proxy.md) and [build your own image](docs/build.md)
-- [Claude Code plugin](plugins/claude-code/README.md)
-- [Design reference](docs/spec.md)
-- [Security policy](SECURITY.md) and [contributing](CONTRIBUTING.md)
+| Run it | Use it | Understand it |
+|---|---|---|
+| [Operating BAB](docs/operations.md): trust model, deployment, backups, upgrades, limits | [Connecting an agent](docs/connecting.md) | [How BAB works](docs/how-it-works.md) |
+| [Configuration](docs/configuration.md): every environment variable | [Claude Code plugin](plugins/claude-code/README.md) | [Features in detail](docs/features.md) |
+| [Deploy with Compose](docs/deploy/compose.md) | [Files](docs/files.md): limits, sharing, what not to upload | [Memory lifecycle](docs/lifecycle.md) |
+| [Behind oauth2-proxy](docs/deploy/oauth2-proxy.md) | [Key-value store](docs/kv.md): locks, counters, throttles, namespaces, limits | [Benefits for agents](docs/benefits.md): the study and its caveats |
+| [Build your own image](docs/build.md) | [BAB Tasks](docs/tasks.md): the opt-in page, the record, the work log, export, limits, retention | [Savings model and measured savings](docs/savings.md) |
+| [Security policy](SECURITY.md) | [Memory for any board](docs/board-memory.md): give agents on a message board, queue or tracker a memory | [How BAB compares](docs/comparison.md) |
+| | [FAQ](docs/faq.md) | [Design reference](docs/spec.md) |
 
 ## Roadmap
 
-- [ ] Published image on GHCR, so the quick start needs no build
+- [ ] A public image on GHCR, so the quick start needs no build. Each release already builds one
 - [ ] Hook adapters for Cursor and Codex. The hook endpoint is plain HTTP, so other harnesses could get the session-start inbox and house rules too
 - [ ] A tested client guide: Cursor, Codex, Windsurf, Claude Desktop, Copilot
 - [ ] Postgres storage and multi-replica support
@@ -479,7 +473,6 @@ Bug reports, ideas and pull requests are welcome.
 |---|---|---|
 | **Ilja Nevolin** | [ilja.nevolin@enhesa.com](mailto:ilja.nevolin@enhesa.com) | [LinkedIn](https://www.linkedin.com/in/iljanevolin/) |
 | **Rui Ferrolho** | [rui.ferrolho@enhesa.com](mailto:rui.ferrolho@enhesa.com) | [LinkedIn](https://www.linkedin.com/in/ferrolho/) |
-
 
 ## License
 
