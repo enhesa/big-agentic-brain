@@ -1552,7 +1552,9 @@ every time.
   `LIVE_PEOPLE_FLOOR` (3), and the page shows it as "3 or fewer". The count moves on a clock of
   `LIVE_PEOPLE_STEP_MINUTES` (5): a person is counted from the next mark after their first beat, so a rise cannot be matched to one beat.
   There is no count of who is at work right now. On an installation with three people or fewer, anyone who
-  knows that can still narrow a beat to those people: the page cannot be live and hide that.
+  knows that can still narrow a beat to those people: the page cannot be live and hide that. The Usage
+  page shows how many people used BAB in each week, so in a week with one person it already says so; the
+  floor keeps the Live page from adding a count by the day or the minute to that.
 - **A dot is a seat, not a person.** The picture draws one dot per counted person, at most
   `LIVE_DOTS_MAX` (24), all alike. Each mark moves to a seat drawn by lot from the beat's id (`lib/live-picture.ts`). The
   page says so under the picture.
