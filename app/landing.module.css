@@ -1215,27 +1215,9 @@
   background: color-mix(in srgb, var(--sand) 60%, transparent);
 }
 
-.filmButton:focus-visible,
-.filmLink:focus-visible {
+.filmButton:focus-visible {
   outline: 3px solid var(--teal-ink);
   outline-offset: 3px;
-}
-
-.filmLink {
-  color: var(--teal-ink);
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.filmLink:hover {
-  color: var(--navy);
-}
-
-/* A way past the pinned film. Nothing to skip while the film is a player. */
-.filmSkip {
-  display: none;
 }
 
 /* The acts in words. */
@@ -1452,11 +1434,9 @@
     transform: translateX(-50%);
   }
 
+  /* The bar holds only the player's buttons, and scroll is the clock here. */
   .filmBar {
-    position: absolute;
-    top: 10px;
-    right: 0;
-    margin: 0;
+    display: none;
   }
 
   /* The page is the film's paper here. Its own would show as a box when the page turns navy. */
@@ -1494,14 +1474,9 @@
     content: "";
   }
 
-  .filmSection[data-night] .filmLink:focus-visible {
-    outline-color: var(--sage);
-  }
-
   .actTitle,
   .actText,
   .actNo,
-  .filmLink,
   .rail,
   .railMark {
     transition:
@@ -1509,8 +1484,7 @@
       background-color 0.3s ease;
   }
 
-  .filmSection[data-night] .actTitle,
-  .filmSection[data-night] .filmLink {
+  .filmSection[data-night] .actTitle {
     color: var(--paper);
   }
 
@@ -1532,10 +1506,6 @@
 
   .filmControls {
     display: none;
-  }
-
-  .filmSkip {
-    display: inline;
   }
 
   .scrollCue {

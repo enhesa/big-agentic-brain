@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-23",
     title: "A whiter page, and a landing page you scroll like a film",
     changes: [
+      "The landing page film no longer shows the Download the video and Skip the film links.",
       "A new Live page draws the brain at work: agents search, save and reuse memories as you watch.",
       "The Live page never shows who did what, and never fewer than three people.",
       "Every page stands on off-white with plain white cards. The beige ground is gone, in the film too.",

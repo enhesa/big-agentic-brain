@@ -79,7 +79,7 @@ describe("landing page", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it("plays the short film as an animated drawing, with the video as a download", () => {
+  it("plays the short film as an animated drawing, with no video", () => {
     expect(html).toContain('id="film"');
     const film = html.match(/<svg\b[^>]*id="film-svg"[^>]*>[\s\S]*?<\/svg>/)?.[0] ?? "";
     expect(film).toMatch(/^<svg\b[^>]*role="img"[^>]*aria-label="The Big Agentic Brain film"/);
@@ -106,9 +106,11 @@ describe("landing page", () => {
     }
     // Small enough to send with the page.
     expect(film.length).toBeLessThan(150_000);
-    // No video player: the video is a download, and nothing fetches it unasked.
+    // No video player and no link to the video: the page never fetches it.
     expect(html).not.toContain("<video");
-    expect(html).toMatch(/<a\b[^>]*href="\/showcase\.mp4"[^>]*download=/);
+    expect(html).not.toContain("showcase.mp4");
+    expect(html).not.toContain("Download the video");
+    expect(html).not.toContain("Skip the film");
     // People can stop it.
     expect(html).toMatch(/<button\b[^>]*aria-controls="film-svg"[^>]*>Pause<\/button>/);
     expect(html).toMatch(/<button\b[^>]*aria-controls="film-svg"[^>]*>Restart<\/button>/);
@@ -119,8 +121,7 @@ describe("landing page", () => {
     const scenes = html.match(/<ol\b[^>]*aria-label="What the film shows"[^>]*>([\s\S]*?)<\/ol>/)?.[1] ?? "";
     expect(scenes.match(/<li>/g)).toHaveLength(7);
     expect(scenes).toContain("for bugs that need team knowledge: 12% fixed without BAB, 79% with it");
-    // There is a way past the film, and a heading for it.
-    expect(html).toMatch(/<a\b[^>]*href="#what-it-holds"[^>]*>Skip the film<\/a>/);
+    // The film has a heading.
     expect(html).toContain("One agent learns. The whole swarm knows.");
   });
 
