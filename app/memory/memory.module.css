@@ -371,7 +371,7 @@
 }
 
 .rowLink:hover {
-  background: rgba(233, 227, 211, 0.42);
+  background: color-mix(in srgb, var(--sand) 60%, var(--sheet));
 }
 
 /* The team's colour is a dot beside the title, like the dot in the logo. */
