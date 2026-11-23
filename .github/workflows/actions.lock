@@ -8,6 +8,7 @@ workflows:
         - 'actions/setup-node@v7.1.0'
         - 'docker/build-push-action@v7.4.0'
         - 'docker/setup-buildx-action@v4.4.1'
+        - 'docker/setup-qemu-action@v4.4.0'
         - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/evals.yml':
         - 'actions/checkout@v7.0.1'
@@ -17,6 +18,11 @@ workflows:
     '.github/workflows/pr-text.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/release.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'docker/build-push-action@v7.4.0'
+        - 'docker/login-action@v4.8.0'
+        - 'docker/setup-buildx-action@v4.4.1'
+        - 'docker/setup-qemu-action@v4.4.0'
         - 'googleapis/release-please-action@v5.0.0'
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@v7.0.1'
@@ -41,11 +47,21 @@ dependencies:
         commit: 'sha1-c3c9e263c25d99ce0380d002d59b67737d91b0dc'
         owner_id: 5429470
         repo_id: 241092383
+    'docker/login-action@v4.8.0':
+        ref: 'v4.8.0'
+        commit: 'sha1-8aa5831fb8d48d8f76594c7ddde61ae58019f550'
+        owner_id: 5429470
+        repo_id: 287743349
     'docker/setup-buildx-action@v4.4.1':
         ref: 'v4.4.1'
         commit: 'sha1-f87e5991a6d7451dcb8d9637bfbc97413f497069'
         owner_id: 5429470
         repo_id: 288485773
+    'docker/setup-qemu-action@v4.4.0':
+        ref: 'v4.4.0'
+        commit: 'sha1-99012661954931238ded8c8b007157a8430204e1'
+        owner_id: 5429470
+        repo_id: 288487894
     'googleapis/release-please-action@v5.0.0':
         ref: 'v5.0.0'
         commit: 'sha1-45996ed1f6d02564a971a2fa1b5860e934307cf7'

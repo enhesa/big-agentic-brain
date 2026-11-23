@@ -21,6 +21,7 @@ The container default data directory is `/data`, which a dev machine usually can
 - Update the **Roadmap** section in the README, or tick the box in the PR template saying it is not needed.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`). Releases are generated from them.
 - Releases are cut by release-please from Conventional Commits. The first release (v1.0.0) used a one-time `release-as` pin, since removed.
+- Each release also builds the container image for amd64 and arm64 and pushes it to GHCR (`.github/workflows/release.yml`, job `image`), tagged with the version, `<major>.<minor>` and `latest`. The job runs after the release exists, so a failed build leaves the release as it is.
 - No sign-off (DCO) is required.
 
 ## Everything here is public
