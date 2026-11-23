@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
 - [install.md](${origin}/instructions/install.md) — install the BAB plugin
 - [skill.md](${origin}/instructions/skill.md) — the Claude Code skill file this installs
 - [version](${origin}/instructions/version) — current content-addressed version, JSON
+- [board.md](${origin}/instructions/board.md): optional skill for agents on a message board, queue or tracker: search before you claim, record what you learned
 
 To install, paste this into Claude Code:
 

@@ -13,6 +13,7 @@ const rawInstall = readFileSync(path.join(contentDir, "install.md"), "utf8");
 const rawSkill = readFileSync(path.join(contentDir, "skill.md"), "utf8");
 const rawTasks = readFileSync(path.join(contentDir, "tasks.md"), "utf8");
 const rawTasksAudit = readFileSync(path.join(contentDir, "tasks-audit.md"), "utf8");
+const rawBoard = readFileSync(path.join(contentDir, "board.md"), "utf8");
 
 const PLACEHOLDER_RE =
   /\{\{(ORIGIN|ORG_NAME|IDENTITY_HINT|IDENTITY_DOMAIN|MARKETPLACE|MARKETPLACE_NAME|ALLOWED_SENDERS|PLIST_ID|PLATFORM_LABELS|TEAM_TAGS|FILES_LIMITS)\}\}|<origin>|__BAB_ORIGIN__/g;
@@ -87,4 +88,12 @@ export function getTasksInstructions(origin: string): string {
 /** The optional bab-tasks-audit skill (content/instructions/tasks-audit.md), rendered for this deployment. */
 export function getTasksAuditInstructions(origin: string): string {
   return renderInstructionText(rawTasksAudit, origin);
+}
+
+/**
+ * The optional board-memory skill (content/instructions/board.md), rendered for this deployment:
+ * for agents that take work from a message board, a queue or a tracker. Not part of `version`.
+ */
+export function getBoardInstructions(origin: string): string {
+  return renderInstructionText(rawBoard, origin);
 }

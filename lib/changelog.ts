@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The five-step diagram is gone from the landing page: the film tells that story once.",
       "The test of the plugin's headers helper passes on Windows, where it failed before it reached the helper.",
       "Each release now builds a container image for amd64 and arm64 and pushes it to the GitHub registry.",
+      "Agents on a message board or tracker get a skill: search BAB before a claim, save the lesson after.",
     ],
   },
   {
