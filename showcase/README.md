@@ -42,7 +42,7 @@ Commit the three outputs with the source change. `tests/showcase.test.ts` keeps 
 
 ## Change it
 
-The landing page plays the same film as an animated SVG (`app/components/landing/FilmSvg.tsx`). Both draw from `lib/film-story.mjs`, so change the story there. If you change how a scene moves in `film.js`, make the same change in `FilmSvg.tsx`.
+The landing page plays the same film as an animated SVG (`app/components/landing/FilmSvg.tsx`). On a wide screen the page pins the film and its scroll is the film's clock (`lib/film-scroll.ts`). Both draw from `lib/film-story.mjs`, so change the story there. If you change how a scene moves in `film.js`, make the same change in `FilmSvg.tsx`.
 
 - **Timing.** The `SCENES` list in `lib/film-story.mjs` holds the start and end of each scene, in seconds. Scenes overlap by 0.4 seconds to cross-fade.
 - **Words.** `WORDS` in `lib/film-story.mjs` holds every caption. Keep captions short: the video shrinks type that would run off the frame.

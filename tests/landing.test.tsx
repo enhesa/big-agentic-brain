@@ -46,16 +46,37 @@ describe("landing page", () => {
     expect(html).not.toContain("/instructions/install.md");
   });
 
-  it("tells the story as a five-step diagram whose first scene is server-rendered", () => {
-    expect(html).toContain("How it works, in five steps");
-    expect(html).toContain("THE BRAIN");
-    for (const who of ["Alice", "Bob", "Carl", "Dana"]) expect(html).toContain(who);
-    for (const step of ["Save", "Find", "Ask", "Remind", "Everyone"]) expect(html).toContain(step);
-    expect(html).toContain("Alice&#x27;s agent learns something.");
+  it("tells the story once, as the film: seven acts, each named in the page from the server", () => {
+    const acts = html.match(/<ol\b[^>]*aria-label="The film, act by act"[^>]*>([\s\S]*?)<\/ol>/)?.[1] ?? "";
+    expect(acts.match(/<li\b/g)).toHaveLength(7);
+    for (const title of ["Alone", "Again", "One learns", "All know", "One place", "Measured", "Your turn"]) {
+      expect(acts).toContain(`>${title}</strong>`);
+    }
+    // The first act is the one shown before any script runs.
+    expect(acts.match(/actOn/g)).toHaveLength(1);
+    expect(acts.indexOf("actOn")).toBeLessThan(acts.indexOf("Alone"));
+    // The film is the only telling: the old five-step diagram is gone.
+    expect(html).not.toContain("How it works, in five steps");
   });
 
   it("shows one example of each of the three things it holds", () => {
     for (const kind of ["Memories", "Reminders", "Messages"]) expect(html).toContain(kind);
+  });
+
+  it("puts the install commands on the first screen, before the film", () => {
+    const hero = html.slice(0, html.indexOf('id="film"'));
+    expect(hero).toContain("Install in Claude Code");
+    expect(hero).toContain("/plugin marketplace add acme/claude-plugins");
+    expect(hero).toContain("/plugin install bab@acme-plugins");
+    expect(hero).toMatch(/<a\b[^>]*href="#film"/);
+    expect(hero).toMatch(/<a\b[^>]*href="#get-started"/);
+  });
+
+  it("tells the story in film order: the film, what you get, installing, questions", () => {
+    const at = (id: string) => html.indexOf(`id="${id}"`);
+    const order = ["film", "what-it-holds", "get-started", "faq"].map(at);
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
   it("plays the short film as an animated drawing, with the video as a download", () => {
@@ -98,6 +119,9 @@ describe("landing page", () => {
     const scenes = html.match(/<ol\b[^>]*aria-label="What the film shows"[^>]*>([\s\S]*?)<\/ol>/)?.[1] ?? "";
     expect(scenes.match(/<li>/g)).toHaveLength(7);
     expect(scenes).toContain("for bugs that need team knowledge: 12% fixed without BAB, 79% with it");
+    // There is a way past the film, and a heading for it.
+    expect(html).toMatch(/<a\b[^>]*href="#what-it-holds"[^>]*>Skip the film<\/a>/);
+    expect(html).toContain("One agent learns. The whole swarm knows.");
   });
 
   it("answers the common how-do-I questions in a FAQ", () => {

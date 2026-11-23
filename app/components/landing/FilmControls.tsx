@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "../../landing.module.css";
+import { useScrub } from "./useScrub";
 
 /**
  * Pause, play and restart for the animated film (FilmSvg).
@@ -12,9 +13,13 @@ import styles from "../../landing.module.css";
  *
  * People who ask their device for less motion see the still poster (landing.module.css hides
  * the film for them). For them the film waits, and Play is how they choose to watch it.
+ *
+ * On a wide screen the page's scroll plays the film instead (FilmScroll). There these buttons
+ * are hidden and this component leaves the film's clock alone.
  */
 export default function FilmControls({ target }: { target: string }) {
   const [paused, setPaused] = useState(false);
+  const scrub = useScrub();
   // What the viewer asked for, kept apart from what scrolling does.
   const wantsPlay = useRef(true);
   const started = useRef(false);
@@ -36,7 +41,7 @@ export default function FilmControls({ target }: { target: string }) {
 
   useEffect(() => {
     const svg = document.getElementById(target) as SVGSVGElement | null;
-    if (!svg) return;
+    if (!svg || scrub) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       wantsPlay.current = false;
       svg.pauseAnimations();
@@ -62,7 +67,7 @@ export default function FilmControls({ target }: { target: string }) {
     // The stage, not the film: the film itself is not laid out while the poster stands in.
     seen.observe(svg.parentElement ?? svg);
     return () => seen.disconnect();
-  }, [target]);
+  }, [target, scrub]);
 
   const toggle = () => {
     const svg = film();

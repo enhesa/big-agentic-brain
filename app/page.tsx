@@ -2,7 +2,6 @@ import styles from "./landing.module.css";
 import { branding } from "@/lib/branding";
 import TopBar from "./components/landing/TopBar";
 import Hero from "./components/landing/Hero";
-import HowItWorks from "./components/landing/HowItWorks";
 import Holds from "./components/landing/Holds";
 import Film from "./components/landing/Film";
 import GetStarted from "./components/landing/GetStarted";
@@ -10,14 +9,17 @@ import Faq from "./components/landing/Faq";
 import Footer from "./components/shell/Footer";
 
 /**
- * The landing page is the demo, so nobody has to record one.
- * Order is the order a newcomer needs: what it is and how it works (hero + tour), what
- * Installation comes straight after the hero: someone sold by the
- * headline should not have to scroll past the explanation to find the one line they need.
- * Then how it works, then what you get (show the mechanism before the
- * argument; the why and what-it-holds sections merged into one). Under a minute, for any team.
- * The short film comes after the features: it retells the story for people who would rather
- * watch, and nobody has to pass it to find the install line.
+ * The landing page is the demo, so nobody has to record one. It is laid out like a short film,
+ * in the order a newcomer needs:
+ *
+ * 1. The first screen says what it is and holds the two install commands: someone sold by the
+ *    headline does not have to scroll to find them.
+ * 2. The film tells the story, once: why agents need a shared brain and how it works. On a
+ *    wide screen it is pinned and the scroll plays it, act by act; elsewhere it is a player.
+ * 3. What you get: one example of each thing it holds, and the house rules.
+ * 4. Installation again, in full, and the questions people ask.
+ *
+ * Under a minute, for any team.
  */
 export default function Home() {
   return (
@@ -25,10 +27,9 @@ export default function Home() {
       <TopBar orgName={branding().orgName} />
       <main>
         <Hero />
-        <GetStarted />
-        <HowItWorks />
-        <Holds />
         <Film />
+        <Holds />
+        <GetStarted />
         <Faq />
       </main>
       <Footer />
