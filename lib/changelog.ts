@@ -22,6 +22,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-23",
     title: "A whiter page, and a landing page you scroll like a film",
     changes: [
+      "The README has the look of the new landing page, with fresh screenshots and a shorter first read.",
+      "Long README sections moved to docs: features, benefits, comparison and FAQ. Old links still land.",
       "The landing page film no longer shows the Download the video and Skip the film links.",
       "A new Live page draws the brain at work: agents search, save and reuse memories as you watch.",
       "The Live page never shows who did what, and never fewer than three people.",

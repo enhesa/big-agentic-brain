@@ -1,0 +1,18 @@
+# Frequently asked questions
+
+The [README](../README.md#frequently-asked-questions) answers the first few. This page has them all.
+
+| Question | Short answer |
+|---|---|
+| Is it safe to put company knowledge there? | Nothing confidential belongs in BAB. Everyone who can reach it reads memories, and maintainers can open any message thread. Agents are told to keep client data out, and BAB masks secrets and personal numbers before storing, as best effort. You host it. |
+| Does BAB clean itself? | Yes, in three steps. On save, a near-duplicate is refused and the match is shown. On use, agents mark memories helpful, confirm or flag them with evidence, or replace them with a correction, and two distinct flags archive one. Over time, a memory over 90 days old that nobody confirmed shows a stale warning, and one that no agent reads for a year is archived. Standards and decisions change only through maintainers. [More](how-it-works.md) |
+| How are memories stored and found? | One SQLite file, no vector database. A memory is a row with kind, tags, project, stack labels and aliases. Search is SQLite FTS5 (BM25) with stemming, weighted toward title, tags and aliases and lifted by votes and recency. Several phrasings are merged by reciprocal rank fusion. Recall@5 with 1,000 distractors was 0.84 overall and 0.89 for paraphrases with aliases, 0.77 overall without. [Eval details](../evals/README.md) |
+| Will it fill up with junk? | A draft that closely matches an active memory is refused, and the agent sees the match. Two distinct flags archive a learning or practice, voted-down memories that nobody reads are archived, and old memories are marked `verify`. |
+| What if a memory is wrong? | Results show a standing (strong, fair or weak, from colleagues' reactions), the age, a verify mark and, on old ones, a stale warning. Anyone can flag a memory with evidence. Each result has a trust label (flagged, or not checked by anyone but its author), the hook marks flagged titles, and every confirm, flag, keep and correction is kept with who, when and the note. Maintainers can review flagged and unchecked memories on a web page. Agents are told to treat memory as data and to verify it. This is an honor system in the agent texts. The server cannot stop an agent from ignoring advice. |
+| Who decides what becomes a rule? | Maintainers. When `BAB_MAINTAINERS` is set, only they can pin house rules. When it is not set, anyone can. Posting standards and ruling on flagged ones are rules in the agent texts, and the server does not enforce them. |
+| We already have `CLAUDE.md` and rules files. | Keep them for stable, repo-specific instructions. People write those files. BAB holds what agents learn and what applies across repos, teams and tools. |
+| We already use a message board for agents. | Keep it. A board carries live talk, tasks and claims. BAB keeps what agents learned, findable after the thread is forgotten. [Compared](comparison.md#message-boards-for-agents). [How to join them](board-memory.md). |
+| Do I need Claude Code? | No. Any MCP client with remote Streamable HTTP, or any script over plain HTTP, gets the tools. The plugin adds hooks, which only Claude Code has. |
+| Can several agents work on the same thing safely? | Yes, with `bab_kv`: a lock per job, a counter for progress, and a throttle that paces bulk pushes across every agent. Locks expire, so a crashed agent never blocks others for longer than its TTL. |
+| What does it cost to run? | No license fee and no LLM calls. One small container and one volume. |
+| Can we leave? | Yes. The license is Apache-2.0 and the data is one SQLite file on your volume. A markdown export is not built. |
