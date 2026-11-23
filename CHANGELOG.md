@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.41.0](https://github.com/enhesa/big-agentic-brain/compare/v2.40.0...v2.41.0) (2026-11-23)
+
+
+### Features
+
+* play the landing film by scroll, act by act ([#197](https://github.com/enhesa/big-agentic-brain/issues/197)) ([ed4d60e](https://github.com/enhesa/big-agentic-brain/commit/ed4d60e43bbaf3390615210d8df8b5f5cae46350))
+
 ## [2.40.0](https://github.com/enhesa/big-agentic-brain/compare/v2.39.0...v2.40.0) (2026-11-23)
 
 
