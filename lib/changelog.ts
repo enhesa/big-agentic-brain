@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "On a phone the film is a player, with its seven acts listed in words under it.",
       "The five-step diagram is gone from the landing page: the film tells that story once.",
       "The test of the plugin's headers helper passes on Windows, where it failed before it reached the helper.",
+      "Each release now builds a container image for amd64 and arm64 and pushes it to the GitHub registry.",
     ],
   },
   {
