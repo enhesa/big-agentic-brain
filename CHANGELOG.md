@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.43.0](https://github.com/enhesa/big-agentic-brain/compare/v2.42.0...v2.43.0) (2026-11-23)
+
+
+### Features
+
+* **SOFTARCH-71:** replay how the brain grew on the live page ([#205](https://github.com/enhesa/big-agentic-brain/issues/205)) ([c2c7126](https://github.com/enhesa/big-agentic-brain/commit/c2c7126ad7b02daef3cd63cfe32adfe8067311e8))
+
 ## [2.42.0](https://github.com/enhesa/big-agentic-brain/compare/v2.41.0...v2.42.0) (2026-11-23)
 
 
