@@ -1376,12 +1376,14 @@ instructions files it, colleagues vote on what matters, and maintainers triage.
 
 ## Brand
 
-Brand palette: navy `#1A3360`, steel `#3F5175`, mist `#EAEDF1`, teal `#00B0A1`, amber `#FFB700`,
+Brand palette: navy `#1A3360`, steel `#3F5175`, mist `#E4E5E7`, teal `#00B0A1`, amber `#FFB700`,
 coral `#FF4423`, sage `#AEDAD4`. Fonts: Inter (body, 300/400/600), Urbanist (headings, 600/700/800).
 Wordmarks in `public/logo-wordmark-{navy,white}.svg`. Simple, slick, lots of whitespace, one accent per surface.
 
-Every page stands on paper (`--paper`), with cards, lists and forms drawn as sheets (`--sheet`, a
-`--hairline` edge, `--sheet-radius`) and quiet panels on `--sand`. The bright teal, amber and coral
+Every page stands on paper (`--paper`, the off-white `#FAFAF7`), with cards, lists and forms drawn
+as sheets (`--sheet`, plain white, a `--hairline` edge, `--sheet-radius`) and quiet panels on `--sand`
+(`#F0F0EB`). Paper and sand stay nearly neutral, so they sit beside any logo and accent without
+tinting the page. The bright teal, amber and coral
 are fills only. Words use the darker `--teal-ink`, `--amber-ink`, `--green-ink` and `--alert-ink`,
 white text sits only on `--navy` or `--alert`, and a field's edge is `--field-edge` (3 to 1 on
 paper). No card has a shadow, no text is under 12 pixels, and every transition stops under

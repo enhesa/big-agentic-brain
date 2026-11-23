@@ -30,7 +30,7 @@ export async function GET() {
     scope: "/",
     display: "standalone",
     // The paper every page stands on (--paper in app/globals.css).
-    background_color: "#f5f2ea",
+    background_color: "#fafaf7",
     theme_color: config().branding.accentColor,
     icons: [
       // The 192 and 512 pixel PNGs are what Chrome's install check looks for (rendered from public/branding/icon.svg).

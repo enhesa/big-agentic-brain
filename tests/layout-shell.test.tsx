@@ -132,8 +132,18 @@ describe("one page width", () => {
 
   it("every page stands on the film's paper, and both bars are solid paper", () => {
     const globals = read("app/globals.css");
-    expect(globals).toMatch(/--paper:\s*#f5f2ea/);
-    expect(globals).toMatch(/--sand:\s*#e9e3d3/);
+    expect(globals).toMatch(/--paper:\s*#fafaf7/);
+    expect(globals).toMatch(/--sand:\s*#f0f0eb/);
+    expect(globals).toMatch(/--sheet:\s*#ffffff/);
+    // Off-whites, not beige: paper and sand stay nearly neutral, and the film draws on the same two.
+    for (const token of ["--paper", "--sand"]) {
+      const hex = globals.match(new RegExp(`${token}:\\s*#([0-9a-f]{6})`))![1];
+      const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      expect(Math.max(r, g, b) - Math.min(r, g, b), `${token} is nearly neutral`).toBeLessThanOrEqual(6);
+    }
+    const story = read("lib/film-story.mjs");
+    expect(story).toContain('paper: "#fafaf7"');
+    expect(story).toContain('sand: "#f0f0eb"');
     expect(globals).toMatch(/body\s*\{[^}]*background:\s*var\(--paper\)/);
     for (const file of ["app/components/shell/Shell.module.css", "app/landing.module.css"]) {
       expect(read(file), file).toMatch(/\.topbar\s*\{[^}]*background:\s*var\(--paper\)/);
@@ -188,7 +198,7 @@ describe("one page width", () => {
       const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
       return (hi + 0.05) / (lo + 0.05);
     };
-    for (const ground of ["#f5f2ea", "#e9e3d3", "#ffffff"]) {
+    for (const ground of ["#fafaf7", "#f0f0eb", "#ffffff"]) {
       expect(ratio(hex!, ground), `teal ink on ${ground}`).toBeGreaterThanOrEqual(4.5);
     }
     expect(globals).toMatch(/:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--teal-ink\)/);

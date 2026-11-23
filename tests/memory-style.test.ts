@@ -40,7 +40,7 @@ function ratio(a: string, b: string): number {
 }
 
 describe("the Memory pages on paper", () => {
-  it("cards, lists and fields are sheets: one warm white and one hairline, from tokens", () => {
+  it("cards, lists and fields are sheets: one white and one hairline, from tokens", () => {
     const sheet = globals.match(/--sheet:\s*(#[0-9a-f]{6})/)?.[1];
     expect(sheet, "--sheet is defined").toBeTruthy();
     expect(globals).toMatch(/--hairline:\s*rgba\(/);

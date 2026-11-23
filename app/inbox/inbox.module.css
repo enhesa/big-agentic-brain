@@ -98,7 +98,7 @@
 }
 
 .row:hover {
-  background: rgba(233, 227, 211, 0.42);
+  background: color-mix(in srgb, var(--sand) 60%, var(--sheet));
 }
 
 /* The ring is drawn inside the row, as the sheet clips what sticks out of it. */
