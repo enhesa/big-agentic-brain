@@ -32,8 +32,8 @@ export interface LiveUpdatesProps {
  * Realtime companion for the read-only web UI (docs/spec.md "Realtime").
  * Opens an SSE connection to `GET /api/events`, and on any matching event
  * calls `router.refresh()` (debounced) so the server components on the
- * current page re-render with fresh data. Renders a tiny status dot: teal
- * while connected, amber while reconnecting. Reconnection itself is native
+ * current page re-render with fresh data. Renders a small status: a teal dot
+ * and "Live" while connected, an amber dot and the word while it is not. Reconnection itself is native
  * `EventSource` behavior (the server sends a `retry:` hint); this component
  * just reflects readyState.
  *
@@ -52,7 +52,7 @@ export default function LiveUpdates({ topics }: LiveUpdatesProps) {
   } catch {
     router = null;
   }
-  const [status, setStatus] = useState<"live" | "reconnecting">("reconnecting");
+  const [status, setStatus] = useState<"connecting" | "live" | "reconnecting">("connecting");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -85,8 +85,9 @@ export default function LiveUpdates({ topics }: LiveUpdatesProps) {
   }, [topics]);
 
   return (
-    <span className={styles.wrap} title={status === "live" ? "Live" : "Reconnecting"}>
-      <span className={`${styles.dot} ${status === "live" ? styles.live : styles.reconnecting}`} />
+    <span className={styles.wrap}>
+      <span className={`${styles.dot} ${status === "live" ? styles.live : styles.reconnecting}`} aria-hidden="true" />
+      {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Reconnecting"}
     </span>
   );
 }

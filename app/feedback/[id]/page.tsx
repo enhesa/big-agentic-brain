@@ -24,8 +24,8 @@ export default async function FeedbackDetailPage({ params }: { params: Promise<{
   return (
     <Shell>
       <div className={styles.detail}>
-        <Link href="/feedback" className={styles.back}>
-          ← Feedback
+        <Link href="/feedback" className="back-link">
+          Feedback
         </Link>
         <div className={styles.header}>
           <h1 className={styles.detailTitle}>{item.title}</h1>

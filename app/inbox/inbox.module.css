@@ -3,9 +3,9 @@
 }
 
 .h1 {
-  font-size: 2rem;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  font-size: var(--page-title);
+  line-height: 1.08;
+  margin-bottom: 8px;
 }
 
 .subline {
@@ -175,7 +175,7 @@
 
 .when {
   flex: 0 0 auto;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   color: var(--steel);
   white-space: nowrap;
 }
@@ -202,9 +202,10 @@
   height: 22px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--coral);
+  /* White on --coral is 3.4 to 1. On --alert it is 5.4 to 1. */
+  background: var(--alert);
   color: #fff;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 22px;
   text-align: center;
@@ -226,6 +227,29 @@
   background: var(--sand);
   color: var(--steel);
   text-align: center;
+}
+
+/* On a phone the list fills the page and a tap opens a thread: the hint to pick one is noise. */
+@media (max-width: 760px) {
+  .pick {
+    display: none;
+  }
+}
+
+/* On a phone an open thread takes the page, with a way back to the list above it. Wider, the
+   list stays beside the thread and the way back is not drawn. */
+.backToList {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .hasOpen > .list {
+    display: none;
+  }
+
+  .hasOpen .backToList {
+    display: inline-flex;
+  }
 }
 
 .threadHeader {
@@ -317,7 +341,7 @@
   align-items: center;
   gap: 10px;
   margin: 14px 0 4px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;

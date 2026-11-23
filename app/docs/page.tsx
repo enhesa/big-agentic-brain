@@ -292,7 +292,7 @@ export default async function DocsPage() {
 
   return (
     <Shell>
-      <h1>How it works</h1>
+      <h1 className="page-title">How it works</h1>
       <p className={styles.lede}>
         One HTTP call per arrow. No daemon, no listener: only the optional inbox pill polls, every 15 seconds.
       </p>

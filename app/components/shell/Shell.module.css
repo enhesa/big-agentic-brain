@@ -9,7 +9,7 @@
   z-index: 20;
   /* Solid, not translucent: the page scrolls under this bar and must not show through it. */
   background: var(--paper);
-  border-bottom: 1px solid var(--mist);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .topbarInner {
@@ -37,7 +37,7 @@
 .brandSep {
   width: 1px;
   height: 22px;
-  background: var(--mist);
+  background: var(--hairline);
 }
 
 .brandName {
@@ -117,8 +117,7 @@
 }
 
 .btnNavy:hover {
-  background: #12294f;
-  box-shadow: 0 10px 26px rgba(26, 51, 96, 0.22);
+  background: var(--navy-deep);
 }
 
 .btnNavy:focus-visible {
@@ -170,7 +169,9 @@
 }
 
 @media (max-width: 640px) {
-  .brandName {
+  /* The name goes, and the rule that stood between it and the logo goes with it. */
+  .brandName,
+  .brandSep {
     display: none;
   }
 
@@ -189,13 +190,13 @@
     width: calc(100% + 2 * var(--shell-gutter));
     margin: 0 calc(-1 * var(--shell-gutter));
     /* Room for the focus ring: a scrolling box clips whatever leaves it. */
-    padding: 6px 30px 6px calc(var(--shell-gutter) - 8px);
+    padding: 8px 30px 8px calc(var(--shell-gutter) - 8px);
     overflow-x: auto;
     /* Keyboard focus stops clear of the two faded edges. */
     scroll-padding-inline: 30px;
     scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
-    mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 30px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 30px), transparent 100%);
   }
 
   .nav::-webkit-scrollbar {
@@ -206,6 +207,13 @@
     flex: none;
     font-size: 0.86rem;
     padding: 6px 8px;
+  }
+
+  /* The word stays small; the place a thumb can hit is 44 pixels high. */
+  .navLink::after {
+    content: "";
+    position: absolute;
+    inset: -8px 0;
   }
 
   .frame::before {
@@ -224,7 +232,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btnNavy {
+  .btnNavy,
+  .navLink {
     transition: none;
   }
 }

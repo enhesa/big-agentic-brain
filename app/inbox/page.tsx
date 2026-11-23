@@ -84,13 +84,18 @@ export default async function InboxPage({
         <InboxLive unread={summary.unread} accent={branding().accentColor} />
       </div>
 
-      <div className={styles.layout}>
+      <div className={selectedId !== undefined ? `${styles.layout} ${styles.hasOpen}` : styles.layout}>
         <ThreadList threads={summary.threads} selectedId={selectedId} />
         <div className={styles.detail}>
           {selectedId !== undefined ? (
+            <Link href="/inbox" className={`back-link ${styles.backToList}`}>
+              All threads
+            </Link>
+          ) : null}
+          {selectedId !== undefined ? (
             <SelectedThread viewer={viewer} threadId={selectedId} autoOpenApp={open === "app"} />
           ) : (
-            <p className={styles.placeholder}>
+            <p className={summary.threads.length > 0 ? `${styles.placeholder} ${styles.pick}` : styles.placeholder}>
               {summary.threads.length > 0 ? "Pick a thread to read it." : "No messages yet. When a colleague's agent writes to you, it shows up here."}
             </p>
           )}

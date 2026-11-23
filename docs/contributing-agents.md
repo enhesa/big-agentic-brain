@@ -25,6 +25,7 @@ Read this on demand, before you change the area a section names. It lists the ru
 - Expect the `pr-text` workflow (`.github/workflows/pr-text.yml`) to run the same scan on the PR title, body and commit messages. A ticket key is allowed only as a commit subject scope.
 - Person-name checks only run when `VENDOR_EXTRA_PATTERN` is set (`scripts/check-vendor-names.sh:7-9`). A clean scan does not prove a file has no names.
 - Do not use `NEXT_PUBLIC_` in `app` or `lib`. Only CI checks it (`.github/workflows/ci.yml:31`). `runTest.sh` does not.
+- Keep the paper look on every page: `tests/paper-style.test.ts` fails on a white card, a card shadow, text under 12 pixels, a class a page asks for that its stylesheet lacks, or white text on bright coral.
 - Keep the coverage gates: 85 percent lines and functions, 75 percent branches (`vitest.config.mts:43`). They cover `lib`, `app/api` and `app/instructions`. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 - Keep pages that post a form on a referrer policy that sends the origin to itself. `no-referrer` breaks `sameOrigin` (`tests/referrer-policy.test.ts:4-9`).
 
@@ -86,6 +87,13 @@ Read this on demand, before you change the area a section names. It lists the ru
 - A device secret never drives an SSO page or route (`lib/session.ts:40-41`).
 - Check the rate limit with `checkUiRateLimit(viewer.ownerId)` (`app/inbox/unread/route.ts`).
 - A page stands on paper. Draw a card, a list or a field as a sheet: `var(--sheet)`, a `var(--hairline)` edge and `var(--sheet-radius)` (`app/globals.css`). Use `var(--sand)` for a quiet panel, never a white or grey of your own (`tests/memory-style.test.ts`). The shared `card` class is a sheet already. A list drawn as one sheet clips what sticks out of a row, so draw a row's focus ring inside it (`tests/inbox-style.test.ts`).
+- Use the shared parts in `app/globals.css` before you draw your own: `page-title` and `page-lede` for the top of a page, `btn-primary` and `btn-quiet` for buttons (pills), `field` and `field-label` for inputs and selects, `empty-state` for an empty page, `back-link` for the way up and `sr-only` for text only a screen reader needs.
+- Edge a field with `var(--field-edge)`, never `var(--hairline)`: a control needs 3 to 1 against the page. Round it with `var(--field-radius)`.
+- Darken a navy fill on hover with `var(--navy-deep)`, never a hex of your own: it is mixed from the accent an operator may set.
+- Write errors in `var(--alert-ink)` and put white text only on `var(--alert)` or `var(--navy)`. The bright `var(--coral)`, `var(--amber)` and `var(--teal)` are fills, never text or a ground for white text.
+- Set no text below `0.75rem`, give a card no `box-shadow`, and guard every transition with `prefers-reduced-motion` (`tests/paper-style.test.ts`).
+- There is no dark theme. Tasks and Usage keep unused dark values; do not add more until the whole app has one.
+- An address that leads nowhere renders `app/not-found.tsx` in the shell. A page that fails renders `app/error.tsx`, which shows no detail of the failure.
 
 ## Plugin changes
 

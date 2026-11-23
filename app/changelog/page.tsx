@@ -39,8 +39,8 @@ export default async function ChangelogPage() {
     <Shell>
       <>
         <header className={styles.header}>
-          <h1 className={styles.h1}>News</h1>
-          <p className={styles.lede}>What changed in BAB, newest first.</p>
+          <h1 className="page-title">News</h1>
+          <p className="page-lede">What changed in BAB, newest first.</p>
         </header>
         <ol className={styles.list}>
           {CHANGELOG.map((entry, i) => {
@@ -64,12 +64,14 @@ export default async function ChangelogPage() {
                   </time>
                   {rel && <span className={styles.rel}>{rel}</span>}
                 </div>
-                <h2 className={styles.title}>{entry.title}</h2>
-                <ul className={styles.changes}>
-                  {entry.changes.map((change) => (
-                    <li key={change}>{change}</li>
-                  ))}
-                </ul>
+                <div className={styles.body}>
+                  <h2 className={styles.title}>{entry.title}</h2>
+                  <ul className={styles.changes}>
+                    {entry.changes.map((change) => (
+                      <li key={change}>{change}</li>
+                    ))}
+                  </ul>
+                </div>
               </li>
             );
           })}

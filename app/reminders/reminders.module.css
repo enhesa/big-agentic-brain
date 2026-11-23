@@ -1,7 +1,7 @@
 .h1 {
-  font-size: 1.7rem;
-  letter-spacing: -0.02em;
-  margin-bottom: 20px;
+  font-size: var(--page-title);
+  line-height: 1.08;
+  margin-bottom: 24px;
 }
 
 /* One reading column: a reminder is a line or two, not a full-width banner. */
@@ -104,29 +104,29 @@ details[open] > .summary::before {
   white-space: nowrap;
 }
 
-/* Tint of the brand colour as the fill, a darkened mix of it as the text, so the
-   label keeps contrast on white (raw amber or coral text would not). */
+/* A tint of the colour on the sheet as the fill, the dark ink of that colour as the text, so the
+   label keeps contrast (raw amber or coral text would not). */
 .chipOverdue {
-  background: color-mix(in srgb, var(--coral) 14%, white);
-  border-color: color-mix(in srgb, var(--coral) 45%, white);
-  color: color-mix(in srgb, var(--coral) 70%, black);
+  background: color-mix(in srgb, var(--coral) 12%, var(--sheet));
+  border-color: color-mix(in srgb, var(--coral) 40%, var(--sheet));
+  color: var(--alert-ink);
 }
 
 .chipToday {
-  background: color-mix(in srgb, var(--amber) 22%, white);
-  border-color: color-mix(in srgb, var(--amber) 60%, white);
-  color: color-mix(in srgb, var(--amber) 40%, black);
+  background: color-mix(in srgb, var(--amber) 20%, var(--sheet));
+  border-color: color-mix(in srgb, var(--amber) 55%, var(--sheet));
+  color: var(--amber-ink);
 }
 
 .chipSoon {
-  background: color-mix(in srgb, var(--teal) 12%, white);
-  border-color: color-mix(in srgb, var(--teal) 40%, white);
-  color: color-mix(in srgb, var(--teal) 55%, black);
+  background: color-mix(in srgb, var(--teal) 12%, var(--sheet));
+  border-color: color-mix(in srgb, var(--teal) 40%, var(--sheet));
+  color: var(--teal-ink);
 }
 
 .chipLater,
 .chipDone {
-  background: var(--mist);
+  background: var(--sand);
   color: var(--steel);
 }
 
@@ -206,4 +206,10 @@ details[open] > .summary::before {
   color: var(--steel);
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary::before {
+    transition: none;
+  }
 }

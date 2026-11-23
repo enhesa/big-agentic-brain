@@ -92,7 +92,6 @@ export default function Holds() {
         <ul className={styles.getList}>
           {ITEMS.map(({ kind, headline, body, Icon, accent }, i) => (
             <Reveal as="li" key={kind} className={styles.getCard} delay={i * 100}>
-              <span className={styles.getGlow} data-accent={accent} aria-hidden="true" />
               <Icon />
               <span className={styles.getKind} data-accent={accent}>
                 {kind}

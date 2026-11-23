@@ -125,7 +125,7 @@
   border-radius: 999px;
   background: var(--sand);
   color: var(--navy);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -142,7 +142,7 @@
 .requestMeta {
   display: block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--steel);
   word-break: break-all;
 }
@@ -192,7 +192,7 @@
   border-radius: 999px;
   background: var(--sage);
   color: var(--navy);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -200,7 +200,7 @@
 }
 
 .msgWhen {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--steel);
   margin: 2px 6px 0;
 }
@@ -235,4 +235,9 @@
     animation: none;
     opacity: 1;
   }
+}
+
+/* The way from a thread's own page to the same thread in the Inbox. */
+.openIn {
+  margin: 0 0 20px;
 }

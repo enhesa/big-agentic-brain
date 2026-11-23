@@ -1,12 +1,13 @@
 .lede {
+  max-width: 68ch;
   font-size: 1.05rem;
   line-height: 1.5;
   color: var(--steel);
-  margin: 0 0 22px;
+  margin: 10px 0 26px;
 }
 
 .diagramCard {
-  padding: 20px;
+  padding: 24px;
   overflow-x: auto;
 }
 
@@ -25,7 +26,7 @@
 .label { fill: var(--navy); font-family: var(--font-head); font-weight: 700; font-size: 12.5px; }
 .sub { fill: var(--steel); font-size: 11px; }
 .edgeLabel { fill: var(--steel); font-size: 10.5px; }
-.zone { fill: none; stroke: var(--mist); stroke-dasharray: 4 4; }
+.zone { fill: none; stroke: var(--steel); stroke-opacity: 0.4; stroke-dasharray: 4 4; }
 .zoneLabel { fill: var(--steel); font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; }
 
 /* The two full-width drawings of "Under the hood" (deployment and data). Like .diagram they have
@@ -48,35 +49,36 @@
 
 .flowFigure {
   margin: 0;
-  padding: 16px 18px 10px;
-  border: 1px solid var(--mist);
-  border-radius: 16px;
-  background: #fff;
+  padding: 20px 22px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--sheet-radius);
+  background: var(--sheet);
   /* A grid item may not be wider than its column, or a diagram would stretch the whole page. */
   min-width: 0;
 }
 
 /* The drawing scrolls sideways when it is wider than the card (a phone), the title does not.
-   The soft edge is CSS only: the white covers ride on the content and hide the shadows once
-   the end is reached, so a shadow shows only on the side that still has more. */
+   The soft edge is CSS only: covers in the sheet's own colour ride on the content and hide the
+   shadows once the end is reached, so a shadow shows only on the side that still has more. */
 .scroller {
   overflow-x: auto;
   overflow-y: hidden;
-  /* The covers are fully white for longer (16px) than the shadows are wide (14px), or a faint
-     line of shadow would show through at the edge of a diagram that does not scroll at all. */
+  /* The covers are solid for longer (16px) than the shadows are wide (14px), or a faint line
+     of shadow would show through at the edge of a diagram that does not scroll at all. */
   background:
-    linear-gradient(to right, #fff 40%, rgba(255, 255, 255, 0)) left center / 40px 100% no-repeat local,
-    linear-gradient(to left, #fff 40%, rgba(255, 255, 255, 0)) right center / 40px 100% no-repeat local,
-    radial-gradient(farthest-side at 0 50%, rgba(26, 51, 96, 0.16), rgba(26, 51, 96, 0)) left center / 14px 100% no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%, rgba(26, 51, 96, 0.16), rgba(26, 51, 96, 0)) right center / 14px 100% no-repeat scroll;
+    linear-gradient(to right, var(--sheet) 40%, rgba(255, 253, 248, 0)) left center / 40px 100% no-repeat local,
+    linear-gradient(to left, var(--sheet) 40%, rgba(255, 253, 248, 0)) right center / 40px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(26, 51, 96, 0.14), rgba(26, 51, 96, 0)) left center / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(26, 51, 96, 0.14), rgba(26, 51, 96, 0)) right center / 14px 100% no-repeat scroll;
 }
 
 .flowTitle {
   font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.98rem;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
   color: var(--navy);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .flowSvg {
@@ -92,8 +94,8 @@
 /* A four-lane flow on its own card: no cap, or its 8px labels are unreadable. */
 .flowSvgWide { max-width: none; }
 
-.lane { stroke: var(--mist); stroke-width: 1.2; stroke-dasharray: 3 4; }
-.laneChip { fill: var(--mist); stroke: none; }
+.lane { stroke: var(--steel); stroke-opacity: 0.32; stroke-width: 1.2; stroke-dasharray: 3 4; }
+.laneChip { fill: var(--sand); stroke: none; }
 .laneChipAccent { fill: rgba(0, 176, 161, 0.16); stroke: none; }
 .laneLabel { fill: var(--navy); font-family: var(--font-head); font-weight: 700; font-size: 11.5px; }
 .stepLabel { fill: var(--steel); font-size: 10.5px; }
@@ -114,13 +116,13 @@
 
 /* A note sits on a lane, for something BAB does by itself. The fill is opaque on purpose: it
    covers the dashed lane line behind the text. */
-.noteChip { fill: #fff; stroke: var(--teal); stroke-width: 1.2; }
+.noteChip { fill: var(--sheet); stroke: var(--teal); stroke-width: 1.2; }
 .noteText { fill: var(--navy); font-size: 10.5px; font-weight: 600; }
 
 /* Sections: a short heading, at most one caption line, then diagrams. No body text. */
-.section { margin: 44px 0 0; }
-.sectionTitle { font-size: 1.4rem; line-height: 1.2; color: var(--navy); }
-.sectionCaption { margin: 4px 0 0; font-size: 0.98rem; line-height: 1.4; color: var(--steel); }
+.section { margin: 56px 0 0; }
+.sectionTitle { font-size: 1.6rem; line-height: 1.15; letter-spacing: -0.02em; color: var(--navy); }
+.sectionCaption { margin: 6px 0 0; max-width: 68ch; font-size: 1rem; line-height: 1.45; color: var(--steel); }
 .flowFigureWide { grid-column: 1 / -1; }
 
 /* The lifecycle (LifecycleDiagram) and the fans (ChoiceDiagram), from the same theme tokens.
@@ -137,7 +139,7 @@
 .lifeSvgNarrow { max-width: 380px; }
 .lifeNarrow { display: none; }
 .stateTitle { fill: var(--navy); font-family: var(--font-head); font-weight: 700; font-size: 16px; }
-.archivedBox { fill: rgba(234, 237, 241, 0.55); stroke: var(--steel); stroke-opacity: 0.55; stroke-dasharray: 5 4; }
+.archivedBox { fill: var(--sand); fill-opacity: 0.6; stroke: var(--steel); stroke-opacity: 0.55; stroke-dasharray: 5 4; }
 .lcEdge { stroke: var(--steel); stroke-width: 1.6; fill: none; }
 .lcEdgeGood { stroke: var(--teal); stroke-width: 1.6; fill: none; }
 .lcLabel { fill: var(--navy); font-size: 12.5px; font-weight: 600; }
@@ -146,7 +148,7 @@
 .keyLabel { fill: var(--steel); font-size: 11px; font-weight: 600; }
 
 .chipTeal { fill: rgba(0, 176, 161, 0.12); stroke: var(--teal); stroke-width: 1; }
-.chipNavy { fill: #fff; stroke: var(--navy); stroke-width: 1; }
+.chipNavy { fill: var(--sheet); stroke: var(--navy); stroke-width: 1; }
 .chipCoral { fill: rgba(255, 68, 35, 0.07); stroke: var(--coral); stroke-width: 1; stroke-dasharray: 3 3; }
 .chipText { fill: var(--navy); font-size: 11px; font-weight: 600; }
 .chipIcon { stroke: var(--coral); stroke-width: 1.8; stroke-linecap: round; fill: none; }
@@ -154,12 +156,12 @@
 .fanEdge { stroke: var(--steel); stroke-width: 1.3; fill: none; }
 .bandStanding { fill: rgba(0, 176, 161, 0.08); stroke: var(--teal); stroke-width: 1.2; }
 .bandWaiting { fill: rgba(255, 183, 0, 0.14); stroke: var(--amber); stroke-width: 1.2; }
-.bandPlain { fill: var(--mist); stroke: none; }
+.bandPlain { fill: var(--sand); stroke: none; }
 .bandText { fill: var(--navy); font-size: 11.5px; font-weight: 600; }
 /* Navy text on all three: white on the teal fails contrast, navy on teal clears 4.5:1. */
 .levelStrong { fill: var(--teal); }
 .levelFair { fill: rgba(0, 176, 161, 0.28); }
-.levelWeak { fill: var(--mist); }
+.levelWeak { fill: var(--sand); }
 
 /* The arrows arrive in order, so the eye follows the sequence instead of meeting four
    at once. One pass, no loop: a diagram that keeps moving is harder to read, not easier. */
