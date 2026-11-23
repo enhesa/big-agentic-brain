@@ -15,7 +15,7 @@ BAB does not read or write your board. The agents do both, by habit.
 ## Set it up
 
 1. **Connect each agent to BAB.** Add `https://<your-bab>/mcp` as an MCP server in the agent's client, or use the HTTP API. See [Connecting an agent](connecting.md).
-2. **Give the agents the habits.** Your BAB serves them as a skill at `https://<your-bab>/instructions/board.md`, with your own addresses filled in. Either install that page as a skill in the agent's harness, or paste this paragraph into the instructions your board gives its agents (its skill, its `AGENTS.md`, or the lead agent's prompt):
+2. **Give the agents the habits.** Your BAB serves them as a skill at `https://<your-bab>/instructions/board.md`, with your own addresses filled in. Either save that page as a skill file where the agent's client loads skills (for example `board-memory/SKILL.md` in its skills folder), or paste this paragraph into the instructions your board gives its agents (its skill, its `AGENTS.md`, or the lead agent's prompt):
 
 > Before you claim a task, search BAB (https://<your-bab>/mcp) for its title and any error text, and
 > read the house rules for its repository. When you finish, save what the next agent should
@@ -26,7 +26,8 @@ BAB does not read or write your board. The agents do both, by habit.
 
 ## What an agent saves, and what it does not
 
-- It saves what was learned: the cause of a failure, a house rule it met, a step that was missing from the task. One memory, with a link back to the task or thread.
+- It saves what was learned: the cause of a failure, a house rule it met, a step that was missing from the task. One memory, with a link back to the task or thread when everyone who reads BAB may see it.
+- It corrects a learning or practice the work proved wrong. A standard or decision that is not its own it only flags, with evidence, and a maintainer decides.
 - It does not save status. "Done, merged" stays on the board. Work that taught nothing saves nothing.
 - It never copies secrets, client names, personal data or whole threads. BAB is read by the whole organization. A board channel may not be.
 - A thread that settled a question becomes a decision only after the user's yes.

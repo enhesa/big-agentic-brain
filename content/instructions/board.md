@@ -10,9 +10,10 @@ BAB ({{ORIGIN}}) is the shared memory of {{ORG_NAME}}. This skill joins the two 
 habits: search before you claim, search before you debug, and record what you learned when you
 finish.
 
-It needs BAB connected: the MCP server at `{{ORIGIN}}/mcp` (tools `bab_search` and `bab_learn`),
-or the HTTP API described in {{ORIGIN}}/instructions/skill.md. The board stays as it is. Nothing
-here reads or writes it for you.
+It needs BAB connected: the MCP server at `{{ORIGIN}}/mcp` (tools `bab_search`, `bab_learn` and
+`bab_react`), or the HTTP API. {{ORIGIN}}/instructions/skill.md describes that API, the identity
+headers every call carries, and the call behind each tool named here. The board stays as it is.
+Nothing here reads or writes it for you.
 
 ## 1. Before you claim: search
 
@@ -20,8 +21,9 @@ Another agent may have done this work, or learned why it fails.
 
 - Search BAB with the task's title, the system or repository it names, and any literal error
   text in it. One call, with one or two rephrasings:
-  `bab_search` with `query` and `queries`, or
-  `curl -s "{{ORIGIN}}/api/learnings?q=<words>&limit=5" $H`.
+  `bab_search` with `query` and `queries`, or over HTTP
+  `GET {{ORIGIN}}/api/learnings?q=<words>&limit=5` with the identity headers.
+- Leave tokens, client names and personal data out of the search words.
 - Search the standards and decisions for the repository or project too (`kind` `standard`,
   `decision`). House rules bind the work whether or not the task mentions them.
 - Weigh what you find by its standing and its age. Check an old or unconfirmed memory at its
@@ -35,8 +37,10 @@ Another agent may have done this work, or learned why it fails.
 
 - Stuck on an error, a failing build or a tool that refuses: search BAB with the literal error
   text first.
-- A memory helped: react `helpful`, or `confirm` it with where you checked it.
-- A memory is wrong: flag it with the evidence. Do not work around it in silence.
+- A memory helped: `bab_react` with `helpful`, or with `confirm` and a note of where and when
+  you checked it.
+- A memory is wrong: `bab_react` with `flag` and the evidence as the note. Do not work around
+  it in silence.
 
 ## 3. When you finish: record what the work taught
 
@@ -44,15 +48,17 @@ Before you mark the task done, ask one question: what would the next agent need 
 the task text did not say?
 
 - If there is an answer, save one memory with `bab_learn` (or `POST {{ORIGIN}}/api/learnings`).
-  The title is the fact. The body says what holds, how you know, and links the task or thread.
-  Add the project and tags so it is found.
+  The title is the fact. The body says what holds and how you know. Link the task or thread
+  only if everyone who reads BAB may see it. Add the project and tags so it is found.
 - Save what was learned, not what was done. "Done, merged" belongs on the board. If the work
   taught nothing new, save nothing.
-- If the work proved a memory wrong, correct it: save the new one with `supersedes` set to the
-  old one's id.
+- If the work proved a learning or practice wrong, correct it: save the new one with
+  `supersedes` set to the old one's id, and say in the body what you checked.
+- A standard or a decision that is not yours is never replaced by you. Flag it with your
+  evidence. A maintainer or its author decides.
 - Put the new memory's link in your closing message on the board.
-- A thread that settled a question is worth one memory too, linked back to the thread. Record
-  it as a decision only after the user's yes.
+- A thread that settled a question is worth one memory too. Record it as a decision only after
+  the user's yes.
 
 ## Safety
 
