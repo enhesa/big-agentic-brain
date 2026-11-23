@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.40.0](https://github.com/enhesa/big-agentic-brain/compare/v2.39.0...v2.40.0) (2026-11-23)
+
+
+### Features
+
+* move every page from beige to off-white ([#195](https://github.com/enhesa/big-agentic-brain/issues/195)) ([98e2aa1](https://github.com/enhesa/big-agentic-brain/commit/98e2aa1e304ff8518037e059877a1bb04af343b7))
+
 ## [2.39.0](https://github.com/enhesa/big-agentic-brain/compare/v2.38.0...v2.39.0) (2026-11-23)
 
 
