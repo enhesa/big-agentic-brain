@@ -1549,9 +1549,11 @@ every time.
   message subject or body, or who a message was for.
 - **The count of people is kept vague.** An exact small count does the harm of a name: "one person at work"
   makes every beat that person's. So with any beat in the window the count is at least
-  `LIVE_PEOPLE_FLOOR` (3), and the page shows it as "3 or fewer". The count moves on a clock of
-  `LIVE_PEOPLE_STEP_MINUTES` (5): a person is counted from the next mark after their first beat, so a rise cannot be matched to one beat.
-  There is no count of who is at work right now. On an installation with three people or fewer, anyone who
+  `LIVE_PEOPLE_FLOOR` (3), and the page shows it as "3 or fewer". The count changes only on a clock of
+  `LIVE_PEOPLE_STEP_MINUTES` (5): it covers the 24 hours that end at the last mark, so it neither rises with a
+  beat nor falls at the second a beat turns 24 hours old. A change cannot be matched to one beat when more than
+  one beat fell in those minutes. Above the floor, a step with a single beat still marks that beat as someone's
+  first or last, not whose. There is no count of who is at work right now. On an installation with three people or fewer, anyone who
   knows that can still narrow a beat to those people: the page cannot be live and hide that. The Usage
   page shows how many people used BAB in each week, so in a week with one person it already says so; the
   floor keeps the Live page from adding a count by the day or the minute to that.

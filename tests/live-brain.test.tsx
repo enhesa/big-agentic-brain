@@ -175,7 +175,7 @@ describe("liveBrain", () => {
     expect(JSON.stringify(liveBrain(NOW))).not.toMatch(/awake|active|online/);
   });
 
-  it("counts a person only from the next mark of the clock, so a rise cannot be matched to one beat", async () => {
+  it("counts a person only from the next mark of the clock, so the count does not rise with a beat", async () => {
     const { liveBrain, LIVE_PEOPLE_STEP_MINUTES } = await import("../lib/live-brain");
     const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
     // Two minutes after a mark.
@@ -191,6 +191,52 @@ describe("liveBrain", () => {
     // Just before the next mark it still stays, and from the mark on it is five.
     expect(liveBrain(new Date(at.getTime() + 3 * 60_000 - 1000)).agents).toBe(4);
     expect(liveBrain(new Date(at.getTime() + 3 * 60_000)).agents).toBe(5);
+  });
+
+  it("keeps the count flat when a beat turns 24 hours old, so a fall cannot be matched to a person", async () => {
+    // A daily job: yesterday it confirmed a memory, and the memory page names that voter with the
+    // time. Today it searched, 20 seconds earlier in the day.
+    const { liveBrain, LIVE_PEOPLE_STEP_MINUTES, LIVE_WINDOW_HOURS } = await import("../lib/live-brain");
+    const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
+    const mark = Math.floor(NOW.getTime() / step) * step;
+    const day = LIVE_WINDOW_HOURS * 3_600_000;
+    const at = (ms: number) => sql(new Date(mark + ms));
+    for (let i = 0; i < 4; i++) await search(`p${i}@example.com`, at(-(30 + i) * 60_000));
+    await row(CAT, "confirm", at(-day + 40_000), { entity: "learning", entityId: "m-daily" });
+    await search(CAT, at(20_000));
+
+    const seen = (ms: number) => liveBrain(new Date(mark + ms));
+    expect(seen(30_000).agents).toBe(5);
+    expect(seen(30_000).counts.reuse).toBe(1);
+    // The confirm is now 24 hours old and leaves the counts. The count of people does not move.
+    expect(seen(41_000).counts.reuse).toBe(0);
+    expect(seen(41_000).agents).toBe(5);
+    expect(seen(step - 1000).agents).toBe(5);
+    // At the next mark today's search is counted in its place.
+    expect(seen(step).agents).toBe(5);
+  });
+
+  it("lets a person leave the count only at a mark of the clock, and goes back to 0 when nothing is left", async () => {
+    const { liveBrain, LIVE_PEOPLE_STEP_MINUTES, LIVE_WINDOW_HOURS } = await import("../lib/live-brain");
+    const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
+    const mark = Math.floor(NOW.getTime() / step) * step;
+    const day = LIVE_WINDOW_HOURS * 3_600_000;
+    const at = (ms: number) => sql(new Date(mark + ms));
+    for (let i = 0; i < 4; i++) await search(`p${i}@example.com`, at(-day + 6 * 60 * 60_000 + i * 60_000));
+    // Cat's only beat turns 24 hours old 40 seconds after the mark.
+    await search(CAT, at(-day + 40_000));
+
+    const seen = (ms: number) => liveBrain(new Date(mark + ms));
+    expect(seen(30_000).agents).toBe(5);
+    expect(seen(41_000).counts.search).toBe(4);
+    expect(seen(41_000).agents).toBe(5);
+    expect(seen(step - 1000).agents).toBe(5);
+    expect(seen(step).agents).toBe(4);
+    // Once every beat is older than the window the page is empty again.
+    const later = seen(7 * 60 * 60_000);
+    expect(later.agents).toBe(0);
+    expect(later.beats).toEqual([]);
+    expect(later.counts.search).toBe(0);
   });
 
   it("is empty and whole when nothing happened", async () => {

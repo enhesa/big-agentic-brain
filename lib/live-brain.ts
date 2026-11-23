@@ -14,9 +14,11 @@ import { parseDbTime } from "@/lib/dates";
  *
  * The count of people is kept vague on purpose. An exact small count does the same harm as a
  * name: "one person at work" makes every beat that person's, and one of them may be a save that
- * the memory page signs. So the count is never under LIVE_PEOPLE_FLOOR, it moves only on a
- * LIVE_PEOPLE_STEP_MINUTES clock so a rise cannot be matched to one beat, and there is no count of
- * who is at work right now.
+ * the memory page signs. So the count is never under LIVE_PEOPLE_FLOOR, and there is no count of
+ * who is at work right now. And it changes only on a LIVE_PEOPLE_STEP_MINUTES clock: people are
+ * counted over the 24 hours that end at the last mark, so the count neither rises with a beat nor
+ * falls at the second a beat turns 24 hours old. A fall at that second would say that the person
+ * who signed yesterday's beat has done nothing since, or only in the minutes after the mark.
  */
 
 /** How far back the page looks, in hours. */
@@ -29,7 +31,7 @@ export const LIVE_BEATS_MAX = 40;
 export const LIVE_CACHE_MS = 2000;
 /** With any beat in the window the count of people is at least this, so it never shows one person alone. */
 export const LIVE_PEOPLE_FLOOR = 3;
-/** The count of people moves on this clock, in minutes: a person is counted from the next mark after their first beat. */
+/** The count of people changes only on this clock, in minutes: it covers the LIVE_WINDOW_HOURS that end at the last mark. */
 export const LIVE_PEOPLE_STEP_MINUTES = 5;
 
 const SEARCH_TOOL_PATH = "/mcp#tools/call:bab_search";
@@ -52,8 +54,9 @@ export interface LiveBeat {
 
 export interface LiveBrain {
   /**
-   * People whose agents did one of the five things in the window: 0 with no beat, else at least
-   * LIVE_PEOPLE_FLOOR, counted as of the last LIVE_PEOPLE_STEP_MINUTES mark.
+   * People whose agents did one of the five things: 0 with no beat in the window, else at least
+   * LIVE_PEOPLE_FLOOR, counted over the LIVE_WINDOW_HOURS that end at the last
+   * LIVE_PEOPLE_STEP_MINUTES mark.
    */
   agents: number;
   /** Live memories right now. */
@@ -98,8 +101,12 @@ const BEAT_FROM = `FROM audit_log a NOT INDEXED WHERE a.id >= ? AND a.at >= ? AN
  * which is every row before the window.
  */
 const FIRST_SQL = "SELECT MIN(id) AS id FROM audit_log INDEXED BY idx_audit_at WHERE at >= ?";
-/** One pass for the counts and the people. The actor ids it groups by are counted here and go no further. */
-const TALLY_SQL = `SELECT a.actor_id AS actor, a.action AS action, a.entity AS entity, COUNT(*) AS n, MIN(a.at) AS first ${BEAT_FROM} GROUP BY a.actor_id, a.action, a.entity`;
+/**
+ * One pass for the counts and the people. It reads from the start of the people's window, which is
+ * up to LIVE_PEOPLE_STEP_MINUTES earlier than the page's, so `n` counts only the rows from the
+ * page's window on. The actor ids it groups by are counted here and go no further.
+ */
+const TALLY_SQL = `SELECT a.actor_id AS actor, a.action AS action, a.entity AS entity, SUM(CASE WHEN a.at >= ? THEN 1 ELSE 0 END) AS n, MIN(a.at) AS first ${BEAT_FROM} GROUP BY a.actor_id, a.action, a.entity`;
 const BEATS_SQL = `SELECT a.id, a.at, a.action, a.entity, a.entity_id ${BEAT_FROM} ORDER BY a.id DESC LIMIT ?`;
 
 interface BeatRow {
@@ -117,19 +124,25 @@ export function liveBrain(now: Date = new Date()): LiveBrain {
   const memories = Number((db.prepare("SELECT COUNT(*) AS n FROM learnings WHERE status = 'active'").get() as { n: number | bigint }).n);
 
   const fromTime = sqlTime(since);
-  const first = db.prepare(FIRST_SQL).get(fromTime) as { id: number | bigint | null };
+  // People are counted over the 24 hours that end at the last mark of the clock. Both ends are
+  // stepped, so the count changes only at a mark: not with a new beat, not when a beat ages out.
+  const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
+  const markAt = Math.floor(now.getTime() / step) * step;
+  const mark = sqlTime(new Date(markAt));
+  const peopleFromTime = sqlTime(new Date(markAt - LIVE_WINDOW_HOURS * 3_600_000));
+
+  // The people's window starts first, so its first row bounds every read.
+  const first = db.prepare(FIRST_SQL).get(peopleFromTime) as { id: number | bigint | null };
   if (first.id === null) return { agents: 0, memories, counts, beats: [], since: since.toISOString() };
   const from = Number(first.id);
 
-  // People are counted as of the last mark of the clock, so the count does not rise with a beat.
-  const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
-  const mark = sqlTime(new Date(Math.floor(now.getTime() / step) * step));
   const counted = new Set<string>();
   let total = 0;
-  const tally = db.prepare(TALLY_SQL).all(from, fromTime) as Array<{ actor: string; action: string; entity: string; n: number | bigint; first: string }>;
+  const tally = db.prepare(TALLY_SQL).all(fromTime, from, peopleFromTime) as Array<{ actor: string; action: string; entity: string; n: number | bigint; first: string }>;
   for (const t of tally) {
     counts[kindOf(t)] += Number(t.n);
     total += Number(t.n);
+    // Every row here is at or after the start of the people's window, so one before the mark is in it.
     if (t.first < mark) counted.add(t.actor);
   }
   const agents = total > 0 ? Math.max(LIVE_PEOPLE_FLOOR, counted.size) : 0;
@@ -175,7 +188,7 @@ export function _livePlansForTests(): Record<"first" | "tally" | "beats", string
     (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args) as Array<{ detail: string }>).map((r) => r.detail);
   return {
     first: plan(FIRST_SQL, ""),
-    tally: plan(TALLY_SQL, 0, ""),
+    tally: plan(TALLY_SQL, "", 0, ""),
     beats: plan(BEATS_SQL, 0, "", 1),
   };
 }
