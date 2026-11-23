@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.42.0](https://github.com/enhesa/big-agentic-brain/compare/v2.41.0...v2.42.0) (2026-11-23)
+
+
+### Features
+
+* publish the container image at each release ([#199](https://github.com/enhesa/big-agentic-brain/issues/199)) ([704f23a](https://github.com/enhesa/big-agentic-brain/commit/704f23aaa2b6212d0e618305720d28fea7689f96))
+* serve a memory skill for agents on any board ([#201](https://github.com/enhesa/big-agentic-brain/issues/201)) ([edf1f04](https://github.com/enhesa/big-agentic-brain/commit/edf1f04d9310cb8e20eb5ca5eac4fc0a397b49d6))
+* **SOFTARCH-71:** draw the brain at work on a live page ([#202](https://github.com/enhesa/big-agentic-brain/issues/202)) ([7963fcb](https://github.com/enhesa/big-agentic-brain/commit/7963fcb17a5e21878e0b945ae4b1e6b8ab564755))
+
+
+### Bug Fixes
+
+* keep the live page from saying who did what ([#204](https://github.com/enhesa/big-agentic-brain/issues/204)) ([1d28443](https://github.com/enhesa/big-agentic-brain/commit/1d28443a2dba5b967b1ca2c76305ec240539f6db))
+* remove the film's download and skip links from the landing page ([#203](https://github.com/enhesa/big-agentic-brain/issues/203)) ([39f6400](https://github.com/enhesa/big-agentic-brain/commit/39f6400569c2153b7b22b19804e2a59ba5900ae3))
+
 ## [2.41.0](https://github.com/enhesa/big-agentic-brain/compare/v2.40.0...v2.41.0) (2026-11-23)
 
 
