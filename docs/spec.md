@@ -708,6 +708,8 @@ Endpoints (served by `app/instructions/**`, backed by `lib/instructions.ts`, con
 - `GET /instructions/skill.md`, the skill file itself, `text/markdown` (legacy path)
 - `GET /api/hook`, what the SessionStart/UserPromptSubmit hook (a bare `curl`) prints into a session: an unread-message count (never a sender or a body: the identity is a self-asserted header) + update notice, as the documented hook envelope. `?event=` names the event that fired (`SessionStart` when absent or unrecognised) because Claude Code rejects an envelope naming any other event, and a bare `curl` cannot read the event off stdin (legacy path)
 - `GET /instructions/version`, `{ version, updatedAt }`, JSON
+- `GET /instructions/board.md`, the optional board-memory skill for agents on a message board, queue or
+  tracker, `text/markdown`. Not part of `version`. Guide: [board-memory.md](board-memory.md)
 
 `version` is content-addressed: the first 12 hex chars of a sha256 over the concatenated
 raw content of `install.md` + `skill.md`. Any edit to those files bumps the
