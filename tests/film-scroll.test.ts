@@ -136,6 +136,8 @@ describe("the film played by scroll", () => {
     expect(before).not.toMatch(/\.filmPin\s*\{/);
     expect(before).not.toMatch(/\.filmControls\s*\{[^}]*display:\s*none/);
     expect(scrub).toMatch(/\.filmControls\s*\{[^}]*display:\s*none/);
+    // The bar holds only those buttons. Left in, its empty box would push the pinned film up.
+    expect(scrub).toMatch(/\.filmBar\s*\{[^}]*display:\s*none/);
     // hidden would make the page its own scroll box, and nothing could be pinned to the window.
     expect(css).toMatch(/\.page\s*\{[^}]*overflow-x:\s*clip/);
   });
