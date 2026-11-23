@@ -65,15 +65,6 @@ export function smoothClosed(points: Array<[number, number]>): string {
   return `${d} Z`;
 }
 
-/**
- * The dots that stand lit: `awake` of `total`, spread evenly around the ring. A dot is a seat, not
- * a person, so which ones are lit says only how many people's agents are at work right now.
- */
-export function litSeats(total: number, awake: number): number[] {
-  const n = Math.max(0, Math.min(Math.floor(awake), total));
-  return Array.from({ length: n }, (_, k) => Math.floor((k * total) / n));
-}
-
 function mix(n: number): number {
   let h = n >>> 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
@@ -82,14 +73,13 @@ function mix(n: number): number {
 }
 
 /**
- * The seat a beat's mark moves to or from, or -1 with no dots. Drawn by lot from the beat's id,
- * among the lit seats when there are any: the same beat always gets the same seat, and no seat
- * belongs to a person. The snapshot does not say who did a beat, so this cannot either.
+ * The seat a beat's mark moves to or from, or -1 with no dots. Drawn by lot from the beat's id:
+ * the same beat always gets the same seat, and no seat belongs to a person. The snapshot does not
+ * say who did a beat, so this cannot either.
  */
-export function seatOf(beatId: number, total: number, awake: number): number {
+export function seatOf(beatId: number, total: number): number {
   if (total <= 0) return -1;
-  const lit = litSeats(total, awake);
-  return lit.length > 0 ? lit[mix(beatId) % lit.length] : mix(beatId) % total;
+  return mix(beatId) % total;
 }
 
 /** A second seat for a message, never the first, or -1 with fewer than two dots. */

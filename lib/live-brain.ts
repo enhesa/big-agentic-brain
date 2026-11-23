@@ -11,6 +11,12 @@ import { parseDbTime } from "@/lib/dates";
  * file. A memory page names its author and its voters, so anything that tied a beat to a person's
  * dot would name that dot, and with it that person's searches and messages. The page draws the
  * dots as seats and picks one per beat by lot (lib/live-picture.ts).
+ *
+ * The count of people is kept vague on purpose. An exact small count does the same harm as a
+ * name: "one person at work" makes every beat that person's, and one of them may be a save that
+ * the memory page signs. So the count is never under LIVE_PEOPLE_FLOOR, it moves only on a
+ * LIVE_PEOPLE_STEP_MINUTES clock so a rise cannot be matched to one beat, and there is no count of
+ * who is at work right now.
  */
 
 /** How far back the page looks, in hours. */
@@ -21,8 +27,10 @@ export const LIVE_DOTS_MAX = 24;
 export const LIVE_BEATS_MAX = 40;
 /** One snapshot serves every open page for this long. */
 export const LIVE_CACHE_MS = 2000;
-/** A person counts as at work right now when their agents did something this recently, in minutes. */
-export const LIVE_AWAKE_MINUTES = 15;
+/** With any beat in the window the count of people is at least this, so it never shows one person alone. */
+export const LIVE_PEOPLE_FLOOR = 3;
+/** The count of people moves on this clock, in minutes: a person is counted from the next mark after their first beat. */
+export const LIVE_PEOPLE_STEP_MINUTES = 5;
 
 const SEARCH_TOOL_PATH = "/mcp#tools/call:bab_search";
 const SEARCH_API_PATH = "/api/learnings";
@@ -43,10 +51,11 @@ export interface LiveBeat {
 }
 
 export interface LiveBrain {
-  /** People whose agents did one of the five things in the window. */
+  /**
+   * People whose agents did one of the five things in the window: 0 with no beat, else at least
+   * LIVE_PEOPLE_FLOOR, counted as of the last LIVE_PEOPLE_STEP_MINUTES mark.
+   */
   agents: number;
-  /** Of those, the people whose agents did one in the last LIVE_AWAKE_MINUTES. */
-  awake: number;
   /** Live memories right now. */
   memories: number;
   /** How often each thing happened in the window. */
@@ -89,8 +98,8 @@ const BEAT_FROM = `FROM audit_log a NOT INDEXED WHERE a.id >= ? AND a.at >= ? AN
  * which is every row before the window.
  */
 const FIRST_SQL = "SELECT MIN(id) AS id FROM audit_log INDEXED BY idx_audit_at WHERE at >= ?";
-const PEOPLE_SQL = `SELECT COUNT(DISTINCT a.actor_id) AS agents, COUNT(DISTINCT CASE WHEN a.at >= ? THEN a.actor_id END) AS awake ${BEAT_FROM}`;
-const TALLY_SQL = `SELECT a.action AS action, a.entity AS entity, COUNT(*) AS n ${BEAT_FROM} GROUP BY a.action, a.entity`;
+/** One pass for the counts and the people. The actor ids it groups by are counted here and go no further. */
+const TALLY_SQL = `SELECT a.actor_id AS actor, a.action AS action, a.entity AS entity, COUNT(*) AS n, MIN(a.at) AS first ${BEAT_FROM} GROUP BY a.actor_id, a.action, a.entity`;
 const BEATS_SQL = `SELECT a.id, a.at, a.action, a.entity, a.entity_id ${BEAT_FROM} ORDER BY a.id DESC LIMIT ?`;
 
 interface BeatRow {
@@ -109,14 +118,21 @@ export function liveBrain(now: Date = new Date()): LiveBrain {
 
   const fromTime = sqlTime(since);
   const first = db.prepare(FIRST_SQL).get(fromTime) as { id: number | bigint | null };
-  if (first.id === null) return { agents: 0, awake: 0, memories, counts, beats: [], since: since.toISOString() };
+  if (first.id === null) return { agents: 0, memories, counts, beats: [], since: since.toISOString() };
   const from = Number(first.id);
 
-  const awakeFrom = sqlTime(new Date(now.getTime() - LIVE_AWAKE_MINUTES * 60_000));
-  const people = db.prepare(PEOPLE_SQL).get(awakeFrom, from, fromTime) as { agents: number | bigint; awake: number | bigint };
-
-  const tally = db.prepare(TALLY_SQL).all(from, fromTime) as Array<{ action: string; entity: string; n: number | bigint }>;
-  for (const t of tally) counts[kindOf(t)] += Number(t.n);
+  // People are counted as of the last mark of the clock, so the count does not rise with a beat.
+  const step = LIVE_PEOPLE_STEP_MINUTES * 60_000;
+  const mark = sqlTime(new Date(Math.floor(now.getTime() / step) * step));
+  const counted = new Set<string>();
+  let total = 0;
+  const tally = db.prepare(TALLY_SQL).all(from, fromTime) as Array<{ actor: string; action: string; entity: string; n: number | bigint; first: string }>;
+  for (const t of tally) {
+    counts[kindOf(t)] += Number(t.n);
+    total += Number(t.n);
+    if (t.first < mark) counted.add(t.actor);
+  }
+  const agents = total > 0 ? Math.max(LIVE_PEOPLE_FLOOR, counted.size) : 0;
 
   const rows = (db.prepare(BEATS_SQL).all(from, fromTime, LIVE_BEATS_MAX) as unknown as BeatRow[]).reverse();
 
@@ -139,7 +155,7 @@ export function liveBrain(now: Date = new Date()): LiveBrain {
     };
   });
 
-  return { agents: Number(people.agents), awake: Number(people.awake), memories, counts, beats, since: since.toISOString() };
+  return { agents, memories, counts, beats, since: since.toISOString() };
 }
 
 let cached: { at: number; value: LiveBrain } | null = null;
@@ -153,13 +169,12 @@ export function cachedLiveBrain(now: Date = new Date()): LiveBrain {
 }
 
 /** Test-only: how the database reads each of the page's queries, so a test can pin that none walks the whole table. */
-export function _livePlansForTests(): Record<"first" | "people" | "tally" | "beats", string[]> {
+export function _livePlansForTests(): Record<"first" | "tally" | "beats", string[]> {
   const db = getDb();
   const plan = (sql: string, ...args: Array<string | number>) =>
     (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args) as Array<{ detail: string }>).map((r) => r.detail);
   return {
     first: plan(FIRST_SQL, ""),
-    people: plan(PEOPLE_SQL, "", 0, ""),
     tally: plan(TALLY_SQL, 0, ""),
     beats: plan(BEATS_SQL, 0, "", 1),
   };

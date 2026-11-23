@@ -53,16 +53,7 @@
 }
 
 .dot {
-  fill: var(--steel);
-  opacity: 0.4;
-  transition:
-    fill 0.3s ease,
-    opacity 0.3s ease;
-}
-
-.awake {
   fill: var(--navy);
-  opacity: 1;
 }
 
 /* A mark that travels between a dot and the brain. Its ends come from the component. */
@@ -193,12 +184,8 @@
 
   /* The drawing shrinks with the screen. A stroke in the mark's own colour keeps it visible. */
   .dot {
-    stroke: var(--steel);
-    stroke-width: 12;
-  }
-
-  .awake {
     stroke: var(--navy);
+    stroke-width: 12;
   }
 
   .fly {
@@ -355,7 +342,6 @@
     animation: none;
   }
 
-  .dot,
   .statusDot {
     transition: none;
   }

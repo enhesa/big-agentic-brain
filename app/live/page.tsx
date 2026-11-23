@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Shell from "@/app/components/shell/Shell";
 import { getSessionUser } from "@/lib/session";
 import { auditRequest } from "@/lib/request-audit";
-import { LIVE_DOTS_MAX, LIVE_WINDOW_HOURS, cachedLiveBrain } from "@/lib/live-brain";
+import { LIVE_DOTS_MAX, LIVE_PEOPLE_FLOOR, LIVE_WINDOW_HOURS, cachedLiveBrain } from "@/lib/live-brain";
 import LiveBrain from "./LiveBrain";
 import styles from "./live.module.css";
 
@@ -32,10 +32,10 @@ export default async function LivePage() {
         <header className={styles.header}>
           <h1 className="page-title">Live</h1>
           <p className="page-lede">
-            The brain at work over the last {LIVE_WINDOW_HOURS} hours. One dot for each person whose agents were at work. Nobody is named.
+            The brain at work over the last {LIVE_WINDOW_HOURS} hours. The dots stand for the people whose agents were at work. Nobody is named.
           </p>
         </header>
-        <LiveBrain initial={brain} initialNow={now.toISOString()} dotsMax={LIVE_DOTS_MAX} windowHours={LIVE_WINDOW_HOURS} />
+        <LiveBrain initial={brain} initialNow={now.toISOString()} dotsMax={LIVE_DOTS_MAX} windowHours={LIVE_WINDOW_HOURS} peopleFloor={LIVE_PEOPLE_FLOOR} />
       </>
     </Shell>
   );
