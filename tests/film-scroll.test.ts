@@ -97,6 +97,9 @@ describe("the film played by scroll", () => {
       expect(scrub, part).toContain(`.filmSection[data-night] ${part}`);
     }
     expect(css.slice(0, css.indexOf(`@media ${SCRUB_QUERY} {`))).not.toContain("data-night");
+    // The pin takes the navy ground, so the film's own paper must not show as a box on it.
+    expect(scrub).toMatch(/\.filmGround\s*\{[^}]*display:\s*none/);
+    expect(read("app/components/landing/FilmSvg.tsx")).toContain("className={styles.filmGround}");
     expect(read("app/components/landing/FilmScroll.tsx")).toContain('section.toggleAttribute("data-night", nightAt(now))');
   });
 

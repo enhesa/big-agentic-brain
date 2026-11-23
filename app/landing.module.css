@@ -1459,6 +1459,11 @@
     margin: 0;
   }
 
+  /* The page is the film's paper here. Its own would show as a box when the page turns navy. */
+  .filmGround {
+    display: none;
+  }
+
   /* In one scene the film's navy ground spills over the page. The pin takes the same ground,
      so the words beside the film are on navy in any window shape, and they turn light. */
   .filmPin {
@@ -1467,6 +1472,15 @@
 
   .filmSection[data-night] .filmPin {
     background: var(--navy);
+  }
+
+  /* The film's soft backdrop shapes are paper shapes. They leave with the paper. */
+  .filmBackdrop {
+    transition: opacity 0.3s ease;
+  }
+
+  .filmSection[data-night] .filmBackdrop {
+    opacity: 0;
   }
 
   /* The pin sits a little under the top bar. The night reaches up to the bar. */

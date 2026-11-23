@@ -912,9 +912,12 @@ export default function FilmSvg({ className, describedBy }: { className?: string
       strokeLinejoin="round"
     >
       {/* Still on purpose, like the video's backdrop. */}
-      <rect width={FILM.width} height={FILM.height} fill={C.paper} />
-      <path d={blobD(1130, 640, 330, 250, 3, 0.12, 9)} fill={C.sand} opacity={0.55} />
-      <path d={blobD(110, 70, 250, 190, 5, 0.14, 8)} fill={C.sand} opacity={0.5} />
+      {/* The film's own paper. The pinned film stands on the page instead, so the page hides it. */}
+      <rect className={styles.filmGround} width={FILM.width} height={FILM.height} fill={C.paper} />
+      <g className={styles.filmBackdrop}>
+        <path d={blobD(1130, 640, 330, 250, 3, 0.12, 9)} fill={C.sand} opacity={0.55} />
+        <path d={blobD(110, 70, 250, 190, 5, 0.14, 8)} fill={C.sand} opacity={0.5} />
+      </g>
       <Alone />
       <Again />
       <Learns />
