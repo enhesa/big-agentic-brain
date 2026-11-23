@@ -65,7 +65,7 @@ describe("liveBrain", () => {
     await row(BOB, "helpful", minutesAgo(18), { entity: "learning", entityId: saved.id });
     await row(CAT, "confirm", minutesAgo(17), { entity: "learning", entityId: saved.id });
     await row(CAT, "flag", minutesAgo(16), { entity: "learning", entityId: saved.id });
-    await row(CAT, "send", minutesAgo(15), { entity: "message", entityId: "m-none" });
+    await row(CAT, "send", minutesAgo(10), { entity: "message", entityId: "m-none" });
     // Not beats: too old, not a person, a write to the search address, a page view, another action.
     await search(BOB, minutesAgo(25 * 60));
     await search("anonymous", minutesAgo(5));
@@ -78,7 +78,8 @@ describe("liveBrain", () => {
     const brain = liveBrain(NOW);
     expect(brain.counts).toEqual({ save: 1, search: 3, reuse: 2, message: 1, flag: 1 });
     expect(brain.agents).toBe(3);
-    expect(brain.dots).toHaveLength(3);
+    // Ann saved just now and Cat sent a message ten minutes ago. Bob's last beat is older.
+    expect(brain.awake).toBe(2);
     expect(brain.memories).toBe(1);
     expect(brain.beats).toHaveLength(8);
     expect(Date.parse(brain.since)).toBe(NOW.getTime() - LIVE_WINDOW_HOURS * 3_600_000);
@@ -87,22 +88,22 @@ describe("liveBrain", () => {
     expect([...ids].sort((a, b) => a - b)).toEqual(ids);
   });
 
-  it("names nobody: a dot is a key that cannot be read back", async () => {
+  it("never says who did what: no beat carries a person, or anything that ties two beats together", async () => {
+    // A memory page names its author. So a save must not share anything with the same person's search.
     await memory(ANN, "Use the shared runner for long jobs");
-    await search(BOB, minutesAgo(3));
-    const { liveBrain, _resetLiveBrainForTests } = await import("../lib/live-brain");
-    const first = liveBrain(NOW);
-    const text = JSON.stringify(first);
+    await search(ANN, minutesAgo(3));
+    await search(BOB, minutesAgo(2));
+    const { liveBrain } = await import("../lib/live-brain");
+    const brain = liveBrain(NOW);
+    const text = JSON.stringify(brain);
     for (const who of [ANN, BOB, "ann", "bob"]) expect(text).not.toContain(who);
-    for (const key of first.dots) expect(key).toMatch(/^[0-9a-f]{12}$/);
-    expect([...first.dots].sort()).toEqual(first.dots);
-
-    // One person keeps one dot while the app runs, and gets another after a restart.
-    expect(liveBrain(NOW).dots).toEqual(first.dots);
-    _resetLiveBrainForTests();
-    const after = liveBrain(NOW);
-    expect(after.dots).toHaveLength(2);
-    for (const key of after.dots) expect(first.dots).not.toContain(key);
+    // The whole shape, so a new field has to be argued for here.
+    expect(Object.keys(brain).sort()).toEqual(["agents", "awake", "beats", "counts", "memories", "since"]);
+    expect(brain.beats).toHaveLength(3);
+    for (const beat of brain.beats) expect(Object.keys(beat).sort()).toEqual(["at", "id", "kind", "memory"]);
+    // Ann's search and Bob's search look the same apart from when they happened.
+    const [a, b] = brain.beats.filter((x) => x.kind === "search");
+    expect({ ...a, id: 0, at: "" }).toEqual({ ...b, id: 0, at: "" });
   });
 
   it("shows a memory's title only while the memory is live, and never a search or a message text", async () => {
@@ -121,7 +122,7 @@ describe("liveBrain", () => {
     expect(JSON.stringify(brain)).not.toContain("Gone title");
   });
 
-  it("points a message at the receiver's dot, or at nobody when the receiver has none", async () => {
+  it("says a message was sent, and nothing about who sent it, who got it or what it said", async () => {
     await person(ANN);
     await person(BOB);
     await person(CAT);
@@ -134,18 +135,17 @@ describe("liveBrain", () => {
     const brain = liveBrain(NOW);
     const sent = brain.beats.filter((b) => b.kind === "message");
     expect(sent).toHaveLength(2);
-    // Bob searched, so he has a dot. Cat did nothing, so she has none.
-    expect(brain.dots).toHaveLength(2);
-    expect(sent[0].to).not.toBeNull();
-    expect(brain.dots).toContain(sent[0].to);
-    expect(sent[0].to).not.toBe(sent[0].agent);
-    expect(sent[1].to).toBeNull();
+    for (const beat of sent) expect(Object.keys(beat).sort()).toEqual(["at", "id", "kind", "memory"]);
+    expect(sent.map((b) => b.memory)).toEqual([null, null]);
+    // Ann sent and Bob searched. Cat only received, which is not a beat.
+    expect(brain.agents).toBe(2);
     const text = JSON.stringify(brain);
     expect(text).not.toContain("private");
     expect(text).not.toContain("Another");
+    for (const who of [ANN, BOB, CAT, "ann", "bob", "cat"]) expect(text).not.toContain(who);
   });
 
-  it("draws at most LIVE_DOTS_MAX dots, the most recent, and sends at most LIVE_BEATS_MAX beats", async () => {
+  it("counts every person and every beat, and sends at most LIVE_BEATS_MAX beats, the newest", async () => {
     const { liveBrain, LIVE_DOTS_MAX, LIVE_BEATS_MAX } = await import("../lib/live-brain");
     const people = LIVE_DOTS_MAX + 3;
     // Person 0 is the oldest, and searches twice so there are more beats than the page takes.
@@ -154,26 +154,66 @@ describe("liveBrain", () => {
 
     const brain = liveBrain(NOW);
     expect(brain.agents).toBe(people);
-    expect(brain.dots).toHaveLength(LIVE_DOTS_MAX);
+    expect(brain.awake).toBe(0);
     expect(brain.counts.search).toBe(people + LIVE_BEATS_MAX);
     expect(brain.beats).toHaveLength(LIVE_BEATS_MAX);
-    // Every beat sent is by the last person, who has a dot.
-    expect(new Set(brain.beats.map((b) => b.agent)).size).toBe(1);
-    expect(brain.beats[0].agent).not.toBeNull();
+    // The newest: all later than the first round of searches.
+    const oldest = Date.parse(brain.beats[0].at);
+    expect(NOW.getTime() - oldest).toBeLessThan(101 * 60_000);
   });
 
-  it("gives a beat no dot when its person is not among the dots drawn", async () => {
-    const { liveBrain, LIVE_DOTS_MAX } = await import("../lib/live-brain");
-    await search("early@example.com", minutesAgo(900));
-    for (let i = 0; i < LIVE_DOTS_MAX; i++) await search(`p${i}@example.com`, minutesAgo(100 - i));
+  it("counts a person as at work right now only for LIVE_AWAKE_MINUTES", async () => {
+    const { liveBrain, LIVE_AWAKE_MINUTES } = await import("../lib/live-brain");
+    await search(ANN, minutesAgo(LIVE_AWAKE_MINUTES + 5));
+    await search(BOB, minutesAgo(LIVE_AWAKE_MINUTES - 5));
+    await search(BOB, minutesAgo(1));
+    await search(CAT, minutesAgo(2));
     const brain = liveBrain(NOW);
-    expect(brain.beats[0].agent).toBeNull();
-    expect(brain.beats.slice(1).every((b) => b.agent !== null)).toBe(true);
+    expect(brain.agents).toBe(3);
+    expect(brain.awake).toBe(2);
   });
 
   it("is empty and whole when nothing happened", async () => {
     const { liveBrain } = await import("../lib/live-brain");
-    expect(liveBrain(NOW)).toMatchObject({ agents: 0, dots: [], memories: 0, beats: [], counts: { save: 0, search: 0, reuse: 0, message: 0, flag: 0 } });
+    const empty = { agents: 0, awake: 0, memories: 0, beats: [], counts: { save: 0, search: 0, reuse: 0, message: 0, flag: 0 } };
+    expect(liveBrain(NOW)).toMatchObject(empty);
+    // Only rows from before the window, then only rows that are not beats.
+    await search(BOB, minutesAgo(30 * 60));
+    expect(liveBrain(NOW)).toMatchObject(empty);
+    await row(BOB, "GET", minutesAgo(5), { path: "/memory" });
+    expect(liveBrain(NOW)).toMatchObject(empty);
+  });
+
+  it("reads a quiet day without walking the rows before the window", async () => {
+    // A long history of memory rows, all old, and one search today.
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    const insert = db.prepare("INSERT INTO audit_log (actor_id, action, entity, entity_id, via, at, path) VALUES (?, 'helpful', 'learning', ?, 'mcp', ?, NULL)");
+    for (let i = 0; i < 400; i++) insert.run(BOB, `old-${i}`, minutesAgo(3 * 24 * 60 + i));
+    await search(ANN, minutesAgo(3));
+    const { liveBrain, _livePlansForTests } = await import("../lib/live-brain");
+    const brain = liveBrain(NOW);
+    expect(brain.counts).toEqual({ save: 0, search: 1, reuse: 0, message: 0, flag: 0 });
+    expect(brain.agents).toBe(1);
+    // How the database reads it: the window's first row from the index over the time, then only
+    // the rows from that id on. Never a scan of the table, and no index that pulls in old rows.
+    const plans = _livePlansForTests();
+    expect(plans.first).toEqual(["SEARCH audit_log USING COVERING INDEX idx_audit_at (at>?)"]);
+    for (const name of ["people", "tally", "beats"] as const) {
+      expect(plans[name], name).toContain("SEARCH a USING INTEGER PRIMARY KEY (rowid>?)");
+      expect(plans[name].join(" "), name).not.toMatch(/SCAN|idx_audit/);
+    }
+  });
+
+  it("still counts a row written out of order, by its time", async () => {
+    // The newest row by id is older than the window, and an older row by id is inside it.
+    await search(ANN, minutesAgo(10));
+    await search(BOB, minutesAgo(26 * 60));
+    await search(CAT, minutesAgo(20));
+    const { liveBrain } = await import("../lib/live-brain");
+    const brain = liveBrain(NOW);
+    expect(brain.counts.search).toBe(2);
+    expect(brain.agents).toBe(2);
   });
 
   it("serves one snapshot for LIVE_CACHE_MS, then reads again", async () => {
@@ -199,20 +239,69 @@ describe("GET /live/feed", () => {
     const res = await GET();
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
-    const body = (await res.json()) as { now: string; brain: { counts: { search: number }; dots: string[] } };
+    const text = await res.text();
+    const body = JSON.parse(text) as { now: string; brain: { counts: { search: number }; agents: number } };
     expect(Number.isNaN(Date.parse(body.now))).toBe(false);
     expect(body.brain.counts.search).toBe(1);
-    expect(body.brain.dots).toHaveLength(1);
+    expect(body.brain.agents).toBe(1);
+    expect(text).not.toContain("bob");
     expect(rows()).toBe(before);
   });
 
-  it("answers 429 once the browser bucket is spent", async () => {
+  it("spends a signed-in browser's own bucket, and answers 429 once it is spent", async () => {
     vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
-    vi.doMock("@/lib/rate-limit", () => ({ checkUiRateLimit: () => false }));
+    vi.doMock("@/lib/notify-auth", () => ({ NO_STORE: { "Cache-Control": "no-store" }, getViewer: async () => ({ ownerId: ANN, actor: {} }) }));
+    const spent: string[] = [];
+    vi.doMock("@/lib/rate-limit", async (original) => ({
+      ...(await original<typeof import("../lib/rate-limit")>()),
+      checkUiRateLimit: (id: string) => {
+        spent.push(id);
+        return false;
+      },
+    }));
     const { GET } = await import("../app/live/feed/route");
     const res = await GET();
     expect(res.status).toBe(429);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(spent).toEqual([ANN]);
+    vi.doUnmock("@/lib/notify-auth");
+  });
+
+  it("limits an anonymous caller by a verified address only, each address on its own", async () => {
+    const from = (ip: string) => vi.doMock("next/headers", () => ({ headers: async () => new Headers({ "x-real-ip": ip }) }));
+    // A new start, as after a restart: closes the database first, so its file can be removed later.
+    const restart = async () => {
+      (await import("../lib/db"))._resetDbForTests();
+      vi.resetModules();
+    };
+    process.env.BAB_CLIENT_IP_HEADER = "x-real-ip";
+    try {
+      from("192.0.2.7");
+      const { checkRateLimit, ANON_RATE_LIMIT_PER_MINUTE } = await import("../lib/rate-limit");
+      for (let i = 0; i < ANON_RATE_LIMIT_PER_MINUTE; i++) checkRateLimit("anon:192.0.2.7", ANON_RATE_LIMIT_PER_MINUTE);
+      const { GET } = await import("../app/live/feed/route");
+      const refused = await GET();
+      expect(refused.status).toBe(429);
+      expect(refused.headers.get("Retry-After")).toMatch(/^\d+$/);
+      expect(refused.headers.get("Cache-Control")).toBe("no-store");
+
+      // Another address is not held back by the first one.
+      await restart();
+      from("192.0.2.8");
+      const rate = await import("../lib/rate-limit");
+      for (let i = 0; i < rate.ANON_RATE_LIMIT_PER_MINUTE; i++) rate.checkRateLimit("anon:192.0.2.7", rate.ANON_RATE_LIMIT_PER_MINUTE);
+      expect((await (await import("../app/live/feed/route")).GET()).status).toBe(200);
+
+      // An address nobody vouches for is not a bucket: it could be changed at will.
+      delete process.env.BAB_CLIENT_IP_HEADER;
+      await restart();
+      from("192.0.2.7");
+      const loose = await import("../lib/rate-limit");
+      for (let i = 0; i < loose.ANON_RATE_LIMIT_PER_MINUTE; i++) loose.checkRateLimit("anon:192.0.2.7", loose.ANON_RATE_LIMIT_PER_MINUTE);
+      expect((await (await import("../app/live/feed/route")).GET()).status).toBe(200);
+    } finally {
+      delete process.env.BAB_CLIENT_IP_HEADER;
+    }
   });
 });
 
@@ -233,6 +322,9 @@ describe("the /live page", () => {
     expect(html).toContain("Nobody is named.");
     expect(html).toContain('role="img"');
     expect((html.match(/<circle class="[^"]*dot/g) ?? []).length).toBe(2);
+    // Both are at work right now, so both dots are lit. The page says a dot is nobody's.
+    expect((html.match(/<circle class="[^"]*awake/g) ?? []).length).toBe(2);
+    expect(html).toContain("drawn by lot");
     expect(html).toContain("An agent saved a memory");
     expect(html).toContain("An agent searched the brain");
     expect(html).toContain(`href="/memory/${saved.id}"`);
@@ -299,6 +391,43 @@ describe("the picture", () => {
     expect(smoothClosed([[0, 0], [10, 0], [10, 10]])).toMatch(/^M [\d. -]+( Q [\d. -]+){3} Z$/);
   });
 
+  it("lights as many dots as people at work, spread around, and seats a mark by lot", async () => {
+    const { litSeats, seatOf, otherSeat } = await import("../lib/live-picture");
+    expect(litSeats(8, 0)).toEqual([]);
+    expect(litSeats(8, 2)).toEqual([0, 4]);
+    expect(litSeats(8, 8)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    // Never more lit than there are dots, and never the same dot twice.
+    expect(litSeats(3, 9)).toEqual([0, 1, 2]);
+    for (let total = 1; total <= 24; total++) {
+      for (let awake = 0; awake <= total; awake++) expect(new Set(litSeats(total, awake)).size).toBe(awake);
+    }
+
+    expect(seatOf(7, 0, 0)).toBe(-1);
+    // The same beat always gets the same seat, and it is a lit one when any is lit.
+    for (let id = 1; id <= 300; id++) {
+      const seat = seatOf(id, 12, 3);
+      expect(seat).toBe(seatOf(id, 12, 3));
+      expect(litSeats(12, 3)).toContain(seat);
+      const quiet = seatOf(id, 12, 0);
+      expect(quiet >= 0 && quiet < 12).toBe(true);
+      // A message goes to another seat, never back to its own.
+      const other = otherSeat(id, 12, seat);
+      expect(other >= 0 && other < 12 && other !== seat).toBe(true);
+    }
+    // The lot spreads the marks: every seat gets some.
+    expect(new Set(Array.from({ length: 300 }, (_, i) => seatOf(i + 1, 12, 0))).size).toBe(12);
+    expect(otherSeat(7, 1, 0)).toBe(-1);
+    expect(otherSeat(7, 5, -1)).toBe(-1);
+  });
+
+  it("keeps the count inside the brain short", async () => {
+    const { coreCount } = await import("../lib/live-picture");
+    expect(coreCount(0)).toBe("0");
+    expect(coreCount(9_999)).toBe("9,999");
+    expect(coreCount(12_345)).toBe("12.3K");
+    expect(coreCount(2_500_000)).toBe("2.5M");
+  });
+
   it("calls every beat by what an agent did", async () => {
     const { BEAT_WORDS } = await import("../lib/live-picture");
     const { BEAT_KINDS } = await import("../lib/live-brain");
@@ -314,9 +443,10 @@ describe("where the page is told", () => {
     const { NAV_ITEMS } = await import("../app/components/nav-items");
     expect(NAV_ITEMS.map((i) => i.href as string)).toContain("/live");
     expect(read("README.md")).toContain("**Live page.**");
-    const { LIVE_WINDOW_HOURS, LIVE_DOTS_MAX, LIVE_BEATS_MAX, LIVE_CACHE_MS } = await import("../lib/live-brain");
+    const { LIVE_WINDOW_HOURS, LIVE_DOTS_MAX, LIVE_BEATS_MAX, LIVE_CACHE_MS, LIVE_AWAKE_MINUTES } = await import("../lib/live-brain");
     const spec = read("docs/spec.md");
     expect(spec).toContain("## Live Brain page");
+    expect(spec).toContain(`\`LIVE_AWAKE_MINUTES\` (${LIVE_AWAKE_MINUTES})`);
     expect(spec).toContain(`\`LIVE_WINDOW_HOURS\` (${LIVE_WINDOW_HOURS})`);
     expect(spec).toContain(`\`LIVE_DOTS_MAX\` (${LIVE_DOTS_MAX})`);
     expect(spec).toContain(`\`LIVE_BEATS_MAX\` (${LIVE_BEATS_MAX})`);

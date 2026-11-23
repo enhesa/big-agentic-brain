@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import type { BeatKind, LiveBeat, LiveBrain as LiveBrainData } from "@/lib/live-brain";
-import { BEAT_WORDS, CORE, PICTURE, arcPath, coreEdge, dotPlace, smoothClosed, type Point } from "@/lib/live-picture";
+import { BEAT_WORDS, CORE, PICTURE, arcPath, coreCount, coreEdge, dotPlace, litSeats, otherSeat, seatOf, smoothClosed, type Point } from "@/lib/live-picture";
 import { blobPoints } from "@/lib/film-story.mjs";
 import styles from "./live.module.css";
 
@@ -18,8 +18,6 @@ export const REPLAY_MAX = 6;
 const REPLAY_WINDOW_MS = 3_600_000;
 /** Beats that arrive in one snapshot and are played. More than this would be a blur. */
 const PLAY_MAX = 12;
-/** A dot is awake when its agent did something this recently. */
-const AWAKE_MS = 15 * 60_000;
 /** Rows in the list under the picture. */
 export const LATEST_MAX = 12;
 
@@ -70,14 +68,19 @@ export interface LiveBrainProps {
   /** The server's clock at render, so the first paint says the same times on both sides. */
   initialNow: string;
   dotsMax: number;
+  windowHours: number;
 }
 
 /**
  * The Live Brain picture and the list under it. It draws the snapshot it was given, plays the last
  * hour again, then follows along: a new snapshot from /live/feed every few seconds and right after
  * a live event. Everything the picture shows is also in the list, so nothing depends on motion.
+ *
+ * A dot is a seat, not a person: there are as many dots as people whose agents were at work, and
+ * as many lit as are at work right now. The snapshot does not say who did a beat, so each mark
+ * goes to a seat drawn by lot from the beat's id (lib/live-picture.ts).
  */
-export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainProps) {
+export default function LiveBrain({ initial, initialNow, dotsMax, windowHours }: LiveBrainProps) {
   const [brain, setBrain] = useState(initial);
   const [now, setNow] = useState(() => Date.parse(initialNow));
   const [playing, setPlaying] = useState<Playing[]>([]);
@@ -106,16 +109,22 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
     const held = timers.current;
     let stopped = false;
     let debounce: ReturnType<typeof setTimeout> | null = null;
+    // Requests are numbered: an answer that lands after a newer one was applied is dropped.
+    let asked = 0;
+    let applied = 0;
 
     const start = Date.parse(initialNow);
     play(initial.beats.filter((b) => start - Date.parse(b.at) < REPLAY_WINDOW_MS).slice(-REPLAY_MAX));
 
     async function load() {
       if (stopped || document.hidden) return;
+      const mine = ++asked;
       try {
         const res = await fetch("/live/feed", { cache: "no-store" });
         if (!res.ok || stopped) return;
         const body = (await res.json()) as { now: string; brain: LiveBrainData };
+        if (stopped || mine < applied) return;
+        applied = mine;
         const fresh = body.brain.beats.filter((b) => b.id > lastId.current);
         lastId.current = body.brain.beats.reduce((m, b) => Math.max(m, b.id), lastId.current);
         setBrain(body.brain);
@@ -151,12 +160,9 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const places = useMemo(() => new Map(brain.dots.map((key, i) => [key, dotPlace(i, brain.dots.length)])), [brain.dots]);
-  const awake = useMemo(() => {
-    const keys = new Set<string>();
-    for (const b of brain.beats) if (b.agent && now - Date.parse(b.at) < AWAKE_MS) keys.add(b.agent);
-    return keys;
-  }, [brain.beats, now]);
+  const dots = Math.min(brain.agents, dotsMax);
+  const places = useMemo(() => Array.from({ length: dots }, (_, i) => dotPlace(i, dots)), [dots]);
+  const lit = useMemo(() => new Set(litSeats(dots, brain.awake)), [dots, brain.awake]);
   const latest = useMemo(() => [...brain.beats].reverse().slice(0, LATEST_MAX), [brain.beats]);
 
   const tiles: Array<{ label: string; value: number; swatch?: string }> = [
@@ -169,36 +175,35 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
 
   const summary =
     brain.agents === 0
-      ? "The brain, with no agents at work in the last 24 hours."
-      : `The brain with ${brain.dots.length} dots around it, one for each person whose agents were at work. What they did is in the list below.`;
+      ? `The brain, with no agents at work in the last ${windowHours} hours.`
+      : `The brain with ${dots} dots around it, one for each person whose agents were at work. ${lit.size} are lit: that many are at work right now. What was done is in the list below.`;
 
   return (
     <div className={styles.live}>
       <div className={styles.stage}>
         <svg className={styles.picture} viewBox={`0 0 ${PICTURE.width} ${PICTURE.height}`} role="img" aria-label={summary}>
           <g className={styles.spokes}>
-            {brain.dots.map((key) => {
-              const p = places.get(key)!;
+            {places.map((p, i) => {
               const e = coreEdge(p);
-              return <line key={key} x1={e.x} y1={e.y} x2={p.x} y2={p.y} />;
+              return <line key={i} x1={e.x} y1={e.y} x2={p.x} y2={p.y} />;
             })}
           </g>
 
           <g>
             {playing.map(({ key, beat, delay }) => {
-              const from = beat.agent ? places.get(beat.agent) : undefined;
-              const to = beat.to ? places.get(beat.to) : undefined;
+              // A seat drawn by lot: the snapshot does not say who did this.
+              const seat = seatOf(beat.id, dots, brain.awake);
+              const from = seat >= 0 ? places[seat] : undefined;
               const edge = from ? coreEdge(from) : undefined;
               const pulse = (tone: string, wait: number) => (
                 <circle className={`${styles.pulse} ${tone}`} cx={CORE.x} cy={CORE.y} r={CORE.r} style={{ animationDelay: `${delay + wait}ms` }} />
               );
               if (beat.kind === "message") {
-                const a = from ?? CORE;
-                const b = to ?? (from ? coreEdge(from) : CORE);
-                if (a === b) return <g key={key}>{pulse(styles.navy, 0)}</g>;
+                const other = otherSeat(beat.id, dots, seat);
+                if (!from || other < 0) return <g key={key}>{pulse(styles.navy, 0)}</g>;
                 return (
                   <g key={key}>
-                    <path className={styles.arc} d={arcPath(a, b)} pathLength={1} style={{ animationDelay: `${delay}ms` }} />
+                    <path className={styles.arc} d={arcPath(from, places[other])} pathLength={1} style={{ animationDelay: `${delay}ms` }} />
                   </g>
                 );
               }
@@ -234,15 +239,14 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
           <path className={styles.brain} d={BRAIN_PATH} />
 
           <g>
-            {brain.dots.map((key) => {
-              const p = places.get(key)!;
-              return <circle key={key} className={`${styles.dot} ${awake.has(key) ? styles.awake : ""}`} cx={p.x} cy={p.y} r={11} />;
-            })}
+            {places.map((p, i) => (
+              <circle key={i} className={`${styles.dot} ${lit.has(i) ? styles.awake : ""}`} cx={p.x} cy={p.y} r={11} />
+            ))}
           </g>
         </svg>
 
         <p className={styles.core}>
-          <span className={styles.coreCount}>{count(brain.memories)}</span>
+          <span className={styles.coreCount}>{coreCount(brain.memories)}</span>
           <span className={styles.coreLabel}>{brain.memories === 1 ? "memory" : "memories"}</span>
         </p>
       </div>
@@ -263,9 +267,10 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
           </div>
         ))}
       </dl>
-      {brain.agents > brain.dots.length ? (
+      {dots > 0 ? (
         <p className={styles.note}>
-          The picture shows the {dotsMax} people whose agents were at work most recently, of {count(brain.agents)}.
+          A dot stands for a person, but no dot is anyone&apos;s: which dot a mark moves to is drawn by lot.
+          {brain.agents > dots ? ` The picture draws ${dotsMax} dots for ${count(brain.agents)} people.` : ""}
         </p>
       ) : null}
 
@@ -274,7 +279,7 @@ export default function LiveBrain({ initial, initialNow, dotsMax }: LiveBrainPro
           Latest
         </h2>
         {latest.length === 0 ? (
-          <p className="empty-state">Quiet for the last 24 hours. The picture moves when an agent searches, saves or reuses a memory.</p>
+          <p className="empty-state">{`Quiet for the last ${windowHours} hours. The picture moves when an agent searches, saves or reuses a memory.`}</p>
         ) : (
           <ol className={styles.list}>
             {latest.map((b) => (
