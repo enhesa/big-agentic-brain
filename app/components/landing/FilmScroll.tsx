@@ -44,17 +44,24 @@ export default function FilmScroll({ target, acts }: { target: string; acts: Act
       section.toggleAttribute("data-night", nightAt(now));
       if (now !== goal) frame = requestAnimationFrame(draw);
     };
+    // How far below the top of the window the film is pinned: the stylesheet's own figure.
+    const pin = section.querySelector<HTMLElement>(`.${styles.filmPin}`);
+    let pinTop = 0;
     const measure = () => {
       const box = section.getBoundingClientRect();
-      goal = filmTimeAt(scrollProgress(box.top, box.height, window.innerHeight));
+      goal = filmTimeAt(scrollProgress(box.top, box.height, window.innerHeight, pinTop));
       if (!frame) frame = requestAnimationFrame(draw);
     };
-    measure();
+    const size = () => {
+      pinTop = (pin && parseFloat(getComputedStyle(pin).top)) || 0;
+      measure();
+    };
+    size();
     window.addEventListener("scroll", measure, { passive: true });
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", size);
     return () => {
       window.removeEventListener("scroll", measure);
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", size);
       cancelAnimationFrame(frame);
       section.removeAttribute("data-night");
     };

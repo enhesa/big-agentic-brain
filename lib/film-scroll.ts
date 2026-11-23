@@ -21,6 +21,11 @@ export const SCRUB_QUERY =
  * window's height: early, so the first lines are already being drawn as the stage comes up.
  */
 const LEAD = 0.85;
+/**
+ * The share of the film that plays while the stage rises, before it is pinned: a first stroke,
+ * no more. The first act is told once the film holds still.
+ */
+const RISE = 0.03;
 /** The last share of the scroll rests on the closing frame. */
 const HOLD = 0.06;
 /**
@@ -36,14 +41,18 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /**
  * How far the page has scrolled through the film section, 0 to 1.
  * top: the section's top edge, in pixels below the top of the window. height: the section's
- * height. viewport: the window's height.
+ * height. viewport: the window's height. pin: how far below the top of the window the film
+ * is pinned (the height of the page's top bar).
+ *
+ * Two stretches. While the stage rises to its pin, only the first moments play. Once it is
+ * pinned, the rest plays evenly, until the section's bottom meets the window's bottom.
  */
-export function scrollProgress(top: number, height: number, viewport: number): number {
+export function scrollProgress(top: number, height: number, viewport: number, pin = 0): number {
   // A section no taller than the window is not pinned: there is nothing to scroll through.
   if (!(height > viewport)) return 0;
   const lead = viewport * LEAD;
-  const span = height - viewport + lead;
-  return clamp01((lead - top) / span);
+  if (top > pin) return lead > pin ? clamp01((lead - top) / (lead - pin)) * RISE : 0;
+  return RISE + clamp01((pin - top) / (height - viewport + pin)) * (1 - RISE);
 }
 
 /** The film's moment, in seconds, for a scroll progress of 0 to 1. */
@@ -62,12 +71,13 @@ export function actAt(seconds: number): number {
 
 /**
  * Whether the film's night covers the page at this moment. In one scene a navy ground spreads
- * from the brain past the edges of the stage, so the words beside the film must turn light.
- * It takes a moment to reach them, and leaves as the scene fades.
+ * from the brain past the edges of the stage. While it does, the page gives the pinned film
+ * the same ground and turns the words beside it light, in any window shape. It begins once
+ * the ground has started to spread, and ends halfway through the scene's fade.
  */
 export function nightAt(seconds: number): boolean {
   const night = SCENES.find((scene) => scene.id === "knows");
-  return night !== undefined && seconds >= night.start + 0.6 && seconds < night.end - 0.25;
+  return night !== undefined && seconds >= night.start + 0.45 && seconds < night.end - 0.2;
 }
 
 /** Where each act after the first begins on the progress rail, as a share of its length. */

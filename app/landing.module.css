@@ -1459,7 +1459,31 @@
     margin: 0;
   }
 
-  /* In one scene the film's navy ground spills over the page. The words beside it turn light. */
+  /* In one scene the film's navy ground spills over the page. The pin takes the same ground,
+     so the words beside the film are on navy in any window shape, and they turn light. */
+  .filmPin {
+    transition: background-color 0.3s ease;
+  }
+
+  .filmSection[data-night] .filmPin {
+    background: var(--navy);
+  }
+
+  /* The pin sits a little under the top bar. The night reaches up to the bar. */
+  .filmPin::before {
+    position: absolute;
+    top: -12px;
+    right: 0;
+    left: 0;
+    height: 12px;
+    background: inherit;
+    content: "";
+  }
+
+  .filmSection[data-night] .filmLink:focus-visible {
+    outline-color: var(--sage);
+  }
+
   .actTitle,
   .actText,
   .actNo,

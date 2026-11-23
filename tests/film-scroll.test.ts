@@ -8,24 +8,35 @@ const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf
 
 /** The landing page's film is played by scrolling. These are the sums behind it. */
 describe("the film played by scroll", () => {
-  it("starts as the film rises into the window and ends where the pin lets go", () => {
+  it("plays a first stroke as the film rises, and the rest once it is pinned", () => {
     const viewport = 900;
     const height = 6840;
+    const pin = 68;
+    const at = (top: number) => scrollProgress(top, height, viewport, pin);
     // Below the window, or only just in it: not started.
-    expect(scrollProgress(900, height, viewport)).toBe(0);
-    expect(scrollProgress(800, height, viewport)).toBe(0);
-    // Risen a good way in, but not yet pinned: the first lines are already being drawn.
-    expect(scrollProgress(450, height, viewport)).toBeGreaterThan(0);
-    expect(scrollProgress(450, height, viewport)).toBeLessThan(0.08);
+    expect(at(900)).toBe(0);
+    expect(at(800)).toBe(0);
+    // Risen a good way in, but not yet pinned: the first line is being drawn.
+    expect(at(450)).toBeGreaterThan(0);
+    expect(at(450)).toBeLessThan(at(pin));
+    // Pinned: the first act has only just begun, so it is told while the film holds still.
+    const first = SCENES[0];
+    expect(filmTimeAt(at(pin))).toBeGreaterThan(0.5);
+    expect(filmTimeAt(at(pin))).toBeLessThan(first.end / 3);
+    expect(actAt(filmTimeAt(at(pin)))).toBe(0);
+    // No jump where the rise ends and the pin begins.
+    expect(at(pin + 0.01)).toBeCloseTo(at(pin), 4);
+    expect(at(pin - 0.01)).toBeCloseTo(at(pin), 4);
     // The section's bottom meets the window's bottom: the pin lets go, the film is over.
-    expect(scrollProgress(viewport - height, height, viewport)).toBe(1);
-    expect(scrollProgress(-99999, height, viewport)).toBe(1);
-    // In between it moves with the scroll, evenly.
-    const a = scrollProgress(0, height, viewport);
-    const b = scrollProgress(-1000, height, viewport);
-    const c = scrollProgress(-2000, height, viewport);
-    expect(a).toBeGreaterThan(0);
-    expect(b - a).toBeCloseTo(c - b, 10);
+    expect(at(viewport - height)).toBe(1);
+    expect(at(-99999)).toBe(1);
+    // While pinned it moves with the scroll, evenly.
+    expect(at(-1000) - at(0)).toBeCloseTo(at(-2000) - at(-1000), 10);
+    // Every act gets a fair stretch of scroll: none flashes by.
+    const perSecond = (pin - (viewport - height)) / (LAST_SECOND / (1 - 0.06));
+    expect(((SCENES[1].start + first.end) / 2 - filmTimeAt(at(pin))) * perSecond).toBeGreaterThan(400);
+    // Without a top bar the pin is the top of the window.
+    expect(scrollProgress(0, height, viewport)).toBeCloseTo(at(pin), 6);
   });
 
   it("is still, not broken, when the section is no taller than the window", () => {
