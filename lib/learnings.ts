@@ -17,6 +17,7 @@ import {
   DAILY_SUPERSEDE_MAX,
   defaultCheckBy,
   DISPUTED_OR_STALE_SQL,
+  flagAnswerSql,
   freshnessFor,
   freshnessWarning,
   parseCheckBy,
@@ -961,27 +962,30 @@ const VOTE_SCORE_MAX = 10;
 const RECENCY_FACTOR_MAX = 0.5;
 const RECENCY_HALF_LIFE_DAYS = 90.0;
 
-// Open flag: a flag newer than the newest check (confirm, keep, restore) by someone other than
-// the author, the same rule as trustFor (lib/trust.ts). Such a memory still matches, but ranks
-// lower: an agent mostly reads the top results, and a flag means someone found it wrong. Unchecked
-// memories are not demoted; they are most of the corpus. Both subqueries use the votes primary key.
+// Open flag: a flag newer than the newest check (confirm, keep, restore) that answers it, the
+// same rule as trustFor (lib/trust.ts) and freshnessFor (flagAnswerSql in lib/freshness.ts). Such a
+// memory still matches, but ranks lower: an agent mostly reads the top results, and a flag means
+// someone found it wrong. Unchecked memories are not demoted; they are most of the corpus. Both
+// subqueries use the votes primary key. A function, because the rule reads the maintainer list.
 export const OPEN_FLAG_RANK_FACTOR = 0.6;
-const OPEN_FLAG_SQL = `EXISTS (
+export function openFlagSql(): string {
+  return `EXISTS (
   SELECT 1 FROM votes f WHERE f.learning_id = learnings.id AND f.kind = 'flag'
     AND f.created_at > COALESCE((SELECT MAX(c.created_at) FROM votes c
       WHERE c.learning_id = learnings.id AND c.kind IN ('confirm', 'keep', 'restore')
-        AND lower(c.voter_id) <> lower(learnings.author_id)), ''))`;
+        AND ${flagAnswerSql("c", "learnings")}), ''))`;
+}
 
 // COALESCE and the MAX(..., 0) floor are belt and braces, not live bugs: score is NOT
 // NULL today and nothing writes a future created_at. Both matter because SQLite's
 // scalar MIN/MAX propagate NULL, and a row whose age went negative enough would divide
 // by ~0, NULL the whole product, and sort LAST under DESC. That is, a clock skew or a
 // bad import would silently bury a perfect match rather than fail loudly.
-const RANK_EXPRESSION = `(
+const rankExpression = () => `(
   (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}, ${BM25_ALIASES_WEIGHT}))
   * (1.0 + MIN(MAX(COALESCE(learnings.score, 0), ${VOTE_SCORE_MIN}), ${VOTE_SCORE_MAX}) * ${VOTE_FACTOR_PER_POINT})
   * (1.0 + ${RECENCY_FACTOR_MAX} / (1.0 + MAX(julianday('now') - julianday(learnings.created_at), 0) / ${RECENCY_HALF_LIFE_DAYS}))
-  * (CASE WHEN ${OPEN_FLAG_SQL} OR ${DISPUTED_OR_STALE_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
+  * (CASE WHEN ${openFlagSql()} OR ${DISPUTED_OR_STALE_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
 )`;
 
 /**
@@ -1069,7 +1073,7 @@ export function search(
      FROM learnings_fts
      CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
      WHERE ${clauses.join(" AND ")}
-     ORDER BY ${stackRank ? `${stackRank}, ` : ""}${sortSql(filters.sort, "learnings.") ?? `${RANK_EXPRESSION} DESC, learnings.created_at DESC`}
+     ORDER BY ${stackRank ? `${stackRank}, ` : ""}${sortSql(filters.sort, "learnings.") ?? `${rankExpression()} DESC, learnings.created_at DESC`}
      LIMIT ? OFFSET ?`,
   );
 
@@ -2014,8 +2018,15 @@ export function flag(
        ON CONFLICT(learning_id, voter_id, kind) DO UPDATE SET note = COALESCE(excluded.note, votes.note)`,
     ).run(learningId, voterId, normalizedNote);
     audit(db, voterId, "flag", "learning", learningId, via);
-    // The history keeps every flag and every new note on a repeat; a bare repeat adds nothing.
-    if (!before || (normalizedNote != null && normalizedNote !== before.note) || evidence) {
+    // The history keeps every flag and every new note or new evidence on a repeat; a bare repeat,
+    // or the same evidence again, adds nothing.
+    const lastEvidence = evidence
+      ? (db
+          .prepare("SELECT evidence FROM trust_events WHERE learning_id = ? AND lower(actor_id) = lower(?) AND kind = 'flag' ORDER BY id DESC LIMIT 1")
+          .get(learningId, voterId) as { evidence: string | null } | undefined)
+      : undefined;
+    const newEvidence = evidence != null && JSON.stringify(evidence) !== (lastEvidence?.evidence ?? null);
+    if (!before || (normalizedNote != null && normalizedNote !== before.note) || newEvidence) {
       recordTrustEvent(db, { learningId, actorId: voterId, kind: "flag", authorId: learning.author_id, note: normalizedNote, evidence });
     }
 
@@ -2326,10 +2337,15 @@ export function giveKudos(
 /**
  * A check by someone other than the author (a confirm, a keep, a restore, or a Yes): the
  * freshness clock starts again (learnings.checked_at) and an open No or Not sure is answered
- * (lib/freshness.ts). Inside the caller's transaction.
+ * (lib/freshness.ts). `keepDispute` leaves the No or Not sure open: a keep on a business fact
+ * (see keepLearning). Inside the caller's transaction.
  */
-export function markChecked(db: ReturnType<typeof getDb>, learningId: string): void {
-  db.prepare("UPDATE learnings SET checked_at = datetime('now'), disputed_at = NULL, dispute_kind = NULL WHERE id = ?").run(learningId);
+export function markChecked(db: ReturnType<typeof getDb>, learningId: string, keepDispute = false): void {
+  db.prepare(
+    keepDispute
+      ? "UPDATE learnings SET checked_at = datetime('now') WHERE id = ?"
+      : "UPDATE learnings SET checked_at = datetime('now'), disputed_at = NULL, dispute_kind = NULL WHERE id = ?",
+  ).run(learningId);
 }
 
 export interface ConfirmResult {
@@ -2471,7 +2487,10 @@ export function keepLearning(
     audit(db, actorId, "keep", "learning", learningId, via);
     recordTrustEvent(db, { learningId, actorId, kind: "keep", authorId: learning.author_id, note: keepNote });
     // Someone else's keep is a check, like a confirm; the author's own is not (lib/swarm-gc.ts).
-    if (learning.author_id.toLowerCase() !== actorId.toLowerCase()) markChecked(db, learningId);
+    // On a business fact (check_by person) a keep needs no note and agents give it on their own,
+    // so it leaves a person's No or Not sure open: only a recheck Yes or a confirm with its note
+    // takes that back.
+    if (learning.author_id.toLowerCase() !== actorId.toLowerCase()) markChecked(db, learningId, learning.check_by === "person");
   });
   emit("learning.updated", learningId, { id: learningId, title: learning.title, kind: "active" });
   // A valid-until date is the author's own choice: say so, so a keep is not taken for an extension.
@@ -2822,7 +2841,7 @@ export function voteCounts(learningId: string): LearningVoteCounts {
 
 /**
  * The only scoring: score = helpful - not_helpful votes, kudos and confirm worth +2 each. Flags stay
- * out. The search rank (RANK_EXPRESSION in search()) uses it as a bounded boost on bm25 relevance,
+ * out. The search rank (rankExpression in search()) uses it as a bounded boost on bm25 relevance,
  * and standing (lib/standing.ts) is derived on read from the votes.
  */
 function recomputeScore(learningId: string) {

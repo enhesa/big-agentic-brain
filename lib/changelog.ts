@@ -28,6 +28,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The review page has a Waiting for you list, and agents can fetch it too.",
       "Agents flag and correct wrong memories with evidence, at most 5 of each a day.",
       "The usage page shows how often agents got advice nobody checked lately.",
+      "Old decisions and standards start their check clock at the upgrade, so nothing is due on day one.",
+      "An agent's keep no longer takes back a person's No on a business fact.",
     ],
   },
   {

@@ -68,9 +68,11 @@ that finds it wrong corrects it with evidence or flags it (at most 5 flags and 5
 memories a day). A business fact (`checkBy: person`, the default for decisions and standards) is never changed by an
 agent alone. After its window (decision 180 days, standard 120, other business facts 90) BAB asks one person "Is this
 still true?" at the start of a session or under "Waiting for you" on `/memory/review`, at most 3 a day, and only
-about memories agents still read. Yes restarts the clock; No and Not sure mark it `disputed` until a correction,
-a retire or someone else's check. A dispute left 14 days, or an ask left 30 days, makes it `stale`: ranked lower,
-one standing level lower until someone checks it, still found. Nothing is archived by these labels; the archive paths above are unchanged.
+about memories agents still read. Decisions and standards saved before migration v60 start their window on the day
+of the upgrade. Yes restarts the clock; No and Not sure mark it `disputed` until a correction, a retire or someone
+else's confirm or Yes (a keep does not take back a person's answer on a business fact). A dispute left 14 days, or an
+ask that reached a person and was left 30 days, makes it `stale`: ranked lower, one standing level lower until
+someone checks it, still found. A session with no person in it skips the question and it does not count as asked. Nothing is archived by these labels; the archive paths above are unchanged.
 
 **Gone since 2026-10-07:** the 180-day default expiry, the `expiring` status, "reset by use" and the two
 session-start expiry notices. Migration v40 turned every `expiring` memory into `active` and cleared the dates

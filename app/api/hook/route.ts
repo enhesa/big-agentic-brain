@@ -624,8 +624,9 @@ function supersededNudgeFor(ownerId: string, sessionId: string, origin: string):
  * session only (once per session, session_nudges kind 'checks'), at most 3, once a day and 6 a
  * week. Titles and links only: this route is unauthenticated (see projectNudgeFor), so the agent
  * fetches each memory's exact text with bab_search waitingForMe over its signed-in connection,
- * asks the user, and records each answer with bab_react recheck. takeHookChecks records the
- * delivery.
+ * asks the user, and records each answer with bab_react recheck. takeHookChecks records which
+ * memories were named; they count as asked once the agent fetches the texts, so a session with no
+ * person in it (told to skip) starts no clock.
  */
 function checksNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
   if (nudgedKind(sessionId, "checks")) return [];
@@ -635,6 +636,7 @@ function checksNudgeFor(ownerId: string, sessionId: string, origin: string): str
   const list = checks.map((c) => `"${capTitle(c.title).replace(/"/g, "'")}" (${origin}/memory/${c.id})`).join(", ");
   return [
     `BAB: ${checks.length === 1 ? "1 memory needs" : `${checks.length} memories need`} the user's check, Is this still true?: ${list}. ` +
+      "No person in this session (a scheduled or unattended run): skip this. " +
       "Unless the user asked for urgent work, ask before you start (else ask in one line whether to check now or later). " +
       "Call bab_search with waitingForMe: true for the exact text, show it, offer Yes, No, Not sure, Let agents check this, Ask me later, and record each answer with bab_react recheck.",
   ];

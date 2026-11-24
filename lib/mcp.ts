@@ -19,7 +19,7 @@ import { redeemLinkToken } from "./session-links";
 import { recordSearchOutcome } from "./request-audit";
 import { VERIFY_HINT } from "./swarm-gc";
 import { CHECK_DUE_HINT } from "./freshness";
-import { changeCheckBy, recheck, recordServed, waitingFor } from "./checks";
+import { changeCheckBy, markChecksDelivered, recheck, recordServed, waitingFor } from "./checks";
 import { formatAge } from "./relative-time";
 import { parseCost, recordDiscoveryCost, recordReuseCost } from "./effort-cost";
 import {
@@ -289,6 +289,8 @@ function runSearch(actor: SessionUser, args: Record<string, unknown>, ctx?: Tool
   // Other filters and paging do not apply. Not a read: nothing was used yet.
   if (waitingForMe) {
     const checks = waitingFor(actor.id).map((c) => ({ ...c, url: memoryUrl(ctx, c.id) }));
+    // The agent has the texts now: what its session hook named counts as asked from here on.
+    markChecksDelivered(actor.id, checks.map((c) => c.id));
     return JSON.stringify({
       results: checks,
       total: checks.length,
@@ -379,7 +381,8 @@ export const RECHECK_HINT =
   "These memories wait for the user's check. Unless the user asked for urgent work, ask before you start, or ask in one line whether to check now or later. " +
   "Show each memory's exact text (do not rewrite it; past 5 lines give the link), then offer: Yes, No, Not sure, Let agents check this, Ask me later. " +
   "Record each answer with bab_react recheck (answer yes, no, unsure, agent or later). A Yes on someone else's memory needs a note on where they checked. " +
-  "If the user is busy or skips, record later for each one and do not ask again this session. Never answer for the user.";
+  "If the user is busy or skips, record later for each one and do not ask again this session. Never answer for the user. " +
+  "No person in this session (a scheduled or unattended run): record nothing.";
 
 // ---------------------------------------------------------------------------
 // bab_learn

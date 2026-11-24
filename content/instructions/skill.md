@@ -306,10 +306,14 @@ If you find something newer that contradicts it, show both to the user and ask w
 **When you save.** Set `checkBy`: `agent` if an agent could test it, `person` if only a person can
 say it is still true. Not sure: `person` for decisions and standards, `agent` for the rest. A
 business fact may set `checkEveryDays` (30 to 365; the defaults are decision 180, standard 120,
-other 90). A fact with a known end date sets `expiresAt`.
+other 90). A fact with a known end date sets `expiresAt`. To change who checks a saved memory,
+use `bab_react` `check_by` with `checkBy` (`agent` or `person`); on someone else's memory, add a
+note.
 
 **When BAB asks "Is this still true?"** At session start the hook may name up to 3 memories that
-need the user's check. Get them with `bab_search` `waitingForMe: true`.
+need the user's check. No person in this session (a scheduled or unattended run): skip it and
+record nothing. Otherwise get them with `bab_search` `waitingForMe: true`; BAB counts them as
+asked from that call on.
 
 1. If the user did not ask for urgent work, ask once before starting. If they did, do that task
    first, or ask in one short line whether to check these now or later. Use your question tool if
@@ -339,7 +343,10 @@ to ask the area contact or the author with `bab_send`, only with the user's yes.
 - Standards and decisions: only their author or a maintainer supersedes or retires them. Anyone
   else proposes the change and sends it with `bab_send`, with the user's yes.
 - Do not confirm the current user's own memory: use `recheck` with `yes`, and only when BAB asks
-  or marks it due. BAB refuses a third author Yes in a row on a business fact.
+  or marks it due. BAB refuses a third author Yes in a row on a business fact when a colleague
+  can be asked instead.
+- A `keep` does not take back a person's No or Not sure on a business fact. Only the user's Yes,
+  a confirm with a note on where it was checked, or a corrected version does.
 - Do not flag in bulk. BAB allows 5 flags and 5 corrections of other people's memories a day per
   person, each with its own evidence. Many wrong memories at once usually means your setup is
   wrong.

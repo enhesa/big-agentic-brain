@@ -484,6 +484,8 @@ function runMigrationV60(database: DatabaseSync) {
   const cols = new Set(
     (database.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name),
   );
+  // Only the run that adds the columns starts the clocks below; a second run leaves them alone.
+  const firstRun = !cols.has("check_by");
   if (!cols.has("check_by")) database.exec("ALTER TABLE learnings ADD COLUMN check_by TEXT NOT NULL DEFAULT 'agent'");
   if (!cols.has("check_every_days")) database.exec("ALTER TABLE learnings ADD COLUMN check_every_days INTEGER");
   if (!cols.has("checked_at")) database.exec("ALTER TABLE learnings ADD COLUMN checked_at TEXT");
@@ -524,6 +526,9 @@ function runMigrationV60(database: DatabaseSync) {
       served_unchecked INTEGER NOT NULL DEFAULT 0
     );
   `);
+  // The business facts that exist today start their check clock now. Without this every old
+  // decision and standard would be due a person's check on the day of the upgrade, all at once.
+  if (firstRun) database.exec("UPDATE learnings SET checked_at = datetime('now') WHERE check_by = 'person'");
 }
 
 function runMigrationV59(database: DatabaseSync) {

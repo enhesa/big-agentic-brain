@@ -4,9 +4,9 @@ import { emit } from "./events";
 import { redact, assertRawLength } from "./redact";
 import { todayUtc, parseDbTime } from "./dates";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
-import { confirm, getById, noteArg } from "./learnings";
+import { confirm, getById, noteArg, openFlagSql } from "./learnings";
 import { recordTrustEvent } from "./trust";
-import { freshnessFor, parseCheckBy, sqlTimeBefore, type CheckBy, type Freshness } from "./freshness";
+import { freshnessFor, parseCheckBy, PERSON_WINDOW_DAYS_SQL, sqlTimeBefore, type CheckBy, type Freshness } from "./freshness";
 import type { AuditVia, LearningKind, LearningRow } from "./types";
 
 /**
@@ -16,13 +16,17 @@ import type { AuditVia, LearningKind, LearningRow } from "./types";
  *
  * - recheck(): records one answer. A Yes from someone other than the author is a confirm (it
  *   reuses confirm(), so it adds points and closes open flags). The author's own Yes resets the
- *   clock with no points, at most AUTHOR_YES_STREAK_MAX times in a row for a business fact. No
+ *   clock with no points, at most AUTHOR_YES_STREAK_MAX times in a row for a business fact while
+ *   someone else can be asked (a single-person install has no limit). No
  *   and Not sure make the memory disputed until a fix. Nothing here writes a correction: the
  *   person's agent proposes it and the person approves it (bab_learn with supersedes).
  * - waitingFor(): what is waiting for one person (GET /api/checks/mine, bab_search waitingForMe,
  *   the "Waiting for you" view on /memory/review).
  * - takeHookChecks(): the session-start set, at most ASK_SET_MAX memories, once a day and
- *   ASK_WEEK_MAX a week. Only memories agents still read are ever asked about.
+ *   ASK_WEEK_MAX a week. Only memories agents still read are ever asked about. A memory the hook
+ *   named (check_asks via `nudge`) counts as asked (via `hook`) only once the agent fetched the
+ *   list (markChecksDelivered) or reported an answer, so a session with no person in it uses up no
+ *   ask and starts no clock.
  * - recordServed() and serveStats(): the unchecked serve rate.
  *
  * BAB does not record who read a memory (a deliberate choice), so "in use" is any agent's read.
@@ -107,8 +111,21 @@ function recordAnswer(db: ReturnType<typeof getDb>, learningId: string, userId: 
     )
     .get(learningId, userId) as { id: number | bigint } | undefined;
   if (open) {
-    db.prepare("UPDATE check_asks SET answer = ?, answered_at = datetime('now') WHERE id = ?").run(answer, open.id);
+    // An answer to a memory the hook only named shows it did reach the person: asked as of now.
+    db.prepare(
+      `UPDATE check_asks SET answer = ?, answered_at = datetime('now'),
+         delivered_at = CASE via WHEN 'nudge' THEN datetime('now') ELSE delivered_at END,
+         via = CASE via WHEN 'nudge' THEN 'hook' ELSE via END
+       WHERE id = ?`,
+    ).run(answer, open.id);
   } else {
+    if (answer === "later") {
+      // A skip inside the skip window is already on record: a repeat adds no row.
+      const last = db
+        .prepare("SELECT answer, delivered_at FROM check_asks WHERE learning_id = ? AND lower(user_id) = lower(?) ORDER BY id DESC LIMIT 1")
+        .get(learningId, userId) as { answer: string | null; delivered_at: string } | undefined;
+      if (last?.answer === "later" && last.delivered_at >= sqlTimeBefore(Date.now(), ASK_SKIP_DAYS)) return;
+    }
     db.prepare(
       "INSERT INTO check_asks (learning_id, user_id, via, answer, answered_at) VALUES (?, ?, 'direct', ?, datetime('now'))",
     ).run(learningId, userId, answer);
@@ -167,7 +184,9 @@ export function recheck(
   const note = normalizeRecheckNote(noteRaw, answer === "yes" && checkBy === "agent");
   if (answer === "yes" && checkBy === "person") {
     const streak = authorYesStreaks([learningId]).get(learningId) ?? 0;
-    if (streak >= AUTHOR_YES_STREAK_MAX) {
+    // The limit hands the next check to someone else. With nobody else to ask (a single-person
+    // install, or no contact and no recent user for this memory) the author stays the one who checks.
+    if (streak >= AUTHOR_YES_STREAK_MAX && someoneElseCanBeAsked(learning)) {
       throw new ConflictError(
         `You said Yes to your own memory ${AUTHOR_YES_STREAK_MAX} times in a row. The next check goes to someone else: ask a colleague to confirm it (bab_react confirm), or leave it for BAB to ask an area contact.`,
       );
@@ -296,10 +315,16 @@ interface AskRow {
  * is one of its tags, then people who marked it helpful, cited or confirmed it in the last
  * RECENT_USER_DAYS days. It stops at the first who used BAB in the last ASKER_ACTIVE_DAYS days and
  * was not passed over: two skips, or no answer for PASS_ON_DAYS days, since its last check. The
- * author is passed over after AUTHOR_YES_STREAK_MAX Yes answers in a row. Nobody left: undefined,
- * and maintainers see it on /memory/review.
+ * author is passed over after AUTHOR_YES_STREAK_MAX Yes answers in a row, unless nobody else is
+ * left: then the author is asked again. `exceptAuthor` leaves the author out altogether (who else
+ * could be asked). Nobody left: undefined, and maintainers see it on /memory/review.
  */
-function askersFor(rows: CandidateRow[], fresh: Map<string, Freshness>, now: number): Map<string, string | undefined> {
+function askersFor(
+  rows: Array<Pick<LearningRow, "id" | "author_id" | "tags">>,
+  fresh: Map<string, Freshness>,
+  now: number,
+  exceptAuthor = false,
+): Map<string, string | undefined> {
   const db = getDb();
   const out = new Map<string, string | undefined>();
   if (rows.length === 0) return out;
@@ -342,37 +367,51 @@ function askersFor(rows: CandidateRow[], fresh: Map<string, Freshness>, now: num
     ];
     const seen = new Set<string>();
     let asker: string | undefined;
+    // The author after AUTHOR_YES_STREAK_MAX Yes answers in a row: asked only when nobody else is.
+    let authorAtLimit: string | undefined;
     for (const u of list) {
       const key = u.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
+      const isAuthor = same(u, r.author_id);
+      if (isAuthor && exceptAuthor) continue;
       const at = lastSeen.get(key);
       if (!at || parseDbTime(at).getTime() < activeSince) continue;
-      if (same(u, r.author_id) && (streaks.get(r.id) ?? 0) >= AUTHOR_YES_STREAK_MAX) continue;
       const theirs = mine.filter((a) => same(a.user_id, u));
       const skips = theirs.filter((a) => a.answer === "later").length;
       const ignored = theirs.some((a) => a.via === "hook" && a.answer === null && parseDbTime(a.delivered_at).getTime() < passOnBefore);
       if (skips >= PASS_ON_SKIPS || ignored) continue;
+      if (isAuthor && (streaks.get(r.id) ?? 0) >= AUTHOR_YES_STREAK_MAX) {
+        authorAtLimit = u;
+        continue;
+      }
       asker = u;
       break;
     }
-    out.set(r.id, asker);
+    out.set(r.id, asker ?? authorAtLimit);
   }
   return out;
+}
+
+/** true when someone other than the author could be asked about this memory now (see askersFor). */
+function someoneElseCanBeAsked(learning: LearningRow, now: number = Date.now()): boolean {
+  return askersFor([learning], freshnessFor([learning.id], now), now, true).get(learning.id) !== undefined;
 }
 
 /** Due business facts still in use, most important first (pinned, decisions, standards, most read), at most `limit`. */
 function dueCandidates(now: number, limit = 300): { rows: CandidateRow[]; fresh: Map<string, Freshness> } {
   const rows = getDb()
     .prepare(
+      // Each memory's own window and the dispute tests come before the LIMIT, so memories that are
+      // not due yet, or disputed, never push a due one off the list. freshnessFor has the last word.
       `SELECT id, title, kind, author_id, body, tags, access_days, pinned FROM learnings
        WHERE status = 'active' AND check_by = 'person' AND access_days >= ? AND last_accessed_at >= ?
-         AND COALESCE(checked_at, created_at) < ?
+         AND COALESCE(checked_at, created_at) < datetime(?, '-' || ${PERSON_WINDOW_DAYS_SQL} || ' days')
+         AND dispute_kind IS NULL AND NOT ${openFlagSql()}
        ORDER BY pinned DESC, CASE kind WHEN 'decision' THEN 0 WHEN 'standard' THEN 1 ELSE 2 END, access_days DESC, id
        LIMIT ?`,
     )
-    // 30 days is the shortest window an author can set; freshnessFor then applies each memory's own.
-    .all(IN_USE_MIN_DAYS, sqlTimeBefore(now, IN_USE_RECENT_DAYS), sqlTimeBefore(now, 30), limit) as unknown as CandidateRow[];
+    .all(IN_USE_MIN_DAYS, sqlTimeBefore(now, IN_USE_RECENT_DAYS), sqlTimeBefore(now, 0), limit) as unknown as CandidateRow[];
   const fresh = freshnessFor(rows.map((r) => r.id), now);
   return { rows: rows.filter((r) => fresh.get(r.id)?.checkDue && !fresh.get(r.id)?.disputeKind), fresh };
 }
@@ -425,6 +464,7 @@ export function waitingFor(userId: string, now: number = Date.now()): CheckItem[
   return [...due, ...followUp];
 }
 
+/** The person's newest ask or answer per memory. A memory the hook only named (via `nudge`) is neither. */
 function latestAnswers(userId: string, ids: string[]): Map<string, { answer: string | null; delivered_at: string; via: string }> {
   const out = new Map<string, { answer: string | null; delivered_at: string; via: string }>();
   if (ids.length === 0) return out;
@@ -432,7 +472,7 @@ function latestAnswers(userId: string, ids: string[]): Map<string, { answer: str
   for (const r of getDb()
     .prepare(
       `SELECT learning_id AS id, answer, delivered_at, via FROM check_asks
-       WHERE lower(user_id) = lower(?) AND learning_id IN (${marks}) ORDER BY id`,
+       WHERE lower(user_id) = lower(?) AND learning_id IN (${marks}) AND via <> 'nudge' ORDER BY id`,
     )
     .all(userId, ...ids) as Array<{ id: string; answer: string | null; delivered_at: string; via: string }>) {
     out.set(r.id, r);
@@ -443,9 +483,12 @@ function latestAnswers(userId: string, ids: string[]): Map<string, { answer: str
 /**
  * The session-start set for one person (app/api/hook/route.ts): at most ASK_SET_MAX of the
  * memories waiting for them, once per UTC day and at most ASK_WEEK_MAX in any 7 days, never one
- * they were asked about or skipped in the last ASK_SKIP_DAYS days. Each one is recorded as
- * delivered (check_asks, via hook), so the limits and the answer rate stay honest; "answered" is
- * only recorded when the agent reports back with bab_react recheck.
+ * they were asked about or skipped in the last ASK_SKIP_DAYS days. Each one is recorded as named
+ * (check_asks, via `nudge`, one open row per person and memory). It becomes a delivered ask (via
+ * `hook`, from that moment) when the agent fetches the list (markChecksDelivered) or reports an
+ * answer. Only delivered asks count for the limits and start the pass-on and stale clocks, so a
+ * session with no person in it uses up nothing, and the next session names the same memories
+ * again; "answered" is only recorded when the agent reports back with bab_react recheck.
  */
 export function takeHookChecks(userId: string, now: number = Date.now()): CheckItem[] {
   const db = getDb();
@@ -470,10 +513,31 @@ export function takeHookChecks(userId: string, now: number = Date.now()): CheckI
     .slice(0, room);
   if (pick.length === 0) return [];
   inTransaction(db, () => {
-    const insert = db.prepare("INSERT INTO check_asks (learning_id, user_id, via) VALUES (?, ?, 'hook')");
-    for (const i of pick) insert.run(i.id, userId);
+    // A memory named before and never fetched keeps its one row.
+    const insert = db.prepare(
+      `INSERT INTO check_asks (learning_id, user_id, via) SELECT ?, ?, 'nudge'
+       WHERE NOT EXISTS (SELECT 1 FROM check_asks WHERE learning_id = ? AND lower(user_id) = lower(?) AND via = 'nudge')`,
+    );
+    for (const i of pick) insert.run(i.id, userId, i.id, userId);
   });
   return pick;
+}
+
+/**
+ * The agent fetched the person's list (bab_search waitingForMe): the memories its session hook
+ * named are now delivered asks, from this moment. Only the newest open one per memory.
+ */
+export function markChecksDelivered(userId: string, ids: string[]): void {
+  if (ids.length === 0) return;
+  const marks = ids.map(() => "?").join(",");
+  getDb()
+    .prepare(
+      `UPDATE check_asks SET via = 'hook', delivered_at = datetime('now')
+       WHERE id IN (SELECT MAX(id) FROM check_asks
+                    WHERE lower(user_id) = lower(?) AND via = 'nudge' AND answer IS NULL AND learning_id IN (${marks})
+                    GROUP BY learning_id)`,
+    )
+    .run(userId, ...ids);
 }
 
 /** A served result counts as unchecked when it is due or stale, or disputed for more than this many days. */

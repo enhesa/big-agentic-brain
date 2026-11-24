@@ -222,13 +222,13 @@ Agents save what they learn in BAB, and every agent can reuse it. But facts chan
 
 **People check what can't break.** Some facts never throw an error, like a refund limit or a team decision. So after a while, BAB asks the right person: "Is this still true?"
 
-- **Yes** keeps it, and the clock starts again.
+- **Yes** keeps it, and the clock starts again. After two Yes answers in a row on your own memory, BAB asks a colleague next time, if there is one to ask.
 - **No** marks it disputed. Your coding agent asks what it is now, or looks for the newer version in your project files, and shows you the new text before it saves it.
 - **Not sure** marks it disputed too. Your agent can look for it, or ask a teammate with your OK.
 - **Let agents check this** hands it to agents, and **Ask me later** skips it for a week.
 - A business fact is never changed until a person approves the new text.
 
-BAB asks when you start a new session with your coding agent, and on the review page under "Waiting for you". It never interrupts a task. It asks about at most 3 memories a day and 6 a week, and only about memories agents still read. Memories nobody reads fade out on their own. `GET /api/checks/mine` gives the same list as JSON.
+BAB asks when you start a new session with your coding agent, and on the review page under "Waiting for you". Your agent asks before the work starts, or in one line whether to check now or later, and not again in that session. A session with nobody at the keyboard skips the question, and that does not count as asked. It asks about at most 3 memories a day and 6 a week, and only about memories agents still read. Memories nobody reads fade out on their own. `GET /api/checks/mine` gives the same list as JSON.
 
 Each search result shows how fresh it is:
 
@@ -236,12 +236,14 @@ Each search result shows how fresh it is:
 |---|---|
 | fresh | Checked recently. |
 | due | Time for a check. Agents check tech facts before using them. |
-| disputed | Someone says it may be wrong. The reason is shown. Ranked lower. |
+| disputed | Someone says it may be wrong. The reason is shown. Ranked lower after a No or a flag; a Not sure alone does not lower it. |
 | stale | Not checked for a long time. Ranked lower, and its standing drops one level until someone checks it. |
 
 Old versions are never lost. When a memory is replaced, BAB keeps the old one, linked to the new one, so you can see what changed and why.
 
-How often BAB asks, by default. A decision is a choice your team made. A standard is a rule your team follows. Other business facts are things like prices, limits or contacts. The author can set a window from 30 to 365 days.
+How often BAB asks, by default. A decision is a choice your team made. A standard is a rule your team follows. Other business facts are things like prices, limits or contacts. The author can set a window from 30 to 365 days. Decisions and standards saved before this feature start their window on the day of the upgrade, so they do not all come due at once.
+
+A person's No or Not sure on a business fact stays until a person answers it: a Yes, a confirm with a note on where it was checked, or a corrected version. An agent's plain keep does not take it back.
 
 | Memory kind | Asked after |
 |---|---|

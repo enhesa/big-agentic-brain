@@ -38,6 +38,15 @@ afterEach(async () => {
   vi.resetModules();
 });
 
+/**
+ * A fresh module graph in the middle of a test. The open database handle is closed first: the old
+ * graph would keep it, and Windows cannot delete the data directory under an open handle.
+ */
+async function freshModules() {
+  (await import("../lib/db"))._resetDbForTests();
+  vi.resetModules();
+}
+
 function asAgent(email: string) {
   vi.doMock("next/headers", () => ({
     headers: async () => new Headers({ "x-bab-actor-email": email, "x-bab-actor-name": email.split("@")[0] }),
@@ -106,6 +115,10 @@ describe("migration v60", () => {
     const l = create({ authorId: AUTHOR, title: "The build needs Node 24 zqmig2", body: "Older Node fails zqmig2", confirmNotDuplicate: true });
     confirm(l.id, BOB, "Checked package.json engines", "mcp");
     const conn = await db();
+    // Legacy data: the decision is far older than its 180-day window and agents still read it.
+    conn
+      .prepare("UPDATE learnings SET created_at = datetime('now', '-400 days'), access_days = 5, last_accessed_at = datetime('now', '-1 days') WHERE id = ?")
+      .run(d.id);
     // Back to v59: the columns are gone, and the confirm is only a vote.
     conn.exec("DROP TABLE check_asks; DROP TABLE freshness_daily");
     for (const c of ["check_by", "check_every_days", "checked_at", "disputed_at", "dispute_kind"]) conn.exec(`ALTER TABLE learnings DROP COLUMN ${c}`);
@@ -118,7 +131,13 @@ describe("migration v60", () => {
     expect(again.prepare("SELECT 1 AS ok FROM migrations WHERE version = 60").get()).toBeTruthy();
     const row = (id: string) => again.prepare("SELECT check_by, checked_at, dispute_kind FROM learnings WHERE id = ?").get(id) as Record<string, unknown>;
     expect(row(d.id).check_by).toBe("person");
-    expect(row(d.id).checked_at).toBeNull();
+    // An old business fact starts its clock at the upgrade: nothing is due a person's check on day one.
+    expect(row(d.id).checked_at).toBeTruthy();
+    const { freshnessFor } = await import("../lib/freshness");
+    expect(freshnessFor([d.id]).get(d.id)).toMatchObject({ freshness: "fresh", checkDue: false });
+    const { waitingFor, takeHookChecks } = await import("../lib/checks");
+    expect(waitingFor(AUTHOR)).toEqual([]);
+    expect(takeHookChecks(AUTHOR)).toEqual([]);
     expect(row(l.id).check_by).toBe("agent");
     expect(row(l.id).checked_at).toBeTruthy();
     expect(row(l.id).dispute_kind).toBeNull();
@@ -126,11 +145,12 @@ describe("migration v60", () => {
     expect(cols.has("evidence")).toBe(true);
     expect(again.prepare("SELECT COUNT(*) AS n FROM check_asks").get()).toEqual({ n: 0 });
 
-    // Running it again changes nothing and does not fail.
+    // Running it again changes nothing and does not fail: the clock it started is not moved again.
+    again.prepare("UPDATE learnings SET checked_at = '2026-01-01 00:00:00' WHERE id = ?").run(d.id);
     again.prepare("DELETE FROM migrations WHERE version = 60").run();
     _resetDbForTests();
     const third = await db();
-    expect((third.prepare("SELECT check_by FROM learnings WHERE id = ?").get(d.id) as { check_by: string }).check_by).toBe("person");
+    expect(third.prepare("SELECT check_by, checked_at FROM learnings WHERE id = ?").get(d.id)).toEqual({ check_by: "person", checked_at: "2026-01-01 00:00:00" });
   });
 });
 
@@ -151,7 +171,7 @@ describe("GET /api/checks/mine", () => {
     expect(body.checks[0].text).toContain("Refunds up to 50");
     expect(body.answers).toEqual(["yes", "no", "unsure", "agent", "later"]);
 
-    vi.resetModules();
+    await freshModules();
     asAgent(MAINT);
     const other = await (await (await import("../app/api/checks/mine/route")).GET(new Request(`${ORIGIN}/api/checks/mine`))).json();
     expect(other.total).toBe(0);
@@ -170,18 +190,20 @@ describe("POST /api/learnings/:id/recheck", () => {
   it("refuses an unknown answer and a colleague's Yes without a note", async () => {
     const m = await mk({ kind: "decision" });
     expect((await post(m.id, { answer: "maybe" }, MAINT)).status).toBe(400);
-    vi.resetModules();
+    await freshModules();
     expect((await post(m.id, { answer: "yes" }, MAINT)).status).toBe(400);
   });
 
   it("takes the author's Yes twice, then a 409, and a No marks it disputed", async () => {
     const m = await mk({ kind: "decision" });
+    // Someone else uses it, so there is a colleague to hand the next check to.
+    (await import("../lib/learnings")).vote(m.id, MAINT, "helpful", "mcp");
     expect((await post(m.id, { answer: "yes" }, BOB)).status).toBe(200);
-    vi.resetModules();
+    await freshModules();
     expect((await post(m.id, { answer: "yes" }, BOB)).status).toBe(200);
-    vi.resetModules();
+    await freshModules();
     expect((await post(m.id, { answer: "yes" }, BOB)).status).toBe(409);
-    vi.resetModules();
+    await freshModules();
     const no = await post(m.id, { answer: "no", note: "The limit is 25 now" }, MAINT);
     expect(no.status).toBe(200);
     expect((await no.json()).learning.dispute_kind).toBe("no");
@@ -240,7 +262,7 @@ describe("Waiting for you on /memory/review", () => {
     const m = await dueDecision();
     await bobOnWeb();
     expect((await answer(m.id, { answer: "yes" }, "https://evil.example.com")).status).toBe(403);
-    vi.resetModules();
+    await freshModules();
     noIdentity();
     expect((await answer(m.id, { answer: "yes" })).status).toBe(404);
   });
@@ -266,11 +288,11 @@ describe("MCP", () => {
     const m = await mk({ kind: "decision" });
     const yes = await rpc("bab_react", { learningId: m.id, action: "recheck", answer: "yes" });
     expect(yes.isError).toBe(false);
-    vi.resetModules();
+    await freshModules();
     const handed = (await rpc("bab_react", { learningId: m.id, action: "check_by", checkBy: "agent" })).json();
     expect(handed.learning.check_by).toBe("agent");
 
-    vi.resetModules();
+    await freshModules();
     const t = await mk();
     const flagged = await rpc(
       "bab_react",
@@ -318,7 +340,16 @@ describe("hook lines", () => {
     expect(first[0]).toContain(`${ORIGIN}/memory/${m.id}`);
     expect(first[0]).not.toContain("Refunds up to 50");
     expect((await prompt("sess-check-1")).some((l) => l.includes("Is this still true?"))).toBe(false);
-    expect((await db()).prepare("SELECT COUNT(*) AS n FROM check_asks WHERE learning_id = ? AND via = 'hook'").get(m.id)).toEqual({ n: 1 });
+    const asks = async () =>
+      (await db()).prepare("SELECT via, COUNT(*) AS n FROM check_asks WHERE learning_id = ? GROUP BY via").all(m.id) as Array<{ via: string; n: number }>;
+    // Named, not asked yet: a session with no person in it reads this line too.
+    expect(first[0]).toContain("No person in this session");
+    expect(await asks()).toEqual([{ via: "nudge", n: 1 }]);
+    // The agent fetches the texts to ask the person: now it is a delivered ask.
+    await freshModules();
+    const out = (await rpc("bab_search", { waitingForMe: true })).json();
+    expect(out.results.map((c: { id: string }) => c.id)).toEqual([m.id]);
+    expect(await asks()).toEqual([{ via: "hook", n: 1 }]);
   });
 
   it("tells the author once when a colleague's agent replaced their memory", async () => {

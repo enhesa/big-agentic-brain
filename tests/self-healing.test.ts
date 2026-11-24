@@ -349,18 +349,36 @@ describe("recheck answers", () => {
     expect(freshnessFor([m.id]).get(m.id)!.checkDue).toBe(false);
   });
 
-  it("allows the author's own Yes twice in a row and refuses the third", async () => {
+  it("allows the author's own Yes twice in a row and refuses the third while a colleague can be asked", async () => {
     const { recheck, AUTHOR_YES_STREAK_MAX } = await import("../lib/checks");
+    const { vote } = await import("../lib/learnings");
     const m = await mk({ kind: "decision" });
+    vote(m.id, BOB, "helpful", "mcp");
     expect(AUTHOR_YES_STREAK_MAX).toBe(2);
     expect(recheck(m.id, AUTHOR, "yes", null, "mcp").changed).toBe(true);
     expect(recheck(m.id, AUTHOR, "yes", null, "mcp").changed).toBe(true);
     expect(() => recheck(m.id, AUTHOR, "yes", null, "mcp")).toThrow(/two times|colleague|next check/);
   });
 
+  it("has no limit on the author's own Yes when nobody else can be asked", async () => {
+    const { recheck } = await import("../lib/checks");
+    // A single-person install: no contact for its area and nobody else used it.
+    const m = await mk({ kind: "decision" });
+    for (let i = 0; i < 4; i++) expect(recheck(m.id, AUTHOR, "yes", null, "mcp").changed).toBe(true);
+    // The only colleague who used it has not been seen for two months: still nobody to ask.
+    const { vote } = await import("../lib/learnings");
+    vote(m.id, BOB, "helpful", "mcp");
+    await setLastSeen(BOB, 60);
+    expect(recheck(m.id, AUTHOR, "yes", null, "mcp").changed).toBe(true);
+    await setLastSeen(BOB, 0);
+    expect(() => recheck(m.id, AUTHOR, "yes", null, "mcp")).toThrow(/two times|colleague|next check/);
+  });
+
   it("a colleague's check lets the author say Yes again", async () => {
     const { recheck } = await import("../lib/checks");
+    const { vote } = await import("../lib/learnings");
     const m = await mk({ kind: "decision" });
+    vote(m.id, BOB, "helpful", "mcp");
     recheck(m.id, AUTHOR, "yes", null, "mcp");
     recheck(m.id, AUTHOR, "yes", null, "mcp");
     expect(() => recheck(m.id, AUTHOR, "yes", null, "mcp")).toThrow();
@@ -555,6 +573,56 @@ describe("waitingFor", () => {
     expect(waitingFor(BOB).map((i) => i.id)).toContain(m.id);
   });
 
+  it("passes over the author after two Yes answers in a row when a colleague can be asked", async () => {
+    const m = await duePersonFact();
+    const { vote } = await import("../lib/learnings");
+    const { recheck, waitingFor } = await import("../lib/checks");
+    vote(m.id, BOB, "helpful", "mcp");
+    recheck(m.id, AUTHOR, "yes", null, "mcp");
+    recheck(m.id, AUTHOR, "yes", null, "mcp");
+    (await db()).prepare("UPDATE learnings SET checked_at = datetime('now', '-200 days') WHERE id = ?").run(m.id);
+    expect(waitingFor(AUTHOR).map((i) => i.id)).not.toContain(m.id);
+    expect(waitingFor(BOB).map((i) => i.id)).toContain(m.id);
+  });
+
+  it("asks the author again after two Yes answers when nobody else is left", async () => {
+    const m = await duePersonFact();
+    const { recheck, waitingFor } = await import("../lib/checks");
+    recheck(m.id, AUTHOR, "yes", null, "mcp");
+    recheck(m.id, AUTHOR, "yes", null, "mcp");
+    (await db()).prepare("UPDATE learnings SET checked_at = datetime('now', '-200 days') WHERE id = ?").run(m.id);
+    expect(waitingFor(AUTHOR).map((i) => i.id)).toContain(m.id);
+    // And the Yes it asks for is accepted.
+    expect(recheck(m.id, AUTHOR, "yes", null, "mcp").changed).toBe(true);
+  });
+
+  it("finds a due memory behind more than 300 memories that are not due yet", async () => {
+    const due = await duePersonFact();
+    const conn = await db();
+    // 301 decisions agents read more, so they sort first, all inside their window or disputed.
+    for (let i = 0; i < 301; i++) {
+      const m = await mk({ kind: "decision" });
+      conn
+        .prepare("UPDATE learnings SET created_at = datetime('now', ?), access_days = 9, last_accessed_at = datetime('now', '-1 days'), dispute_kind = ? WHERE id = ?")
+        .run(i % 3 === 0 ? "-200 days" : "-40 days", i % 3 === 0 ? "no" : null, m.id);
+    }
+    const { waitingFor } = await import("../lib/checks");
+    expect(waitingFor(AUTHOR).map((i) => i.id)).toEqual([due.id]);
+  }, 180_000);
+
+  it("uses each memory's own window when it lists what is due", async () => {
+    const short = await mk({ kind: "decision", checkEveryDays: 30 });
+    const long = await mk({ kind: "decision", checkEveryDays: 365 });
+    const standard = await mk({ kind: "standard" });
+    for (const m of [short, long, standard]) {
+      await backdate(m.id, 130);
+      await setAccess(m.id, 3, 5);
+    }
+    const { waitingFor } = await import("../lib/checks");
+    // 130 days: past the 30-day window and the standard's 120, inside the 365-day one.
+    expect(waitingFor(AUTHOR).map((i) => i.id).sort()).toEqual([short.id, standard.id].sort());
+  });
+
   it("never asks about a memory agents barely read", async () => {
     const m = await duePersonFact();
     await setAccess(m.id, 1, 5);
@@ -605,11 +673,28 @@ describe("waitingFor", () => {
 });
 
 describe("takeHookChecks", () => {
-  it("takes one session-start set per day", async () => {
-    await duePersonFact();
-    const { takeHookChecks } = await import("../lib/checks");
-    expect(takeHookChecks(AUTHOR).length).toBeGreaterThan(0);
+  it("takes one session-start set per day, once it reached the person", async () => {
+    const m = await duePersonFact();
+    const { takeHookChecks, markChecksDelivered } = await import("../lib/checks");
+    expect(takeHookChecks(AUTHOR).map((i) => i.id)).toEqual([m.id]);
+    // Nobody fetched it (a session with no person in it): the next session names it again,
+    // on the same one row.
+    expect(takeHookChecks(AUTHOR).map((i) => i.id)).toEqual([m.id]);
+    expect((await db()).prepare("SELECT COUNT(*) AS n FROM check_asks").get()).toEqual({ n: 1 });
+    markChecksDelivered(AUTHOR, [m.id]);
     expect(takeHookChecks(AUTHOR)).toEqual([]);
+  });
+
+  it("does not let sessions with no person in them use up the week's asks", async () => {
+    const m = await duePersonFact();
+    const conn = await db();
+    // Six memories named over the week and never fetched.
+    for (let i = 0; i < 6; i++) {
+      const other = await mk({ kind: "decision" });
+      conn.prepare("INSERT INTO check_asks (learning_id, user_id, via, delivered_at) VALUES (?, ?, 'nudge', datetime('now', '-2 days'))").run(other.id, AUTHOR);
+    }
+    const { takeHookChecks } = await import("../lib/checks");
+    expect(takeHookChecks(AUTHOR).map((i) => i.id)).toEqual([m.id]);
   });
 
   it("takes at most three memories in a set", async () => {
@@ -631,6 +716,53 @@ describe("takeHookChecks", () => {
     await insertHookAsk(m.id, AUTHOR, 2);
     const { takeHookChecks } = await import("../lib/checks");
     expect(takeHookChecks(AUTHOR).find((i) => i.id === m.id)).toBeUndefined();
+  });
+
+  it("names a memory without starting the pass-on and stale clocks", async () => {
+    const m = await duePersonFact();
+    const { takeHookChecks, waitingFor } = await import("../lib/checks");
+    const { freshnessFor } = await import("../lib/freshness");
+    expect(takeHookChecks(AUTHOR).map((i) => i.id)).toEqual([m.id]);
+    const conn = await db();
+    expect(conn.prepare("SELECT via, answer FROM check_asks WHERE learning_id = ?").all(m.id)).toEqual([{ via: "nudge", answer: null }]);
+    // Forty days on with nobody at the keyboard: nobody was asked, so it is due, not stale,
+    // and the author is still the one to ask.
+    conn.prepare("UPDATE check_asks SET delivered_at = datetime('now', '-40 days') WHERE learning_id = ?").run(m.id);
+    expect(freshnessFor([m.id]).get(m.id)!.freshness).toBe("due");
+    expect(waitingFor(AUTHOR).map((i) => i.id)).toContain(m.id);
+  });
+
+  it("counts a named memory as asked once the agent fetched the list", async () => {
+    const m = await duePersonFact();
+    const { takeHookChecks, markChecksDelivered } = await import("../lib/checks");
+    takeHookChecks(AUTHOR);
+    const conn = await db();
+    conn.prepare("UPDATE check_asks SET delivered_at = datetime('now', '-3 days') WHERE learning_id = ?").run(m.id);
+    markChecksDelivered(AUTHOR, [m.id]);
+    const row = conn.prepare("SELECT via, delivered_at >= datetime('now', '-1 minutes') AS now FROM check_asks WHERE learning_id = ?").all(m.id);
+    expect(row).toEqual([{ via: "hook", now: 1 }]);
+    // Nothing named: nothing changes, and nothing is added.
+    markChecksDelivered(AUTHOR, [m.id]);
+    markChecksDelivered(BOB, [m.id]);
+    markChecksDelivered(AUTHOR, []);
+    expect(conn.prepare("SELECT COUNT(*) AS n FROM check_asks").get()).toEqual({ n: 1 });
+  });
+
+  it("counts a named memory as asked when its answer comes back, from that moment", async () => {
+    const m = await duePersonFact();
+    const { takeHookChecks, recheck } = await import("../lib/checks");
+    const { freshnessFor } = await import("../lib/freshness");
+    takeHookChecks(AUTHOR);
+    const conn = await db();
+    // Named 40 days ago, answered only now: the 30-day stale clock starts at the answer.
+    conn.prepare("UPDATE check_asks SET delivered_at = datetime('now', '-40 days') WHERE learning_id = ?").run(m.id);
+    recheck(m.id, AUTHOR, "later", null, "mcp");
+    expect(
+      conn.prepare("SELECT via, answer, delivered_at >= datetime('now', '-1 minutes') AS now FROM check_asks WHERE learning_id = ?").all(m.id),
+    ).toEqual([{ via: "hook", answer: "later", now: 1 }]);
+    expect(freshnessFor([m.id]).get(m.id)!.freshness).toBe("due");
+    // And it is skipped for a week, like any Ask me later.
+    expect(takeHookChecks(AUTHOR)).toEqual([]);
   });
 
   it("takes only due questions, not follow-ups", async () => {
@@ -1044,5 +1176,112 @@ describe("a stale memory drops one standing level", () => {
     expect(computeStanding(recent, row, now).standing).toBe("strong");
     expect(computeStanding({ ...recent, freshnessStale: true }, row, now).standing).toBe("fair");
     expect(computeStanding({ ...recent, confirm: 0, freshnessStale: true }, row, now).standing).toBe("weak");
+  });
+});
+
+describe("who can take back a No, a Not sure or a flag", () => {
+  async function stateOf(id: string) {
+    const { freshnessFor } = await import("../lib/freshness");
+    return freshnessFor([id]).get(id)!;
+  }
+
+  it("a keep by someone else leaves a No on a business fact open", async () => {
+    const { recheck } = await import("../lib/checks");
+    const { keepLearning, confirm, getById } = await import("../lib/learnings");
+    const m = await duePersonFact();
+    recheck(m.id, BOB, "no", "The limit changed", "mcp");
+    keepLearning(m.id, CID, "mcp");
+    expect(getById(m.id)!.dispute_kind).toBe("no");
+    expect((await stateOf(m.id)).freshness).toBe("disputed");
+    // A confirm, with the note on where it was checked, takes the No back.
+    confirm(m.id, DEE, "Checked the policy page", "mcp");
+    expect(getById(m.id)!.dispute_kind).toBeNull();
+    expect((await stateOf(m.id)).freshness).toBe("fresh");
+  });
+
+  it("a keep by someone else leaves a Not sure on a business fact open, and a Yes closes it", async () => {
+    const { recheck } = await import("../lib/checks");
+    const { keepLearning, getById } = await import("../lib/learnings");
+    const m = await mk({ kind: "standard" });
+    recheck(m.id, BOB, "unsure", null, "mcp");
+    keepLearning(m.id, CID, "mcp", "Still in use");
+    expect(getById(m.id)!.dispute_kind).toBe("unsure");
+    recheck(m.id, CID, "yes", "Asked the owner of the policy", "mcp");
+    expect(getById(m.id)!.dispute_kind).toBeNull();
+  });
+
+  it("a keep by someone else still closes a No on a tech fact", async () => {
+    const { recheck } = await import("../lib/checks");
+    const { keepLearning, getById } = await import("../lib/learnings");
+    const m = await mk();
+    recheck(m.id, BOB, "no", "The script moved", "mcp");
+    keepLearning(m.id, CID, "mcp");
+    expect(getById(m.id)!.dispute_kind).toBeNull();
+    expect((await stateOf(m.id)).freshness).toBe("fresh");
+  });
+
+  it("a maintainer's keep answers the flag on their own standard everywhere", async () => {
+    (await import("../lib/db"))._resetDbForTests();
+    process.env.BAB_MAINTAINERS = AUTHOR;
+    vi.resetModules();
+    const { flag, keepLearning, flaggedStandardsWaitingIds, standingsFor, getById, search } = await import("../lib/learnings");
+    const { trustFor } = await import("../lib/trust");
+    const m = await mk({ kind: "standard", title: "Wombat naming rule zqwom", body: "Wombat names use kebab case zqwom" });
+    flag(m.id, BOB, "mcp", "Looks outdated");
+    await setFlagAge(m.id, 20);
+    expect((await stateOf(m.id)).freshness).toBe("stale");
+    expect(flaggedStandardsWaitingIds()).toContain(m.id);
+
+    keepLearning(m.id, AUTHOR, "mcp", "Checked, still our rule");
+    expect(flaggedStandardsWaitingIds()).not.toContain(m.id);
+    expect(await stateOf(m.id)).toMatchObject({ freshness: "fresh" });
+    expect((await stateOf(m.id)).disputeKind).toBeUndefined();
+    expect(standingsFor([getById(m.id)!]).get(m.id)!.standingReason).not.toMatch(/stale/i);
+    const trust = () => trustFor([getById(m.id)!]).get(m.id)!;
+    expect(trust()).toMatchObject({ flags: 0, answeredFlags: 1 });
+    const hit = search("wombat naming rule", {}, 5, 0).find((r) => r.id === m.id)!;
+    expect(hit.freshness).toBe("fresh");
+    expect(hit.freshnessWarning).toBeUndefined();
+    // Their own keep is still not a check: it gives no points and does not move the clock.
+    expect(trust()).toMatchObject({ unchecked: true, lastCheckedAt: null });
+    expect(getById(m.id)!.checked_at).toBeNull();
+  });
+
+  it("an author who is no maintainer does not answer a flag with their own keep", async () => {
+    const { flag, keepLearning } = await import("../lib/learnings");
+    const m = await mk({ kind: "standard" });
+    flag(m.id, BOB, "mcp", "Looks outdated");
+    keepLearning(m.id, AUTHOR, "mcp", "Still our rule");
+    expect(await stateOf(m.id)).toMatchObject({ freshness: "disputed", disputeKind: "flag" });
+  });
+});
+
+describe("repeats add no rows", () => {
+  it("records one skip per week however often Ask me later repeats", async () => {
+    const { recheck } = await import("../lib/checks");
+    const m = await mk({ kind: "decision" });
+    for (let i = 0; i < 10; i++) recheck(m.id, BOB, "later", null, "mcp");
+    const conn = await db();
+    expect(conn.prepare("SELECT COUNT(*) AS n FROM check_asks WHERE learning_id = ?").get(m.id)).toEqual({ n: 1 });
+    // A week later the skip is over: the next one is on record again.
+    conn.prepare("UPDATE check_asks SET delivered_at = datetime('now', '-8 days'), answered_at = datetime('now', '-8 days') WHERE learning_id = ?").run(m.id);
+    recheck(m.id, BOB, "later", null, "mcp");
+    expect(conn.prepare("SELECT COUNT(*) AS n FROM check_asks WHERE learning_id = ?").get(m.id)).toEqual({ n: 2 });
+    // Another person's skip is their own.
+    recheck(m.id, CID, "later", null, "mcp");
+    expect(conn.prepare("SELECT COUNT(*) AS n FROM check_asks WHERE learning_id = ?").get(m.id)).toEqual({ n: 3 });
+  });
+
+  it("keeps one history row for a flag repeated with the same evidence, and one more for new evidence", async () => {
+    const { flag } = await import("../lib/learnings");
+    const { trustHistory } = await import("../lib/trust");
+    const m = await mk();
+    const evidence = { failure: "api_error" as const, saw: "exit 1" };
+    for (let i = 0; i < 10; i++) flag(m.id, BOB, "mcp", "Broken", evidence);
+    expect(trustHistory(m.id).filter((e) => e.kind === "flag")).toHaveLength(1);
+    flag(m.id, BOB, "mcp", "Broken", { failure: "api_error", saw: "exit 2" });
+    const flags = trustHistory(m.id).filter((e) => e.kind === "flag");
+    expect(flags).toHaveLength(2);
+    expect(flags.map((e) => e.evidence?.saw).sort()).toEqual(["exit 1", "exit 2"]);
   });
 });

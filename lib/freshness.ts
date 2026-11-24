@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
+import { config } from "./config";
 import { parseDbTime } from "./dates";
 import { ValidationError } from "./errors";
 import { verifyDueIds } from "./swarm-gc";
@@ -53,6 +54,20 @@ export const DAILY_FLAG_MAX = 5;
 export const DAILY_SUPERSEDE_MAX = 5;
 
 const DAY_MS = 86_400_000;
+
+/**
+ * The one rule for which check answers a flag, as SQL over a vote `v` (a confirm, keep or restore)
+ * and its memory `l`: a check by someone other than the author, or a keep or restore by a
+ * maintainer, also on their own memory (that is how a maintainer answers a flag on a standard).
+ * Search rank, the trust label and freshness all use it, so a flag one of them calls answered is
+ * answered for all three. Maintainer ids come from the configuration and are quoted here, because
+ * the search rank expression takes no parameters.
+ */
+export function flagAnswerSql(v: string, l: string): string {
+  const maintainers = [...config().identity.maintainers].map((id) => `'${id.replace(/'/g, "''")}'`);
+  const own = maintainers.length > 0 ? ` OR lower(${v}.voter_id) IN (${maintainers.join(", ")})` : "";
+  return `(lower(${v}.voter_id) <> lower(${l}.author_id)${own})`;
+}
 
 /** The default check_by for a kind, when the writing agent does not pick: decisions and standards are a person's. */
 export function defaultCheckBy(kind: LearningKind): CheckBy {
@@ -111,6 +126,11 @@ export interface Freshness {
   checkedAt: string;
 }
 
+/** personWindowDays as SQL over a `learnings` row: its own window, or the default for its kind. */
+export const PERSON_WINDOW_DAYS_SQL = `COALESCE(check_every_days, CASE kind ${Object.entries(PERSON_CHECK_DAYS)
+  .map(([kind, days]) => `WHEN '${kind}' THEN ${days}`)
+  .join(" ")} ELSE 90 END)`;
+
 /** One SQLite datetime, `days` before `now`. */
 export function sqlTimeBefore(now: number, days: number): string {
   return new Date(now - days * DAY_MS).toISOString().slice(0, 19).replace("T", " ");
@@ -163,14 +183,15 @@ export function freshnessFor(
       .all(...chunk) as Array<{ id: string; at: string }>) {
       lastCheck.set(r.id, r.at);
     }
-    // Flags newer than that check are open; the oldest of them is when the dispute began.
+    // Flags newer than the newest answering check (flagAnswerSql) are open; the oldest of them is
+    // when the dispute began.
     for (const r of db
       .prepare(
         `SELECT f.learning_id AS id, MIN(f.created_at) AS at FROM votes f JOIN learnings l ON l.id = f.learning_id
          WHERE f.learning_id IN (${marks}) AND f.kind = 'flag'
            AND f.created_at > COALESCE((SELECT MAX(c.created_at) FROM votes c
              WHERE c.learning_id = f.learning_id AND c.kind IN ('confirm', 'keep', 'restore')
-               AND lower(c.voter_id) <> lower(l.author_id)), '')
+               AND ${flagAnswerSql("c", "l")}), '')
          GROUP BY f.learning_id`,
       )
       .all(...chunk) as Array<{ id: string; at: string }>) {
