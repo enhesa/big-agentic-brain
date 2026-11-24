@@ -607,6 +607,8 @@ describe("the replay clock", () => {
     expect(view).toMatch(/if \(playing\) \{[^}]*advanceReplayClock/s);
     expect(view).not.toMatch(/playing = false;\s*endedAt = wall/);
     expect(view).toContain("let playing = !options.still;");
+    // Scrubbing to the very end pauses on the finished brain instead of wrapping at once.
+    expect(view).toMatch(/seconds >= scene\.duration\) playing = false;/);
   });
 });
 

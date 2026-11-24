@@ -1592,6 +1592,7 @@ every time.
   and never while it is paused. The replay takes the keyboard focus when it opens and gives
   it back to the Replay button when it closes. Under `prefers-reduced-motion` the finished brain is shown
   and nothing moves until Play is pressed, and it loops from then on.
+  Dragging the time to the very end shows the finished brain and pauses there.
 - `GET /live/replay` returns the history as plain numbers (`lib/live-replay.ts`). For each memory: the hour it
   was saved, the hour it stopped being live, its kind and the number of its group. Then the threads, the
   reuses and flags by day, and the searches and messages as a count per day. **It holds no person, no id, no

@@ -424,6 +424,8 @@ export function mountReplay(canvas: HTMLCanvasElement, scene: ReplayScene, optio
     },
     seek(to: number) {
       seconds = Math.max(0, Math.min(scene.duration, to));
+      // Dragging to the very end shows the finished brain and pauses there, so it is not wrapped at once.
+      if (seconds >= scene.duration) playing = false;
       endedAt = seconds >= scene.duration ? wall : -1;
       dirty = true;
       options.onTick(seconds, playing);
