@@ -43,7 +43,24 @@ const HISTORY_VERB: Record<TrustEvent["kind"], string> = {
   retire: "Retired",
   supersede: "Replaced",
   archive: "Archived",
+  recheck_yes: "Answered Yes (still true)",
+  recheck_no: "Answered No (not true any more)",
+  recheck_unsure: "Answered Not sure",
+  recheck_agent: "Handed to agents to check",
+  check_by_changed: "Changed who checks it",
 };
+
+/** The structured evidence of a flag or a correction, as one plain line. */
+function evidenceLine(e: NonNullable<TrustEvent["evidence"]>): string {
+  return [
+    e.failure ? `failure ${e.failure.replace(/_/g, " ")}` : null,
+    e.tried ? `tried ${e.tried}` : null,
+    e.saw ? `saw ${e.saw}` : null,
+    e.where ? `where ${e.where}` : null,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
 
 /**
  * Why the sweep archived a memory, when it did (the `auto-archive` or `downvote_archived` audit row,
@@ -315,6 +332,7 @@ export default async function LearningDetailPage({
                     </>
                   ) : null}
                   {e.note ? `: ${e.note}` : ""}
+                  {e.evidence ? ` (evidence: ${evidenceLine(e.evidence)})` : ""}
                 </li>
               ))}
             </ol>

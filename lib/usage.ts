@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
 import { parseDbTime } from "./dates";
 import { flaggedStandardsWaitingIds, INACTIVITY_CLOCK_START, LEARNING_KINDS, standingsFor } from "./learnings";
+import { serveStats, type ServeStats } from "./checks";
 import { generalProjectCount, topProjects } from "./stats";
 import { teamTags } from "./teams";
 import type { StandingLevel } from "./standing";
@@ -351,6 +352,8 @@ export interface UsageReport {
   /** Memories saved since USAGE_COLLECTING_SINCE by the model their author named; "" is not stated. */
   models: Count[];
   upkeep: Upkeep;
+  /** Self-healing memory: how often agents got unchecked advice in the last 30 days, and how often people answer a check (lib/checks.ts). */
+  freshness: ServeStats;
   unused: Unused;
   searchOutcomes: SearchOutcomes;
   measured: MeasuredSavings;
@@ -1250,6 +1253,7 @@ function reportFromParts(now: Date, weeks: string[], parts: AuditPart[], helpful
     generalCount: generalProjectCount(),
     models: modelsUsed(),
     upkeep: upkeep(now),
+    freshness: serveStats(now.getTime()),
     unused: unusedMemories(now),
     searchOutcomes: searchOutcomesFromParts(parts.map((p) => p.search)),
     measured: measuredSavings(weeks),

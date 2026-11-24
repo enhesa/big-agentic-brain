@@ -7,7 +7,10 @@ import { toApiError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-/** POST /api/learnings/[id]/flag: flag a learning as wrong/stale. Required { note }: one line of evidence (400 without it). */
+/**
+ * POST /api/learnings/[id]/flag: flag a learning as wrong/stale. Required { note }: one line of
+ * evidence (400 without it). Optional { evidence: { failure, tried, saw, where } } (lib/evidence.ts).
+ */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let user;
   try {
@@ -26,7 +29,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const noteRaw = (payload as { note?: unknown } | null)?.note;
       const note = noteArg(noteRaw);
 
-      const learning = flag(id, user.id, "mcp", note);
+      const evidence = (payload as { evidence?: unknown } | null)?.evidence;
+      const learning = flag(id, user.id, "mcp", note, evidence);
       return { status: 200, body: { learning } };
     } catch (err) {
       return toApiError(err);

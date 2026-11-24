@@ -86,7 +86,7 @@ const REDACTABLE: { table: string; id: string; columns: string[] }[] = [
   { table: "threads", id: "id", columns: ["subject"] },
   { table: "messages", id: "id", columns: ["body"] },
   { table: "votes", id: "rowid", columns: ["note"] },
-  { table: "trust_events", id: "id", columns: ["note"] },
+  { table: "trust_events", id: "id", columns: ["note", "evidence"] },
   { table: "memory_comments", id: "id", columns: ["body"] },
   { table: "users", id: "id", columns: ["name"] },
   // Composite primary key (area, user_id): the rowid names the row.
@@ -313,6 +313,8 @@ function sweepDeletedLearnings(db: Db): number {
         // Only the deleted memory's own events. A "replaced by" event on a memory that still exists
         // stays; trustHistory hides the link once the replacement is gone.
         db.prepare(`DELETE FROM trust_events WHERE learning_id IN (${idList})`).run(...ids);
+        // Who was asked to check it (lib/freshness.ts) goes too.
+        db.prepare(`DELETE FROM check_asks WHERE learning_id IN (${idList})`).run(...ids);
         // Foreign key to learnings, like votes: gone first, or the DELETE below fails.
         db.prepare(`DELETE FROM memory_comments WHERE learning_id IN (${idList})`).run(...ids);
         db.prepare(`DELETE FROM reuse_costs WHERE learning_id IN (${idList})`).run(...ids);
