@@ -106,3 +106,67 @@ export const BEAT_WORDS: Record<BeatWord, string> = {
   message: "An agent sent a message",
   flag: "An agent flagged a memory",
 };
+
+/** What a beat is called in the note that pops up beside its dot. Short: a memory's title may follow. */
+export const POP_WORDS: Record<BeatWord, string> = {
+  save: "Saved",
+  search: "Searched the brain",
+  reuse: "Reused",
+  message: "Sent a message",
+  flag: "Flagged",
+};
+
+/** The four counts the picture draws as coloured circles on the rim of the brain, two on each side. */
+export const MOON_KINDS = ["search", "save", "message", "reuse"] as const;
+export type MoonKind = (typeof MOON_KINDS)[number];
+/** The smallest and largest circle, and the gap between a circle and the brain. */
+export const MOON = { rMin: 22, rMax: 32, gap: 6 };
+/** Which way from the middle of the brain each circle sits: left or right, up or down, 30 degrees off level. */
+const MOON_SIDES: Record<MoonKind, { side: -1 | 1; up: -1 | 1 }> = {
+  search: { side: -1, up: -1 },
+  save: { side: 1, up: -1 },
+  message: { side: -1, up: 1 },
+  reuse: { side: 1, up: 1 },
+};
+const MOON_LEAN = { x: Math.cos(Math.PI / 6), y: Math.sin(Math.PI / 6) };
+
+/**
+ * Where each count sits and how big it is drawn. The largest count gets the largest circle and the
+ * others shrink by area, so a circle twice as wide stands for four times as much. A count of
+ * nothing still gets the smallest circle: the picture keeps its shape on a quiet day. Every circle
+ * sits on the rim of the brain, inside the ring of dots, so it never covers one. `side` says which
+ * way its word is written: to the left (-1) or to the right (1).
+ */
+export function moons(counts: Record<MoonKind, number>): Array<{ kind: MoonKind; x: number; y: number; r: number; side: -1 | 1; count: number }> {
+  const most = Math.max(0, ...MOON_KINDS.map((k) => counts[k]));
+  const round = (n: number) => Math.round(n * 10) / 10;
+  return MOON_KINDS.map((kind) => {
+    const share = most > 0 ? Math.sqrt(Math.max(0, counts[kind]) / most) : 0;
+    const r = round(MOON.rMin + (MOON.rMax - MOON.rMin) * share);
+    const { side, up } = MOON_SIDES[kind];
+    const far = CORE.r + MOON.gap + r;
+    return { kind, x: round(CORE.x + side * MOON_LEAN.x * far), y: round(CORE.y + up * MOON_LEAN.y * far), r, side, count: counts[kind] };
+  });
+}
+
+/** The number in a coloured circle: at most four characters, so it fits the smallest one. */
+export function moonCount(n: number): string {
+  if (n < 1000) return String(Math.max(0, Math.round(n)));
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: n < 9950 ? 1 : 0 }).format(n);
+}
+
+/**
+ * Which beats get a note. A note starts with its mark, and no sooner than `gap` after the note
+ * before it, so with a note that lasts two gaps at most two are on the page at once. In a burst
+ * the beats in between move without a note: they are all in the list. `starts` are the times the
+ * marks start, in order; `freeAt` is when the next note may start.
+ */
+export function spaceNotes(starts: number[], freeAt: number, gap: number): { noted: boolean[]; freeAt: number } {
+  let free = freeAt;
+  const noted = starts.map((at) => {
+    if (at < free) return false;
+    free = at + gap;
+    return true;
+  });
+  return { noted, freeAt: free };
+}
