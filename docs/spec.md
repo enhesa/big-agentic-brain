@@ -543,8 +543,9 @@ supersede and the trust history above.
   `stale` (disputed for more than 14 days, or a person memory whose first ask after its last check
   is more than 30 days old and unanswered). Results also carry `checkBy`, `checkDue` and a plain
   `freshnessWarning`; any `checkDue` result adds `checkDueHint`. Disputed and stale rank like a
-  flagged memory (x0.6). A live memory that is not active shows as fresh. Stale is a label, not a
-  standing drop.
+  flagged memory (x0.6). A live memory that is not active shows as fresh. A stale memory also drops
+  one standing level (strong to fair, fair to weak, weak stays weak; the reason says "stale"),
+  and gets it back once a check clears the state (see "Ranking").
 - *Recheck.* `bab_react recheck` and `POST /api/learnings/:id/recheck` take `answer`: `yes`, `no`,
   `unsure`, `agent` or `later`, and an optional `note` (300 characters, redacted). A non-author Yes
   is a confirm (note required). An author's Yes restarts the clock without points or a confirm vote
@@ -606,7 +607,9 @@ search rank expression does not change. `points = 2*confirm + helpful + 2*kudos 
 3*flag`, plus 2 for a Confluence mirror whose author is a maintainer (`BAB_MAINTAINERS`: `source`
 is a claim any author can write, and mirrors come from the owner's seeding run, so anyone else's
 `confluence` entry gets no bonus). `strong` at 6 or more, `fair` at 2 to 5, `weak` below 2. If the
-newest of `created_at` and the last confirm is over 180 days old, standing drops one level.
+newest of `created_at` and the last confirm is over 180 days old, standing drops one level. A
+memory whose freshness is `stale` (see "Self-healing memory") drops one level too; both together
+still drop one level, and `weak` is the floor.
 A correction that replaces exactly one entry inherits part of that entry's standing: half of
 the old entry's positive points, rounded down, at most 4 (`carryOver` in `lib/standing.ts`;
 negative points never carry, the Confluence bonus is not part of it, and a consolidation of

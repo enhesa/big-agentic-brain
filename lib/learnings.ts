@@ -1037,10 +1037,10 @@ export function search(
     const rows = list(filters).slice(offset, offset + limit);
     const authorNames = getAuthorNames(rows.map((r) => r.author_id));
     const supersededByIds = getSupersededByIds(rows.map((r) => r.id));
-    const standings = standingsFor(rows);
+    const fresh = freshnessFor(rows.map((r) => r.id));
+    const standings = standingsFor(rows, Date.now(), fresh);
     const retires = lastRetiresFor(rows);
     const trust = trustFor(rows);
-    const fresh = freshnessFor(rows.map((r) => r.id));
     return rows.map((r) => ({
       ...r,
       ...ageInfo(r),
@@ -1115,10 +1115,10 @@ export function search(
 
   const authorNames = getAuthorNames(rows.map((r) => r.author_id));
   const supersededByIds = getSupersededByIds(rows.map((r) => r.id));
-  const standings = standingsFor(rows);
+  const fresh = freshnessFor(rows.map((r) => r.id));
+  const standings = standingsFor(rows, Date.now(), fresh);
   const retires = lastRetiresFor(rows);
   const trust = trustFor(rows);
-  const fresh = freshnessFor(rows.map((r) => r.id));
 
   return rows.map((r) => ({
     ...r,
@@ -1324,6 +1324,7 @@ function carriedFor(
 export function standingsFor(
   rows: Array<Pick<LearningRow, "id" | "source" | "created_at" | "author_id">>,
   now: number = Date.now(),
+  fresh?: Map<string, Freshness>,
 ): Map<string, Standing> {
   const out = new Map<string, Standing>();
   if (rows.length === 0) return out;
@@ -1364,13 +1365,22 @@ export function standingsFor(
   // A correction that replaces exactly one entry inherits part of that entry's standing, and
   // that entry may have inherited from the one before it (see carriedFor).
   const carried = carriedFor(db, ids, counts);
+  // A stale memory (self-healing memory, lib/freshness.ts) drops one level. Search passes the map
+  // it already has, so the freshness queries run once.
+  const freshness = fresh ?? freshnessFor(ids, now, db);
 
   for (const row of rows) {
     const c = counts.get(row.id) ?? { helpful: 0, not_helpful: 0, flag: 0, kudos: 0, confirm: 0 };
     out.set(
       row.id,
       computeStanding(
-        { ...c, lastConfirmAt: lastConfirm.get(row.id) ?? null, replaced: replaced.get(row.id), carried: carried.get(row.id) ?? 0 },
+        {
+          ...c,
+          lastConfirmAt: lastConfirm.get(row.id) ?? null,
+          replaced: replaced.get(row.id),
+          carried: carried.get(row.id) ?? 0,
+          freshnessStale: freshness.get(row.id)?.freshness === "stale",
+        },
         { source: row.source, created_at: row.created_at, authorIsMaintainer: isMaintainer(row.author_id) },
         now,
       ),

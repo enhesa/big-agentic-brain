@@ -236,9 +236,20 @@ describe("standing on results (integration)", () => {
     const proto = Object.getPrototypeOf(getDb());
     const spy = vi.spyOn(proto, "prepare");
     try {
-      const map = standingsFor(rows);
+      // Search passes the freshness map it already has: three queries for standing itself.
+      const { freshnessFor } = await import("../lib/freshness");
+      const fresh = freshnessFor(rows.map((r) => r.id));
+      spy.mockClear();
+      const map = standingsFor(rows, Date.now(), fresh);
       expect(map.size).toBe(30);
       expect(spy.mock.calls.length).toBeLessThanOrEqual(3);
+      // Without it, the freshness lookup (stale drops a level) adds a fixed few, the same for 3 rows as for 30.
+      spy.mockClear();
+      standingsFor(rows.slice(0, 3));
+      const few = spy.mock.calls.length;
+      spy.mockClear();
+      standingsFor(rows);
+      expect(spy.mock.calls.length).toBe(few);
     } finally {
       spy.mockRestore();
     }

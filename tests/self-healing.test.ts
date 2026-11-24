@@ -952,3 +952,97 @@ describe("the unchecked serve rate", () => {
     expect(s.answerRate).toBeCloseTo(0.5);
   });
 });
+
+describe("a stale memory drops one standing level", () => {
+  async function standingOf(id: string) {
+    const { standingsFor, getById } = await import("../lib/learnings");
+    return standingsFor([getById(id)!]).get(id)!;
+  }
+
+  /** A decision three colleagues confirmed: 6 points, strong. */
+  async function strongDecision(over: Record<string, unknown> = {}) {
+    const { confirm } = await import("../lib/learnings");
+    const m = await mk({ kind: "decision", ...over });
+    for (const v of [BOB, CID, DEE]) confirm(m.id, v, "Checked the policy page", "mcp");
+    return m;
+  }
+
+  it("strong drops to fair, with the reason, and comes back once someone rechecks it", async () => {
+    const m = await strongDecision();
+    expect((await standingOf(m.id)).standing).toBe("strong");
+    await setDisputeAge(m.id, 20, "no");
+    const stale = await standingOf(m.id);
+    expect(stale.standing).toBe("fair");
+    expect(stale.standingReason).toContain("stale");
+    const { recheck } = await import("../lib/checks");
+    recheck(m.id, EVE, "yes", "Checked the policy page again", "mcp");
+    const back = await standingOf(m.id);
+    expect(back.standing).toBe("strong");
+    expect(back.standingReason).not.toContain("stale");
+  });
+
+  it("fair drops to weak, and weak stays weak", async () => {
+    const { confirm } = await import("../lib/learnings");
+    const fair = await mk({ kind: "decision" });
+    confirm(fair.id, BOB, "Checked the policy page", "mcp");
+    expect((await standingOf(fair.id)).standing).toBe("fair");
+    await setDisputeAge(fair.id, 20, "unsure");
+    expect((await standingOf(fair.id)).standing).toBe("weak");
+
+    const weak = await mk({ kind: "decision" });
+    expect((await standingOf(weak.id)).standing).toBe("weak");
+    await setDisputeAge(weak.id, 20, "no");
+    expect((await standingOf(weak.id)).standing).toBe("weak");
+  });
+
+  it("an author's Yes on a stale memory also brings the level back", async () => {
+    const m = await strongDecision();
+    await setDisputeAge(m.id, 20, "unsure");
+    expect((await standingOf(m.id)).standing).toBe("fair");
+    const { recheck } = await import("../lib/checks");
+    recheck(m.id, AUTHOR, "yes", null, "mcp");
+    expect((await standingOf(m.id)).standing).toBe("strong");
+  });
+
+  it("fresh, due and disputed memories keep their level", async () => {
+    const { freshnessFor } = await import("../lib/freshness");
+    const fresh = await strongDecision();
+    expect(freshnessFor([fresh.id]).get(fresh.id)!.freshness).toBe("fresh");
+    expect((await standingOf(fresh.id)).standing).toBe("strong");
+
+    const disputed = await strongDecision();
+    await setDisputeAge(disputed.id, 3, "no");
+    expect(freshnessFor([disputed.id]).get(disputed.id)!.freshness).toBe("disputed");
+    expect((await standingOf(disputed.id)).standing).toBe("strong");
+
+    // Due: a 30-day window, last checked 40 days ago, well inside the 180-day standing clock.
+    const due = await strongDecision({ checkEveryDays: 30 });
+    const conn = await db();
+    conn.prepare("UPDATE votes SET created_at = datetime('now', '-40 days') WHERE learning_id = ?").run(due.id);
+    conn.prepare("UPDATE learnings SET created_at = datetime('now', '-60 days'), checked_at = datetime('now', '-40 days') WHERE id = ?").run(due.id);
+    expect(freshnessFor([due.id]).get(due.id)!.freshness).toBe("due");
+    expect((await standingOf(due.id)).standing).toBe("strong");
+  });
+
+  it("search results and the memory API carry the lower level", async () => {
+    const m = await strongDecision({ title: "Refunds need a second approver zqstale", body: "Over 500 needs two people zqstale" });
+    await setDisputeAge(m.id, 20, "no");
+    const { search } = await import("../lib/learnings");
+    const hit = search("zqstale", {}, 20, 0).find((h) => h.id === m.id)!;
+    expect(hit.freshness).toBe("stale");
+    expect(hit.standing).toBe("fair");
+  });
+
+  it("costs one level at most, also when the entry is old as well", async () => {
+    const { computeStanding } = await import("../lib/standing");
+    const votes = { helpful: 0, not_helpful: 0, flag: 0, kudos: 0, confirm: 3, lastConfirmAt: "2025-01-01 00:00:00" };
+    const row = { source: "native" as const, created_at: "2025-01-01 00:00:00" };
+    const now = Date.parse("2026-11-24T00:00:00Z");
+    expect(computeStanding(votes, row, now).standing).toBe("fair");
+    expect(computeStanding({ ...votes, freshnessStale: true }, row, now).standing).toBe("fair");
+    const recent = { ...votes, lastConfirmAt: "2026-11-20 00:00:00" };
+    expect(computeStanding(recent, row, now).standing).toBe("strong");
+    expect(computeStanding({ ...recent, freshnessStale: true }, row, now).standing).toBe("fair");
+    expect(computeStanding({ ...recent, confirm: 0, freshnessStale: true }, row, now).standing).toBe("weak");
+  });
+});

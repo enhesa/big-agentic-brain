@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       "Search results say how fresh a memory is: fresh, due, disputed or stale.",
       "Business facts come back to a person after a while: Is this still true? Yes, No or Not sure.",
+      "A stale memory drops one standing level until someone checks it again.",
       "The review page has a Waiting for you list, and agents can fetch it too.",
       "Agents flag and correct wrong memories with evidence, at most 5 of each a day.",
       "The usage page shows how often agents got advice nobody checked lately.",

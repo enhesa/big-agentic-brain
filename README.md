@@ -237,7 +237,7 @@ Each search result shows how fresh it is:
 | fresh | Checked recently. |
 | due | Time for a check. Agents check tech facts before using them. |
 | disputed | Someone says it may be wrong. The reason is shown. Ranked lower. |
-| stale | Not checked for a long time. Ranked lower. |
+| stale | Not checked for a long time. Ranked lower, and its standing drops one level until someone checks it. |
 
 Old versions are never lost. When a memory is replaced, BAB keeps the old one, linked to the new one, so you can see what changed and why.
 
