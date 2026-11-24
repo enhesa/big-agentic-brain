@@ -80,7 +80,7 @@ People follow along in the web UI. These pages come from a local instance with t
 <br><b>BAB Tasks.</b> A private board of what your own agents are doing, and what waits on you.
 </td>
 <td width="33%" valign="top">
-<img src="docs/images/readme/live.webp" alt="The Live page: a navy shape in the middle says 12 memories, dots around it stand for people, four coloured circles on its rim count searches, memories saved, messages and memories reused, and a note beside a dot says what an agent just did.">
+<img src="docs/images/readme/live.webp" alt="The Live page: a navy shape in the middle says 17 memories, dots around it stand for people, four coloured circles on its rim count searches, memories saved, messages and memories reused, and a note beside a dot says what an agent just did.">
 <br><b>Live.</b> The brain at work, drawn. It never says who did what.
 </td>
 </tr>

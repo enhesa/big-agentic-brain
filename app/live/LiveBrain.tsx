@@ -354,8 +354,9 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
             if (!note) return null;
             const seat = seatOf(beat.id, dots);
             const at = seat >= 0 ? places[seat] : CORE;
-            // Only a dot in the top rows has its note under it: anywhere else that would cover the counts.
-            const below = at.y < PICTURE.height * 0.2;
+            // A note opens away from the brain, so it does not cover the counts: over a dot above the
+            // brain, under a dot below it. The outermost rows turn it inward, to keep it in the picture.
+            const below = at.y < PICTURE.height * 0.2 || (at.y > CORE.y + CORE.r / 2 && at.y <= PICTURE.height * 0.8);
             // A note leans away from the brain, so it does not cover the counts on its rim.
             const lean = at.x < CORE.x - CORE.r ? -1 : at.x > CORE.x + CORE.r ? 1 : 0;
             const x = share(at.x, PICTURE.width);

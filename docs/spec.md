@@ -1660,7 +1660,8 @@ every time.
   rings for every beat of that kind. For a beat a note pops up beside its dot for `POP_MS` (2.6 seconds):
   what was done and, for a memory, its title as a link. A note starts no sooner than `LOOP_STAGGER_MS` after
   the one before it, so at most two show at once: in a burst the beats in between move without a note.
-  A note that has not started or has ended cannot be clicked. The count of people stands beside the word "Live".
+  A note opens away from the brain, so it does not cover the counts. A note that has not started or has
+  ended cannot be clicked. The count of people stands beside the word "Live".
 - The same is kept in words. The numbers and the "Latest" list are in the page for a screen reader, hidden
   from the eye. The list comes back onto the page under `prefers-reduced-motion`, where no note pops up, and
   when a link in it takes the keyboard focus. Both come back on a small screen (720 pixels wide or less), where a
