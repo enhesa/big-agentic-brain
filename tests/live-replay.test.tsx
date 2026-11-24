@@ -583,6 +583,33 @@ describe("the shape of the brain", () => {
   });
 });
 
+describe("the replay clock", () => {
+  it("loops past the end, never moves when nothing plays, and keeps the tail before it restarts", async () => {
+    const { advanceReplayClock, REPLAY_SECONDS, REPLAY_TAIL_SECONDS } = await import("../lib/replay-scene");
+    // Inside the replay the clock simply advances.
+    expect(advanceReplayClock(10, 0.1, REPLAY_SECONDS)).toBeCloseTo(10.1, 6);
+    // The tail holds the finished brain: the clock reaches it before it wraps.
+    const inTail = REPLAY_SECONDS - REPLAY_TAIL_SECONDS + 0.5;
+    expect(advanceReplayClock(inTail, 0.1, REPLAY_SECONDS)).toBeCloseTo(inTail + 0.1, 6);
+    // Past the end it starts again from the first memory, keeping the overshoot, and keeps going.
+    expect(advanceReplayClock(REPLAY_SECONDS - 0.05, 0.1, REPLAY_SECONDS)).toBeCloseTo(0.05, 6);
+    expect(advanceReplayClock(REPLAY_SECONDS, 0.1, REPLAY_SECONDS)).toBeCloseTo(0.1, 6);
+    let at = REPLAY_SECONDS - 0.2;
+    for (let i = 0; i < 5; i++) at = advanceReplayClock(at, 0.1, REPLAY_SECONDS);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at).toBeLessThan(0.5);
+    // An empty history has nothing to loop.
+    expect(advanceReplayClock(0, 0.1, 0)).toBe(0);
+  });
+
+  it("keeps pause and reduced motion in the view: only a playing clock advances", () => {
+    const view = readFileSync(path.join(process.cwd(), "app/live/replay-scene.ts"), "utf8");
+    expect(view).toMatch(/if \(playing\) \{[^}]*advanceReplayClock/s);
+    expect(view).not.toMatch(/playing = false;\s*endedAt = wall/);
+    expect(view).toContain("let playing = !options.still;");
+  });
+});
+
 describe("the Replay on the page", () => {
   it("is one button under the picture, and the replay itself starts by saying what it does", async () => {
     vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));

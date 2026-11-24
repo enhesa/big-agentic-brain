@@ -19,6 +19,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-24",
+    title: "The Replay loops",
+    changes: [
+      "The Replay on the Live page starts again when it reaches the end, until you pause it.",
+      "The line under the Live title is shorter: The brain at work over the last 24 hours.",
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "A whiter page, and a landing page you scroll like a film",
     changes: [

@@ -12,7 +12,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { LINK_GROW_SECONDS, PULSE_SECONDS, parseCssColor, type ReplayScene } from "@/lib/replay-scene";
+import { LINK_GROW_SECONDS, PULSE_SECONDS, advanceReplayClock, parseCssColor, type ReplayScene } from "@/lib/replay-scene";
 
 /**
  * The Replay, drawn (docs/spec.md "Live Brain page", Replay). This file is loaded only when
@@ -374,11 +374,9 @@ export function mountReplay(canvas: HTMLCanvasElement, scene: ReplayScene, optio
     last = now;
     wall += dt;
     if (playing) {
-      seconds = Math.min(scene.duration, seconds + dt);
-      if (seconds >= scene.duration) {
-        playing = false;
-        endedAt = wall;
-      }
+      // Loops: the last REPLAY_TAIL_SECONDS hold the finished brain, then it starts again.
+      // Paused, or a still brain nobody pressed Play on, never gets here and stays where it is.
+      seconds = advanceReplayClock(seconds, dt, scene.duration);
     }
     const ended = seconds >= scene.duration;
     const progress = scene.duration > 0 ? seconds / scene.duration : 1;

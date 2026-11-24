@@ -1585,12 +1585,13 @@ every time.
   search and message. At most `REPLAY_PULSES_MAX` (120,000) sparks are drawn: with more, the newest reuses
   and flags and an even share of the searches and messages. A memory that is no longer live fades to grey.
   The last `REPLAY_TAIL_SECONDS` (1.6) seconds hold nothing new, so the replay ends on the finished brain.
+  A playing replay then starts again from the first memory and loops until it is paused or closed.
   The date and the running counts stand beside the picture.
 - The viewer can pause, drag the time, turn the brain (drag, or the arrow keys), zoom (the wheel, or plus and
   minus), go full screen and go back to the live picture. The brain turns by itself while the replay plays
-  and after it ends, never while it is paused. The replay takes the keyboard focus when it opens and gives
+  and never while it is paused. The replay takes the keyboard focus when it opens and gives
   it back to the Replay button when it closes. Under `prefers-reduced-motion` the finished brain is shown
-  and nothing moves until Play is pressed.
+  and nothing moves until Play is pressed, and it loops from then on.
 - `GET /live/replay` returns the history as plain numbers (`lib/live-replay.ts`). For each memory: the hour it
   was saved, the hour it stopped being live, its kind and the number of its group. Then the threads, the
   reuses and flags by day, and the searches and messages as a count per day. **It holds no person, no id, no

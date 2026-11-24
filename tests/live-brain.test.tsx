@@ -398,7 +398,10 @@ describe("the /live page", () => {
     await search(BOB, minutesAgo(4));
     const html = await renderPage();
     expect(html).toContain(">Live</h1>");
-    expect(html).toContain("Nobody is named.");
+    expect(html).toContain("The brain at work over the last 24 hours</p>");
+    expect(html).not.toContain("Nobody is named.");
+    // The privacy line moved under the picture: a dot stands for a person, but no dot is anyone's.
+    expect(html).toContain("no dot is anyone");
     expect(html).toContain('role="img"');
     // Two people, drawn as three dots that all look alike. The page says a dot is nobody's.
     const dotClasses = html.match(/<circle class="[^"]*dot[^"]*"/g) ?? [];
