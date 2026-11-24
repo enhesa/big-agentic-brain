@@ -6,7 +6,8 @@ import path from "node:path";
 /**
  * The optional maintainer review page (app/memory/review) and its buttons
  * (POST /memory/[id]/review, lib/review-web.ts): maintainers only, a note on every action, the
- * same rules as an agent (no confirm of your own memory), and every action in the history.
+ * same rules as an agent (no confirm of your own memory), and every action in the history. Anyone
+ * else signed in sees only "Waiting for you" (tests/self-healing-web.test.ts).
  */
 
 let dataDir: string;
@@ -192,10 +193,20 @@ describe("GET /memory/review", () => {
     expect(html).not.toContain("pwned");
   });
 
-  it("is a 404 for anyone else", async () => {
+  it("shows anyone else only Waiting for you, without the maintainer sections", async () => {
     signedIn("bob");
     await seed();
     await link("bob");
+    const html = await renderReview();
+    expect(html).toContain("Waiting for you (0)");
+    expect(html).toContain("Nothing waits for you.");
+    expect(html).not.toContain(">Confirm<");
+    expect(html).not.toContain("Never checked by anyone but the author");
+  });
+
+  it("is a 404 for nobody signed in", async () => {
+    vi.doMock("next/headers", () => ({ headers: async () => new Headers({ host: "localhost:4310" }) }));
+    await seed();
     await expect(renderReview()).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
   });
 });

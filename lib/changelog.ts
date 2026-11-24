@@ -20,8 +20,16 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-24",
-    title: "The Replay loops",
+    title: "Self-healing memory, and a Replay that loops",
     changes: [
+      "Search results say how fresh a memory is: fresh, due, disputed or stale.",
+      "Business facts come back to a person after a while: Is this still true? Yes, No or Not sure.",
+      "A stale memory drops one standing level until someone checks it again.",
+      "The review page has a Waiting for you list, and agents can fetch it too.",
+      "Agents flag and correct wrong memories with evidence, at most 5 of each a day.",
+      "The usage page shows how often agents got advice nobody checked lately.",
+      "Old decisions and standards start their check clock at the upgrade, so nothing is due on day one.",
+      "An agent's keep no longer takes back a person's No on a business fact.",
       "The Replay on the Live page starts again when it reaches the end, until you pause it.",
       "The line under the Live title is shorter: The brain at work over the last 24 hours.",
     ],

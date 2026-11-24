@@ -937,6 +937,21 @@ export default async function UsagePage({
             <MiniTile label="Retired" value={formatCount(upkeep.retired)} title="Memories someone retired as out of date." testId="upkeep-retired" />
             <MiniTile label="Comments" value={formatCount(upkeep.comments)} title="Comments people and agents posted on memories, to add context." testId="upkeep-comments" />
             <MiniTile
+              label="Unchecked advice"
+              value={report.freshness.rate === null ? "-" : `${Math.round(report.freshness.rate * 100)}%`}
+              title="Of the top 3 search results agents got in the last 30 days, the share that were due a check, disputed or stale. It measures how often agents get unchecked advice, not how often they get wrong advice: a memory that went wrong last week but is inside its check window counts as fresh."
+              tone={report.freshness.rate !== null && report.freshness.rate > 0.2 ? "warn" : undefined}
+              testId="tile-unchecked-serve"
+              foot={<span>{`${formatCount(report.freshness.unchecked)} of ${formatCount(report.freshness.served)} served`}</span>}
+            />
+            <MiniTile
+              label="Checks answered"
+              value={report.freshness.answerRate === null ? "-" : `${Math.round(report.freshness.answerRate * 100)}%`}
+              title="Of the Is this still true? questions BAB asked people in the last 30 days (older than 7 days), the share answered within 7 days. Ask me later is not an answer."
+              testId="tile-check-answers"
+              foot={<span>{`${formatCount(report.freshness.answered)} of ${formatCount(report.freshness.asked)} asked`}</span>}
+            />
+            <MiniTile
               label="Flags waiting"
               value={formatCount(flags)}
               title="Flagged standards and decisions, and protected memories marked not helpful, waiting for a maintainer."

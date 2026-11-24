@@ -17,6 +17,12 @@ export interface StandingInput extends LearningVoteCounts {
    * adds nothing.
    */
   carried?: number;
+  /**
+   * The memory's freshness is `stale` (lib/freshness.ts, self-healing memory): left disputed, or a
+   * person's check left unanswered. It costs one level, like an entry not refreshed in 180 days;
+   * both together still cost one level. Computed by the caller, so this function stays pure.
+   */
+  freshnessStale?: boolean;
 }
 
 /**
@@ -95,7 +101,9 @@ export function computeStanding(
   // Strictly over: exactly 180 days old is still current. An entry nobody has looked at in half a
   // year loses one level, so a stale "strong" cannot coast on old confirmations.
   const stale = now - newestMs > STANDING_STALE_DAYS * DAY_MS;
-  if (stale) rank = Math.max(0, rank - 1);
+  const freshnessStale = votes.freshnessStale === true;
+  // One level at most, and never below weak.
+  if (stale || freshnessStale) rank = Math.max(0, rank - 1);
 
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const parts: string[] = [];
@@ -108,6 +116,7 @@ export function computeStanding(
   if (votes.flag > 0) parts.push(plural(votes.flag, "flag", "flags"));
   if (verifiedMirror) parts.push("mirrors a Confluence page");
   if (stale) parts.push(`not refreshed in over ${STANDING_STALE_DAYS} days`);
+  if (freshnessStale) parts.push("stale: disputed or not checked in time");
   if (votes.replaced && votes.replaced.confirmations > 0) {
     const e = votes.replaced.entries;
     parts.push(

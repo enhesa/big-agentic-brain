@@ -219,6 +219,88 @@ for something "as a standard", post a `practice`, say why in one line, and offer
 a maintainer to promote it (`bab_people` lists the maintainers). To dispute a standard,
 or someone else's decision, flag it with the evidence: a maintainer decides.
 
+## Keeping memory true (self-healing)
+
+Shared memory is only useful if it is true. Any agent can save something wrong; the next agent
+catches it. Agents fix what breaks. People check what can't break.
+
+**Freshness.** Each search result has `freshness`: `fresh` (use it), `due` (check it before you act
+on it), `disputed` (someone said it may be wrong: read why, and do not act on it until you
+checked) or `stale` (not checked for a long time: a hint, not a fact). `checkBy` says who checks
+it: `agent` for a tech fact a test can prove (a command, a path, a setting, an API), `person` for
+a business fact no command can prove (a price, a limit, a policy, a client term, who owns what, a
+deadline, a team decision).
+
+**Tech facts: check them yourself.** When one fails or gives a wrong result:
+
+1. Make sure the problem is the memory, not your setup. Do not flag because of no network, a
+   missing login, the wrong folder or a branch broken for other reasons.
+2. If you find the right answer for a `learning` or `practice`, check that it works where it
+   matters (for example on the main branch), then save it with `supersedes` and `evidence`: what
+   failed and what works now. A `standard` or `decision`: flag it with evidence instead.
+3. If you cannot find the right answer, flag it with `evidence`: `failure` (`command_failed`,
+   `path_missing`, `api_error`, `wrong_output`, `contradicts_code` or `contradicts_memory`),
+   `tried` (what you ran or opened), `saw` (what you saw) and `where` (repo and branch).
+4. Do not just work around a wrong memory. The next agent hits the same problem.
+
+A `due` memory you used that worked: confirm it with a note on where you checked, at most 3
+confirms a task, never on the current user's own memory. On the user's own memory, recheck with
+answer `yes` and a note on what you checked.
+
+**Business facts: a person decides.** Never mark one true or false on your own. If it is `due`,
+use it, but tell the user it may be out of date, and ask before anything that cannot be undone.
+If you find something newer that contradicts it, show both to the user and ask which is right.
+
+**When you save.** Set `checkBy`: `agent` if an agent could test it, `person` if only a person can
+say it is still true. Not sure: `person` for decisions and standards, `agent` for the rest. A
+business fact may set `checkEveryDays` (30 to 365; the defaults are decision 180, standard 120,
+other 90). A fact with a known end date sets `expiresAt`. To change who checks a saved memory,
+use `bab_react` `check_by` with `checkBy` (`agent` or `person`); on someone else's memory, add a
+note.
+
+**When BAB asks "Is this still true?"** At session start the hook may name up to 3 memories that
+need the user's check. No person in this session (a scheduled or unattended run): skip it and
+record nothing. Otherwise get them with `bab_search` `waitingForMe: true`; BAB counts them as
+asked from that call on.
+
+1. If the user did not ask for urgent work, ask once before starting. If they did, do that task
+   first, or ask in one short line whether to check these now or later. Use your question tool if
+   you have one.
+2. Show each memory's exact text. Do not rewrite or shorten it; past 5 lines, show the first 5
+   and the link.
+3. Offer: Yes, No, Not sure, Let agents check this, Ask me later.
+4. Record each answer with `bab_react` `recheck` and `answer` (`yes`, `no`, `unsure`, `agent`,
+   `later`). A Yes on a colleague's memory needs a note on where the user checked.
+5. Skipped or busy: `recheck` with `later` for each one not answered. Do not ask again this
+   session.
+
+After No: ask "Do you know what it is now?" If yes, write the new memory with `supersedes`, and
+show the exact text first. If no, offer to look for the newer fact now in shared project sources
+only (this code folder, recent commits, shared team docs, newer BAB memories; never private
+chats, email, HR files or secret files), read only, about 5 tool calls, then show what you found
+and propose a supersede or a retire. After Not sure: the same search; if nothing is clear, offer
+to ask the area contact or the author with `bab_send`, only with the user's yes.
+
+**Guardrails.**
+
+- Never save a fix to a business fact without the user's yes. Show the exact text first and say:
+  "This will be shared with everyone in BAB." Tech fixes backed by a real error may be saved
+  directly.
+- Never copy private content (private messages, HR files, personal data, secrets) into a shared
+  memory. Write the fact, not where you found private details.
+- Standards and decisions: only their author or a maintainer supersedes or retires them. Anyone
+  else proposes the change and sends it with `bab_send`, with the user's yes.
+- Do not confirm the current user's own memory: use `recheck` with `yes`, and only when BAB asks
+  or marks it due. BAB refuses a third author Yes in a row on a business fact when a colleague
+  can be asked instead.
+- A `keep` does not take back a person's No or Not sure on a business fact. Only the user's Yes,
+  a confirm with a note on where it was checked, or a corrected version does.
+- Do not flag in bulk. BAB allows 5 flags and 5 corrections of other people's memories a day per
+  person, each with its own evidence. Many wrong memories at once usually means your setup is
+  wrong.
+- Do not argue with the user's answer. If they say Yes and you have evidence it is wrong, show the
+  evidence once, then respect their answer.
+
 ## Nothing confidential goes in
 
 There is no sensitivity setting and no private corner: every learning is readable by
