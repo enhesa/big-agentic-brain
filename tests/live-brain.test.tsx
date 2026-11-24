@@ -408,6 +408,10 @@ describe("the /live page", () => {
     expect(dotClasses).toHaveLength(3);
     expect(new Set(dotClasses).size).toBe(1);
     expect(html).toContain("3 or fewer");
+    expect(html).toContain("3 or fewer people with agents at work");
+    // The counts are drawn into the picture: four coloured circles with a number and a word each.
+    expect((html.match(/<circle class="[^"]*moonBody[^"]*"/g) ?? []).length).toBe(4);
+    for (const word of ["searches", "saved", "reused", "messages"]) expect(html).toMatch(new RegExp(`<text class="[^"]*moonWord[^"]*"[^>]*>${word}</text>`));
     expect(html).toContain("never shows one person alone");
     expect(html).toContain("drawn by lot");
     expect(html).toContain("An agent saved a memory");
@@ -504,11 +508,48 @@ describe("the picture", () => {
     expect(coreCount(2_500_000)).toBe("2.5M");
   });
 
+  it("draws each count as a circle on the rim of the brain, as big as its share, clear of every dot", async () => {
+    const { CORE, MOON, MOON_KINDS, dotPlace, moons } = await import("../lib/live-picture");
+    const { LIVE_DOTS_MAX } = await import("../lib/live-brain");
+    const drawn = moons({ search: 400, save: 100, reuse: 0, message: 25 });
+    expect(drawn.map((m) => m.kind)).toEqual([...MOON_KINDS]);
+    const by = Object.fromEntries(drawn.map((m) => [m.kind, m]));
+    // The largest count has the largest circle. A quarter of it is half as far up the scale: area, not width.
+    expect(by.search.r).toBe(MOON.rMax);
+    expect(by.save.r).toBeCloseTo((MOON.rMin + MOON.rMax) / 2, 1);
+    expect(by.reuse.r).toBe(MOON.rMin);
+    expect(by.message.r).toBeGreaterThan(MOON.rMin);
+    expect(by.message.r).toBeLessThan(by.save.r);
+    // A quiet day keeps four small circles, and never a NaN.
+    for (const m of moons({ search: 0, save: 0, reuse: 0, message: 0 })) expect(m.r).toBe(MOON.rMin);
+    // Whatever the counts: beside the brain and not on it, off each other, and clear of every dot,
+    // the word beside the circle included (it runs up to 90 units away from the brain).
+    for (const counts of [{ search: 9, save: 9, reuse: 9, message: 9 }, { search: 0, save: 0, reuse: 0, message: 0 }, { search: 400, save: 100, reuse: 0, message: 25 }]) {
+      const all = moons(counts);
+      for (const m of all) {
+        expect(Math.hypot(m.x - CORE.x, m.y - CORE.y) - m.r).toBeCloseTo(CORE.r + MOON.gap, 0);
+        expect(Math.sign(m.x - CORE.x)).toBe(m.side);
+        for (const other of all) if (other !== m) expect(Math.hypot(m.x - other.x, m.y - other.y)).toBeGreaterThan(m.r + other.r + 10);
+        for (let total = 1; total <= LIVE_DOTS_MAX; total++) {
+          for (let i = 0; i < total; i++) {
+            const d = dotPlace(i, total);
+            expect(Math.hypot(m.x - d.x, m.y - d.y)).toBeGreaterThan(m.r + 11 + 20);
+            for (let reach = 10; reach <= 90; reach += 10) expect(Math.hypot(m.x + m.side * (m.r + reach) - d.x, m.y - d.y)).toBeGreaterThan(11 + 20);
+          }
+        }
+      }
+    }
+  });
+
   it("calls every beat by what an agent did", async () => {
     const { BEAT_WORDS } = await import("../lib/live-picture");
     const { BEAT_KINDS } = await import("../lib/live-brain");
     expect(Object.keys(BEAT_WORDS).sort()).toEqual([...BEAT_KINDS].sort());
     for (const words of Object.values(BEAT_WORDS)) expect(words).toMatch(/^An agent /);
+    // The note that pops up beside a dot is short, and names nobody either.
+    const { POP_WORDS } = await import("../lib/live-picture");
+    expect(Object.keys(POP_WORDS).sort()).toEqual([...BEAT_KINDS].sort());
+    for (const words of Object.values(POP_WORDS)) expect(words.length).toBeLessThanOrEqual(20);
   });
 });
 
@@ -533,5 +574,89 @@ describe("where the page is told", () => {
     const { REPLAY_MAX, POLL_MS } = await import("../app/live/LiveBrain");
     expect(spec).toContain(`at most ${REPLAY_MAX} beats`);
     expect(spec).toContain(`every ${POLL_MS / 1000} seconds`);
+    const { LOOP_PAUSE_MS } = await import("../app/live/LiveBrain");
+    expect(spec).toContain(`\`LOOP_PAUSE_MS\` (${LOOP_PAUSE_MS / 1000} seconds)`);
+    const { LOOP_STAGGER_MS, LATEST_MAX, POP_MS } = await import("../app/live/LiveBrain");
+    expect(spec).toContain(`\`LOOP_STAGGER_MS\` (${LOOP_STAGGER_MS / 1000} seconds)`);
+    expect(spec).toContain(`\`POP_MS\` (${POP_MS / 1000} seconds)`);
+    expect(spec).toContain(`the last ${LATEST_MAX} beats`);
+  });
+
+  it("loops the picture: it plays the latest beats again, oldest first", async () => {
+    const { loopBeats, LATEST_MAX } = await import("../app/live/LiveBrain");
+    const now = Date.parse("2026-01-01T12:00:00Z");
+    const beat = (id: number, minutesAgo: number) => ({ id, kind: "search" as const, at: new Date(now - minutesAgo * 60_000).toISOString(), memory: null });
+    // A busy day: the newest LATEST_MAX beats, oldest first.
+    const busy = Array.from({ length: 30 }, (_, i) => beat(i + 1, 600 - i * 20));
+    const played = loopBeats(busy);
+    expect(played).toHaveLength(LATEST_MAX);
+    expect(played.map((b) => b.id)).toEqual(busy.slice(-LATEST_MAX).map((b) => b.id));
+    // A quiet day still has something to play, however old.
+    expect(loopBeats(busy.slice(0, 3)).map((b) => b.id)).toEqual([1, 2, 3]);
+    // No beats, nothing to loop.
+    expect(loopBeats([])).toEqual([]);
+  });
+
+  it("never piles the notes up: one starts no sooner than a gap after the one before", async () => {
+    const { spaceNotes } = await import("../lib/live-picture");
+    const { LOOP_STAGGER_MS, POP_MS, STAGGER_MS } = await import("../app/live/LiveBrain");
+    // A note lasts two gaps, so the third starts as the first ends: at most two on the page.
+    expect(POP_MS).toBeLessThanOrEqual(LOOP_STAGGER_MS * 2);
+    // Beats a gap apart all get a note.
+    const loop = spaceNotes([0, 1, 2, 3].map((i) => 1000 + i * LOOP_STAGGER_MS), 0, LOOP_STAGGER_MS);
+    expect(loop.noted).toEqual([true, true, true, true]);
+    expect(loop.freeAt).toBe(1000 + 4 * LOOP_STAGGER_MS);
+    // A burst: the first has a note, the next ones move without, until a gap has passed.
+    const burst = spaceNotes([0, 1, 2, 3, 4, 5, 6, 7].map((i) => i * STAGGER_MS), 0, LOOP_STAGGER_MS);
+    const starts = burst.noted.flatMap((yes, i) => (yes ? [i * STAGGER_MS] : []));
+    expect(burst.noted[0]).toBe(true);
+    expect(starts.length).toBeGreaterThan(1);
+    expect(starts.length).toBeLessThan(8);
+    for (let i = 1; i < starts.length; i++) expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(LOOP_STAGGER_MS);
+    // A batch that lands while a note from the batch before is fresh waits its turn.
+    expect(spaceNotes([500, 2000], burst.freeAt + 1500, LOOP_STAGGER_MS).noted).toEqual([false, false]);
+    expect(spaceNotes([], 42, LOOP_STAGGER_MS)).toEqual({ noted: [], freeAt: 42 });
+    // A new beat takes the loop's marks away, so its own note is never held back by them.
+    const view = read("app/live/LiveBrain.tsx");
+    expect(view).toContain("p.filter((b) => !b.loop)");
+    expect(view).toContain("play(loopBeats(latestBeats.current), LOOP_STAGGER_MS, true)");
+    // What the page plays on opening is old too, so it never holds back the note of a new beat.
+    expect(view).toContain(".slice(-REPLAY_MAX), LOOP_STAGGER_MS, true);");
+    expect(view).toMatch(/play\(fresh\);/);
+  });
+
+  it("writes a count short enough for the smallest circle", async () => {
+    const { moonCount } = await import("../lib/live-picture");
+    expect(moonCount(0)).toBe("0");
+    expect(moonCount(27)).toBe("27");
+    expect(moonCount(999)).toBe("999");
+    expect(moonCount(1000)).toBe("1K");
+    expect(moonCount(1234)).toBe("1.2K");
+    expect(moonCount(9999)).toBe("10K");
+    expect(moonCount(123_456)).toBe("123K");
+    expect(moonCount(2_500_000)).toBe("3M");
+    for (const n of [0, 7, 999, 1000, 9949, 9950, 54_321, 999_499, 999_500, 87_654_321]) expect(moonCount(n).length).toBeLessThanOrEqual(4);
+  });
+
+  it("keeps a mark until its note has been read, and clears the marks when the page is left", () => {
+    const view = read("app/live/LiveBrain.tsx");
+    expect(view).toContain("Math.max(BEAT_MS, POP_MS) + 400");
+    // Without this a second mount keeps the first marks for ever and the loop never starts.
+    expect(view).toMatch(/held\.clear\(\);[\s\S]{0,260}setPlaying\(\[\]\);/);
+    const css = read("app/live/live.module.css");
+    const { POP_MS } = { POP_MS: Number(/export const POP_MS = (\d+);/.exec(view)![1]) };
+    expect(css).toContain(`animation: pop ${POP_MS}ms`);
+    // A note that cannot be seen cannot be clicked: it is not there before it starts or after it ends.
+    const frames = css.slice(css.indexOf("@keyframes pop {"), css.indexOf(".people::before"));
+    expect(frames).toMatch(/0% \{\s*visibility: hidden;/);
+    expect(frames).toMatch(/100% \{\s*visibility: hidden;/);
+    // With motion off nothing pops up, so the list comes back onto the page.
+    const still = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(still).toMatch(/\.pops,\s*\.pop \{\s*display: none;/);
+    expect(still).toMatch(/\.latest \{\s*position: static;/);
+    // A small screen has no room for a note or for a number in a circle: the boxes and the list come back.
+    const small = css.slice(css.lastIndexOf("@media (max-width: 720px)"), css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(small).toMatch(/\.tiles,\s*\.latest \{\s*position: static;/);
+    expect(small).toMatch(/\.moonCount,\s*\.moonWord,\s*\.pops \{\s*display: none;/);
   });
 });

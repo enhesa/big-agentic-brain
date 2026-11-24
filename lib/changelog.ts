@@ -20,7 +20,7 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-24",
-    title: "Self-healing memory, and a Replay that loops",
+    title: "Self-healing memory, and a Live picture that never stops",
     changes: [
       "Search results say how fresh a memory is: fresh, due, disputed or stale.",
       "Business facts come back to a person after a while: Is this still true? Yes, No or Not sure.",
@@ -31,6 +31,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Old decisions and standards start their check clock at the upgrade, so nothing is due on day one.",
       "An agent's keep no longer takes back a person's No on a business fact.",
       "The Replay on the Live page starts again when it reaches the end, until you pause it.",
+      "The Live picture no longer stops: it plays the latest beats again and again.",
+      "On the Live page each beat pops up as a note beside its dot, with the memory's title.",
+      "The Live numbers are coloured circles on the brain now. The boxes under the picture are gone.",
       "The line under the Live title is shorter: The brain at work over the last 24 hours.",
     ],
   },
