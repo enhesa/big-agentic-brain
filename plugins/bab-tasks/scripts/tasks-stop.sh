@@ -127,10 +127,10 @@ verdict=$(awk '
 
 case "$verdict" in
   block)
-    printf '%s\n' '{"decision":"block","reason":"BAB Tasks: this turn made tool calls but did not publish to BAB Tasks. Publish or patch your initiative now with bab_tasks: every remaining step as a task, every open question under questions, and a worked line. If the person asked you to leave BAB Tasks alone, or the bab_tasks tool is not available, say so in one line and stop; this hook then stays quiet for the session."}'
+    printf '%s\n' '{"decision":"block","reason":"BAB Tasks: this turn made tool calls but did not publish to BAB Tasks. Publish or patch your initiative now with bab_tasks: every remaining step as a task, every open question under questions, and a worked line. If the person asked you to leave BAB Tasks alone, or the bab_tasks tool is not available, say so in one line and stop; this hook then stays quiet for the session. Then repeat your full answer after the publish, so it is the last text the person sees; never point back to an earlier message."}'
     ;;
   stale)
-    printf '%s\n' '{"decision":"block","reason":"BAB Tasks: you published early in this turn but kept working. Patch your initiative now with bab_tasks so it shows where things stand: task statuses, remaining steps, open questions, and a worked line."}'
+    printf '%s\n' '{"decision":"block","reason":"BAB Tasks: you published early in this turn but kept working. Patch your initiative now with bab_tasks so it shows where things stand: task statuses, remaining steps, open questions, and a worked line. Then repeat your full answer after the publish, so it is the last text the person sees; never point back to an earlier message."}'
     ;;
 esac
 exit 0

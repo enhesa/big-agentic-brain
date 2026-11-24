@@ -39,6 +39,8 @@ expect() {
   case "$out" in *'kept working'*) got=stale ;; *'"decision":"block"'*) got=block ;; esac
   if [ "$code" -ne 0 ]; then
     echo "FAIL $1: exit $code"; fails=$((fails + 1))
+  elif [ "$2" != pass ] && case "$out" in *'Then repeat your full answer after the publish, so it is the last text the person sees; never point back to an earlier message."}') false ;; *) true ;; esac; then
+    echo "FAIL $1: a block reason must end with the repeat-answer sentence, got: $out"; fails=$((fails + 1))
   elif [ "$got" != "$2" ]; then
     echo "FAIL $1: expected $2, got $got ($out)"; fails=$((fails + 1))
   elif [ "$got" = pass ] && [ -n "$out" ]; then
