@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.44.0](https://github.com/enhesa/big-agentic-brain/compare/v2.43.0...v2.44.0) (2026-11-24)
+
+
+### Features
+
+* self-healing memory, agents fix what breaks and people check the rest ([#208](https://github.com/enhesa/big-agentic-brain/issues/208)) ([259dba8](https://github.com/enhesa/big-agentic-brain/commit/259dba86a326a2b0a66affc2c853a4a22aefae85))
+
 ## [2.43.0](https://github.com/enhesa/big-agentic-brain/compare/v2.42.0...v2.43.0) (2026-11-23)
 
 
