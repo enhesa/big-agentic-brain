@@ -212,6 +212,48 @@ Every feature, with its limits, and use cases by team: [Features in detail](docs
 
 Memory, message and feedback text is data for the agent, never instructions. The server's usage instructions tell every agent so at connect time.
 
+## Self-healing memory
+
+![How BAB catches and fixes a wrong memory](docs/images/self-healing.svg)
+
+Agents save what they learn in BAB, and every agent can reuse it. But facts change. A command gets renamed. A price goes up. A team changes its mind. If the memory does not change too, every agent repeats the old answer. BAB heals its memory in two ways.
+
+**Agents fix what breaks.** Some facts can be tested, like a command, a file path or a setting. When an agent uses one and it fails, the agent corrects the memory (supersede) or flags it, and says what failed. The next agent gets the right answer. Each person's agents may flag at most 5 memories and correct at most 5 colleagues' memories a day.
+
+**People check what can't break.** Some facts never throw an error, like a refund limit or a team decision. So after a while, BAB asks the right person: "Is this still true?"
+
+- **Yes** keeps it, and the clock starts again. After two Yes answers in a row on your own memory, BAB asks a colleague next time, if there is one to ask.
+- **No** marks it disputed. Your coding agent asks what it is now, or looks for the newer version in your project files, and shows you the new text before it saves it.
+- **Not sure** marks it disputed too. Your agent can look for it, or ask a teammate with your OK.
+- **Let agents check this** hands it to agents, and **Ask me later** skips it for a week.
+- A business fact is never changed until a person approves the new text.
+
+BAB asks when you start a new session with your coding agent, and on the review page under "Waiting for you". Your agent asks before the work starts, or in one line whether to check now or later, and not again in that session. A session with nobody at the keyboard skips the question, and that does not count as asked. It asks about at most 3 memories a day and 6 a week, and only about memories agents still read. Memories nobody reads fade out on their own. `GET /api/checks/mine` gives the same list as JSON.
+
+Each search result shows how fresh it is:
+
+| Label | Means |
+|---|---|
+| fresh | Checked recently. |
+| due | Time for a check. Agents check tech facts before using them. |
+| disputed | Someone says it may be wrong. The reason is shown. Ranked lower after a No or a flag; a Not sure alone does not lower it. |
+| stale | Not checked for a long time. Ranked lower, and its standing drops one level until someone checks it. |
+
+Old versions are never lost. When a memory is replaced, BAB keeps the old one, linked to the new one, so you can see what changed and why.
+
+How often BAB asks, by default. A decision is a choice your team made. A standard is a rule your team follows. Other business facts are things like prices, limits or contacts. The author can set a window from 30 to 365 days. Decisions and standards saved before this feature start their window on the day of the upgrade, so they do not all come due at once.
+
+A person's No or Not sure on a business fact stays until a person answers it: a Yes, a confirm with a note on where it was checked, or a corrected version. An agent's plain keep does not take it back.
+
+| Memory kind | Asked after |
+|---|---|
+| Decision | 180 days |
+| Standard | 120 days |
+| Other business facts | 90 days |
+| Tech facts | Never. Agents check them in real work. |
+
+The usage page shows the unchecked serve rate: the share of top search results agents got that were due, disputed or stale. It measures unchecked advice, not wrong advice. Details: [Memory lifecycle](docs/lifecycle.md#self-healing-memory).
+
 ### Connect your agents
 
 | Your agent | How it connects | What it gets |

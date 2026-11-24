@@ -3,6 +3,8 @@ import { getDb } from "./db";
 import { parseDbTime } from "./dates";
 import { verifyDueIds } from "./swarm-gc";
 import type { LearningKind, LearningRow } from "./types";
+import { readEvidence, type FlagEvidence } from "./evidence";
+import { flagAnswerSql, freshnessFor } from "./freshness";
 
 /**
  * Explicit, auditable validation of memories (docs/spec.md "Trust labels and validation history").
@@ -20,7 +22,22 @@ import type { LearningKind, LearningRow } from "./types";
  * This module imports no lib module that writes learnings, so lib/learnings.ts can import it.
  */
 
-export const TRUST_EVENT_KINDS = ["confirm", "flag", "keep", "restore", "retire", "supersede", "archive"] as const;
+export const TRUST_EVENT_KINDS = [
+  "confirm",
+  "flag",
+  "keep",
+  "restore",
+  "retire",
+  "supersede",
+  "archive",
+  // Self-healing memory (lib/checks.ts): a person's answer to "Is this still true?", and a change
+  // of who checks it. A non-author Yes is stored as a confirm, so recheck_yes is the author's own.
+  "recheck_yes",
+  "recheck_no",
+  "recheck_unsure",
+  "recheck_agent",
+  "check_by_changed",
+] as const;
 export type TrustEventKind = (typeof TRUST_EVENT_KINDS)[number];
 
 /** The newest events a memory page and GET /api/learnings/:id return. */
@@ -39,10 +56,12 @@ export function recordTrustEvent(
     authorId: string;
     note?: string | null;
     relatedId?: string | null;
+    /** Structured evidence on a flag or a correction (lib/evidence.ts), already validated and redacted. */
+    evidence?: FlagEvidence | null;
   },
 ): void {
   db.prepare(
-    "INSERT INTO trust_events (learning_id, actor_id, kind, by_author, note, related_id) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO trust_events (learning_id, actor_id, kind, by_author, note, related_id, evidence) VALUES (?, ?, ?, ?, ?, ?, ?)",
   ).run(
     e.learningId,
     e.actorId,
@@ -50,6 +69,7 @@ export function recordTrustEvent(
     e.actorId.toLowerCase() === e.authorId.toLowerCase() ? 1 : 0,
     e.note ?? null,
     e.relatedId ?? null,
+    e.evidence ? JSON.stringify(e.evidence) : null,
   );
 }
 
@@ -65,6 +85,8 @@ export interface TrustEvent {
   at: string;
   /** Copied from older records by migration v58: the date is the newest one those records kept. */
   backfilled?: true;
+  /** Structured evidence on a flag or a correction: failure, tried, saw, where. */
+  evidence?: FlagEvidence;
 }
 
 /**
@@ -77,7 +99,7 @@ export function trustHistory(learningId: string, limit: number = TRUST_HISTORY_L
   if (!row || row.status === "deleted") return [];
   const rows = db
     .prepare(
-      `SELECT t.kind AS kind, t.by_author AS byAuthor, t.note AS note, t.at AS at, t.backfilled AS backfilled,
+      `SELECT t.kind AS kind, t.by_author AS byAuthor, t.note AS note, t.at AS at, t.backfilled AS backfilled, t.evidence AS evidence,
               t.related_id AS relatedId, r.title AS relatedTitle, r.status AS relatedStatus,
               COALESCE(u.name, t.actor_id) AS actorName
        FROM trust_events t
@@ -92,6 +114,7 @@ export function trustHistory(learningId: string, limit: number = TRUST_HISTORY_L
     note: string | null;
     at: string;
     backfilled: number;
+    evidence: string | null;
     relatedId: string | null;
     relatedTitle: string | null;
     relatedStatus: string | null;
@@ -107,14 +130,16 @@ export function trustHistory(learningId: string, limit: number = TRUST_HISTORY_L
       : {}),
     at: r.at,
     ...(r.backfilled === 1 ? { backfilled: true as const } : {}),
+    ...(readEvidence(r.evidence) ? { evidence: readEvidence(r.evidence)! } : {}),
   }));
 }
 
 export interface TrustSummary {
   /**
-   * Distinct people whose flag no later check answered: a confirm, keep or restore by someone other
-   * than the author after the flag (a tie in the same second counts as before, like swarm-gc). The
-   * flags stay on record in the history either way.
+   * Distinct people whose flag no later check answered: a confirm, keep or restore after the flag
+   * by someone other than the author, or by a maintainer (flagAnswerSql in lib/freshness.ts; a tie
+   * in the same second counts as before, like swarm-gc). The flags stay on record in the history
+   * either way.
    */
   flags: number;
   /** The newest of those open flags. */
@@ -170,7 +195,8 @@ export function trustTag(s: Pick<TrustSummary, "flags" | "unchecked" | "verify">
 
 /**
  * The trust summary of each row, in three queries however many rows there are (the grouped votes,
- * the flags, and verifyDueIds). Votes by the author never count as a check.
+ * the flags, and verifyDueIds). Votes by the author never count as a check; a maintainer's keep or
+ * restore of their own memory still answers a flag on it (flagAnswerSql in lib/freshness.ts).
  */
 export function trustFor(
   rows: Array<TrustRow>,
@@ -183,13 +209,14 @@ export function trustFor(
   const marks = ids.map(() => "?").join(",");
   const votes = db
     .prepare(
-      `SELECT v.learning_id AS id, v.kind AS kind, COUNT(DISTINCT lower(v.voter_id)) AS n, MAX(v.created_at) AS last
+      `SELECT v.learning_id AS id, v.kind AS kind, (lower(v.voter_id) = lower(l.author_id)) AS own,
+              COUNT(DISTINCT lower(v.voter_id)) AS n, MAX(v.created_at) AS last
        FROM votes v JOIN learnings l ON l.id = v.learning_id
        WHERE v.learning_id IN (${marks}) AND v.kind IN ('confirm', 'keep', 'restore')
-         AND lower(v.voter_id) <> lower(l.author_id)
-       GROUP BY v.learning_id, v.kind`,
+         AND ${flagAnswerSql("v", "l")}
+       GROUP BY v.learning_id, v.kind, own`,
     )
-    .all(...ids) as Array<{ id: string; kind: string; n: number | bigint; last: string }>;
+    .all(...ids) as Array<{ id: string; kind: string; own: number | bigint; n: number | bigint; last: string }>;
   // One row per flag (votes keeps one per person), so each can be weighed against the newest check.
   const flagRows = db
     .prepare(`SELECT learning_id AS id, lower(voter_id) AS voter, created_at AS at FROM votes WHERE learning_id IN (${marks}) AND kind = 'flag'`)
@@ -200,7 +227,12 @@ export function trustFor(
     flagsBy.get(f.id)!.push(f);
   }
   const by = new Map<string, Map<string, { n: number; last: string }>>();
+  // The newest check that answers a flag (flagAnswerSql): any of the checks below, or a
+  // maintainer's keep or restore of their own memory, which is not a check for the label.
+  const answeredAt = new Map<string, string>();
   for (const v of votes) {
+    if (v.last > (answeredAt.get(v.id) ?? "")) answeredAt.set(v.id, v.last);
+    if (Number(v.own) === 1) continue;
     if (!by.has(v.id)) by.set(v.id, new Map());
     by.get(v.id)!.set(v.kind, { n: Number(v.n), last: v.last });
   }
@@ -210,7 +242,8 @@ export function trustFor(
     const checks = ["confirm", "keep", "restore"].map((kind) => k.get(kind)?.last).filter((x): x is string => !!x);
     const lastCheckedAt = checks.length > 0 ? checks.sort().at(-1)! : null;
     const flags = flagsBy.get(r.id) ?? [];
-    const open = flags.filter((f) => lastCheckedAt === null || f.at > lastCheckedAt);
+    const flagsAnsweredAt = answeredAt.get(r.id) ?? null;
+    const open = flags.filter((f) => flagsAnsweredAt === null || f.at > flagsAnsweredAt);
     const openVoters = new Set(open.map((f) => f.voter));
     const answered = new Set(flags.map((f) => f.voter).filter((v) => !openVoters.has(v)));
     const base = {
@@ -246,7 +279,7 @@ export interface ReviewItem {
 export interface ReviewQueue {
   /** Active memories with a flag no later check answered, newest flag first. */
   flagged: ReviewItem[];
-  /** Active memories due a check (over 90 days, nobody else checked them lately), oldest first. */
+  /** Active memories due a check (a tech fact over 90 days that nobody else checked lately, or a business fact past its window), oldest first. */
   due: ReviewItem[];
   /** Active memories nobody but the author has checked, not already listed above, newest first. */
   unchecked: ReviewItem[];
@@ -287,6 +320,8 @@ export function reviewQueue(limit: number = REVIEW_QUEUE_LIMIT, now: number = Da
     )
     .all(limit * 3) as unknown as Row[];
   const trust = trustFor([...flaggedRows, ...oldRows, ...recentRows], now);
+  // A business fact past its window is due a person's check, not a verify (lib/freshness.ts).
+  const fresh = freshnessFor(oldRows.map((r) => r.id), now);
   const item = (r: Row): ReviewItem => ({
     id: r.id,
     title: r.title,
@@ -298,7 +333,7 @@ export function reviewQueue(limit: number = REVIEW_QUEUE_LIMIT, now: number = Da
   });
   const flagged = flaggedRows.filter((r) => trust.get(r.id)!.flags > 0).slice(0, limit).map(item);
   const shown = new Set(flagged.map((i) => i.id));
-  const due = oldRows.filter((r) => !shown.has(r.id) && trust.get(r.id)!.verify).slice(0, limit).map(item);
+  const due = oldRows.filter((r) => !shown.has(r.id) && (trust.get(r.id)!.verify || fresh.get(r.id)?.checkDue)).slice(0, limit).map(item);
   for (const i of due) shown.add(i.id);
   const unchecked = recentRows.filter((r) => !shown.has(r.id)).slice(0, limit).map(item);
   return { flagged, due, unchecked };

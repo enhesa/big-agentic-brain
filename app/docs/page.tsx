@@ -405,6 +405,7 @@ export default async function DocsPage() {
             { chip: "confirm", text: "I checked it: where, when" },
             { chip: "kudos", text: "you praised it" },
             { chip: "flag", text: "it is wrong: evidence" },
+            { chip: "recheck", text: "you say: still true?" },
             { chip: "comment", text: "context, also on the web" },
           ]}
           footer={{ tone: "standing", text: "Standing: colleagues' reactions", levels: ["strong", "fair", "weak"] }}

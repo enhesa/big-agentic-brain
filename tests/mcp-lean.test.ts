@@ -151,5 +151,7 @@ describe("tool description size", () => {
 // shorter bab_remind field texts (138 fewer): the list is 24486.
 // Group messages (2026-11-16): bab_send's `to` takes a string or a list, and its description says a reply
 // reaches every participant. 130 characters, the limit and errors left to the server: the list is 24616.
-const CEILING_FULL = 24621;
-const CEILING_LEAN = 11200;
+// Self-healing memory (2026-11-24) adds recheck, check_by, checkBy, checkEveryDays, evidence and
+// waitingForMe to the existing tools, no new tool. Full is 25979; leave a small margin.
+const CEILING_FULL = 26000;
+const CEILING_LEAN = 12600;

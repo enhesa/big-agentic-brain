@@ -1351,6 +1351,17 @@
   line-height: 1.3;
 }
 
+/* The exact text of a memory BAB asks about: kept as written, line breaks included. */
+.checkText {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--sand);
+  border-radius: var(--sheet-radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 .reviewForm {
   display: grid;
   gap: 8px;

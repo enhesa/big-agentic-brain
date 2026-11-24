@@ -516,18 +516,100 @@ check has a record (`lib/trust.ts`).
   Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
   `checkUiRateLimit`). They call `confirm`, `keepLearning` and `retire` with `via: "ui"`, so the
   agent rules hold: a note is required, and nobody confirms their own memory (the button is hidden).
-  Maintainers only (`BAB_MAINTAINERS`); anyone else gets a 404, like `/admin`. The page is optional:
-  flags, sweeps and labels work without it.
+  Maintainers see these sections; every signed-in person also sees "Waiting for you" (see
+  "Self-healing memory"), and someone not signed in gets a 404. The page is optional: flags, sweeps
+  and labels work without it.
+
+## Self-healing memory
+
+Agents fix what breaks; people check what can't break (`lib/freshness.ts`, `lib/checks.ts`,
+`lib/evidence.ts`, migration v60). It reuses the verify mark, the non-author confirm, flags,
+supersede and the trust history above.
+
+- *Who checks.* `learnings.check_by` is `agent` (a tech fact a test can prove: a command, a path, a
+  setting) or `person` (a business fact: a price, a policy, a decision). `bab_learn` and `POST
+  /api/learnings` take `checkBy`; the default is `person` for a `decision` or `standard` and `agent`
+  otherwise, and a one-entry correction of the same kind inherits it. Migration v60 sets `person` on
+  existing decisions and standards and starts their clock at the upgrade (`checked_at` is the
+  migration time, set only by the run that adds the columns), so no old memory is due on day one.
+  `checkEveryDays` (30 to 365, person memories only, inherited the same way) overrides the window.
+  `bab_react check_by` (`checkBy`: `agent` or `person`) changes it later; someone other than the
+  author gives a note. Audited as `check_by_changed` in the history.
+- *Windows.* A `person` memory is due when its last check is older than its window: `decision` 180
+  days, `standard` 120, `learning` and `practice` 90 (`PERSON_CHECK_DAYS`). An `agent` memory keeps
+  the 90-day `verify` mark and is never asked about. The last check is the newest of the creation
+  time, `checked_at` (set by a non-author confirm, keep or restore and by an author's Yes; migration
+  v60 backfills it from votes) and a non-author check vote.
+- *States.* Search results carry `freshness`: `fresh`, `due` (agent: `verify`; person: past its
+  window), `disputed` (an open flag, or a No or Not sure answer that nothing answered yet) or
+  `stale` (disputed for more than 14 days, or a person memory whose first ask after its last check
+  is more than 30 days old and unanswered). Results also carry `checkBy`, `checkDue` and a plain
+  `freshnessWarning`; any `checkDue` result adds `checkDueHint`. An open flag, a No and a stale
+  memory rank x0.6; a Not sure has no rank penalty until it is stale. One rule says when a flag is
+  answered (`flagAnswerSql`), for freshness, the rank and `trustFor`: a later confirm, keep or
+  restore by someone other than the author, or by a maintainer. So a maintainer's keep on their own
+  flagged standard, which already takes it off the maintainer queue (there only a maintainer's
+  answer counts), also ends its dispute. A live memory that is not active shows as fresh. A stale
+  memory also drops
+  one standing level (strong to fair, fair to weak, weak stays weak; the reason says "stale"),
+  and gets it back once a check clears the state (see "Ranking").
+- *Recheck.* `bab_react recheck` and `POST /api/learnings/:id/recheck` take `answer`: `yes`, `no`,
+  `unsure`, `agent` or `later`, and an optional `note` (300 characters, redacted). A non-author Yes
+  is a confirm (note required). An author's Yes restarts the clock without points or a confirm vote
+  and leaves flags open; on a `person` memory at most 2 in a row (`AUTHOR_YES_STREAK_MAX`, then a
+  409 until someone else checks it), and on an `agent` memory it needs a note. The limit holds only
+  while someone else can be asked (see "Who is asked"): on a single-person install, or with no
+  contact and no recent user for the memory, the author keeps checking it. No sets
+  `dispute_kind = no`; Not sure sets `unsure` unless a No is open. A later non-author confirm,
+  restore or Yes, a correction or a retire clears the dispute. A non-author keep clears it on an
+  `agent` memory only: on a `person` memory a keep needs no note and agents give it on their own,
+  so it restarts the clock and leaves the No or Not sure open. `agent` hands the memory to agents
+  (`check_by`); `later` only records the skip, once per person and memory in 7 days. Each answer
+  lands in the history (`recheck_yes`, `recheck_no`,
+  `recheck_unsure`, `recheck_agent`) and the audit log (`recheck`).
+- *Who is asked.* `waitingFor(user)` lists due person memories still in use (read on 2 or more days,
+  the last read inside 90 days, not disputed), pinned first, then decisions, standards and the most
+  read (at most 300; each memory's own window and the dispute tests apply before that cut, so
+  memories that are not due never crowd out one that is), and routes each one to one person: the author, else an area contact whose area is one of its
+  tags, else someone who marked it helpful, cited or confirmed it in the last 60 days. That person
+  must have used BAB in the last 30 days and not have passed on it (2 Ask me later, or a hook ask
+  unanswered for 14 days); an author with 2 Yes answers in a row is skipped, unless nobody else is
+  left. The list also holds the
+  memories the person answered No or Not sure that still wait for a fix. `bab_search waitingForMe:
+  true` and `GET /api/checks/mine` return it (title, kind, the first 5 lines of the text, the link,
+  why it is due); the review page shows it as "Waiting for you", with Yes, No, Not sure, Let agents
+  check this and Ask me later buttons that post to `POST /memory/[id]/recheck`.
+- *Hook.* Once per session (`session_nudges` kind `checks`) and at most once per UTC day per person,
+  the hook names up to 3 due memories (6 a week, none asked again within 7 days), titles and links
+  only, and tells the agent to call `bab_search waitingForMe` and ask, or to skip it when no person
+  is in the session. Each named memory is a `check_asks` row with `via = nudge` (one open row per
+  person and memory). It becomes a delivered ask (`via = hook`, `delivered_at` now) when the agent
+  fetches `bab_search waitingForMe` or reports an answer (`markChecksDelivered`). Only delivered
+  asks count for the daily and weekly limits and the answer rate and start the 14-day pass-on and
+  the 30-day stale clocks, so an unattended session uses up no ask and the next session names the
+  same memories again. `GET /api/checks/mine` is a feed and marks nothing.
+  The author of a memory a colleague corrected hears it once (`superseded:<id>:<event>`).
+- *Agent limits.* A flag and a supersede of someone else's memory may carry `evidence` (`failure`:
+  `command_failed`, `path_missing`, `api_error`, `wrong_output`, `contradicts_code` or
+  `contradicts_memory`; `tried`, `saw`, `where`: 300 characters each, redacted), stored on the trust
+  event and shown in the history (a flag repeated with the same evidence adds no row). One person
+  may place at most 5 flags and 5 supersedes of other
+  people's memories in 24 hours (`DAILY_FLAG_MAX`, `DAILY_SUPERSEDE_MAX`, a 429), on every surface.
+- *Metric.* Each search with text records its top 3 results by state in `freshness_daily` (a
+  memory disputed in the last 7 days counts by its state before). `/usage` shows the unchecked
+  serve rate (due, disputed or stale over served, last 30 days) and the share of hook asks answered
+  within 7 days. It measures unchecked advice, not wrong advice. Time to fix, catches by agents
+  versus people and spot checks are not measured. No per-person read log, no email.
 
 ## Ranking
 
-Search order is built in `search()` (`lib/learnings.ts`, `RANK_EXPRESSION`): bm25 relevance (title 5, tags 3, aliases 3, body 1)
+Search order is built in `search()` (`lib/learnings.ts`, `rankExpression`): bm25 relevance (title 5, tags 3, aliases 3, body 1)
 multiplied by a bounded vote boost (`score` clamped to -5..10, 5% per point) and a recency boost (up to +50% for a new
 memory, about half of that at 90 days). The boosts multiply, so relevance keeps the order and votes and age only separate
 close matches. One vote per identity; the author's own votes are refused. Author trust, a citation signal, a time-decayed
 score and a nightly recompute were planned and never built. Score and staleness stay separate axes and are both shown.
-A memory with an open flag (a flag newer than the newest check by someone other than the author, the same rule as
-`trustFor`) is multiplied by `OPEN_FLAG_RANK_FACTOR` (0.6): it still matches, but ranks below an equal match, so an
+A memory with an open flag (a flag newer than the newest check by someone other than the author or by a maintainer,
+the same rule as `trustFor`) is multiplied by `OPEN_FLAG_RANK_FACTOR` (0.6): it still matches, but ranks below an equal match, so an
 agent that reads only the top results meets it less. A later check answers the flag and lifts the penalty. Unchecked
 memories are not demoted: they are most of the corpus, and recency already favours new ones.
 
@@ -546,7 +628,9 @@ search rank expression does not change. `points = 2*confirm + helpful + 2*kudos 
 3*flag`, plus 2 for a Confluence mirror whose author is a maintainer (`BAB_MAINTAINERS`: `source`
 is a claim any author can write, and mirrors come from the owner's seeding run, so anyone else's
 `confluence` entry gets no bonus). `strong` at 6 or more, `fair` at 2 to 5, `weak` below 2. If the
-newest of `created_at` and the last confirm is over 180 days old, standing drops one level.
+newest of `created_at` and the last confirm is over 180 days old, standing drops one level. A
+memory whose freshness is `stale` (see "Self-healing memory") drops one level too; both together
+still drop one level, and `weak` is the floor.
 A correction that replaces exactly one entry inherits part of that entry's standing: half of
 the old entry's positive points, rounded down, at most 4 (`carryOver` in `lib/standing.ts`;
 negative points never carry, the Confluence bonus is not part of it, and a consolidation of

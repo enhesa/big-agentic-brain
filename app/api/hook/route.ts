@@ -26,6 +26,7 @@ import { isMaintainer, maintainerFeedbackNudge } from "@/lib/feedback";
 import { publicOrigin } from "@/lib/origin";
 import { commentedOwnMemories } from "@/lib/memory-comments";
 import { recentDeviceNotices } from "@/lib/devices";
+import { takeHookChecks } from "@/lib/checks";
 
 export const dynamic = "force-dynamic";
 
@@ -359,6 +360,8 @@ export async function POST(req: Request) {
       ...digest.lines,
       ...downvotedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...retiredNudgeFor(owner, sessionId, publicOrigin(req.headers)),
+      ...supersededNudgeFor(owner, sessionId, publicOrigin(req.headers)),
+      ...checksNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...commentedNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...newDeviceNudgeFor(owner, sessionId, publicOrigin(req.headers)),
       ...due.lines,
@@ -567,6 +570,78 @@ function retiredNudgeFor(ownerId: string, sessionId: string, origin: string): st
   );
 }
 
+/** How long a correction by someone else is worth telling the author about. */
+const SUPERSEDE_NUDGE_DAYS = 7;
+/** At most this many correction lines in one prompt; the rest follow on the next prompts. */
+const SUPERSEDE_NUDGE_MAX = 3;
+
+/**
+ * Author nudge after a correction (self-healing memory, docs/spec.md): when a colleague's agent
+ * replaced one of your memories with a correction in the last SUPERSEDE_NUDGE_DAYS days, your
+ * session hears it once, with the titles and the link to the new version, so a wrong fix does not
+ * stand unseen. retiredNudgeFor skips superseded memories, so this is its own line. Who corrected
+ * it and why stay behind the link (this route is unauthenticated, see projectNudgeFor). Dedup is
+ * per owner, across sessions, in session_learning_deliveries, keyed `superseded:<id>:<event id>`.
+ */
+function supersededNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT l.id AS id, l.title AS title, t.id AS eventId, t.related_id AS newId
+       FROM trust_events t JOIN learnings l ON l.id = t.learning_id
+       WHERE l.author_id = ? AND t.kind = 'supersede' AND t.by_author = 0 AND t.related_id IS NOT NULL
+         AND t.at > datetime('now', ?)
+       ORDER BY t.id`,
+    )
+    .all(ownerId, `-${SUPERSEDE_NUDGE_DAYS} days`) as Array<{ id: string; title: string; eventId: number | bigint; newId: string }>;
+  if (rows.length === 0) return [];
+  const told = new Set(
+    (
+      db
+        .prepare(
+          `SELECT sld.learning_id AS key FROM session_learning_deliveries sld
+           JOIN sessions s ON s.id = sld.session_id
+           WHERE s.owner_id = ? AND sld.learning_id LIKE 'superseded:%'`,
+        )
+        .all(ownerId) as Array<{ key: string }>
+    ).map((r) => r.key),
+  );
+  const fresh = rows
+    .map((r) => ({ ...r, key: `superseded:${r.id}:${r.eventId}` }))
+    .filter((r) => !told.has(r.key))
+    .slice(0, SUPERSEDE_NUDGE_MAX);
+  const record = db.prepare("INSERT OR IGNORE INTO session_learning_deliveries (session_id, learning_id) VALUES (?, ?)");
+  for (const r of fresh) record.run(sessionId, r.key);
+  return fresh.map(
+    (r) =>
+      `BAB: a colleague's agent replaced your memory "${capTitle(r.title).replace(/"/g, "'")}" with a correction (${origin}/memory/${r.newId}). ` +
+      "If the correction is wrong, flag it with your evidence, or correct it again with bab_learn supersedes.",
+  );
+}
+
+/**
+ * Self-healing memory (lib/checks.ts): business facts due a person's check, at the start of a
+ * session only (once per session, session_nudges kind 'checks'), at most 3, once a day and 6 a
+ * week. Titles and links only: this route is unauthenticated (see projectNudgeFor), so the agent
+ * fetches each memory's exact text with bab_search waitingForMe over its signed-in connection,
+ * asks the user, and records each answer with bab_react recheck. takeHookChecks records which
+ * memories were named; they count as asked once the agent fetches the texts, so a session with no
+ * person in it (told to skip) starts no clock.
+ */
+function checksNudgeFor(ownerId: string, sessionId: string, origin: string): string[] {
+  if (nudgedKind(sessionId, "checks")) return [];
+  recordNudge(sessionId, "checks");
+  const checks = takeHookChecks(ownerId);
+  if (checks.length === 0) return [];
+  const list = checks.map((c) => `"${capTitle(c.title).replace(/"/g, "'")}" (${origin}/memory/${c.id})`).join(", ");
+  return [
+    `BAB: ${checks.length === 1 ? "1 memory needs" : `${checks.length} memories need`} the user's check, Is this still true?: ${list}. ` +
+      "No person in this session (a scheduled or unattended run): skip this. " +
+      "Unless the user asked for urgent work, ask before you start (else ask in one line whether to check now or later). " +
+      "Call bab_search with waitingForMe: true for the exact text, show it, offer Yes, No, Not sure, Let agents check this, Ask me later, and record each answer with bab_react recheck.",
+  ];
+}
+
 /** How far back a colleague's comment is worth telling the author about. */
 const COMMENT_NUDGE_DAYS = 7;
 /** At most this many comment lines in one prompt; the rest follow on the next prompts. */
@@ -702,7 +777,7 @@ function flaggedStandardsNudgeFor(ownerId: string, sessionId: string): string[] 
   ];
 }
 
-function recordNudge(sessionId: string, kind: "capture" | "project" | "flagged" | "rules" | `seen:${string}`): void {
+function recordNudge(sessionId: string, kind: "capture" | "project" | "flagged" | "rules" | "checks" | `seen:${string}`): void {
   getDb().prepare("INSERT OR IGNORE INTO session_nudges (session_id, kind) VALUES (?, ?)").run(sessionId, kind);
 }
 

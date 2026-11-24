@@ -114,11 +114,14 @@ export function downvotedLive(db: DatabaseSync, authorId?: string): DownvotedMem
 }
 
 /**
- * The ids among `rows` that search marks `verify: true`: live, created more than VERIFY_AFTER_DAYS
- * ago, and with no confirm, keep or restore by someone other than the author in the last
- * VERIFY_AFTER_DAYS days. A correction is a
- * new memory (supersede stores a new row), so its age starts again and it never qualifies. One
- * grouped query however many rows there are. `now` is injectable for tests.
+ * The ids among `rows` that search marks `verify: true`: live tech facts (check_by agent, see
+ * lib/freshness.ts) created more than VERIFY_AFTER_DAYS ago, with no confirm, keep or restore by
+ * someone other than the author in the last VERIFY_AFTER_DAYS days, and no recheck in that time
+ * (learnings.checked_at: a confirm, or the author's own `recheck yes` with evidence, which resets
+ * the clock but adds no points). A business fact (check_by person) is never marked verify: it is
+ * due a person's check instead (checkDue). A correction is a new memory (supersede stores a new
+ * row), so its age starts again and it never qualifies. Two grouped queries however many rows
+ * there are. `now` is injectable for tests.
  */
 export function verifyDueIds(
   db: DatabaseSync,
@@ -145,6 +148,11 @@ export function verifyDueIds(
       )
       .all(...chunk, since) as Array<{ id: string }>;
     for (const r of recent) checked.add(r.id);
+    // A business fact, or a recheck inside the window: not verify.
+    const skip = db
+      .prepare(`SELECT id FROM learnings WHERE id IN (${marks}) AND (check_by = 'person' OR checked_at >= ?)`)
+      .all(...chunk, since) as Array<{ id: string }>;
+    for (const r of skip) checked.add(r.id);
   }
   for (const id of ids) if (!checked.has(id)) due.add(id);
   return due;

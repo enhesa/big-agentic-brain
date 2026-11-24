@@ -108,6 +108,10 @@ async function makeOld(id: string, days: number) {
 async function ageVotes(id: string, kind: string, days: number) {
   const { getDb } = await import("../lib/db");
   getDb().prepare("UPDATE votes SET created_at = datetime('now', ?) WHERE learning_id = ? AND kind = ?").run(`-${days} days`, id, kind);
+  // A check (confirm, keep, restore) also starts the memory's check clock (learnings.checked_at); move it back with the vote.
+  if (["confirm", "keep", "restore"].includes(kind)) {
+    getDb().prepare("UPDATE learnings SET checked_at = datetime('now', ?) WHERE id = ?").run(`-${days} days`, id);
+  }
 }
 
 describe("not-helpful votes archive a memory no agent reads", () => {
