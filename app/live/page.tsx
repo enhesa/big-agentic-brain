@@ -32,7 +32,7 @@ export default async function LivePage() {
         <header className={styles.header}>
           <h1 className="page-title">Live</h1>
           <p className="page-lede">
-            The brain at work over the last {LIVE_WINDOW_HOURS} hours. The dots stand for the people whose agents were at work. Nobody is named.
+            {`The brain at work over the last ${LIVE_WINDOW_HOURS} hours`}
           </p>
         </header>
         <LiveBrain initial={brain} initialNow={now.toISOString()} dotsMax={LIVE_DOTS_MAX} windowHours={LIVE_WINDOW_HOURS} peopleFloor={LIVE_PEOPLE_FLOOR} />

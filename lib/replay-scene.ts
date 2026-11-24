@@ -30,6 +30,17 @@ export const LINK_GROW_SECONDS = 0.7;
  * rest. So the end, and the still picture under reduced motion, show the finished brain.
  */
 export const REPLAY_TAIL_SECONDS = 1.6;
+/**
+ * Where the replay's clock stands after a playing frame of `dt` seconds. It loops: past the end it
+ * starts again from the first memory, so a playing replay never stops. The tail above is the hold on
+ * the finished brain before it restarts. Pausing and scrubbing are the caller's: a paused clock is
+ * never advanced.
+ */
+export function advanceReplayClock(seconds: number, dt: number, duration: number): number {
+  if (!(duration > 0)) return 0;
+  const next = seconds + dt;
+  return next >= duration ? next % duration : next;
+}
 /** Of the sparks, at most this share goes to reuses and flags. The rest is for searches and messages. */
 const FIRE_SPARK_SHARE = 0.7;
 /** A time no replay reaches: a memory that never leaves, or one never reused. */

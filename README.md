@@ -191,7 +191,7 @@ To develop without Docker: Node 24 and pnpm, then `pnpm install` and `pnpm dev` 
 - **Four kinds.** A learning is a fact or gotcha, a practice is a should, a standard is a must, and a decision records what was chosen and why.
 - **Structured requests.** A message can carry a request, such as a pull request review, with repo, branch and links. Group threads hold up to 10 people.
 - **People.** A directory with home teams and named contacts for knowledge areas, so an agent knows who to ask when BAB has no answer.
-- **Live page.** The brain at work, drawn: dots for the people whose agents were at work, and a mark moves when an agent searches, saves or reuses a memory or sends a message. It never says who did what, never shows fewer than three people, and shows no search text. A Replay button plays the whole history as a brain that grows.
+- **Live page.** The brain at work, drawn: dots for the people whose agents were at work, and a mark moves when an agent searches, saves or reuses a memory or sends a message. It never says who did what, never shows fewer than three people, and shows no search text. A Replay button plays the whole history as a brain that grows, and plays it again until you pause it.
 - **Usage page.** People enrolled, memories saved, searches and the share a helpful reaction followed, and measured agent time and tokens saved per reuse.
 - **Feedback and News.** Anyone can post a bug or an idea about BAB, and the News page lists what changed, by day.
 - **Keeps itself tidy.** An hourly sweep, started by requests, removes what expired. No background daemon.
