@@ -1565,8 +1565,11 @@ every time.
   `LIVE_DOTS_MAX` (24), all alike. Each mark moves to a seat drawn by lot from the beat's id (`lib/live-picture.ts`). The
   page says so under the picture.
 - The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
-  to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Under `prefers-reduced-motion` nothing
-  moves. Everything the picture shows is also in the numbers and the "Latest" list under it.
+  to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Once every mark has finished, the picture waits
+  `LOOP_PAUSE_MS` (2.5 seconds) and plays those beats again, and again, so it never rests. A new beat plays
+  at once and the loop carries on after it. When the last hour was quiet it plays the latest beats of the
+  window. The loop waits while the tab is hidden or the Replay is open. Under `prefers-reduced-motion` nothing
+  moves and nothing loops. Everything the picture shows is also in the numbers and the "Latest" list under it.
 - The window is read as a range of audit row ids: the lowest id at or after the start of the people's window,
   which is earlier than the page's, bounds it
   (read from the index over `at`), and the two reads (the counts, the last beats) walk only the rows after

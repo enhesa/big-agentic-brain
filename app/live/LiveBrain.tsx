@@ -17,8 +17,19 @@ const EVENT_DEBOUNCE_MS = 400;
 /** On opening, the page plays again what happened in the last hour: at most this many beats. */
 export const REPLAY_MAX = 6;
 const REPLAY_WINDOW_MS = 3_600_000;
+/** When the picture has gone still, it plays the latest beats again after this pause, and so on. */
+export const LOOP_PAUSE_MS = 2500;
 /** Beats that arrive in one snapshot and are played. More than this would be a blur. */
 const PLAY_MAX = 12;
+/**
+ * The beats the picture plays again when it has gone still: what happened in the last hour, at most
+ * REPLAY_MAX, newest last. When the last hour was quiet, the latest beats of the window instead.
+ */
+export function loopBeats(beats: LiveBeat[], now: number): LiveBeat[] {
+  const recent = beats.filter((b) => now - Date.parse(b.at) < REPLAY_WINDOW_MS);
+  return (recent.length > 0 ? recent : beats).slice(-REPLAY_MAX);
+}
+
 /** Rows in the list under the picture. */
 export const LATEST_MAX = 12;
 
@@ -116,6 +127,26 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
     );
     timers.current.add(timer);
   }, []);
+
+  // The picture never rests: once every mark has finished, the latest beats play again after a pause.
+  // A snapshot that brings a new beat starts it on its own, and the loop carries on after it. Under
+  // reduced motion play() does nothing, so nothing loops. It waits while the tab is hidden or the
+  // Replay is open.
+  const latestBrain = useRef({ beats: initial.beats, now });
+  latestBrain.current = { beats: brain.beats, now };
+  const still = playing.length === 0;
+  useEffect(() => {
+    if (!still || replaying || brain.beats.length === 0) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      timer = setTimeout(() => {
+        if (document.hidden) return arm();
+        play(loopBeats(latestBrain.current.beats, latestBrain.current.now));
+      }, LOOP_PAUSE_MS);
+    };
+    arm();
+    return () => clearTimeout(timer);
+  }, [still, replaying, brain.beats.length, play]);
 
   useEffect(() => {
     const held = timers.current;

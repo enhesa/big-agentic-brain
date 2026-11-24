@@ -533,5 +533,24 @@ describe("where the page is told", () => {
     const { REPLAY_MAX, POLL_MS } = await import("../app/live/LiveBrain");
     expect(spec).toContain(`at most ${REPLAY_MAX} beats`);
     expect(spec).toContain(`every ${POLL_MS / 1000} seconds`);
+    const { LOOP_PAUSE_MS } = await import("../app/live/LiveBrain");
+    expect(spec).toContain(`\`LOOP_PAUSE_MS\` (${LOOP_PAUSE_MS / 1000} seconds)`);
+  });
+
+  it("loops the picture: the beats it plays again are the last hour, else the latest of the window", async () => {
+    const { loopBeats, REPLAY_MAX } = await import("../app/live/LiveBrain");
+    const now = Date.parse("2026-01-01T12:00:00Z");
+    const beat = (id: number, minutesAgo: number) => ({ id, kind: "search" as const, at: new Date(now - minutesAgo * 60_000).toISOString(), memory: null });
+    // Busy last hour: the newest REPLAY_MAX of it, oldest first, and nothing older.
+    const busy = [beat(1, 300), ...Array.from({ length: 9 }, (_, i) => beat(10 + i, 50 - i * 5))];
+    const played = loopBeats(busy, now);
+    expect(played).toHaveLength(REPLAY_MAX);
+    expect(played.map((b) => b.id)).toEqual(busy.slice(-REPLAY_MAX).map((b) => b.id));
+    expect(played.every((b) => now - Date.parse(b.at) < 3_600_000)).toBe(true);
+    // Quiet hour: it still has something to play, the latest beats of the window.
+    const quiet = [beat(1, 600), beat(2, 400), beat(3, 300)];
+    expect(loopBeats(quiet, now).map((b) => b.id)).toEqual([1, 2, 3]);
+    // No beats, nothing to loop.
+    expect(loopBeats([], now)).toEqual([]);
   });
 });

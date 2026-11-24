@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "The Replay loops",
     changes: [
       "The Replay on the Live page starts again when it reaches the end, until you pause it.",
+      "The Live picture no longer stops: it plays the latest beats again and again.",
       "The line under the Live title is shorter: The brain at work over the last 24 hours.",
     ],
   },
