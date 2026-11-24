@@ -1651,7 +1651,7 @@ every time.
 - The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
   to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Once every mark has finished, the picture waits
   `LOOP_PAUSE_MS` (1.5 seconds) and plays the last 12 beats again, oldest first and `LOOP_STAGGER_MS` (1.3 seconds)
-  apart, and again, so it never rests. A new beat plays at once: the loop's marks make way for it, and the loop carries on after it. The loop
+  apart, and again, so it never rests. A new beat plays at once: the marks of beats played again, on opening or by the loop, are cut off to make way for it, and the loop carries on after it. The loop
   waits while the tab is hidden or the Replay is open. Under `prefers-reduced-motion` nothing moves and
   nothing loops.
 - The picture says the numbers and the beats itself, with no boxes under it. Each count (searches, memories

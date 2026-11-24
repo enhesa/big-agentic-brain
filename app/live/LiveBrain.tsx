@@ -62,7 +62,7 @@ interface Playing {
   delay: number;
   /** Whether a note pops up for this beat. In a burst only some get one (spaceNotes). */
   note: boolean;
-  /** Played again by the loop, not new. A new beat takes the loop's marks away. */
+  /** Played again, on opening or by the loop: not new. A new beat takes these marks away. */
   loop: boolean;
 }
 
@@ -129,7 +129,7 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
     wasReplaying.current = replaying;
   }, [replaying]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
-  /** When the next note may start (spaceNotes). The loop only runs when nothing else plays, so it does not count. */
+  /** When the next note may start (spaceNotes). Only new beats count: beats played again make way for them. */
   const noteFreeAt = useRef(0);
 
   const play = useCallback((beats: LiveBeat[], stagger: number = STAGGER_MS, loop = false) => {
@@ -137,13 +137,13 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const started = Date.now();
     const marks = beats.slice(-PLAY_MAX).map((beat, i) => ({ key: nextKey.current++, beat, delay: i * stagger, loop }));
-    // The loop's beats are a note apart already. Anything else shares the page with the notes before it.
+    // Beats played again are a note apart already. New beats share the page with the new notes before them.
     const spaced = loop
       ? { noted: marks.map(() => true), freeAt: noteFreeAt.current }
       : spaceNotes(marks.map((m) => started + m.delay), noteFreeAt.current, LOOP_STAGGER_MS);
     noteFreeAt.current = spaced.freeAt;
     const batch: Playing[] = marks.map((m, i) => ({ ...m, note: spaced.noted[i] }));
-    // A new beat plays at once: the loop's marks make way for it, and the loop carries on after it.
+    // A new beat plays at once: the marks of beats played again make way for it, and the loop carries on after it.
     setPlaying((p) => [...(loop ? p : p.filter((b) => !b.loop)), ...batch]);
     const keys = new Set(batch.map((b) => b.key));
     const timer = setTimeout(
@@ -158,8 +158,8 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
 
   // The picture never rests: once every mark has finished, the latest beats play again after a pause.
   // A snapshot that brings a new beat starts it on its own, and the loop carries on after it. Under
-  // reduced motion play() does nothing, so nothing loops. It waits while the tab is hidden or the
-  // Replay is open.
+  // reduced motion nothing loops: it waits, and starts if that setting is switched off. It also
+  // waits while the tab is hidden or the Replay is open.
   const latestBeats = useRef(initial.beats);
   latestBeats.current = brain.beats;
   const still = playing.length === 0;
@@ -168,7 +168,7 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
     let timer: ReturnType<typeof setTimeout>;
     const arm = () => {
       timer = setTimeout(() => {
-        if (document.hidden) return arm();
+        if (document.hidden || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return arm();
         play(loopBeats(latestBeats.current), LOOP_STAGGER_MS, true);
       }, LOOP_PAUSE_MS);
     };
@@ -185,7 +185,7 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
     let applied = 0;
 
     const start = Date.parse(initialNow);
-    play(initial.beats.filter((b) => start - Date.parse(b.at) < REPLAY_WINDOW_MS).slice(-REPLAY_MAX), LOOP_STAGGER_MS);
+    play(initial.beats.filter((b) => start - Date.parse(b.at) < REPLAY_WINDOW_MS).slice(-REPLAY_MAX), LOOP_STAGGER_MS, true);
 
     async function load() {
       if (stopped || document.hidden) return;
@@ -426,27 +426,25 @@ export default function LiveBrain({ initial, initialNow, dotsMax, windowHours, p
         <h2 id="live-latest" className={styles.latestTitle}>
           Latest
         </h2>
-        {
-          <ol className={styles.list}>
-            {latest.map((b) => (
-              <li key={b.id} className={styles.row}>
-                <span className={`${styles.swatch} ${SWATCH[b.kind]}`} aria-hidden="true" />
-                <span className={styles.what}>
-                  {BEAT_WORDS[b.kind]}
-                  {b.memory ? (
-                    <>
-                      {": "}
-                      <Link href={`/memory/${encodeURIComponent(b.memory.id)}`}>{b.memory.title}</Link>
-                    </>
-                  ) : null}
-                </span>
-                <time className={styles.when} dateTime={b.at}>
-                  {ago(b.at, now)}
-                </time>
-              </li>
-            ))}
-          </ol>
-        }
+        <ol className={styles.list}>
+          {latest.map((b) => (
+            <li key={b.id} className={styles.row}>
+              <span className={`${styles.swatch} ${SWATCH[b.kind]}`} aria-hidden="true" />
+              <span className={styles.what}>
+                {BEAT_WORDS[b.kind]}
+                {b.memory ? (
+                  <>
+                    {": "}
+                    <Link href={`/memory/${encodeURIComponent(b.memory.id)}`}>{b.memory.title}</Link>
+                  </>
+                ) : null}
+              </span>
+              <time className={styles.when} dateTime={b.at}>
+                {ago(b.at, now)}
+              </time>
+            </li>
+          ))}
+        </ol>
       </section>
     </div>
   );

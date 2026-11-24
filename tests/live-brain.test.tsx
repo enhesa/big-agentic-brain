@@ -620,6 +620,9 @@ describe("where the page is told", () => {
     const view = read("app/live/LiveBrain.tsx");
     expect(view).toContain("p.filter((b) => !b.loop)");
     expect(view).toContain("play(loopBeats(latestBeats.current), LOOP_STAGGER_MS, true)");
+    // What the page plays on opening is old too, so it never holds back the note of a new beat.
+    expect(view).toContain(".slice(-REPLAY_MAX), LOOP_STAGGER_MS, true);");
+    expect(view).toMatch(/play\(fresh\);/);
   });
 
   it("writes a count short enough for the smallest circle", async () => {
