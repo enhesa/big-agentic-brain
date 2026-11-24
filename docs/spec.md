@@ -516,8 +516,68 @@ check has a record (`lib/trust.ts`).
   Keep and Retire buttons that post to `POST /memory/[id]/review` (`sameOrigin`, `getViewer`,
   `checkUiRateLimit`). They call `confirm`, `keepLearning` and `retire` with `via: "ui"`, so the
   agent rules hold: a note is required, and nobody confirms their own memory (the button is hidden).
-  Maintainers only (`BAB_MAINTAINERS`); anyone else gets a 404, like `/admin`. The page is optional:
-  flags, sweeps and labels work without it.
+  Maintainers see these sections; every signed-in person also sees "Waiting for you" (see
+  "Self-healing memory"), and someone not signed in gets a 404. The page is optional: flags, sweeps
+  and labels work without it.
+
+## Self-healing memory
+
+Agents fix what breaks; people check what can't break (`lib/freshness.ts`, `lib/checks.ts`,
+`lib/evidence.ts`, migration v60). It reuses the verify mark, the non-author confirm, flags,
+supersede and the trust history above.
+
+- *Who checks.* `learnings.check_by` is `agent` (a tech fact a test can prove: a command, a path, a
+  setting) or `person` (a business fact: a price, a policy, a decision). `bab_learn` and `POST
+  /api/learnings` take `checkBy`; the default is `person` for a `decision` or `standard` and `agent`
+  otherwise, and a one-entry correction of the same kind inherits it. Migration v60 sets `person` on
+  existing decisions and standards. `checkEveryDays` (30 to 365, person memories only, inherited the
+  same way) overrides the window. `bab_react check_by` (`answer`: `agent` or `person`) changes it
+  later; someone other than the author gives a note. Audited as `check_by_changed` in the history.
+- *Windows.* A `person` memory is due when its last check is older than its window: `decision` 180
+  days, `standard` 120, `learning` and `practice` 90 (`PERSON_CHECK_DAYS`). An `agent` memory keeps
+  the 90-day `verify` mark and is never asked about. The last check is the newest of the creation
+  time, `checked_at` (set by a non-author confirm, keep or restore and by an author's Yes; migration
+  v60 backfills it from votes) and a non-author check vote.
+- *States.* Search results carry `freshness`: `fresh`, `due` (agent: `verify`; person: past its
+  window), `disputed` (an open flag, or a No or Not sure answer that nothing answered yet) or
+  `stale` (disputed for more than 14 days, or a person memory whose first ask after its last check
+  is more than 30 days old and unanswered). Results also carry `checkBy`, `checkDue` and a plain
+  `freshnessWarning`; any `checkDue` result adds `checkDueHint`. Disputed and stale rank like a
+  flagged memory (x0.6). A live memory that is not active shows as fresh. Stale is a label, not a
+  standing drop.
+- *Recheck.* `bab_react recheck` and `POST /api/learnings/:id/recheck` take `answer`: `yes`, `no`,
+  `unsure`, `agent` or `later`, and an optional `note` (300 characters, redacted). A non-author Yes
+  is a confirm (note required). An author's Yes restarts the clock without points or a confirm vote
+  and leaves flags open; on a `person` memory at most 2 in a row (`AUTHOR_YES_STREAK_MAX`, then a
+  409 until someone else checks it), and on an `agent` memory it needs a note. No sets
+  `dispute_kind = no`; Not sure sets `unsure` unless a No is open. A later non-author check, a
+  correction or a retire clears the dispute. `agent` hands the memory to agents (`check_by`);
+  `later` only records the skip. Each answer lands in the history (`recheck_yes`, `recheck_no`,
+  `recheck_unsure`, `recheck_agent`) and the audit log (`recheck`).
+- *Who is asked.* `waitingFor(user)` lists due person memories still in use (read on 2 or more days,
+  the last read inside 90 days, not disputed), pinned first, then decisions, standards and the most
+  read, and routes each one to one person: the author, else an area contact whose area is one of its
+  tags, else someone who marked it helpful, cited or confirmed it in the last 60 days. That person
+  must have used BAB in the last 30 days and not have passed on it (2 Ask me later, or a hook ask
+  unanswered for 14 days); an author with 2 Yes answers in a row is skipped. The list also holds the
+  memories the person answered No or Not sure that still wait for a fix. `bab_search waitingForMe:
+  true` and `GET /api/checks/mine` return it (title, kind, the first 5 lines of the text, the link,
+  why it is due); the review page shows it as "Waiting for you", with Yes, No, Not sure, Let agents
+  check this and Ask me later buttons that post to `POST /memory/[id]/recheck`.
+- *Hook.* Once per session (`session_nudges` kind `checks`) and at most once per UTC day per person,
+  the hook names up to 3 due memories (6 a week, none asked again within 7 days), titles and links
+  only, and tells the agent to call `bab_search waitingForMe` and ask. Each ask is a `check_asks`
+  row. The author of a memory a colleague corrected hears it once (`superseded:<id>:<event>`).
+- *Agent limits.* A flag and a supersede of someone else's memory may carry `evidence` (`failure`:
+  `command_failed`, `path_missing`, `api_error`, `wrong_output`, `contradicts_code` or
+  `contradicts_memory`; `tried`, `saw`, `where`: 300 characters each, redacted), stored on the trust
+  event and shown in the history. One person may place at most 5 flags and 5 supersedes of other
+  people's memories in 24 hours (`DAILY_FLAG_MAX`, `DAILY_SUPERSEDE_MAX`, a 429), on every surface.
+- *Metric.* Each search with text records its top 3 results by state in `freshness_daily` (a
+  memory disputed in the last 7 days counts by its state before). `/usage` shows the unchecked
+  serve rate (due, disputed or stale over served, last 30 days) and the share of hook asks answered
+  within 7 days. It measures unchecked advice, not wrong advice. Time to fix, catches by agents
+  versus people and spot checks are not measured. No per-person read log, no email.
 
 ## Ranking
 

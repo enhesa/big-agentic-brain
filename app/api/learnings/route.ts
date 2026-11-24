@@ -186,8 +186,11 @@ export async function POST(req: NextRequest) {
         model: (payload as Record<string, unknown>).model as string | null | undefined,
         // Validated and normalized by create() too (an unknown label is a 400 listing the valid ones).
         appliesTo: (payload as Record<string, unknown>).appliesTo as string[] | string | null | undefined,
+        // Who can tell whether it is still true (lib/freshness.ts), validated by create().
+        checkBy: (payload as Record<string, unknown>).checkBy as string | null | undefined,
+        checkEveryDays: (payload as Record<string, unknown>).checkEveryDays as number | string | null | undefined,
         ...provenance,
-      }, supersedesIds, "mcp");
+      }, supersedesIds, "mcp", (payload as Record<string, unknown>).evidence);
 
       // Close matches of a new memory (not a correction), so the caller can still make it an update.
       const similar = supersedesIds.length > 0 ? [] : nearMatches(created);

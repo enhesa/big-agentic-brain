@@ -69,6 +69,18 @@ export interface LearningRow {
   pinned_at: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Self-healing memory (lib/freshness.ts, migration v60). Optional in this type so older
+   * fixtures still type-check; every stored row has them. check_by: who can tell whether it is
+   * still true, an agent or a person. check_every_days: the author's own window, or null for the
+   * default of the kind. checked_at: the last check. disputed_at and dispute_kind: an open No or
+   * Not sure.
+   */
+  check_by?: "agent" | "person";
+  check_every_days?: number | null;
+  checked_at?: string | null;
+  disputed_at?: string | null;
+  dispute_kind?: "no" | "unsure" | null;
 }
 
 export type VoteKind = "helpful" | "not_helpful" | "flag" | "cited" | "kudos" | "confirm";

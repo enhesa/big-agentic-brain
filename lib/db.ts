@@ -10,7 +10,7 @@ let closedForShutdown = false;
 // Keep in step with the last `if (appliedVersion < N)` block in runMigrations: while this lagged at 26
 // beside a v27 block, a database already at 26 returned early and never got v27. tests/db.test.ts
 // guards it.
-export const CURRENT_VERSION = 59;
+export const CURRENT_VERSION = 60;
 
 /** The data directory (DATA_DIR, default /data). The one env read allowed in this file. */
 export function resolveDataDir(): string {
@@ -372,6 +372,11 @@ function runMigrations(database: DatabaseSync) {
     database.prepare("INSERT INTO migrations (version) VALUES (?)").run(59);
     appliedVersion = 59;
   }
+  if (appliedVersion < 60) {
+    runMigrationV60(database);
+    database.prepare("INSERT INTO migrations (version) VALUES (?)").run(60);
+    appliedVersion = 60;
+  }
 }
 
 function runMigrationV58(database: DatabaseSync) {
@@ -465,6 +470,59 @@ export function repairMessageMembership(database: DatabaseSync) {
         SELECT 1 FROM messages m
         WHERE m.id = message_recipients.message_id AND m.to_id = message_recipients.user_id AND m.read_at IS NOT NULL
       );
+  `);
+}
+
+function runMigrationV60(database: DatabaseSync) {
+  // Self-healing memory (lib/freshness.ts). All additive. check_by says who can tell whether a
+  // memory is still true: an agent (it breaks loudly) or a person (it breaks quietly); decisions
+  // and standards start as person. checked_at is the last check (a confirm, a keep by someone
+  // else, or a Yes), backfilled from votes. disputed_at and dispute_kind hold a No or Not sure
+  // until a Yes, a confirm, a supersede or a retire. check_asks is who was asked about what and
+  // when; freshness_daily counts what search served, for the unchecked serve rate. Guarded and
+  // written so it can run twice.
+  const cols = new Set(
+    (database.prepare("PRAGMA table_info(learnings)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!cols.has("check_by")) database.exec("ALTER TABLE learnings ADD COLUMN check_by TEXT NOT NULL DEFAULT 'agent'");
+  if (!cols.has("check_every_days")) database.exec("ALTER TABLE learnings ADD COLUMN check_every_days INTEGER");
+  if (!cols.has("checked_at")) database.exec("ALTER TABLE learnings ADD COLUMN checked_at TEXT");
+  if (!cols.has("disputed_at")) database.exec("ALTER TABLE learnings ADD COLUMN disputed_at TEXT");
+  if (!cols.has("dispute_kind")) database.exec("ALTER TABLE learnings ADD COLUMN dispute_kind TEXT");
+  const trustCols = new Set(
+    (database.prepare("PRAGMA table_info(trust_events)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!trustCols.has("evidence")) database.exec("ALTER TABLE trust_events ADD COLUMN evidence TEXT");
+  database.exec(`
+    UPDATE learnings SET check_by = 'person'
+      WHERE kind IN ('decision', 'standard') AND check_by = 'agent';
+    UPDATE learnings SET checked_at = (
+        SELECT MAX(v.created_at) FROM votes v
+        WHERE v.learning_id = learnings.id AND v.kind IN ('confirm', 'keep', 'restore')
+          AND lower(v.voter_id) <> lower(learnings.author_id))
+      WHERE checked_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS check_asks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      learning_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      via TEXT NOT NULL DEFAULT 'hook',
+      delivered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      answer TEXT,
+      answered_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_check_asks_user ON check_asks(user_id, delivered_at);
+    CREATE INDEX IF NOT EXISTS idx_check_asks_learning ON check_asks(learning_id, delivered_at);
+
+    CREATE TABLE IF NOT EXISTS freshness_daily (
+      day TEXT PRIMARY KEY,
+      served INTEGER NOT NULL DEFAULT 0,
+      served_fresh INTEGER NOT NULL DEFAULT 0,
+      served_due INTEGER NOT NULL DEFAULT 0,
+      served_disputed INTEGER NOT NULL DEFAULT 0,
+      served_stale INTEGER NOT NULL DEFAULT 0,
+      served_unchecked INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }
 

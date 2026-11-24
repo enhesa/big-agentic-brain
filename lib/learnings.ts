@@ -5,13 +5,26 @@ import { emit } from "./events";
 import { redact, assertMaxLength, assertRawLength } from "./redact";
 import { config } from "./config";
 import { toCalendarDate, todayUtc, parseDbTime } from "./dates";
-import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from "./errors";
+import { NotFoundError, ForbiddenError, ValidationError, ConflictError, TooManyRequestsError } from "./errors";
 import { carryOver, computeStanding } from "./standing";
 import type { Standing, StandingLevel } from "./standing";
 import { isMaintainer, maintainerIdList } from "./feedback";
 import { appliesToFields, appliesToFilterSql, mergeAppliesTo, parseAppliesTo, readAppliesTo, stackRankSql } from "./applies-to";
 import { downvotedLive, verifyDueIds } from "./swarm-gc";
 import { recordTrustEvent, trustFor, type TrustSummary } from "./trust";
+import {
+  DAILY_FLAG_MAX,
+  DAILY_SUPERSEDE_MAX,
+  defaultCheckBy,
+  DISPUTED_OR_STALE_SQL,
+  freshnessFor,
+  freshnessWarning,
+  parseCheckBy,
+  parseCheckEveryDays,
+  type CheckBy,
+  type Freshness,
+} from "./freshness";
+import { parseEvidence, type FlagEvidence } from "./evidence";
 import { markdownToPlainText } from "./markdown";
 import { normalizeProjectKey, deriveProjectFromRepo, projectKeyFromCwd, GENERAL_PROJECT_KEY } from "./project-key";
 export { normalizeProjectKey, GENERAL_PROJECT_KEY } from "./project-key";
@@ -246,6 +259,14 @@ export interface CreateLearningInput {
    * corrects, else everywhere"; null or [] for everywhere on purpose.
    */
   appliesTo?: string[] | string | null;
+  /**
+   * Who can tell whether it is still true (lib/freshness.ts): agent or person. Omit for the
+   * default: a correction keeps the replaced entry's, else decisions and standards are person and
+   * the rest agent.
+   */
+  checkBy?: CheckBy | string | null;
+  /** The author's own check window in days (30 to 365). Omit to keep a corrected entry's, null for the default. */
+  checkEveryDays?: number | string | null;
 }
 
 export interface LearningSearchResult extends LearningRow, AgeInfo {
@@ -272,6 +293,14 @@ export interface LearningSearchResult extends LearningRow, AgeInfo {
   trust: string;
   /** true when nobody but the author has confirmed, kept or restored it. Absent otherwise. */
   unchecked?: true;
+  /** Self-healing memory (lib/freshness.ts): fresh, due, disputed or stale. */
+  freshness?: Freshness["freshness"];
+  /** Who can tell whether it is still true: agent or person. */
+  checkBy?: CheckBy;
+  /** true on a business fact past its window: tell the user it may be out of date. Absent otherwise. */
+  checkDue?: true;
+  /** Why it is disputed or stale, in one plain line, when it is. */
+  freshnessWarning?: string;
 }
 
 export interface AgeInfo {
@@ -457,6 +486,11 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
   const appliesTo = parseAppliesTo(input.appliesTo) ?? inherited?.appliesTo ?? (target ? readAppliesTo(target.applies_to) : []);
   // A correction of exactly one entry keeps that entry's aliases unless it passes its own (an empty list is its own).
   const aliases = aliasesGiven ?? inherited?.aliases ?? (target ? readAliases(target.aliases) : []);
+  // Who checks it: given, else what a correction of the same kind replaces, else the kind's default.
+  const checkBy: CheckBy =
+    parseCheckBy(input.checkBy) ?? (target && target.kind === kind && target.check_by ? target.check_by : defaultCheckBy(kind));
+  const checkEveryGiven = parseCheckEveryDays(input.checkEveryDays);
+  const checkEveryDays = checkEveryGiven !== undefined ? checkEveryGiven : (target?.check_every_days ?? null);
   const provenance = resolveProvenance(
     target && input.source == null && input.sourceUrl == null && input.sourceVersion == null
       ? { source: target.source, sourceUrl: target.source_url, sourceVersion: target.source_version }
@@ -492,8 +526,8 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
   db.prepare(
     `INSERT INTO learnings
        (id, author_id, title, body, tags, repo, project, confidence, status, expires_at, expires_explicit,
-        supersedes_id, kind, source, source_url, source_version, model, applies_to, aliases)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        supersedes_id, kind, source, source_url, source_version, model, applies_to, aliases, check_by, check_every_days)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.authorId,
@@ -514,6 +548,8 @@ export function create(input: CreateLearningInput, via: AuditVia = "ui", inherit
     model,
     JSON.stringify(appliesTo),
     JSON.stringify(aliases),
+    checkBy,
+    checkEveryDays,
   );
 
   audit(db, input.authorId, "create", "learning", id, via);
@@ -945,7 +981,7 @@ const RANK_EXPRESSION = `(
   (-bm25(learnings_fts, ${BM25_TITLE_WEIGHT}, ${BM25_BODY_WEIGHT}, ${BM25_TAGS_WEIGHT}, ${BM25_ALIASES_WEIGHT}))
   * (1.0 + MIN(MAX(COALESCE(learnings.score, 0), ${VOTE_SCORE_MIN}), ${VOTE_SCORE_MAX}) * ${VOTE_FACTOR_PER_POINT})
   * (1.0 + ${RECENCY_FACTOR_MAX} / (1.0 + MAX(julianday('now') - julianday(learnings.created_at), 0) / ${RECENCY_HALF_LIFE_DAYS}))
-  * (CASE WHEN ${OPEN_FLAG_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
+  * (CASE WHEN ${OPEN_FLAG_SQL} OR ${DISPUTED_OR_STALE_SQL} THEN ${OPEN_FLAG_RANK_FACTOR} ELSE 1.0 END)
 )`;
 
 /**
@@ -1004,6 +1040,7 @@ export function search(
     const standings = standingsFor(rows);
     const retires = lastRetiresFor(rows);
     const trust = trustFor(rows);
+    const fresh = freshnessFor(rows.map((r) => r.id));
     return rows.map((r) => ({
       ...r,
       ...ageInfo(r),
@@ -1014,6 +1051,7 @@ export function search(
       ...standingFields(standings.get(r.id)!),
       lastRetire: retires.get(r.id),
       ...trustFields(trust.get(r.id)!),
+      ...freshnessFields(fresh.get(r.id)),
     }));
   }
 
@@ -1080,6 +1118,7 @@ export function search(
   const standings = standingsFor(rows);
   const retires = lastRetiresFor(rows);
   const trust = trustFor(rows);
+  const fresh = freshnessFor(rows.map((r) => r.id));
 
   return rows.map((r) => ({
     ...r,
@@ -1091,6 +1130,7 @@ export function search(
     ...standingFields(standings.get(r.id)!),
     lastRetire: retires.get(r.id),
     ...trustFields(trust.get(r.id)!),
+    ...freshnessFields(fresh.get(r.id)),
   }));
 }
 
@@ -1178,6 +1218,18 @@ export function lastRetire(learning: Pick<LearningRow, "id" | "status">): Retire
  */
 function trustFields(t: TrustSummary): { trust: string; unchecked?: true; verify?: true } {
   return { trust: t.label, ...(t.unchecked ? { unchecked: true as const } : {}), ...(t.verify ? { verify: true as const } : {}) };
+}
+
+/** The freshness fields of a search hit (lib/freshness.ts). Absent flags keep the answer small. */
+function freshnessFields(f: Freshness | undefined): Pick<LearningSearchResult, "freshness" | "checkBy" | "checkDue" | "freshnessWarning"> {
+  if (!f) return {};
+  const warning = freshnessWarning(f);
+  return {
+    freshness: f.freshness,
+    checkBy: f.checkBy,
+    ...(f.checkDue ? { checkDue: true as const } : {}),
+    ...(warning ? { freshnessWarning: warning } : {}),
+  };
 }
 
 /** The two fields that go on the wire; `points` stays internal. */
@@ -1763,8 +1815,12 @@ export function createWithSupersedes(
   input: CreateLearningInput,
   supersedesIds: string[],
   via: AuditVia = "ui",
+  evidenceRaw?: unknown,
 ): LearningRow {
   assertSupersedable(supersedesIds);
+  // Optional structured evidence for the correction (lib/evidence.ts), stored on each replaced memory's history.
+  const evidence = parseEvidence(evidenceRaw);
+  if (evidence && supersedesIds.length === 0) throw new ValidationError("evidence goes with supersedes, or on a flag");
   const db = getDb();
   let createInput: CreateLearningInput = { ...input, supersedesId: supersedesIds[0] ?? null };
   let inherited: InheritedFields | undefined;
@@ -1795,18 +1851,47 @@ export function createWithSupersedes(
   }
   const archived: Array<{ id: string; title: string }> = [];
   const created = inTransaction(db, () => {
+    assertSupersedeBudget(
+      db,
+      input.authorId,
+      supersedesIds.filter((id) => getById(id)!.author_id.toLowerCase() !== input.authorId.toLowerCase()).length,
+    );
     const row = create(createInput, via, inherited);
-    for (const oldId of supersedesIds) archived.push(supersedeWithinTransaction(row.id, oldId, input.authorId, via));
+    for (const oldId of supersedesIds) archived.push(supersedeWithinTransaction(row.id, oldId, input.authorId, via, evidence));
     return getById(row.id)!;
   });
   for (const a of archived) emit("learning.updated", a.id, { id: a.id, title: a.title, kind: "archived" });
   return created;
 }
 
-export function supersede(newId: string, oldId: string, actorId: string, via: AuditVia = "ui") {
+export function supersede(newId: string, oldId: string, actorId: string, via: AuditVia = "ui", evidenceRaw?: unknown) {
   const db = getDb();
-  const archived = inTransaction(db, () => supersedeWithinTransaction(newId, oldId, actorId, via));
+  const evidence = parseEvidence(evidenceRaw);
+  const archived = inTransaction(db, () => {
+    const old = getById(oldId);
+    assertSupersedeBudget(db, actorId, old && old.author_id.toLowerCase() !== actorId.toLowerCase() ? 1 : 0);
+    return supersedeWithinTransaction(newId, oldId, actorId, via, evidence);
+  });
   emit("learning.updated", archived.id, { id: archived.id, title: archived.title, kind: "archived" });
+}
+
+/**
+ * Against flag spam (lib/freshness.ts DAILY_SUPERSEDE_MAX): refuses when `adding` more
+ * corrections of other people's memories would pass the daily cap. Inside the caller's
+ * transaction, so a consolidation is refused whole, before anything is written.
+ */
+function assertSupersedeBudget(db: ReturnType<typeof getDb>, actorId: string, adding: number): void {
+  if (adding === 0) return;
+  const { n } = db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM trust_events WHERE lower(actor_id) = lower(?) AND kind = 'supersede' AND by_author = 0 AND at > datetime('now', '-1 day')",
+    )
+    .get(actorId) as { n: number };
+  if (n + adding > DAILY_SUPERSEDE_MAX) {
+    throw new TooManyRequestsError(
+      `You may correct at most ${DAILY_SUPERSEDE_MAX} other people's memories in 24 hours, and ${n} are done. Flag the rest with your evidence, or try again tomorrow.`,
+    );
+  }
 }
 
 /** supersede() for a caller that already holds the connection's transaction. Does not emit. */
@@ -1815,6 +1900,7 @@ function supersedeWithinTransaction(
   oldId: string,
   actorId: string,
   via: AuditVia,
+  evidence?: FlagEvidence | null,
 ): { id: string; title: string } {
   if (newId === oldId) {
     throw new ValidationError("A learning cannot supersede itself");
@@ -1853,7 +1939,9 @@ function supersedeWithinTransaction(
     ).run(actorId, newId, ...HOUSE_RULE_KINDS);
   }
   audit(db, actorId, "supersede", "learning", oldId, via);
-  recordTrustEvent(db, { learningId: oldId, actorId, kind: "supersede", authorId: oldLearning.author_id, relatedId: newId });
+  recordTrustEvent(db, { learningId: oldId, actorId, kind: "supersede", authorId: oldLearning.author_id, relatedId: newId, evidence });
+  // The fix ends any open No or Not sure on the old memory (lib/freshness.ts).
+  db.prepare("UPDATE learnings SET disputed_at = NULL, dispute_kind = NULL WHERE id = ?").run(oldId);
   return { id: oldId, title: oldLearning.title };
 }
 
@@ -1872,6 +1960,7 @@ export function flag(
   voterId: string,
   via: AuditVia = "ui",
   note?: string | null,
+  evidenceRaw?: unknown,
 ): LearningRow {
   const db = getDb();
   const learning = getById(learningId);
@@ -1884,6 +1973,8 @@ export function flag(
   // so the agent paths (MCP and REST both pass via "mcp") must give one. The web path keeps it
   // optional. Checked after the not-found and own-learning refusals so those keep their status.
   const normalizedNote = normalizeNote(note, FLAG_NOTE_MAX, via === "mcp");
+  // Optional structured evidence (lib/evidence.ts): what failed, what was tried, what was seen, where.
+  const evidence = parseEvidence(evidenceRaw);
 
   // The flag vote and the conditional auto-archive it can trigger must be
   // atomic: a crash between them would record the flag but never archive a
@@ -1894,6 +1985,19 @@ export function flag(
     const before = db
       .prepare("SELECT note FROM votes WHERE learning_id = ? AND voter_id = ? AND kind = 'flag'")
       .get(learningId, voterId) as { note: string | null } | undefined;
+    // Against flag spam: a new flag counts toward DAILY_FLAG_MAX in any 24 hours. A repeat of
+    // one's own flag adds a note, not a flag. Checked inside the transaction, so two calls at once
+    // cannot both pass.
+    if (!before) {
+      const { n: today } = db
+        .prepare("SELECT COUNT(*) AS n FROM votes WHERE lower(voter_id) = lower(?) AND kind = 'flag' AND created_at > datetime('now', '-1 day')")
+        .get(voterId) as { n: number };
+      if (today >= DAILY_FLAG_MAX) {
+        throw new TooManyRequestsError(
+          `You flagged ${DAILY_FLAG_MAX} memories in the last 24 hours, the most BAB takes. If many memories look wrong at once, check your own setup first (network, login, folder, branch). Try again tomorrow.`,
+        );
+      }
+    }
     // created_at is left alone on a repeat: only the note may change, and only when one is given.
     db.prepare(
       `INSERT INTO votes (learning_id, voter_id, kind, note) VALUES (?, ?, 'flag', ?)
@@ -1901,8 +2005,8 @@ export function flag(
     ).run(learningId, voterId, normalizedNote);
     audit(db, voterId, "flag", "learning", learningId, via);
     // The history keeps every flag and every new note on a repeat; a bare repeat adds nothing.
-    if (!before || (normalizedNote != null && normalizedNote !== before.note)) {
-      recordTrustEvent(db, { learningId, actorId: voterId, kind: "flag", authorId: learning.author_id, note: normalizedNote });
+    if (!before || (normalizedNote != null && normalizedNote !== before.note) || evidence) {
+      recordTrustEvent(db, { learningId, actorId: voterId, kind: "flag", authorId: learning.author_id, note: normalizedNote, evidence });
     }
 
     // Only flags placed after the latest restore count (by rowid: a flag keeps its rowid when its
@@ -2209,6 +2313,15 @@ export function giveKudos(
   return getById(learningId)!;
 }
 
+/**
+ * A check by someone other than the author (a confirm, a keep, a restore, or a Yes): the
+ * freshness clock starts again (learnings.checked_at) and an open No or Not sure is answered
+ * (lib/freshness.ts). Inside the caller's transaction.
+ */
+export function markChecked(db: ReturnType<typeof getDb>, learningId: string): void {
+  db.prepare("UPDATE learnings SET checked_at = datetime('now'), disputed_at = NULL, dispute_kind = NULL WHERE id = ?").run(learningId);
+}
+
 export interface ConfirmResult {
   learning: LearningRow;
   /**
@@ -2260,7 +2373,9 @@ export function confirm(
       db
         .prepare("SELECT 1 FROM votes WHERE learning_id = ? AND kind IN ('flag', 'not_helpful') AND created_at > ? LIMIT 1")
         .get(learningId, existing!.created_at) !== undefined;
-    if (recent && !flaggedSince) {
+    // A No or Not sure after the confirmation is answered by a new one too.
+    const disputedSince = recent && !!learning.disputed_at && learning.disputed_at > existing!.created_at;
+    if (recent && !flaggedSince && !disputedSince) {
       // The confirmation stays as it is, but the person just said again that the memory is in use.
       touchRead(db, [learningId]);
       return false;
@@ -2274,6 +2389,7 @@ export function confirm(
     ).run(learningId, voterId, normalizedNote);
     audit(db, voterId, "confirm", "learning", learningId, via, verified ? { details: { verified: true } } : undefined);
     recordTrustEvent(db, { learningId, actorId: voterId, kind: "confirm", authorId: learning.author_id, note: normalizedNote });
+    markChecked(db, learningId);
     recomputeScore(learningId);
     touchRead(db, [learningId]);
     return true;
@@ -2344,6 +2460,8 @@ export function keepLearning(
     recordRetireEvent(db, learningId, actorId, "keep", keepNote);
     audit(db, actorId, "keep", "learning", learningId, via);
     recordTrustEvent(db, { learningId, actorId, kind: "keep", authorId: learning.author_id, note: keepNote });
+    // Someone else's keep is a check, like a confirm; the author's own is not (lib/swarm-gc.ts).
+    if (learning.author_id.toLowerCase() !== actorId.toLowerCase()) markChecked(db, learningId);
   });
   emit("learning.updated", learningId, { id: learningId, title: learning.title, kind: "active" });
   // A valid-until date is the author's own choice: say so, so a keep is not taken for an extension.
@@ -2377,6 +2495,7 @@ function restore(learning: LearningRow, actorId: string, via: AuditVia, note: st
       details: { by: isAuthor ? "author" : "other", note: normalizedNote },
     });
     recordTrustEvent(db, { learningId: learning.id, actorId, kind: "restore", authorId: learning.author_id, note: normalizedNote });
+    if (!isAuthor) markChecked(db, learning.id);
     // A restore is a read: without a fresh inactivity clock, a memory archived for lack of reads
     // would be archived again by the next sweep.
     touchRead(db, [learning.id]);
@@ -2454,6 +2573,8 @@ export function retire(
       details: { by: isAuthor ? "author" : "other", note: normalizedNote },
     });
     recordTrustEvent(db, { learningId, actorId, kind: "retire", authorId: learning.author_id, note: normalizedNote });
+    // Retired with no replacement: an open No or Not sure is answered (lib/freshness.ts).
+    db.prepare("UPDATE learnings SET disputed_at = NULL, dispute_kind = NULL WHERE id = ?").run(learningId);
   });
 
   const updated = getById(learningId)!;

@@ -60,6 +60,18 @@ restore, retire and correction, with who, when and the note; see spec.md "Trust 
 Archived unread nothing before October 2027. The Clean-up card shows the last 8 weeks of archives (unread, not
 helpful, flags), retires, keeps and restores, and confirms on old memories that were due a check.
 
+## Self-healing memory
+
+A live memory also has a freshness label in search: `fresh`, `due`, `disputed` or `stale` (spec.md, "Self-healing
+memory"). A tech fact (`checkBy: agent`) is checked by the agents that use it: after 90 days it is `due`, and an agent
+that finds it wrong corrects it with evidence or flags it (at most 5 flags and 5 corrections of other people's
+memories a day). A business fact (`checkBy: person`, the default for decisions and standards) is never changed by an
+agent alone. After its window (decision 180 days, standard 120, other business facts 90) BAB asks one person "Is this
+still true?" at the start of a session or under "Waiting for you" on `/memory/review`, at most 3 a day, and only
+about memories agents still read. Yes restarts the clock; No and Not sure mark it `disputed` until a correction,
+a retire or someone else's check. A dispute left 14 days, or an ask left 30 days, makes it `stale`: ranked lower,
+still found. Nothing is archived by these labels; the archive paths above are unchanged.
+
 **Gone since 2026-10-07:** the 180-day default expiry, the `expiring` status, "reset by use" and the two
 session-start expiry notices. Migration v40 turned every `expiring` memory into `active` and cleared the dates
 authors had not chosen.

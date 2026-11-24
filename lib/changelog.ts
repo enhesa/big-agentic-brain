@@ -19,6 +19,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-24",
+    title: "Self-healing memory: agents fix what breaks, people check the rest",
+    changes: [
+      "Search results say how fresh a memory is: fresh, due, disputed or stale.",
+      "Business facts come back to a person after a while: Is this still true? Yes, No or Not sure.",
+      "The review page has a Waiting for you list, and agents can fetch it too.",
+      "Agents flag and correct wrong memories with evidence, at most 5 of each a day.",
+      "The usage page shows how often agents got advice nobody checked lately.",
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "A whiter page, and a landing page you scroll like a film",
     changes: [
