@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "./db";
+import { parseDbTime } from "./dates";
 import { flaggedStandardsWaitingIds, INACTIVITY_CLOCK_START, LEARNING_KINDS, standingsFor } from "./learnings";
 import { serveStats, type ServeStats } from "./checks";
 import { generalProjectCount, topProjects } from "./stats";
@@ -16,6 +17,9 @@ import type { StandingLevel } from "./standing";
  *
  * Everyone can open the page, so the page reads cachedUsageReport(): one computed report shared
  * for USAGE_CACHE_MS. The report holds the maintainer-only rows too; the page decides what to show.
+ * Closed weeks of audit_log do not change, so their numbers are read once a week and kept
+ * (usageReportIncremental); a report reads only the current week from the audit log. Every audit
+ * query takes a range [from, to) that starts on a Monday, and the parts of adjacent ranges add up.
  *
  * Some numbers start when they started being recorded (USAGE_COLLECTING_SINCE): Stop nudges,
  * identify refusals, the `cx` session detail and the model behind a memory.
@@ -73,6 +77,8 @@ export const HELPED_WINDOW_MINUTES = 30;
 const NOT_PEOPLE = "('anonymous', 'system')";
 const LIVE = "('active')";
 const DAY_MS = 86_400_000;
+/** The open upper bound of a range that runs up to now. */
+const OPEN_END = "9999-12-31 23:59:59";
 
 /** Monday of the week containing a UTC date, as YYYY-MM-DD. */
 export function weekStart(d: Date): string {
@@ -370,18 +376,28 @@ export interface UsageReport {
 /* ------------------------------------------------------------------ activity */
 
 /**
- * Saves, searches, reactions, active people and first-time people per week between `from`
- * (inclusive) and `to` (exclusive), keyed by Monday. Four queries, each on an (action|path, at) or (at) index range.
- * `+entity` keeps the planner off idx_audit_entity, which is not bounded by time.
+ * The audit-log side of the activity chart for `from` (inclusive) to `to` (exclusive), both on a
+ * Monday so no week is split between two ranges. Four queries, each on an (action|path, at) or
+ * (at) index range. `+entity` keeps the planner off idx_audit_entity, which is not bounded by time.
+ * The parts of several ranges add up (activityFromParts): weekly counts per week, and the two
+ * numbers that are not a sum (searches a reaction credited, a person's first week) as keyed rows.
  */
-function activityRows(from: string, to: string): Map<string, ActivityCounts & { newPeople: number }> {
+export interface ActivityPart {
+  weeks: Map<string, { saves: number; searches: number; reactions: number; identifiedSearches: number; people: number }>;
+  /** Search audit id to the week of that search, for every search a helpful or kudos reaction in the range credited. */
+  helped: Map<number, string>;
+  /** Each person's first activity in the range (SQL datetime). */
+  firsts: Map<string, string>;
+}
+
+export function activityPart(from: string, to: string): ActivityPart {
   const db = getDb();
-  const out = new Map<string, ActivityCounts & { newPeople: number }>();
+  const weeks: ActivityPart["weeks"] = new Map();
   const slot = (week: string) => {
-    let c = out.get(week);
+    let c = weeks.get(week);
     if (!c) {
-      c = { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 };
-      out.set(week, c);
+      c = { saves: 0, searches: 0, reactions: 0, identifiedSearches: 0, people: 0 };
+      weeks.set(week, c);
     }
     return c;
   };
@@ -405,26 +421,24 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
     )
     .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, from, to, SEARCH_TOOL_PATH) as Array<{ week: string; n: number; identified: number }>;
   for (const r of searches) Object.assign(slot(r.week), { searches: num(r.n), identifiedSearches: num(r.identified) });
-  // For each helpful or kudos reaction, the same person's last search in the window before it
-  // (idx_audit_actor_at), counted once per search, in the week of the search. Not a click on the
-  // memory page (via 'ui'): it follows no search in an agent session, so it says nothing about
-  // whether a search helped.
+  // For each helpful or kudos reaction, the same person's last search before it (idx_audit_actor_at),
+  // in the week of the search. Not a click on the memory page (via 'ui'): it follows no search in an
+  // agent session, so it says nothing about whether a search helped. The search may lie before
+  // `from` (a reaction just after Monday); the merge counts each search once.
   const helped = db
     .prepare(
-      `WITH hits AS (
-         SELECT (SELECT s.id FROM audit_log s
-                 WHERE s.actor_id = h.actor_id AND s.at <= h.at AND s.at >= datetime(h.at, '-${HELPED_WINDOW_MINUTES} minutes')
-                   AND s.path IN (?, ?) AND (s.path = ? OR s.action = 'GET')
-                 ORDER BY s.at DESC, s.id DESC LIMIT 1) AS sid
-         FROM audit_log h
-         WHERE h.action IN ${USED_ACTIONS} AND h.at >= ? AND h.at < ? AND +h.entity = 'learning' AND h.via != 'ui' AND h.actor_id NOT IN ${NOT_PEOPLE}
-       )
-       SELECT ${weekSql("s.at")} AS week, COUNT(DISTINCT s.id) AS n
-       FROM hits JOIN audit_log s ON s.id = hits.sid
-       GROUP BY week`,
+      `SELECT DISTINCT s.id AS id, ${weekSql("s.at")} AS week
+       FROM (SELECT (SELECT s.id FROM audit_log s
+                     WHERE s.actor_id = h.actor_id AND s.at <= h.at AND s.at >= datetime(h.at, '-${HELPED_WINDOW_MINUTES} minutes')
+                       AND s.path IN (?, ?) AND (s.path = ? OR s.action = 'GET')
+                     ORDER BY s.at DESC, s.id DESC LIMIT 1) AS sid
+             FROM audit_log h
+             WHERE h.action IN ${USED_ACTIONS} AND h.at >= ? AND h.at < ? AND +h.entity = 'learning' AND h.via != 'ui' AND h.actor_id NOT IN ${NOT_PEOPLE}
+            ) hits
+       JOIN audit_log s ON s.id = hits.sid`,
     )
-    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, SEARCH_TOOL_PATH, from, to) as Array<{ week: string; n: number }>;
-  for (const r of helped) slot(r.week).helpedSearches = num(r.n);
+    .all(SEARCH_TOOL_PATH, SEARCH_API_PATH, SEARCH_TOOL_PATH, from, to) as Array<{ id: number; week: string }>;
+  const helpedMap = new Map(helped.map((r) => [num(r.id), r.week]));
   const people = db
     .prepare(
       `SELECT ${weekSql("at")} AS week, COUNT(DISTINCT actor_id) AS n
@@ -433,27 +447,50 @@ function activityRows(from: string, to: string): Map<string, ActivityCounts & { 
     )
     .all(from, to) as Array<{ week: string; n: number }>;
   for (const r of people) slot(r.week).people = num(r.n);
-  // Each person counts once, in the week of their first activity in the range: the weekly values
-  // add up to the range's distinct people.
   const firsts = db
     .prepare(
-      `SELECT ${weekSql("first_at")} AS week, COUNT(*) AS n
-       FROM (SELECT MIN(at) AS first_at FROM audit_log
-             WHERE at >= ? AND at < ? AND actor_id NOT IN ${NOT_PEOPLE} GROUP BY actor_id)
-       GROUP BY week`,
+      `SELECT actor_id AS actor, MIN(at) AS first_at FROM audit_log
+       WHERE at >= ? AND at < ? AND actor_id NOT IN ${NOT_PEOPLE} GROUP BY actor_id`,
     )
-    .all(from, to) as Array<{ week: string; n: number }>;
-  for (const r of firsts) slot(r.week).newPeople = num(r.n);
-  return out;
+    .all(from, to) as Array<{ actor: string; first_at: string }>;
+  return { weeks, helped: helpedMap, firsts: new Map(firsts.map((r) => [r.actor, r.first_at])) };
+}
+
+/** The activity chart from the parts of adjacent ranges, oldest range first. */
+export function activityFromParts(weeks: string[], parts: ActivityPart[]): ActivityWeek[] {
+  const helped = new Map<number, string>();
+  const firsts = new Map<string, string>();
+  for (const p of parts) {
+    for (const [id, week] of p.helped) helped.set(id, week);
+    for (const [actor, at] of p.firsts) if (!firsts.has(actor) || at < firsts.get(actor)!) firsts.set(actor, at);
+  }
+  const helpedByWeek = new Map<string, number>();
+  for (const week of helped.values()) helpedByWeek.set(week, (helpedByWeek.get(week) ?? 0) + 1);
+  // Each person counts once, in the week of their first activity in the window: the weekly values
+  // add up to the window's distinct people.
+  const newByWeek = new Map<string, number>();
+  for (const at of firsts.values()) {
+    const week = weekStart(parseDbTime(at));
+    newByWeek.set(week, (newByWeek.get(week) ?? 0) + 1);
+  }
+  return weeks.map((week) => {
+    const w = parts.find((p) => p.weeks.has(week))?.weeks.get(week);
+    return {
+      week,
+      label: isoWeekLabel(week),
+      saves: w?.saves ?? 0,
+      searches: w?.searches ?? 0,
+      reactions: w?.reactions ?? 0,
+      identifiedSearches: w?.identifiedSearches ?? 0,
+      people: w?.people ?? 0,
+      helpedSearches: helpedByWeek.get(week) ?? 0,
+      newPeople: newByWeek.get(week) ?? 0,
+    };
+  });
 }
 
 export function activityByWeek(weeks: string[]): ActivityWeek[] {
-  const rows = activityRows(sqlDate(weeks[0]), "9999-12-31 23:59:59");
-  return weeks.map((week) => ({
-    week,
-    label: isoWeekLabel(week),
-    ...(rows.get(week) ?? { saves: 0, searches: 0, reactions: 0, helpedSearches: 0, identifiedSearches: 0, people: 0, newPeople: 0 }),
-  }));
+  return activityFromParts(weeks, [activityPart(sqlDate(weeks[0]), OPEN_END)]);
 }
 
 /** The window's totals for the hero tiles: the weekly counts added up, and the distinct people (each counted once). */
@@ -567,28 +604,53 @@ export function contents(): Contents {
   };
 }
 
-/** The memories with the most helpful, kudos and confirm reactions in the last WINDOW_DAYS days. */
-export function topHelpful(now: Date, limit = 5): HelpfulItem[] {
-  const since = sqlTime(new Date(now.getTime() - WINDOW_DAYS * DAY_MS));
+/** Helpful, kudos and confirm reactions per memory in one range, for topHelpful. */
+export type HelpfulPart = Map<string, { helpful: number; kudos: number; confirm: number; total: number; last: string }>;
+
+export function helpfulPart(from: string, to: string): HelpfulPart {
   const rows = getDb()
     .prepare(
-      `SELECT l.id AS id, l.title AS title, l.kind AS kind,
-              SUM(a.action = 'helpful') AS helpful, SUM(a.action = 'kudos') AS kudos,
-              SUM(a.action = 'confirm') AS confirm, COUNT(*) AS total, MAX(a.at) AS last
-       FROM audit_log a JOIN learnings l ON l.id = a.entity_id
-       WHERE a.action IN ${HELPFUL_ACTIONS} AND a.at >= ? AND +a.entity = 'learning' AND l.status != 'deleted'
-       GROUP BY l.id ORDER BY total DESC, last DESC LIMIT ?`,
+      `SELECT entity_id AS id, SUM(action = 'helpful') AS helpful, SUM(action = 'kudos') AS kudos,
+              SUM(action = 'confirm') AS confirm, COUNT(*) AS total, MAX(at) AS last
+       FROM audit_log
+       WHERE action IN ${HELPFUL_ACTIONS} AND at >= ? AND at < ? AND +entity = 'learning'
+       GROUP BY entity_id`,
     )
-    .all(since, limit) as Array<Record<string, string | number>>;
-  return rows.map((r) => ({
-    id: String(r.id),
-    title: String(r.title),
-    kind: String(r.kind),
-    helpful: num(r.helpful as number),
-    kudos: num(r.kudos as number),
-    confirm: num(r.confirm as number),
-    total: num(r.total as number),
-  }));
+    .all(from, to) as Array<{ id: string; helpful: number; kudos: number; confirm: number; total: number; last: string }>;
+  return new Map(
+    rows.map((r) => [String(r.id), { helpful: num(r.helpful), kudos: num(r.kudos), confirm: num(r.confirm), total: num(r.total), last: r.last }]),
+  );
+}
+
+/** The top memories from the parts of adjacent ranges: counts added up, deleted memories left out. */
+export function topHelpfulFromParts(parts: HelpfulPart[], limit = 5): HelpfulItem[] {
+  const all: HelpfulPart = new Map();
+  for (const p of parts) {
+    for (const [id, c] of p) {
+      const a = all.get(id);
+      all.set(
+        id,
+        a
+          ? { helpful: a.helpful + c.helpful, kudos: a.kudos + c.kudos, confirm: a.confirm + c.confirm, total: a.total + c.total, last: a.last > c.last ? a.last : c.last }
+          : { ...c },
+      );
+    }
+  }
+  const ranked = [...all.entries()].sort(([, a], [, b]) => b.total - a.total || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+  const memory = getDb().prepare("SELECT title, kind FROM learnings WHERE id = ? AND status != 'deleted'");
+  const out: HelpfulItem[] = [];
+  for (const [id, c] of ranked) {
+    if (out.length >= limit) break;
+    const l = memory.get(id) as { title: string; kind: string } | undefined;
+    if (!l) continue;
+    out.push({ id, title: String(l.title), kind: String(l.kind), helpful: c.helpful, kudos: c.kudos, confirm: c.confirm, total: c.total });
+  }
+  return out;
+}
+
+/** The memories with the most helpful, kudos and confirm reactions in the last WINDOW_DAYS days. */
+export function topHelpful(now: Date, limit = 5): HelpfulItem[] {
+  return topHelpfulFromParts([helpfulPart(sqlTime(new Date(now.getTime() - WINDOW_DAYS * DAY_MS)), OPEN_END)], limit);
 }
 
 /** Memories saved since USAGE_COLLECTING_SINCE (not deleted) by the model their author named. */
@@ -671,16 +733,21 @@ export function unusedMemories(now: Date): Unused {
   return { unused: num(r.unused), eligible: num(r.eligible) };
 }
 
-/**
- * The share of searches that found nothing, from the result count each search writes on its own
- * audit row (lib/request-audit.ts recordSearchOutcome). Two queries on idx_audit_path_at, bounded by
- * the window and SEARCH_RESULTS_SINCE.
- */
-export function searchOutcomes(weeks: string[]): SearchOutcomes {
+/** Search result counts in one range, for searchOutcomes. */
+export interface SearchPart {
+  recorded: number;
+  zero: number;
+  first: string | null;
+  /** Zero-result queries: lowercased query to how often and when last. */
+  zeroQueries: Map<string, { n: number; last: string }>;
+}
+
+/** Two queries on idx_audit_path_at for `from` to `to`, never before SEARCH_RESULTS_SINCE. */
+export function searchPart(from: string, to: string): SearchPart {
   const db = getDb();
-  const from = sqlDate(weeks[0] > SEARCH_RESULTS_SINCE ? weeks[0] : SEARCH_RESULTS_SINCE);
-  const where = `path IN (?, ?) AND at >= ? AND (path = ? OR action = 'GET') AND json_extract(details, '$.results') IS NOT NULL`;
-  const args = [SEARCH_TOOL_PATH, SEARCH_API_PATH, from, SEARCH_TOOL_PATH];
+  const start = from > sqlDate(SEARCH_RESULTS_SINCE) ? from : sqlDate(SEARCH_RESULTS_SINCE);
+  const where = `path IN (?, ?) AND at >= ? AND at < ? AND (path = ? OR action = 'GET') AND json_extract(details, '$.results') IS NOT NULL`;
+  const args = [SEARCH_TOOL_PATH, SEARCH_API_PATH, start, to, SEARCH_TOOL_PATH];
   const share = db
     .prepare(`SELECT COUNT(*) AS recorded, SUM(json_extract(details, '$.results') = 0) AS zero, MIN(at) AS first FROM audit_log WHERE ${where}`)
     .get(...args) as { recorded: number; zero: number | null; first: string | null };
@@ -688,15 +755,45 @@ export function searchOutcomes(weeks: string[]): SearchOutcomes {
     .prepare(
       `SELECT lower(json_extract(details, '$.q')) AS query, COUNT(*) AS n, MAX(at) AS last
        FROM audit_log WHERE ${where} AND json_extract(details, '$.results') = 0 AND json_extract(details, '$.q') != ''
-       GROUP BY query ORDER BY n DESC, last DESC LIMIT ?`,
+       GROUP BY query`,
     )
-    .all(...args, ZERO_QUERIES_SHOWN) as Array<{ query: string; n: number; last: string }>;
+    .all(...args) as Array<{ query: string; n: number; last: string }>;
   return {
-    since: share.first ? share.first.slice(0, 10) : null,
     recorded: num(share.recorded),
     zero: num(share.zero),
-    zeroQueries: zeroQueries.map((q) => ({ query: String(q.query), n: num(q.n), last: q.last })),
+    first: share.first,
+    zeroQueries: new Map(zeroQueries.map((q) => [String(q.query), { n: num(q.n), last: q.last }])),
   };
+}
+
+/** The search outcomes from the parts of adjacent ranges. */
+export function searchOutcomesFromParts(parts: SearchPart[]): SearchOutcomes {
+  const queries = new Map<string, { n: number; last: string }>();
+  let recorded = 0;
+  let zero = 0;
+  let first: string | null = null;
+  for (const p of parts) {
+    recorded += p.recorded;
+    zero += p.zero;
+    if (p.first && (first === null || p.first < first)) first = p.first;
+    for (const [q, c] of p.zeroQueries) {
+      const a = queries.get(q);
+      queries.set(q, a ? { n: a.n + c.n, last: a.last > c.last ? a.last : c.last } : { ...c });
+    }
+  }
+  const zeroQueries = [...queries.entries()]
+    .sort(([qa, a], [qb, b]) => b.n - a.n || (a.last < b.last ? 1 : a.last > b.last ? -1 : qa < qb ? -1 : qa > qb ? 1 : 0))
+    .slice(0, ZERO_QUERIES_SHOWN)
+    .map(([query, c]) => ({ query, n: c.n, last: c.last }));
+  return { since: first ? first.slice(0, 10) : null, recorded, zero, zeroQueries };
+}
+
+/**
+ * The share of searches that found nothing, from the result count each search writes on its own
+ * audit row (lib/request-audit.ts recordSearchOutcome), bounded by the window and SEARCH_RESULTS_SINCE.
+ */
+export function searchOutcomes(weeks: string[]): SearchOutcomes {
+  return searchOutcomesFromParts([searchPart(sqlDate(weeks[0]), OPEN_END)]);
 }
 
 /** "Agent time saved" and "Tokens saved" on /usage (docs/savings.md, "Measured savings"). */
@@ -794,26 +891,37 @@ export function measuredSavings(weeks: string[]): MeasuredSavings {
 
 /* -------------------------------------------------------------------- health */
 
-export function captureByWeek(weeks: string[]): CaptureWeek[] {
+/** The bab_learn calls and Stop nudges of one range, by week, for captureByWeek. */
+export interface CaptureRows {
+  calls: Array<{ week: string; calls: number; sessions: number; people: number }>;
+  nudges: Array<{ week: string; issued: number; followed: number }>;
+}
+
+export function captureRows(from: string, to: string): CaptureRows {
   const db = getDb();
-  const since = sqlDate(weeks[0]);
   const calls = db
     .prepare(
       `SELECT ${weekSql("at")} AS week, COUNT(*) AS calls,
               COUNT(DISTINCT json_extract(details, '$.cx')) AS sessions,
               COUNT(DISTINCT actor_id) AS people
-       FROM audit_log WHERE path = ? AND at >= ? GROUP BY week`,
+       FROM audit_log WHERE path = ? AND at >= ? AND at < ? GROUP BY week`,
     )
-    .all(LEARN_PATH, since) as Array<{ week: string; calls: number; sessions: number; people: number }>;
+    .all(LEARN_PATH, from, to) as CaptureRows["calls"];
   const nudges = db
     .prepare(
       `SELECT ${weekSql("n.at")} AS week, COUNT(*) AS issued,
               SUM(EXISTS (SELECT 1 FROM audit_log a
                           WHERE a.actor_id = n.actor_id AND a.path = ?
                             AND a.at >= n.at AND a.at <= datetime(n.at, '+${NUDGE_FOLLOW_MINUTES} minutes'))) AS followed
-       FROM audit_log n WHERE n.action = 'stop_nudge' AND n.at >= ? GROUP BY week`,
+       FROM audit_log n WHERE n.action = 'stop_nudge' AND n.at >= ? AND n.at < ? GROUP BY week`,
     )
-    .all(LEARN_PATH, since) as Array<{ week: string; issued: number; followed: number }>;
+    .all(LEARN_PATH, from, to) as CaptureRows["nudges"];
+  return { calls, nudges };
+}
+
+export function captureByWeek(weeks: string[], parts: CaptureRows[] = [captureRows(sqlDate(weeks[0]), OPEN_END)]): CaptureWeek[] {
+  const calls = parts.flatMap((p) => p.calls);
+  const nudges = parts.flatMap((p) => p.nudges);
   return weeks.map((week) => {
     const c = calls.find((r) => r.week === week);
     const n = nudges.find((r) => r.week === week);
@@ -829,58 +937,87 @@ export function captureByWeek(weeks: string[]): CaptureWeek[] {
   });
 }
 
-export function identifyByWeek(weeks: string[]): IdentifyWeek[] {
-  const rows = getDb()
+type IdentifyRow = { week: string; identifies: number; none: number; refused: number };
+
+export function identifyRows(from: string, to: string): IdentifyRow[] {
+  return getDb()
     .prepare(
       `SELECT ${weekSql("at")} AS week,
               SUM(action = 'identify') AS identifies,
               SUM(action = 'identify' AND json_extract(details, '$.source') = 'none') AS none,
               SUM(action = 'identify_refused') AS refused
-       FROM audit_log WHERE action IN ('identify', 'identify_refused') AND at >= ? GROUP BY week`,
+       FROM audit_log WHERE action IN ('identify', 'identify_refused') AND at >= ? AND at < ? GROUP BY week`,
     )
-    .all(sqlDate(weeks[0])) as Array<{ week: string; identifies: number; none: number; refused: number }>;
+    .all(from, to) as IdentifyRow[];
+}
+
+export function identifyByWeek(weeks: string[], rows: IdentifyRow[] = identifyRows(sqlDate(weeks[0]), OPEN_END)): IdentifyWeek[] {
   return weeks.map((week) => {
     const r = rows.find((x) => x.week === week);
     return { week, label: isoWeekLabel(week), identifies: r?.identifies ?? 0, none: r?.none ?? 0, refused: r?.refused ?? 0 };
   });
 }
 
-/** Days on which one device, connection or address called bab_identify more than the threshold, newest first. */
-export function identifyLoops(weeks: string[], limit = 50): IdentifyLoop[] {
-  const rows = getDb()
+type LoopRow = { day: string; who: string; email: string | null; calls: number };
+
+/** One range's loop days, newest first, at most `limit`. Days never span two ranges that start on a Monday. */
+export function identifyLoopRows(from: string, to: string, limit = 50): LoopRow[] {
+  return getDb()
     .prepare(
       `SELECT date(at) AS day,
               COALESCE(json_extract(details, '$.cx'), 'd:' || json_extract(details, '$.deviceId'), 'a:' || json_extract(details, '$.ip'), '-') AS who,
               MAX(actor_email) AS email, COUNT(*) AS calls
-       FROM audit_log WHERE action = 'identify' AND at >= ?
+       FROM audit_log WHERE action = 'identify' AND at >= ? AND at < ?
        GROUP BY day, who HAVING COUNT(*) > ? ORDER BY day DESC, calls DESC LIMIT ?`,
     )
-    .all(sqlDate(weeks[0]), IDENTIFY_LOOP_THRESHOLD, limit) as Array<{ day: string; who: string; email: string | null; calls: number }>;
-  return rows.map((r) => {
-    const by = r.who.startsWith("d:") ? "device" : r.who.startsWith("c:") ? "connection" : "address";
-    // Shown by the person it identified as: a maintainer needs a name to ask, not an id.
-    return { day: r.day, by, who: r.email ?? r.who, calls: r.calls };
-  });
+    .all(from, to, IDENTIFY_LOOP_THRESHOLD, limit) as LoopRow[];
 }
 
-export function refusalsByReason(weeks: string[]): Array<{ reason: string; n: number }> {
+/**
+ * Days on which one device, connection or address called bab_identify more than the threshold, newest
+ * first. `parts` are the rows of adjacent ranges, newest range first.
+ */
+export function identifyLoops(weeks: string[], limit = 50, parts: LoopRow[][] = [identifyLoopRows(sqlDate(weeks[0]), OPEN_END, limit)]): IdentifyLoop[] {
+  return parts
+    .flat()
+    .slice(0, limit)
+    .map((r) => {
+      const by = r.who.startsWith("d:") ? "device" : r.who.startsWith("c:") ? "connection" : "address";
+      // Shown by the person it identified as: a maintainer needs a name to ask, not an id.
+      return { day: r.day, by, who: r.email ?? r.who, calls: r.calls };
+    });
+}
+
+export function refusalRows(from: string, to: string): Array<{ reason: string; n: number }> {
   return getDb()
     .prepare(
       `SELECT COALESCE(json_extract(details, '$.reason'), 'unknown') AS reason, COUNT(*) AS n
-       FROM audit_log WHERE action = 'identify_refused' AND at >= ? GROUP BY reason ORDER BY n DESC`,
+       FROM audit_log WHERE action = 'identify_refused' AND at >= ? AND at < ? GROUP BY reason ORDER BY n DESC`,
     )
-    .all(sqlDate(weeks[0])) as Array<{ reason: string; n: number }>;
+    .all(from, to) as Array<{ reason: string; n: number }>;
 }
 
-/** bab_learn writes against the duplicate guard: stored vs refused with a 409. Only learnings count (feedback and reminders audit the same actions). */
-export function qualityByWeek(weeks: string[]): QualityWeek[] {
-  const rows = getDb()
+/** Refusals by reason, most first; `parts` are the rows of adjacent ranges. */
+export function refusalsByReason(weeks: string[], parts = [refusalRows(sqlDate(weeks[0]), OPEN_END)]): Array<{ reason: string; n: number }> {
+  const sums = new Map<string, number>();
+  for (const r of parts.flat()) sums.set(r.reason, (sums.get(r.reason) ?? 0) + num(r.n));
+  return [...sums.entries()].map(([reason, n]) => ({ reason, n })).sort((a, b) => b.n - a.n || (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0));
+}
+
+type QualityRow = { week: string; created: number; dup: number };
+
+export function qualityRows(from: string, to: string): QualityRow[] {
+  return getDb()
     .prepare(
       `SELECT ${weekSql("at")} AS week, SUM(action = 'create' AND entity = 'learning') AS created,
               SUM(action = 'create_rejected_duplicate' AND entity = 'learning') AS dup
-       FROM audit_log WHERE action IN ('create', 'create_rejected_duplicate') AND at >= ? GROUP BY week`,
+       FROM audit_log WHERE action IN ('create', 'create_rejected_duplicate') AND at >= ? AND at < ? GROUP BY week`,
     )
-    .all(sqlDate(weeks[0])) as Array<{ week: string; created: number; dup: number }>;
+    .all(from, to) as QualityRow[];
+}
+
+/** bab_learn writes against the duplicate guard: stored vs refused with a 409. Only learnings count (feedback and reminders audit the same actions). */
+export function qualityByWeek(weeks: string[], rows: QualityRow[] = qualityRows(sqlDate(weeks[0]), OPEN_END)): QualityWeek[] {
   return weeks.map((week) => {
     const r = rows.find((x) => x.week === week);
     return { week, label: isoWeekLabel(week), created: r?.created ?? 0, duplicateRejected: r?.dup ?? 0 };
@@ -925,8 +1062,8 @@ export function authorsPerTeamByWeek(weeks: string[]): TeamWeek[] {
  * one query on idx_audit_action_at. Weeks before an action was first recorded read 0, like the other
  * audit numbers (`auto-archive` started with agent reads, `downvote_archived` with this card).
  */
-export function cleanupByWeek(weeks: string[]): CleanupWeek[] {
-  const rows = getDb()
+export function cleanupRows(from: string, to: string): Array<Record<string, number | string | null>> {
+  return getDb()
     .prepare(
       `SELECT ${weekSql("at")} AS week,
               SUM(action = 'auto-archive' AND json_extract(details, '$.reason') = 'inactive') AS inactive,
@@ -937,10 +1074,13 @@ export function cleanupByWeek(weeks: string[]): CleanupWeek[] {
               SUM(action = 'confirm' AND json_extract(details, '$.verified') = 1) AS verified
        FROM audit_log
        WHERE action IN ('auto-archive', 'downvote_archived', 'auto_archive', 'retire', 'keep', 'restored', 'confirm')
-         AND at >= ? AND +entity = 'learning'
+         AND at >= ? AND at < ? AND +entity = 'learning'
        GROUP BY week`,
     )
-    .all(sqlDate(weeks[0])) as Array<Record<string, number | string | null>>;
+    .all(from, to) as Array<Record<string, number | string | null>>;
+}
+
+export function cleanupByWeek(weeks: string[], rows: Array<Record<string, number | string | null>> = cleanupRows(sqlDate(weeks[0]), OPEN_END)): CleanupWeek[] {
   return weeks.map((week) => {
     const r = rows.find((x) => x.week === week);
     const n = (key: string) => num((r?.[key] ?? 0) as number);
@@ -962,16 +1102,19 @@ export function cleanupByWeek(weeks: string[]): CleanupWeek[] {
  * messages by primary key for the thread. A message deleted since still counts as sent, without a
  * thread. Counts only, never a subject or body.
  */
-export function messagesByWeek(weeks: string[]): MessageWeek[] {
-  const rows = getDb()
+export function messageRows(from: string, to: string): Array<{ week: string; messages: number; conversations: number; senders: number }> {
+  return getDb()
     .prepare(
       `SELECT ${weekSql("a.at")} AS week, COUNT(*) AS messages,
               COUNT(DISTINCT m.thread_id) AS conversations, COUNT(DISTINCT a.actor_id) AS senders
        FROM audit_log a LEFT JOIN messages m ON m.id = a.entity_id
-       WHERE a.action = 'send' AND a.at >= ? AND +a.entity = 'message'
+       WHERE a.action = 'send' AND a.at >= ? AND a.at < ? AND +a.entity = 'message'
        GROUP BY week`,
     )
-    .all(sqlDate(weeks[0])) as Array<{ week: string; messages: number; conversations: number; senders: number }>;
+    .all(from, to) as Array<{ week: string; messages: number; conversations: number; senders: number }>;
+}
+
+export function messagesByWeek(weeks: string[], rows: Array<{ week: string; messages: number; conversations: number; senders: number }> = messageRows(sqlDate(weeks[0]), OPEN_END)): MessageWeek[] {
   return weeks.map((week) => {
     const r = rows.find((x) => x.week === week);
     return {
@@ -988,17 +1131,20 @@ export function messagesByWeek(weeks: string[]): MessageWeek[] {
  * Reminders per week: created, done, snoozed and dropped, one query on idx_audit_action_at. Totals
  * only: reminders are private, so the page never says whose they are or what they say.
  */
-export function remindersByWeek(weeks: string[]): ReminderWeek[] {
-  const rows = getDb()
+export function reminderRows(from: string, to: string): Array<{ week: string; created: number; done: number; snoozed: number; dropped: number }> {
+  return getDb()
     .prepare(
       `SELECT ${weekSql("at")} AS week,
               SUM(action = 'create') AS created, SUM(action = 'complete') AS done,
               SUM(action = 'snooze') AS snoozed, SUM(action = 'abandon') AS dropped
        FROM audit_log
-       WHERE action IN ('create', 'complete', 'snooze', 'abandon') AND at >= ? AND +entity = 'todo'
+       WHERE action IN ('create', 'complete', 'snooze', 'abandon') AND at >= ? AND at < ? AND +entity = 'todo'
        GROUP BY week`,
     )
-    .all(sqlDate(weeks[0])) as Array<{ week: string; created: number; done: number; snoozed: number; dropped: number }>;
+    .all(from, to) as Array<{ week: string; created: number; done: number; snoozed: number; dropped: number }>;
+}
+
+export function remindersByWeek(weeks: string[], rows: Array<{ week: string; created: number; done: number; snoozed: number; dropped: number }> = reminderRows(sqlDate(weeks[0]), OPEN_END)): ReminderWeek[] {
   return weeks.map((week) => {
     const r = rows.find((x) => x.week === week);
     return {
@@ -1041,9 +1187,48 @@ export function auditDataSince(): string | null {
 
 /* -------------------------------------------------------------------- report */
 
-export function usageReport(now: Date = new Date()): UsageReport {
-  const weeks = lastWeeks(now);
-  const activity = activityByWeek(weeks);
+/**
+ * Everything the report reads from audit_log for one range, as parts that add up. Messages are not
+ * here: their conversation count joins the messages table, which changes when a message is deleted.
+ */
+export interface AuditPart {
+  activity: ActivityPart;
+  helpful: HelpfulPart;
+  search: SearchPart;
+  capture: CaptureRows;
+  identify: IdentifyRow[];
+  loops: LoopRow[];
+  refusals: Array<{ reason: string; n: number }>;
+  quality: QualityRow[];
+  cleanup: ReturnType<typeof cleanupRows>;
+  reminders: ReturnType<typeof reminderRows>;
+}
+
+export function auditPart(from: string, to: string): AuditPart {
+  return {
+    activity: activityPart(from, to),
+    helpful: helpfulPart(from, to),
+    search: searchPart(from, to),
+    capture: captureRows(from, to),
+    identify: identifyRows(from, to),
+    loops: identifyLoopRows(from, to),
+    refusals: refusalRows(from, to),
+    quality: qualityRows(from, to),
+    cleanup: cleanupRows(from, to),
+    reminders: reminderRows(from, to),
+  };
+}
+
+/**
+ * The report from audit parts of adjacent ranges (oldest first) that together cover the window from
+ * weeks[0] on, plus `helpfulBefore`: the reactions between the 12-month mark and weeks[0], which
+ * only topHelpful counts.
+ */
+function reportFromParts(now: Date, weeks: string[], parts: AuditPart[], helpfulBefore: HelpfulPart): UsageReport {
+  const activity = activityFromParts(
+    weeks,
+    parts.map((p) => p.activity),
+  );
   const totals = activityTotals(activity);
   const savedStillLive = num(
     (
@@ -1052,6 +1237,7 @@ export function usageReport(now: Date = new Date()): UsageReport {
         .get(sqlDate(weeks[0])) as { n: number }
     ).n,
   );
+  const newestFirst = [...parts].reverse();
   return {
     dataSince: auditDataSince(),
     generatedAt: now.toISOString(),
@@ -1062,43 +1248,176 @@ export function usageReport(now: Date = new Date()): UsageReport {
     savedStillLive,
     savedNoLongerLive: Math.max(0, totals.saves - savedStillLive),
     contents: contents(),
-    topHelpful: topHelpful(now),
+    topHelpful: topHelpfulFromParts([helpfulBefore, ...parts.map((p) => p.helpful)]),
     topProjects: topProjects(5),
     generalCount: generalProjectCount(),
     models: modelsUsed(),
     upkeep: upkeep(now),
     freshness: serveStats(now.getTime()),
     unused: unusedMemories(now),
-    searchOutcomes: searchOutcomes(weeks),
+    searchOutcomes: searchOutcomesFromParts(parts.map((p) => p.search)),
     measured: measuredSavings(weeks),
-    capture: captureByWeek(weeks),
-    identify: identifyByWeek(weeks),
-    identifyLoops: identifyLoops(weeks),
-    refusalsByReason: refusalsByReason(weeks),
-    quality: qualityByWeek(weeks),
+    capture: captureByWeek(
+      weeks,
+      parts.map((p) => p.capture),
+    ),
+    identify: identifyByWeek(
+      weeks,
+      parts.flatMap((p) => p.identify),
+    ),
+    identifyLoops: identifyLoops(
+      weeks,
+      50,
+      newestFirst.map((p) => p.loops),
+    ),
+    refusalsByReason: refusalsByReason(
+      weeks,
+      parts.map((p) => p.refusals),
+    ),
+    quality: qualityByWeek(
+      weeks,
+      parts.flatMap((p) => p.quality),
+    ),
     teams: authorsPerTeamByWeek(weeks),
-    cleanup: cleanupByWeek(weeks),
+    cleanup: cleanupByWeek(
+      weeks,
+      parts.flatMap((p) => p.cleanup),
+    ),
     messages: messagesByWeek(weeks),
-    reminders: remindersByWeek(weeks),
+    reminders: remindersByWeek(
+      weeks,
+      parts.flatMap((p) => p.reminders),
+    ),
     flagged: flaggedWaiting(),
   };
+}
+
+/** The reactions topHelpful counts before weeks[0]: from the 12-month mark (WINDOW_DAYS before now). */
+function helpfulBeforeWindow(now: Date, weeks: string[]): HelpfulPart {
+  return helpfulPart(sqlTime(new Date(now.getTime() - WINDOW_DAYS * DAY_MS)), sqlDate(weeks[0]));
+}
+
+/** The whole report, every number read from the database now. */
+export function usageReport(now: Date = new Date()): UsageReport {
+  const weeks = lastWeeks(now);
+  return reportFromParts(now, weeks, [auditPart(sqlDate(weeks[0]), OPEN_END)], helpfulBeforeWindow(now, weeks));
+}
+
+/**
+ * Closed weeks of audit_log do not change: rows are only appended, with the time they are written.
+ * So the audit numbers of each week before this one are read once and kept, per week
+ * (CLOSED_WEEKS_SETTLE_MS after the week ended, so a reaction or nudge just before midnight on
+ * Sunday has had time to be followed up). When the week turns, only the week that just closed is read.
+ */
+export const CLOSED_WEEKS_SETTLE_MS = HELPED_WINDOW_MINUTES * 60_000;
+
+/** The kept closed weeks: one audit part per Monday, for one database connection. */
+let closed: { db: DatabaseSync; oldest: string | null; weeks: Map<string, AuditPart> } | null = null;
+
+/**
+ * The kept weeks, fit for the window that starts at `from`. Retention deletes the oldest rows: when
+ * the oldest row has moved inside the window, the weeks up to and including its week are dropped
+ * and read again. Weeks before the window are forgotten.
+ */
+function closedStore(from: string): Map<string, AuditPart> {
+  const db = getDb();
+  const oldest = auditDataSince();
+  if (!closed || closed.db !== db) closed = { db, oldest, weeks: new Map() };
+  if (oldest !== closed.oldest) {
+    if (oldest !== null && oldest > from) {
+      const last = weekStart(parseDbTime(oldest));
+      for (const w of [...closed.weeks.keys()]) if (w <= last) closed.weeks.delete(w);
+    }
+    closed.oldest = oldest;
+  }
+  for (const w of [...closed.weeks.keys()]) if (sqlDate(w) < from) closed.weeks.delete(w);
+  return closed.weeks;
+}
+
+/** A week can be kept once CLOSED_WEEKS_SETTLE_MS have passed after it ended: a late follow-up may still land before. */
+function settled(now: Date, weekEnd: string): boolean {
+  return now.getTime() >= parseDbTime(weekEnd).getTime() + CLOSED_WEEKS_SETTLE_MS;
+}
+
+/** The audit parts of every closed week of the window, oldest first: kept ones, the rest read now (and kept once settled). */
+function closedWeeks(now: Date, weeks: string[]): AuditPart[] {
+  const store = closedStore(sqlDate(weeks[0]));
+  const out: AuditPart[] = [];
+  for (let i = 0; i < weeks.length - 1; i++) {
+    let part = store.get(weeks[i]);
+    if (!part) {
+      const end = sqlDate(weeks[i + 1]);
+      part = auditPart(sqlDate(weeks[i]), end);
+      if (settled(now, end)) store.set(weeks[i], part);
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+/** How often warmUsageClosedWeeks looks at most (it is called after every request). */
+export const USAGE_WARM_CHECK_MS = 60_000;
+let lastWarmCheck = 0;
+let warming = false;
+
+/**
+ * Reads the closed weeks that are not kept yet ahead of the first viewer (after a restart, or the
+ * week that closed on Monday), from the maintenance trigger after a request, so no /usage view pays
+ * for them. It reads one week per turn of the event loop: the queries are synchronous, and a year
+ * at once would hold up every other request for seconds. Resolves to true when it read any.
+ */
+export async function warmUsageClosedWeeks(now: () => Date = () => new Date()): Promise<boolean> {
+  const start = now();
+  if (warming || start.getTime() - lastWarmCheck < USAGE_WARM_CHECK_MS) return false;
+  lastWarmCheck = start.getTime();
+  warming = true;
+  try {
+    const weeks = lastWeeks(start);
+    const db = getDb();
+    let read = false;
+    for (let i = 0; i < weeks.length - 1; i++) {
+      const end = sqlDate(weeks[i + 1]);
+      if (!settled(now(), end)) break;
+      // Looked up again each time: a report or a retention sweep may have changed the store meanwhile.
+      const store = closedStore(sqlDate(weeks[0]));
+      if (getDb() !== db) return read;
+      if (store.has(weeks[i])) continue;
+      store.set(weeks[i], auditPart(sqlDate(weeks[i]), end));
+      read = true;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return read;
+  } finally {
+    warming = false;
+  }
+}
+
+/** The report with the closed weeks read from the closed-weeks cache and only this week read now. */
+export function usageReportIncremental(now: Date = new Date()): UsageReport {
+  const weeks = lastWeeks(now);
+  const cut = sqlDate(weeks[weeks.length - 1]);
+  const parts = [...closedWeeks(now, weeks), auditPart(cut, OPEN_END)];
+  return reportFromParts(now, weeks, parts, helpfulBeforeWindow(now, weeks));
 }
 
 // One report for everyone, for USAGE_CACHE_MS. Tied to the connection it was read from, so a test
 // that swaps the database (or a reopened connection) never sees another database's numbers.
 let cached: { db: DatabaseSync; at: number; report: UsageReport } | null = null;
 
-/** usageReport(), computed at most once per USAGE_CACHE_MS for everyone who opens /usage. */
+/** usageReportIncremental(), computed at most once per USAGE_CACHE_MS for everyone who opens /usage. */
 export function cachedUsageReport(now: Date = new Date()): UsageReport {
   const db = getDb();
   const age = cached ? now.getTime() - cached.at : Infinity;
   if (cached && cached.db === db && age >= 0 && age < USAGE_CACHE_MS) return cached.report;
-  const report = usageReport(now);
+  const report = usageReportIncremental(now);
   cached = { db, at: now.getTime(), report };
   return report;
 }
 
-/** Test-only: forget the cached report. */
+/** Test-only: forget the cached report and the closed weeks. */
 export function _resetUsageCacheForTests(): void {
   cached = null;
+  closed = null;
+  lastWarmCheck = 0;
+  warming = false;
 }

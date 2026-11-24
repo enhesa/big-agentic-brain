@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-24",
     title: "Self-healing memory, and a Live picture that never stops",
     changes: [
+      "The Usage page opens in well under a second: past weeks are counted once, not on every visit.",
       "Search results say how fresh a memory is: fresh, due, disputed or stale.",
       "Business facts come back to a person after a while: Is this still true? Yes, No or Not sure.",
       "A stale memory drops one standing level until someone checks it again.",

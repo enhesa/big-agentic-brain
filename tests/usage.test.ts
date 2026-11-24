@@ -861,6 +861,122 @@ describe("the 5-minute cache", () => {
   });
 });
 
+describe("closed weeks are read once", () => {
+  const SEARCH = "/mcp#tools/call:bab_search";
+  // Data on both sides of Monday 2026-10-05: a search late on Sunday credited by a reaction just
+  // after midnight, a person whose first activity is this week, loops, refusals and empty searches.
+  async function straddle(): Promise<string> {
+    await people(A, B);
+    const m1 = await memory(A, { title: "Retry with backoff", createdAt: "2026-09-01 10:00:00" });
+    await row(A, "create", "2026-09-30 10:00:00", { entity: "learning", entityId: m1 });
+    await row(A, "POST", "2026-10-04 23:50:00", { path: SEARCH, details: { results: 0, q: "kafka lag" } });
+    await row(A, "helpful", "2026-10-05 00:05:00", { entity: "learning", entityId: m1 });
+    await row(B, "POST", "2026-10-06 09:00:00", { path: SEARCH, details: { results: 0, q: "Kafka lag" } });
+    await row(B, "helpful", "2026-10-06 09:01:00", { entity: "learning", entityId: m1 });
+    for (const d of ["2026-10-01", "2026-10-06"]) {
+      for (let i = 0; i < 4; i++) await row(A, "identify", `${d} 08:0${i}:00`, { entity: "user", details: { cx: `c:${d}` } });
+      await row(A, "identify_refused", `${d} 09:00:00`, { entity: "user", details: { reason: "mismatch" } });
+    }
+    await learnCall(A, "2026-10-02 10:00:00", "c:1");
+    await learnCall(B, "2026-10-06 10:00:00", "c:2");
+    await row(A, "create", "2026-10-03 10:00:00", { entity: "todo" });
+    await row(B, "create", "2026-10-06 10:00:00", { entity: "todo" });
+    return m1;
+  }
+
+  it("gives the same report as reading every week now", async () => {
+    const m1 = await straddle();
+    const { usageReport, usageReportIncremental } = await import("../lib/usage");
+    const full = usageReport(NOW);
+    const inc = usageReportIncremental(NOW);
+    expect(inc).toEqual(full);
+    // The numbers that are not a plain sum across the Monday cut.
+    expect(full.totals.people).toBe(2);
+    expect(full.activity.at(-1)!.newPeople).toBe(1);
+    expect(full.activity.at(-2)!.helpedSearches).toBe(1);
+    expect(full.identifyLoops.map((l) => l.day)).toEqual(["2026-10-06", "2026-10-01"]);
+    expect(full.refusalsByReason).toEqual([{ reason: "mismatch", n: 2 }]);
+    expect(full.topHelpful[0]).toMatchObject({ id: m1, helpful: 2 });
+  });
+
+  it("keeps the closed weeks until the week turns, and reads this week every time", async () => {
+    await straddle();
+    const { usageReportIncremental } = await import("../lib/usage");
+    const first = usageReportIncremental(NOW);
+    // Nothing writes into a closed week; a row placed there anyway shows the closed weeks were kept.
+    await row(A, "create", "2026-09-30 11:00:00", { entity: "learning" });
+    await row(A, "create", "2026-10-06 11:00:00", { entity: "learning" });
+    const again = usageReportIncremental(NOW);
+    expect(again.activity.at(-2)!.saves).toBe(first.activity.at(-2)!.saves);
+    expect(again.activity.at(-1)!.saves).toBe(first.activity.at(-1)!.saves + 1);
+    // Next week only the week that just closed is read; the older ones stay kept.
+    const nextWeek = usageReportIncremental(new Date("2026-10-13T12:00:00Z"));
+    expect(nextWeek.activity.at(-3)!.saves).toBe(first.activity.at(-2)!.saves);
+    expect(nextWeek.activity.at(-2)!.saves).toBe(first.activity.at(-1)!.saves + 1);
+  });
+
+  it("does not keep closed weeks read just after Monday, while a follow-up may still land", async () => {
+    await straddle();
+    const { usageReportIncremental, CLOSED_WEEKS_SETTLE_MS } = await import("../lib/usage");
+    const early = new Date(Date.parse("2026-10-05T00:00:00Z") + CLOSED_WEEKS_SETTLE_MS - 60_000);
+    usageReportIncremental(early);
+    await row(A, "create", "2026-09-30 11:00:00", { entity: "learning" });
+    expect(usageReportIncremental(NOW).activity.at(-2)!.saves).toBe(2);
+  });
+
+  it("reads the closed weeks again when retention removes rows inside the window", async () => {
+    // Rows in the order they are written, as in production: the oldest row is the first rowid.
+    await row(A, "create", "2026-09-29 10:00:00", { entity: "learning" });
+    await row(A, "create", "2026-10-02 10:00:00", { entity: "learning" });
+    const { usageReportIncremental } = await import("../lib/usage");
+    expect(usageReportIncremental(NOW).totals.saves).toBe(2);
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("DELETE FROM audit_log WHERE at < '2026-10-01 00:00:00'").run();
+    expect(usageReportIncremental(NOW).totals.saves).toBe(1);
+  });
+
+  it("adds up empty searches across the Monday cut", async () => {
+    // After SEARCH_RESULTS_SINCE, so searches carry their result count. Monday is 2026-11-02.
+    const LATER = new Date("2026-11-03T12:00:00Z");
+    await row(A, "POST", "2026-11-01 23:50:00", { path: SEARCH, details: { results: 0, q: "kafka lag" } });
+    await row(B, "POST", "2026-11-03 09:00:00", { path: SEARCH, details: { results: 0, q: "Kafka lag" } });
+    await row(B, "POST", "2026-11-03 09:05:00", { path: SEARCH, details: { results: 3, q: "retries" } });
+    const { usageReport, usageReportIncremental } = await import("../lib/usage");
+    const inc = usageReportIncremental(LATER);
+    expect(inc).toEqual(usageReport(LATER));
+    expect(inc.searchOutcomes).toMatchObject({ recorded: 3, zero: 2, zeroQueries: [{ query: "kafka lag", n: 2, last: "2026-11-03 09:00:00" }] });
+  });
+
+  it("warms the closed weeks a week at a time, at most once a minute, and gives the same report", async () => {
+    await straddle();
+    const { warmUsageClosedWeeks, usageReport, usageReportIncremental, USAGE_WARM_CHECK_MS } = await import("../lib/usage");
+    const at = (ms: number) => () => new Date(NOW.getTime() + ms);
+    expect(await warmUsageClosedWeeks(at(0))).toBe(true);
+    expect(await warmUsageClosedWeeks(at(1000))).toBe(false); // checked a second ago
+    expect(await warmUsageClosedWeeks(at(USAGE_WARM_CHECK_MS))).toBe(false); // already read
+    // Kept: a row placed in a closed week afterwards is not read again.
+    await row(A, "create", "2026-09-30 11:00:00", { entity: "learning" });
+    const warm = usageReportIncremental(NOW);
+    expect(warm.activity.at(-2)!.saves).toBe(1);
+    const { getDb } = await import("../lib/db");
+    getDb().prepare("DELETE FROM audit_log WHERE at = '2026-09-30 11:00:00'").run();
+    expect(warm).toEqual(usageReport(NOW));
+  });
+
+  it("warms the older weeks just after Monday, but not the week that just closed", async () => {
+    await straddle();
+    const { warmUsageClosedWeeks, usageReportIncremental } = await import("../lib/usage");
+    expect(await warmUsageClosedWeeks(() => new Date("2026-10-05T00:10:00Z"))).toBe(true);
+    await row(A, "create", "2026-09-30 11:00:00", { entity: "learning" }); // in the week that just closed
+    await row(A, "create", "2026-09-23 11:00:00", { entity: "learning" }); // in a week kept by the warm-up
+    const r = usageReportIncremental(NOW);
+    expect(r.activity.at(-2)!.saves).toBe(2);
+    expect(r.activity.at(-3)!.saves).toBe(0);
+  });
+
+
+});
+
 /* --------------------------------------------------------------------- page */
 
 describe("/usage page", () => {
