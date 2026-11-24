@@ -909,9 +909,10 @@ describe("closed weeks are read once", () => {
     const again = usageReportIncremental(NOW);
     expect(again.activity.at(-2)!.saves).toBe(first.activity.at(-2)!.saves);
     expect(again.activity.at(-1)!.saves).toBe(first.activity.at(-1)!.saves + 1);
-    // Next week the old closed weeks are read again.
+    // Next week only the week that just closed is read; the older ones stay kept.
     const nextWeek = usageReportIncremental(new Date("2026-10-13T12:00:00Z"));
-    expect(nextWeek.activity.at(-3)!.saves).toBe(first.activity.at(-2)!.saves + 1);
+    expect(nextWeek.activity.at(-3)!.saves).toBe(first.activity.at(-2)!.saves);
+    expect(nextWeek.activity.at(-2)!.saves).toBe(first.activity.at(-1)!.saves + 1);
   });
 
   it("does not keep closed weeks read just after Monday, while a follow-up may still land", async () => {
@@ -962,10 +963,17 @@ describe("closed weeks are read once", () => {
     expect(warm).toEqual(usageReport(NOW));
   });
 
-  it("does not warm just after Monday", async () => {
-    const { warmUsageClosedWeeks } = await import("../lib/usage");
-    expect(await warmUsageClosedWeeks(() => new Date("2026-10-05T00:10:00Z"))).toBe(false);
+  it("warms the older weeks just after Monday, but not the week that just closed", async () => {
+    await straddle();
+    const { warmUsageClosedWeeks, usageReportIncremental } = await import("../lib/usage");
+    expect(await warmUsageClosedWeeks(() => new Date("2026-10-05T00:10:00Z"))).toBe(true);
+    await row(A, "create", "2026-09-30 11:00:00", { entity: "learning" }); // in the week that just closed
+    await row(A, "create", "2026-09-23 11:00:00", { entity: "learning" }); // in a week kept by the warm-up
+    const r = usageReportIncremental(NOW);
+    expect(r.activity.at(-2)!.saves).toBe(2);
+    expect(r.activity.at(-3)!.saves).toBe(0);
   });
+
 
 });
 

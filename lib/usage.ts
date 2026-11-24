@@ -1301,33 +1301,54 @@ export function usageReport(now: Date = new Date()): UsageReport {
 
 /**
  * Closed weeks of audit_log do not change: rows are only appended, with the time they are written.
- * So the audit numbers of the weeks before this one are read once and kept until the week turns
- * (CLOSED_WEEKS_SETTLE_MS after Monday, so a reaction or nudge just before midnight on Sunday has had
- * time to be followed up). Retention deletes the oldest rows: when the oldest row moves inside the
- * window, the closed weeks are read again.
+ * So the audit numbers of each week before this one are read once and kept, per week
+ * (CLOSED_WEEKS_SETTLE_MS after the week ended, so a reaction or nudge just before midnight on
+ * Sunday has had time to be followed up). When the week turns, only the week that just closed is read.
  */
 export const CLOSED_WEEKS_SETTLE_MS = HELPED_WINDOW_MINUTES * 60_000;
 
-let closed: { db: DatabaseSync; key: string; parts: AuditPart[] } | null = null;
+/** The kept closed weeks: one audit part per Monday, for one database connection. */
+let closed: { db: DatabaseSync; oldest: string | null; weeks: Map<string, AuditPart> } | null = null;
 
-/** What the closed weeks depend on: the window, the current Monday and, once retention reaches into the window, the oldest row. */
-function closedKey(from: string, cut: string): string {
-  const oldest = auditDataSince();
-  return `${from}|${cut}|${oldest !== null && oldest > from ? oldest : ""}`;
-}
-
-function settled(now: Date, cut: string): boolean {
-  return now.getTime() >= parseDbTime(cut).getTime() + CLOSED_WEEKS_SETTLE_MS;
-}
-
-function closedWeeks(now: Date, from: string, cut: string): AuditPart[] {
+/**
+ * The kept weeks, fit for the window that starts at `from`. Retention deletes the oldest rows: when
+ * the oldest row has moved inside the window, the weeks up to and including its week are dropped
+ * and read again. Weeks before the window are forgotten.
+ */
+function closedStore(from: string): Map<string, AuditPart> {
   const db = getDb();
-  const key = closedKey(from, cut);
-  if (closed && closed.db === db && closed.key === key) return closed.parts;
-  const parts = [auditPart(from, cut)];
-  // Too soon after Monday: a follow-up may still land, so use it once without keeping it.
-  if (settled(now, cut)) closed = { db, key, parts };
-  return parts;
+  const oldest = auditDataSince();
+  if (!closed || closed.db !== db) closed = { db, oldest, weeks: new Map() };
+  if (oldest !== closed.oldest) {
+    if (oldest !== null && oldest > from) {
+      const last = weekStart(parseDbTime(oldest));
+      for (const w of [...closed.weeks.keys()]) if (w <= last) closed.weeks.delete(w);
+    }
+    closed.oldest = oldest;
+  }
+  for (const w of [...closed.weeks.keys()]) if (sqlDate(w) < from) closed.weeks.delete(w);
+  return closed.weeks;
+}
+
+/** A week can be kept once CLOSED_WEEKS_SETTLE_MS have passed after it ended: a late follow-up may still land before. */
+function settled(now: Date, weekEnd: string): boolean {
+  return now.getTime() >= parseDbTime(weekEnd).getTime() + CLOSED_WEEKS_SETTLE_MS;
+}
+
+/** The audit parts of every closed week of the window, oldest first: kept ones, the rest read now (and kept once settled). */
+function closedWeeks(now: Date, weeks: string[]): AuditPart[] {
+  const store = closedStore(sqlDate(weeks[0]));
+  const out: AuditPart[] = [];
+  for (let i = 0; i < weeks.length - 1; i++) {
+    let part = store.get(weeks[i]);
+    if (!part) {
+      const end = sqlDate(weeks[i + 1]);
+      part = auditPart(sqlDate(weeks[i]), end);
+      if (settled(now, end)) store.set(weeks[i], part);
+    }
+    out.push(part);
+  }
+  return out;
 }
 
 /** How often warmUsageClosedWeeks looks at most (it is called after every request). */
@@ -1336,33 +1357,32 @@ let lastWarmCheck = 0;
 let warming = false;
 
 /**
- * Reads the closed weeks into their cache ahead of the first viewer of the week (or after a
- * restart), from the maintenance trigger after a request, so no /usage view pays for them. It reads
- * one week per turn of the event loop: the queries are synchronous, and one year at once would hold
- * up every other request for seconds. Resolves to true when it read them now.
+ * Reads the closed weeks that are not kept yet ahead of the first viewer (after a restart, or the
+ * week that closed on Monday), from the maintenance trigger after a request, so no /usage view pays
+ * for them. It reads one week per turn of the event loop: the queries are synchronous, and a year
+ * at once would hold up every other request for seconds. Resolves to true when it read any.
  */
 export async function warmUsageClosedWeeks(now: () => Date = () => new Date()): Promise<boolean> {
   const start = now();
   if (warming || start.getTime() - lastWarmCheck < USAGE_WARM_CHECK_MS) return false;
   lastWarmCheck = start.getTime();
-  const weeks = lastWeeks(start);
-  const from = sqlDate(weeks[0]);
-  const cut = sqlDate(weeks[weeks.length - 1]);
-  if (!settled(start, cut)) return false;
-  const db = getDb();
-  const key = closedKey(from, cut);
-  if (closed && closed.db === db && closed.key === key) return false;
   warming = true;
   try {
-    const parts: AuditPart[] = [];
+    const weeks = lastWeeks(start);
+    const db = getDb();
+    let read = false;
     for (let i = 0; i < weeks.length - 1; i++) {
-      parts.push(auditPart(sqlDate(weeks[i]), sqlDate(weeks[i + 1])));
+      const end = sqlDate(weeks[i + 1]);
+      if (!settled(now(), end)) break;
+      // Looked up again each time: a report or a retention sweep may have changed the store meanwhile.
+      const store = closedStore(sqlDate(weeks[0]));
+      if (getDb() !== db) return read;
+      if (store.has(weeks[i])) continue;
+      store.set(weeks[i], auditPart(sqlDate(weeks[i]), end));
+      read = true;
       await new Promise((resolve) => setImmediate(resolve));
     }
-    // Kept only if nothing moved meanwhile: the same connection, week and oldest row.
-    if (getDb() !== db || closedKey(from, cut) !== key || lastWeeks(now())[0] !== weeks[0]) return false;
-    closed = { db, key, parts };
-    return true;
+    return read;
   } finally {
     warming = false;
   }
@@ -1371,9 +1391,8 @@ export async function warmUsageClosedWeeks(now: () => Date = () => new Date()): 
 /** The report with the closed weeks read from the closed-weeks cache and only this week read now. */
 export function usageReportIncremental(now: Date = new Date()): UsageReport {
   const weeks = lastWeeks(now);
-  const from = sqlDate(weeks[0]);
   const cut = sqlDate(weeks[weeks.length - 1]);
-  const parts = [...closedWeeks(now, from, cut), auditPart(cut, OPEN_END)];
+  const parts = [...closedWeeks(now, weeks), auditPart(cut, OPEN_END)];
   return reportFromParts(now, weeks, parts, helpfulBeforeWindow(now, weeks));
 }
 

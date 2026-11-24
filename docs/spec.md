@@ -1516,12 +1516,14 @@ every time.
   Oct"; an empty chart is a short note, never a row of zeros; there is no division by zero.
 - The report is computed once and shared for 5 minutes (`cachedUsageReport`, tied to the database
   connection). Closed weeks of `audit_log` never change (rows are only appended, stamped with the time
-  they are written), so their numbers are read once a week and kept (`usageReportIncremental`); each
-  report reads only the current week from the audit log. The closed weeks are kept once 30 minutes of
-  the new week have passed (a reaction or Stop nudge late on Sunday may still be followed up), and
-  read again when retention deletes rows inside the 12-month window. The maintenance trigger after
-  a request reads them ahead of the first viewer (`warmUsageClosedWeeks`, checked at most once a
-  minute), so after a restart or on Monday no page view waits for a year of audit rows. Every audit query is bounded by time and runs on `audit_log(action, at)`,
+  they are written), so each closed week's numbers are read once and kept, per week
+  (`usageReportIncremental`); each report reads only the current week from the audit log. A week is
+  kept once 30 minutes have passed after it ended (a reaction or Stop nudge late on Sunday may still
+  be followed up). When retention deletes rows inside the 12-month window, only the weeks up to the
+  oldest remaining row are read again. The maintenance trigger after a request reads the missing
+  weeks ahead of the first viewer, one week per event-loop turn (`warmUsageClosedWeeks`, checked at
+  most once a minute), so after a restart or on Monday no page view waits for a year of audit rows.
+  Every audit query is bounded by time and runs on `audit_log(action, at)`,
   `audit_log(path, at)` or `audit_log(at)` (`+entity` keeps the planner off the unbounded
   `audit_log(entity, entity_id)`); learnings queries run on their status, created_at or expires_at
   indexes. No new migration was needed.
