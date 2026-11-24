@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.45.0](https://github.com/enhesa/big-agentic-brain/compare/v2.44.0...v2.45.0) (2026-11-24)
+
+
+### Features
+
+* live picture loops and shows counts and notes itself ([#211](https://github.com/enhesa/big-agentic-brain/issues/211)) ([5dc481c](https://github.com/enhesa/big-agentic-brain/commit/5dc481c88874b3856225a74939a1d39d2eaafe9a))
+
+
+### Performance Improvements
+
+* **SOFTARCH-71:** read closed usage weeks once instead of on every report ([#212](https://github.com/enhesa/big-agentic-brain/issues/212)) ([c56f061](https://github.com/enhesa/big-agentic-brain/commit/c56f061223c667d291d64b072d72f5a30467c489))
+
 ## [2.44.0](https://github.com/enhesa/big-agentic-brain/compare/v2.43.0...v2.44.0) (2026-11-24)
 
 
