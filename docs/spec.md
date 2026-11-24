@@ -1566,10 +1566,22 @@ every time.
   page says so under the picture.
 - The picture moves a mark per beat: dot to brain for a save or a flag, there and back for a search, brain
   to dot for a reuse, a line from one dot to another for a message. On opening it plays the last hour again, at most 6 beats. Once every mark has finished, the picture waits
-  `LOOP_PAUSE_MS` (2.5 seconds) and plays those beats again, and again, so it never rests. A new beat plays
-  at once and the loop carries on after it. When the last hour was quiet it plays the latest beats of the
-  window. The loop waits while the tab is hidden or the Replay is open. Under `prefers-reduced-motion` nothing
-  moves and nothing loops. Everything the picture shows is also in the numbers and the "Latest" list under it.
+  `LOOP_PAUSE_MS` (1.5 seconds) and plays the last 12 beats again, oldest first and `LOOP_STAGGER_MS` (1.3 seconds)
+  apart, and again, so it never rests. A new beat plays at once: the loop's marks make way for it, and the loop carries on after it. The loop
+  waits while the tab is hidden or the Replay is open. Under `prefers-reduced-motion` nothing moves and
+  nothing loops.
+- The picture says the numbers and the beats itself, with no boxes under it. Each count (searches, memories
+  saved, memories reused, messages) is a coloured circle on the rim of the brain with its number in it and its word beside it, as big as
+  its share: the largest count has the largest circle and the others shrink by area. The circle of a kind
+  rings for every beat of that kind. For a beat a note pops up beside its dot for `POP_MS` (2.6 seconds):
+  what was done and, for a memory, its title as a link. A note starts no sooner than `LOOP_STAGGER_MS` after
+  the one before it, so at most two show at once: in a burst the beats in between move without a note.
+  A note that has not started or has ended cannot be clicked. The count of people stands beside the word "Live".
+- The same is kept in words. The numbers and the "Latest" list are in the page for a screen reader, hidden
+  from the eye. The list comes back onto the page under `prefers-reduced-motion`, where no note pops up, and
+  when a link in it takes the keyboard focus. Both come back on a small screen (720 pixels wide or less), where a
+  circle is too small to hold a number and a note would cover the picture: there the circles stay as
+  spots of colour that ring.
 - The window is read as a range of audit row ids: the lowest id at or after the start of the people's window,
   which is earlier than the page's, bounds it
   (read from the index over `at`), and the two reads (the counts, the last beats) walk only the rows after

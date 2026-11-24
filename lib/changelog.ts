@@ -20,10 +20,12 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-24",
-    title: "The Replay loops",
+    title: "The Live picture never stops, and says it all itself",
     changes: [
       "The Replay on the Live page starts again when it reaches the end, until you pause it.",
       "The Live picture no longer stops: it plays the latest beats again and again.",
+      "On the Live page each beat pops up as a note beside its dot, with the memory's title.",
+      "The Live numbers are coloured circles on the brain now. The boxes under the picture are gone.",
       "The line under the Live title is shorter: The brain at work over the last 24 hours.",
     ],
   },
