@@ -616,6 +616,10 @@ JOIN` as a hint to keep the written join order, so MATCH always runs first. See 
 `foreign_keys=ON`, `busy_timeout=5000`, `temp_store=MEMORY`, `cache_size=-20000` (~20MB). `PRAGMA
 optimize` runs once per fresh connection and again every hour via the maintenance sweep below.
 
+**Usage page**: the 12-month audit numbers on `/usage` are read once a week, not on every report:
+closed weeks are kept and only the current week is read (see "Usage page"). At 1 million audit rows
+a report takes about 0.1 s instead of about 4.7 s.
+
 **N+1 fixes**: `inboxFor` (was 1 + 3N queries) is now one CTE-based query.
 `listAllThreads`/`threadForViewer`/`learnings.search`/`learnings.findSimilar` batch their
 per-row user/supersedes lookups into one `IN (...)` query per page instead of N. `listAllThreads`'s
@@ -1511,7 +1515,13 @@ every time.
   before" note; numbers recorded only since 6 Oct (nudges, refusals, sessions, models) say "since 6
   Oct"; an empty chart is a short note, never a row of zeros; there is no division by zero.
 - The report is computed once and shared for 5 minutes (`cachedUsageReport`, tied to the database
-  connection). Every audit query is bounded by time and runs on `audit_log(action, at)`,
+  connection). Closed weeks of `audit_log` never change (rows are only appended, stamped with the time
+  they are written), so their numbers are read once a week and kept (`usageReportIncremental`); each
+  report reads only the current week from the audit log. The closed weeks are kept once 30 minutes of
+  the new week have passed (a reaction or Stop nudge late on Sunday may still be followed up), and
+  read again when retention deletes rows inside the 12-month window. The maintenance trigger after
+  a request reads them ahead of the first viewer (`warmUsageClosedWeeks`, checked at most once a
+  minute), so after a restart or on Monday no page view waits for a year of audit rows. Every audit query is bounded by time and runs on `audit_log(action, at)`,
   `audit_log(path, at)` or `audit_log(at)` (`+entity` keeps the planner off the unbounded
   `audit_log(entity, entity_id)`); learnings queries run on their status, created_at or expires_at
   indexes. No new migration was needed.

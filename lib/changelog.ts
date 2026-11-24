@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-11-24",
     title: "The Replay loops",
     changes: [
+      "The Usage page opens in well under a second: past weeks are counted once, not on every visit.",
       "The Replay on the Live page starts again when it reaches the end, until you pause it.",
       "The line under the Live title is shorter: The brain at work over the last 24 hours.",
     ],

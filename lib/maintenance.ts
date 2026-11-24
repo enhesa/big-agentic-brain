@@ -10,6 +10,7 @@ import { maybeSnapshotBackup } from "./backup";
 import { revokeStaleDevices, purgeDeviceNotices } from "./devices";
 import { expireStaleConnections } from "./mcp-connections";
 import { purgeRemovable as purgeRemovableFiles } from "./files";
+import { warmUsageClosedWeeks } from "./usage";
 
 /** How long an idempotency-replay row is kept (matches TTL_MS in lib/idempotency.ts). */
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -584,6 +585,9 @@ export function scheduleMaintenance(): void {
     } catch (err) {
       console.error("scheduleMaintenance (backup) failed", err);
     }
+    // /usage: read the closed weeks once a week (and after a restart) here, not on a page view.
+    // A cheap check at most once a minute; the read itself is once a week, a week per tick.
+    warmUsageClosedWeeks().catch((err) => console.error("scheduleMaintenance (usage warm-up) failed", err));
   });
 }
 
