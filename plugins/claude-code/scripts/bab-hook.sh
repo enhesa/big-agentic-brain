@@ -66,7 +66,7 @@ drain() {
 # No usable URL: say so once per quiet period (stderr, not the session), then stay quiet.
 no_url() {
   if ! is_quiet "$data/hook-no-url-until"; then
-    printf '%s\n' 'BAB hooks: the bab_url setting (CLAUDE_PLUGIN_OPTION_BAB_URL) is unset or not an http(s) URL, so the hooks stay quiet.' >&3
+    printf '%s\n' 'BAB hooks: the bab_url setting (CLAUDE_PLUGIN_OPTION_BAB_URL) is unset or not an http(s) URL, and no usable server-url file is in the plugin root, so the hooks stay quiet.' >&3
     mark_quiet "$data/hook-no-url-until"
   fi
   drain
