@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.45.1](https://github.com/enhesa/big-agentic-brain/compare/v2.45.0...v2.45.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **plugin:** read a built-in server URL when bab_url is empty ([#215](https://github.com/enhesa/big-agentic-brain/issues/215)) ([a41d25f](https://github.com/enhesa/big-agentic-brain/commit/a41d25fa0369c205c2858d21a89dc5de934a9dac))
+
 ## [2.45.0](https://github.com/enhesa/big-agentic-brain/compare/v2.44.0...v2.45.0) (2026-11-24)
 
 
