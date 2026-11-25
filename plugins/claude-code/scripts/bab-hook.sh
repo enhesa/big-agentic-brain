@@ -1,7 +1,8 @@
 #!/bin/sh
 # BAB hook: posts the hook event on stdin to <bab_url>/api/hook and prints BAB's answer.
 # $1 = the whole request's time limit in seconds (default 3).
-# The URL comes from CLAUDE_PLUGIN_OPTION_BAB_URL, which Claude Code sets from the plugin setting.
+# The URL comes from CLAUDE_PLUGIN_OPTION_BAB_URL, which Claude Code sets from the plugin setting,
+# or, when that is empty, from a server-url file in the plugin root (an organization's own build).
 # It prints the answer only when it is JSON (HTTP 200, a JSON content type, a body that starts
 # with "{") of at most 64 KB, so a captive portal's page never lands in the session.
 # After a connection failure it skips the call for 5 minutes (a stamp in CLAUDE_PLUGIN_DATA; without
@@ -65,13 +66,28 @@ drain() {
 # No usable URL: say so once per quiet period (stderr, not the session), then stay quiet.
 no_url() {
   if ! is_quiet "$data/hook-no-url-until"; then
-    printf '%s\n' 'BAB hooks: the bab_url setting (CLAUDE_PLUGIN_OPTION_BAB_URL) is unset or not an http(s) URL, so the hooks stay quiet.' >&3
+    printf '%s\n' 'BAB hooks: the bab_url setting (CLAUDE_PLUGIN_OPTION_BAB_URL) is unset or not an http(s) URL, and no usable server-url file is in the plugin root, so the hooks stay quiet.' >&3
     mark_quiet "$data/hook-no-url-until"
   fi
   drain
 }
 
 url=${CLAUDE_PLUGIN_OPTION_BAB_URL:-}
+# No setting: a build for one organization may carry its URL in the plugin root, in a file
+# named server-url (one line). Upstream ships none, so the setting stays required there.
+if [ -z "$url" ]; then
+  # The script's folder from $0, which can use \ on Windows.
+  case "$0" in
+    */* | *\\*) builtin_file="${0%[/\\]*}/../server-url" ;;
+    *) builtin_file=../server-url ;;
+  esac
+  if [ -f "$builtin_file" ] && [ -r "$builtin_file" ]; then
+    IFS= read -r url < "$builtin_file" || [ -n "$url" ]
+    # A CRLF checkout leaves a carriage return at the end: drop one trailing character that
+    # cannot be part of a URL. The checks below still apply to the rest.
+    url=${url%[!A-Za-z0-9.:/_-]}
+  fi
+fi
 # Only an http or https URL.
 case "$url" in
   https://* | http://*) ;;

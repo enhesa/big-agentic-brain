@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -92,6 +92,7 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     input = '{"session_id":"s1","hook_event_name":"Stop"}',
     dataDir: string | null = data,
     token?: string,
+    script = SCRIPT,
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
       const env: NodeJS.ProcessEnv = { ...process.env };
@@ -101,7 +102,7 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
       if (url !== undefined) env.CLAUDE_PLUGIN_OPTION_BAB_URL = url;
       delete env.CLAUDE_PLUGIN_OPTION_BAB_TOKEN;
       if (token !== undefined) env.CLAUDE_PLUGIN_OPTION_BAB_TOKEN = token;
-      const child = spawn("sh", [SCRIPT, "3"], { env });
+      const child = spawn("sh", [script, "3"], { env });
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (c) => (stdout += c));
@@ -208,5 +209,61 @@ describe.skipIf(!hasTools)("bab-hook.sh", () => {
     writeFileSync(stamp, "junk");
     expect((await run(`${base}/json`)).stdout).toContain("hookSpecificOutput");
     expect(existsSync(stamp)).toBe(false);
+  });
+
+  describe("built-in server-url file", () => {
+    // A copy of the plugin layout: <root>/scripts/bab-hook.sh and <root>/server-url.
+    const roots: string[] = [];
+    afterAll(() => {
+      for (const root of roots) rmSync(root, { recursive: true, force: true });
+    });
+
+    function pluginWith(serverUrl: string | null): string {
+      const root = mkdtempSync(path.join(tmpdir(), "bab-plugin-"));
+      roots.push(root);
+      mkdirSync(path.join(root, "scripts"));
+      const script = path.join(root, "scripts", "bab-hook.sh");
+      copyFileSync(SCRIPT, script);
+      if (serverUrl !== null) writeFileSync(path.join(root, "server-url"), serverUrl);
+      return script;
+    }
+
+    it("uses the file when the setting is empty", async () => {
+      const script = pluginWith(`${base}/json\n`);
+      for (const url of [undefined, ""]) {
+        const out = await run(url, undefined, data, undefined, script);
+        expect(JSON.parse(out.stdout).hookSpecificOutput.additionalContext).toBe("hi");
+        expect(out.stderr).toBe("");
+      }
+    });
+
+    it("reads a file with CRLF, no newline or a trailing slash", async () => {
+      for (const line of [`${base}/json\r\n`, `${base}/json`, `${base}/json/\n`]) {
+        const out = await run(undefined, undefined, data, undefined, pluginWith(line));
+        expect(JSON.parse(out.stdout).hookSpecificOutput.additionalContext).toBe("hi");
+      }
+    });
+
+    it("prefers the setting over the file", async () => {
+      const out = await run(`${base}/auth`, undefined, data, undefined, pluginWith(`${base}/json\n`));
+      expect(JSON.parse(out.stdout)).toEqual({ auth: null });
+    });
+
+    it.each(["", "ftp://example.com\n", 'https://example.com/"$(id)"\n', "https://example.com/a b\n"])(
+      "makes no call for the file %j",
+      async (line) => {
+        const out = await run(undefined, undefined, data, undefined, pluginWith(line));
+        expect(out.stdout).toBe("");
+        expect(out.stderr).toMatch(/^BAB hooks: the bab_url setting/);
+        expect(calls).toBe(0);
+      },
+    );
+
+    it("makes no call without the file, as before", async () => {
+      const out = await run(undefined, undefined, data, undefined, pluginWith(null));
+      expect(out.stdout).toBe("");
+      expect(out.stderr).toMatch(/^BAB hooks: the bab_url setting/);
+      expect(calls).toBe(0);
+    });
   });
 });

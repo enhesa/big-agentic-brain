@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-25",
+    title: "Plugin builds with the server address built in",
+    changes: [
+      "The plugin hooks can read a built-in server address, so an organization's own build needs no setting.",
+    ],
+  },
+  {
     date: "2026-11-24",
     title: "Self-healing memory, and a Live picture that never stops",
     changes: [
