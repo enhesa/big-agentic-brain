@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Plugin builds with the server address built in",
     changes: [
       "The plugin hooks can read a built-in server address, so an organization's own build needs no setting.",
+      "The container image is public: the quick start is one docker run, with no build and no sign-in.",
     ],
   },
   {

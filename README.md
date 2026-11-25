@@ -103,18 +103,23 @@ Any other MCP client: add `https://<your-bab>/mcp` (see [Connect your agents](#c
 
 ### Run your own
 
-BAB is self-hosted: one container, one SQLite file. You need Docker with Compose.
+BAB is self-hosted: one container, one SQLite file. You need Docker.
 
-**1. Start it.** Compose builds the image from this repository.
+**1. Start it.** This pulls the published image, for amd64 and arm64. No build and no sign-in.
 
 ```bash
-git clone https://github.com/enhesa/big-agentic-brain.git
-cd big-agentic-brain
-docker compose up -d --build
-curl -sf localhost:3000/readyz
+docker run -d --name bab --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  -v bab-data:/data \
+  -e BAB_PUBLIC_ORIGIN=http://localhost:3000 \
+  ghcr.io/enhesa/big-agentic-brain:latest
 ```
 
-**2. Open it.** Go to http://localhost:3000. Compose binds `127.0.0.1:3000` only.
+It is ready a few seconds later, when `curl -sf localhost:3000/readyz` answers. Your data lives in the `bab-data` volume.
+
+To build from source instead, clone this repository and run `docker compose up -d --build` ([Deploy with Compose](docs/deploy/compose.md)).
+
+**2. Open it.** Go to http://localhost:3000. The command binds `127.0.0.1:3000` only.
 
 **3. Save a first memory,** the way an agent would:
 
@@ -125,7 +130,7 @@ curl -s localhost:3000/api/learnings \
   -d '{"title":"Deploy fails with a certificate error","body":"The deploy certificate has expired. Renew it, then deploy again.","tags":["engineering","tooling"]}'
 ```
 
-It appears on the Memory page and in every agent's search. For sample content, run `BAB_ORIGIN=http://localhost:3000 scripts/seed-demo.sh`.
+It appears on the Memory page and in every agent's search. For sample content, clone this repository and run `BAB_ORIGIN=http://localhost:3000 scripts/seed-demo.sh`.
 
 **4. Connect an agent.** Point any MCP client at `http://localhost:3000/mcp`. In Claude Code:
 
@@ -328,7 +333,7 @@ One container, one volume, one SQLite file. BAB makes no external calls and need
 
 | You want to | Do this |
 |---|---|
-| **Try it on your machine** | The [quick start](#run-your-own): `docker compose up -d --build`. |
+| **Try it on your machine** | The [quick start](#run-your-own): one `docker run` on the published image. |
 | **Run it for a team** | [Deploy with Compose](docs/deploy/compose.md), then put it [behind oauth2-proxy](docs/deploy/oauth2-proxy.md) or add bearer tokens. |
 | **Run it on your platform** | Use the published image, or [build your own](docs/build.md). One replica, a local block volume at `/data`, probes on `/healthz` and `/readyz`. |
 | **Change a setting** | Every setting is an environment variable: [Configuration](docs/configuration.md). Misconfiguration fails at startup. |
@@ -336,23 +341,17 @@ One container, one volume, one SQLite file. BAB makes no external calls and need
 
 ### Container image
 
-Each release since 2.42.0 builds an image for amd64 and arm64 and pushes it to the GitHub Container Registry:
+A release builds an image for amd64 and arm64 and pushes it to the GitHub Container Registry. The package is public, so a pull needs no sign-in:
 
 ```text
-ghcr.io/enhesa/big-agentic-brain:2.42.0     one release
-ghcr.io/enhesa/big-agentic-brain:2.42       the latest patch of a minor
+ghcr.io/enhesa/big-agentic-brain:2.45.0     one release
+ghcr.io/enhesa/big-agentic-brain:2.45       the latest patch of a minor
 ghcr.io/enhesa/big-agentic-brain:latest     the latest release
 ```
 
-The package is not public yet, so an anonymous pull is refused. Until it is, build from source with the quick start. With access to the image, this is the quick start without the build:
+The first image is 2.42.0. A release can lack one when its build did not finish, as 2.44.0 does: check the [package page](https://github.com/enhesa/big-agentic-brain/pkgs/container/big-agentic-brain) for the tags that exist.
 
-```bash
-docker run -d --name bab --restart unless-stopped \
-  -p 127.0.0.1:3000:3000 \
-  -v bab-data:/data \
-  -e BAB_PUBLIC_ORIGIN=http://localhost:3000 \
-  ghcr.io/enhesa/big-agentic-brain:2.42.0
-```
+The [quick start](#run-your-own) uses `latest`. For an instance you keep, pin a version and upgrade on purpose: migrations run forward on startup, so back up first ([Operating BAB](docs/operations.md)).
 
 ### Architecture
 
@@ -494,7 +493,7 @@ Every question, with the long answers: [FAQ](docs/faq.md).
 
 ## Roadmap
 
-- [ ] A public image on GHCR, so the quick start needs no build. Each release already builds one
+- [x] A public image on GHCR, so the quick start needs no build
 - [ ] Hook adapters for Cursor and Codex. The hook endpoint is plain HTTP, so other harnesses could get the session-start inbox and house rules too
 - [ ] A tested client guide: Cursor, Codex, Windsurf, Claude Desktop, Copilot
 - [ ] Postgres storage and multi-replica support
