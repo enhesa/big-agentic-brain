@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-26",
+    title: "Allowing BAB tools in auto mode",
+    changes: [
+      "The plugin guide says how to allow BAB tools when auto mode or a host setting keeps asking.",
+    ],
+  },
+  {
     date: "2026-11-25",
     title: "Plugin builds with the server address built in",
     changes: [
