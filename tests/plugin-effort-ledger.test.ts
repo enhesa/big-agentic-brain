@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   REUSE_CAP_MS,
   SEGMENT_CAP_MS,
@@ -9,6 +10,7 @@ import {
   billableTokens,
   completeTurn,
   costArg,
+  costFollowUp,
   cut,
   idsFromNotice,
   idsFromSearchResult,
@@ -196,5 +198,38 @@ describe("effort ledger", () => {
     expect(isReuseReaction("helpful")).toBe(true);
     expect(isReuseReaction("kudos")).toBe(true);
     expect(isReuseReaction("confirm")).toBe(false);
+  });
+});
+
+describe("cost follow-up", () => {
+  const ID = "3f2b8c1e-7a4d-4e2b-9c1a-0f5e6d7c8b9a";
+  const COST = { activeMinutes: 2, tokens: 500 };
+
+  it("attaches a save's cost to the id in BAB's answer", () => {
+    const answer = JSON.stringify({ learning: { id: ID, title: "t" }, url: "https://bab.example.com/learnings/x" });
+    expect(costFollowUp("bab_learn", { title: "t" }, answer, COST)).toEqual({ learningId: ID, action: "cost", for: "learn", cost: COST });
+  });
+
+  it("attaches a helpful or kudos reaction's cost to its memory", () => {
+    expect(costFollowUp("bab_react", { learningId: ID, action: "helpful" }, "{}", COST)).toEqual({ learningId: ID, action: "cost", for: "helpful", cost: COST });
+    expect(costFollowUp("bab_react", { learningId: ID, action: "kudos", note: "n" }, "{}", COST)).toEqual({ learningId: ID, action: "cost", for: "kudos", cost: COST });
+  });
+
+  it("sends nothing without a cost, an id, or for any other reaction", () => {
+    expect(costFollowUp("bab_learn", {}, JSON.stringify({ learning: { id: ID } }), null)).toBeNull();
+    expect(costFollowUp("bab_learn", {}, "BAB does not know you yet. Call bab_identify.", COST)).toBeNull();
+    expect(costFollowUp("bab_learn", {}, JSON.stringify({ learning: { id: "bad id!" } }), COST)).toBeNull();
+    expect(costFollowUp("bab_learn", {}, null, COST)).toBeNull();
+    expect(costFollowUp("bab_react", { learningId: ID, action: "flag" }, "{}", COST)).toBeNull();
+    expect(costFollowUp("bab_react", { action: "helpful" }, "{}", COST)).toBeNull();
+  });
+
+  it("the hook passes every measured call on unchanged, so auto mode runs the input it reviewed", () => {
+    const src = readFileSync("plugins/claude-code/hooks/register.tsx", "utf8");
+    const hook = src.slice(src.indexOf("on('tool.call', async"), src.indexOf("on('session.start'"));
+    expect(hook).toContain("costFollowUp(");
+    // Every next() in the measuring hook gets the event itself, never a copy with extra arguments.
+    expect(hook.match(/next\(([^)]*)\)/g)?.every((c) => c === "next(e)")).toBe(true);
+    expect(src).not.toMatch(/withCost/);
   });
 });

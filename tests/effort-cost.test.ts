@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 /**
- * Measured agent effort (docs/savings.md, "Measured savings"): the plugin attaches `cost` to
- * bab_learn (discovery) and to a helpful or kudos bab_react (reuse). The server validates it
- * tightly, stores numbers only, and keeps them out of every memory answer.
+ * Measured agent effort (docs/savings.md, "Measured savings"): the plugin attaches the discovery
+ * cost of a bab_learn and the reuse cost of a helpful or kudos bab_react in a follow-up bab_react
+ * `cost` call, so the reviewed input is the input that runs. Older plugins send `cost` in the
+ * input itself. The server validates it, stores numbers only, and keeps them out of every answer.
  */
 
 let dataDir: string;
@@ -117,11 +118,11 @@ describe("bab_learn with a measured cost", () => {
     expect(JSON.parse(out.text).learning.id).toBeTruthy();
   });
 
-  it("refuses a bad cost before anything is written", async () => {
+  it("saves with no cost when the input carries one BAB would refuse", async () => {
     const out = await call("bab_learn", { title: "Bad cost", body: "Body.", cost: { activeMinutes: 9999, tokens: 1 } });
-    expect(out.isError).toBe(true);
-    expect(out.text).toMatch(/cost\.activeMinutes/);
-    expect(await rows("SELECT id FROM learnings")).toEqual([]);
+    expect(out.isError).toBe(false);
+    expect(await rows("SELECT id FROM learnings")).toHaveLength(1);
+    expect(await rows("SELECT * FROM learning_costs")).toEqual([]);
   });
 
   it("keeps cost out of the advertised schemas: only the plugin fills it in", async () => {
@@ -166,6 +167,56 @@ describe("bab_react with a measured cost", () => {
     const own = JSON.parse((await call("bab_learn", { title: "Alice's own note on caching", body: "Body." })).text).learning.id;
     expect((await call("bab_react", { learningId: own, action: "helpful", cost: { activeMinutes: 1, tokens: 1 } })).isError).toBe(true);
     expect(await rows("SELECT * FROM reuse_costs")).toEqual([]);
+  });
+});
+
+describe("bab_react cost: the follow-up the plugin sends", () => {
+  const COST = { activeMinutes: 3, tokens: 7000, usd: 0.5 };
+
+  it("attaches a discovery cost to the caller's own memory, once", async () => {
+    const id = JSON.parse((await call("bab_learn", { title: "Alice's measured note", body: "Body." })).text).learning.id;
+    const first = await call("bab_react", { learningId: id, action: "cost", for: "learn", cost: COST });
+    expect(first).toEqual({ isError: false, text: JSON.stringify({ stored: true }) });
+    const again = await call("bab_react", { learningId: id, action: "cost", for: "learn", cost: { activeMinutes: 9, tokens: 9 } });
+    expect(again).toEqual({ isError: false, text: JSON.stringify({ stored: false }) });
+    expect(await rows("SELECT active_ms, tokens, usd FROM learning_costs")).toEqual([{ active_ms: 180_000, tokens: 7000, usd: 0.5 }]);
+  });
+
+  it("refuses a discovery cost on someone else's memory", async () => {
+    const m = await carolsMemory();
+    const out = await call("bab_react", { learningId: m.id, action: "cost", for: "learn", cost: COST });
+    expect(out.isError).toBe(true);
+    expect(out.text).toMatch(/only the author/);
+    expect(await rows("SELECT * FROM learning_costs")).toEqual([]);
+  });
+
+  it("attaches a reuse cost only to the caller's own helpful or kudos reaction, once", async () => {
+    const m = await carolsMemory();
+    expect(JSON.parse((await call("bab_react", { learningId: m.id, action: "cost", for: "helpful", cost: COST })).text)).toEqual({ stored: false });
+    await call("bab_react", { learningId: m.id, action: "helpful" });
+    expect(JSON.parse((await call("bab_react", { learningId: m.id, action: "cost", for: "helpful", cost: COST })).text)).toEqual({ stored: true });
+    expect(JSON.parse((await call("bab_react", { learningId: m.id, action: "cost", for: "helpful", cost: COST })).text)).toEqual({ stored: false });
+    await call("bab_react", { learningId: m.id, action: "kudos", note: "saved a deploy" });
+    expect(JSON.parse((await call("bab_react", { learningId: m.id, action: "cost", for: "kudos", cost: COST })).text)).toEqual({ stored: true });
+    expect(await rows("SELECT kind, tokens FROM reuse_costs ORDER BY kind")).toEqual([
+      { kind: "helpful", tokens: 7000 },
+      { kind: "kudos", tokens: 7000 },
+    ]);
+  });
+
+  it("refuses a missing or bad cost, an unknown target and an unknown memory", async () => {
+    const m = await carolsMemory();
+    expect((await call("bab_react", { learningId: m.id, action: "cost", for: "helpful" })).text).toMatch(/cost is required/);
+    expect((await call("bab_react", { learningId: m.id, action: "cost", for: "helpful", cost: { activeMinutes: 9999, tokens: 1 } })).text).toMatch(/cost\.activeMinutes/);
+    expect((await call("bab_react", { learningId: m.id, action: "cost", for: "flag", cost: COST })).text).toMatch(/for must be one of/);
+    expect((await call("bab_react", { learningId: "missing-id", action: "cost", for: "learn", cost: COST })).isError).toBe(true);
+  });
+
+  it("keeps the cost action out of the advertised bab_react schema", async () => {
+    const { findTool } = await import("../lib/mcp");
+    const schema = findTool("bab_react")!.inputSchema as { properties: { action: { enum: string[] } } & Record<string, unknown> };
+    expect(schema.properties.action.enum).not.toContain("cost");
+    expect(schema.properties.for).toBeUndefined();
   });
 });
 

@@ -252,3 +252,29 @@ export function babToolOf(name: string, server: string | null): 'bab_learn' | 'b
 export function isReuseReaction(action: unknown): boolean {
   return action === 'helpful' || action === 'kudos'
 }
+
+/**
+ * The follow-up bab_react `cost` call that attaches a measured cost to a save or reaction BAB just
+ * accepted, or null when there is nothing to attach. A save's id comes from BAB's answer; an
+ * answer without one (BAB asking who you are, say) sends nothing.
+ */
+export function costFollowUp(
+  tool: 'bab_learn' | 'bab_react',
+  args: Record<string, unknown>,
+  answer: string | null,
+  cost: ReturnType<typeof costArg>,
+): { learningId: string; action: 'cost'; for: 'learn' | 'helpful' | 'kudos'; cost: NonNullable<ReturnType<typeof costArg>> } | null {
+  if (!cost) return null
+  if (tool === 'bab_react') {
+    const action = args.action
+    if ((action !== 'helpful' && action !== 'kudos') || typeof args.learningId !== 'string' || !ID_RE.test(args.learningId)) return null
+    return { learningId: args.learningId, action: 'cost', for: action, cost }
+  }
+  let id: unknown
+  try {
+    id = (JSON.parse(answer ?? '') as { learning?: { id?: unknown } } | null)?.learning?.id
+  } catch {
+    return null
+  }
+  return typeof id === 'string' && ID_RE.test(id) ? { learningId: id, action: 'cost', for: 'learn', cost } : null
+}

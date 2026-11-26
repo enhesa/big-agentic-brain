@@ -21,7 +21,7 @@ import { VERIFY_HINT } from "./swarm-gc";
 import { CHECK_DUE_HINT } from "./freshness";
 import { changeCheckBy, markChecksDelivered, recheck, recordServed, waitingFor } from "./checks";
 import { formatAge } from "./relative-time";
-import { parseCost, recordDiscoveryCost, recordReuseCost } from "./effort-cost";
+import { attachCost, legacyCost, recordDiscoveryCost, recordReuseCost } from "./effort-cost";
 import {
   search,
   searchTotal,
@@ -431,8 +431,8 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
 
   const confirmNotDuplicate = args.confirmNotDuplicate === true;
   const provenance = readProvenance(args);
-  // Measured by the plugin, checked before anything is written; used for /usage only.
-  const cost = parseCost(args.cost);
+  // Sent in the input by older plugins only (the current one attaches it afterwards); /usage only.
+  const cost = legacyCost(args.cost);
 
   let created;
   try {
@@ -815,11 +815,14 @@ function runReact(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
   if (!learningId) throw new ValidationError("learningId is required");
 
   const action = str(args.action);
+  // Not in the schema: the plugin attaches the measured effort of a save or reaction BAB already
+  // accepted, so it never changes the input auto mode reviewed (lib/effort-cost.ts).
+  if (action === "cost") return JSON.stringify({ stored: attachCost(learningId, actor.id, args.for, args.cost) });
   if (!REACT_ACTIONS.includes(action as ReactAction)) {
     throw new ValidationError(`action must be one of ${REACT_ACTIONS.join(", ")}`);
   }
-  // Measured by the plugin between the search that surfaced the memory and this reaction; /usage only.
-  const cost = parseCost(args.cost);
+  // Sent in the input by older plugins only, on helpful and kudos.
+  const cost = legacyCost(args.cost);
   if (cost && action !== "helpful" && action !== "kudos") throw new ValidationError("cost is only for helpful and kudos");
 
   if (action === "comment") {

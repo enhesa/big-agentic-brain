@@ -10,6 +10,7 @@ import {
   billableTokens,
   completeTurn,
   costArg,
+  costFollowUp,
   cut,
   idsFromNotice,
   idsFromSearchResult,
@@ -272,12 +273,6 @@ async function ownServerName($: EngineInterface): Promise<string | null> {
     if (c?.isConnected) ownServer = c.server
   }
   return ownServer ?? null
-}
-
-/** The call's arguments with `cost` set by the plugin alone: whatever the model passed is dropped. */
-function withCost<T extends object>(e: T, cost: ReturnType<typeof costArg> | null): T {
-  const { cost: _dropped, ...rest } = e as T & { cost?: unknown }
-  return (cost ? { ...rest, cost } : rest) as T
 }
 
 /** "jan.van.der.biest@example.com" -> "Jan": enough to recognise, short enough for one line. */
@@ -1033,8 +1028,10 @@ export const register: Register = (on, options) => {
     return entered
   })
 
-  // bab_search marks what it surfaced; bab_learn carries the discovery cost; a helpful or kudos
-  // bab_react carries the reuse cost. Both start a new discovery segment once BAB accepted them.
+  // bab_search marks what it surfaced. bab_learn has a discovery cost and a helpful or kudos
+  // bab_react a reuse cost; both start a new discovery segment once BAB accepted them. The input
+  // is passed on unchanged: auto mode refuses a call a hook changed after it reviewed it, so the
+  // cost goes in a follow-up bab_react `cost` call once BAB accepted the save or reaction.
   on('tool.call', async ($, e, next) => {
     if (!MEASURED_TOOL_RE.test(e.tool)) return next(e)
     const tool = babToolOf(e.tool, await ownServerName($))
@@ -1060,7 +1057,7 @@ export const register: Register = (on, options) => {
       return ran
     }
     const isReuse = tool === 'bab_react' && isReuseReaction(args.action)
-    if (tool !== 'bab_learn' && !isReuse) return next(withCost(e, null))
+    if (tool !== 'bab_learn' && !isReuse) return next(e)
     let cost: ReturnType<typeof costArg> = null
     let undo: (() => void) | null = null
     try {
@@ -1076,9 +1073,20 @@ export const register: Register = (on, options) => {
     } catch {
       cost = null
     }
-    const ran = await next(withCost(e, cost))
+    const ran = await next(e)
     // BAB or the host refused it: the segment goes on as if the call never happened.
-    if (ran.deny !== undefined || ran.isError === true) undo?.()
+    if (ran.deny !== undefined || ran.isError === true) {
+      undo?.()
+      return ran
+    }
+    try {
+      const followUp = costFollowUp(tool, args, typeof ran.text === 'string' ? ran.text : null, cost)
+      // Not awaited: the agent gets its answer now. An older BAB without the cost action, or a
+      // refusal, only loses the number.
+      if (followUp) void call($, 'bab_react', followUp).catch(err => $.ui.log(`effort cost not sent: ${why(err)}`, { to: 'debug' }))
+    } catch {
+      // Measuring is best effort.
+    }
     return ran
   })
 
