@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Allowing BAB tools in auto mode",
     changes: [
       "The plugin guide says how to allow BAB tools when auto mode or a host setting keeps asking.",
+      "Auto mode no longer refuses saves and helpful reactions: the plugin sends measured effort in a separate call.",
     ],
   },
   {

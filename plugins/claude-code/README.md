@@ -33,7 +33,7 @@ The panel (a mod, `hooks/register.tsx`) polls the inbox with `bab_inbox` every 1
 - If BAB cannot be reached, the wait between polls doubles from 30 seconds up to 5 minutes. The first good answer resets it.
 - The mod approves the low-risk BAB tools on its own MCP server (`tool.check` in `hooks/register.tsx`, list in `hooks/poll-backoff.ts`), so they raise no permission dialog: `bab_search`, `bab_inbox`, `bab_identify`, `bab_link_session` and `bab_remind`. It also approves `bab_people` reads (no `action`, no `user`), a plain `bab_learn` (kind learning or practice, no `supersedes`), `bab_react` votes and checks (helpful, not_helpful, kudos, confirm, keep, flag, label, comment), `bab_feedback` `list` and `get`, and `bab_tasks` `publish`, `patch` and `list`, which the BAB Tasks skill calls on every turn on your own private page.
 - Everything else keeps the host's normal ask: `bab_send`, `bab_files`, `bab_kv`, a `bab_feedback` post, vote, comment or status, a `bab_people` profile change (`set_home_team`, `add_contact`, `remove_contact`, or a `user` for someone else), a `bab_learn` decision, standard or `supersedes`, `bab_react` retire, delete, pin and unpin, and the other `bab_tasks` actions. A `deny` rule in settings, or an organisation ceiling on the tool, still wins.
-- Known limit: a host security setting can run before the mod and keep the ask (the session then says the mod's `tool.check` hook was skipped). In auto mode, `bab_learn` and a helpful or kudos `bab_react` can then be refused too, because the mod adds `cost` after auto mode reviewed the call. Until that is fixed, allow the tools you want in your own settings, for example `"permissions": { "allow": ["mcp__plugin_bab_bab__bab_learn", "mcp__plugin_bab_bab__bab_react"] }` in `~/.claude/settings.json`, then restart.
+- Known limit: a host security setting can run before the mod and keep the ask (the session then says the mod's `tool.check` hook was skipped). If it does, allow the tools you want in your own settings, for example `"permissions": { "allow": ["mcp__plugin_bab_bab__bab_learn", "mcp__plugin_bab_bab__bab_react"] }` in `~/.claude/settings.json`, then restart.
 - Keep `bab_url` free of a trailing slash. Some proxies reject a `//` path, which breaks the hooks and MCP; the panel warns once at session start.
 
 ## Measured agent effort
@@ -42,9 +42,9 @@ The mod measures agent effort for the "Agent time saved" and "Tokens saved" tile
 
 - `turn.start`, `turn.step` and `turn.complete` add up active time (the main loop's turn durations) and billable tokens (fresh input, cache writes and output, subagents included).
 - `bab_search` results mark which memories surfaced, from when the search started (the house rules digest does not count). BAB's per-prompt notice does too, if the host passes it to `prompt.submit`.
-- `bab_learn` gets a `cost` argument: the effort since the session start, the last save or the last helpful reaction, capped at 4 hours of active time.
-- A `helpful` or `kudos` `bab_react` gets a `cost` argument: the effort since that memory first surfaced in the session. With no surfacing, or over 4 hours, it sends none.
-- The mod sets `cost` itself and drops any value the model passed. A reload starts the measurement over.
+- A `bab_learn` has a discovery cost: the effort since the session start, the last save or the last helpful reaction, capped at 4 hours of active time.
+- A `helpful` or `kudos` `bab_react` has a reuse cost: the effort since that memory first surfaced in the session. With no surfacing, or over 4 hours, it sends none.
+- The mod never changes the tool input, so auto mode runs the call it reviewed. Once BAB accepted the save or reaction, the mod sends the cost in a follow-up `bab_react` call with the unlisted `cost` action. BAB stores it once, and only on the caller's own memory or reaction. A reload starts the measurement over.
 
 ## What the hooks do
 
