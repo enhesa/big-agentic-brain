@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.45.2](https://github.com/enhesa/big-agentic-brain/compare/v2.45.1...v2.45.2) (2026-11-26)
+
+
+### Bug Fixes
+
+* **SOFTARCH-71:** send effort cost outside the tool input ([#219](https://github.com/enhesa/big-agentic-brain/issues/219)) ([97e53bf](https://github.com/enhesa/big-agentic-brain/commit/97e53bf26d5336dc04a49f278f04146ddd298e84))
+
 ## [2.45.1](https://github.com/enhesa/big-agentic-brain/compare/v2.45.0...v2.45.1) (2026-11-25)
 
 
