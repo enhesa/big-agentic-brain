@@ -126,13 +126,20 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    **Match strength.** Search returns all-terms matches first, then fills the page with any-term
    matches, so a query on a topic BAB does not know still returns rows that share one common word.
    Every text search result (`bab_search` and `GET /api/learnings`) carries `matchedTerms`, for
-   example `"3/7"`: how many of the query's distinct terms (the tokens `buildFtsQuery` uses, after
-   stop words and tokens under 3 characters drop out, at most `MATCH_TERMS_MAX` = 16) the memory's
-   indexed text holds. It is counted with the FTS index itself (one `MATCH` per term, restricted to
-   the returned page), so stemming agrees with search, and the cost is at most 16 lookups per
-   search. With several phrasings a result shows its best ratio over them. A first page (offset 0)
-   of a text search with results where no result holds at least half the terms of its best
-   phrasing is weak: the answer carries `weak: true`, a fixed `weakHint` (rephrase once, or treat
+   example `"3/7"`: how many of the query's terms (`matchTerms`) the memory's indexed text holds.
+   A plain word is one term, filtered like `buildFtsQuery` (stop words and tokens under 3
+   characters drop out). An identifier with two or more parts (`KeyError`, `order_id`,
+   `parse_config`, a version such as `2.67`) is one term that matches either form: its plain
+   tokens, or the parts phrase the any-term query adds (`"key error"`, `"2 67"`), so a memory that
+   writes "key error" holds `KeyError`. Terms are de-duplicated as written, not on their stem, so
+   "retry" and "retries" count as two terms. Only the first `MATCH_TERMS_MAX` = 16 terms are
+   counted, in both numbers. The page's rows are copied into a small TEMP FTS5 table with the same
+   columns and tokenizer, and each term is matched there, so stemming agrees with search and a
+   common term does not walk its whole posting list. With several phrasings a result shows its best
+   match over them: a good match first (a one-term phrasing, or at least half the terms), then the
+   larger share. A phrasing with no searchable word (only stop words) is left out when another
+   phrasing has words. A first page (offset 0)
+   of a text search with results where no result is a good match is weak: the answer carries `weak: true`, a fixed `weakHint` (rephrase once, or treat
    BAB as having nothing) and the area `contacts`. A result of a one-term phrasing always counts as
    a good match, so a one-term query is never weak. Listings, the house rules digest and
    `waitingForMe` carry neither field. Ranking is unchanged.

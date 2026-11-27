@@ -72,10 +72,70 @@ describe("matchedTerms", () => {
   });
 
   it("drops stop words, short tokens and repeats, and caps the terms counted", async () => {
-    const { queryTerms, MATCH_TERMS_MAX } = await import("../lib/learnings");
-    expect(queryTerms("how do the widget widget exports go")).toEqual(["widget", "exports"]);
+    const { matchTerms, MATCH_TERMS_MAX } = await import("../lib/learnings");
+    expect(matchTerms("how do the widget widget exports go")).toEqual(['"widget"', '"exports"']);
     const many = Array.from({ length: 30 }, (_, i) => `term${i}x`).join(" ");
-    expect(queryTerms(many)).toHaveLength(MATCH_TERMS_MAX);
+    expect(matchTerms(many)).toHaveLength(MATCH_TERMS_MAX);
+    // Near-duplicates are separate terms: de-duplicated as written, not on the stem.
+    expect(matchTerms("retry retries")).toHaveLength(2);
+  });
+
+  it("counts only the first MATCH_TERMS_MAX terms, in both numbers", async () => {
+    await seed();
+    const extra = Array.from({ length: 20 }, (_, i) => `zz${i}qq`).join(" ");
+    const answer = await babSearch(`widget export ${extra} timeout`);
+    // "timeout" is term 23: past the cap, so it counts in neither number.
+    expect(answer.results[0].matchedTerms).toBe("2/16");
+  });
+
+  it("counts an identifier as one term held in either form", async () => {
+    await users();
+    const apart = await memory("Python key error and value error handling", "Catch the key error before the value error.");
+    const joined = await memory("Lookup fails with KeyError", "The KeyError comes from a missing dict key.");
+    const snake = await memory("Order table naming", "Use order_id and parse_config in the orders module.");
+    const camelApart = await memory("Parse the config once", "We parse config at start and keep the order id per row.");
+    const version = await memory("Upgrade to release 2.67", "Release 2.67 fixes the export bug.");
+
+    // CamelCase written apart in the body: each identifier is held, never 0.
+    let answer = await babSearch("KeyError ValueError", { limit: 10 });
+    expect(answer.results.find((r: { id: string }) => r.id === apart.id).matchedTerms).toBe("2/2");
+    expect(answer.weak).toBeUndefined();
+    // Written as one token: the plain form holds it.
+    expect(answer.results.find((r: { id: string }) => r.id === joined.id).matchedTerms).toBe("1/2");
+
+    answer = await babSearch("order_id parse_config", { limit: 10 });
+    expect(answer.results.find((r: { id: string }) => r.id === snake.id).matchedTerms).toBe("2/2");
+    // The parts written apart as words also hold both terms.
+    expect(answer.results.find((r: { id: string }) => r.id === camelApart.id).matchedTerms).toBe("2/2");
+
+    answer = await babSearch("parseConfig orderId", { limit: 10 });
+    expect(answer.results.find((r: { id: string }) => r.id === camelApart.id).matchedTerms).toBe("2/2");
+
+    // A version string is a term although its tokens are short; it matches as the phrase "2 67".
+    answer = await babSearch("release 2.67", { limit: 10 });
+    expect(answer.results.find((r: { id: string }) => r.id === version.id).matchedTerms).toBe("2/2");
+    answer = await babSearch("release 3.14", { limit: 10 });
+    expect(answer.results.find((r: { id: string }) => r.id === version.id).matchedTerms).toBe("1/2");
+  });
+
+  it("carries matchedTerms with sort, stack and status all", async () => {
+    const { full } = await seed();
+    const { search, retire } = await import("../lib/learnings");
+    const gone = await memory("Widget export archive", "Old widget export notes.");
+    retire(gone.id, AUTHOR, "mcp", "Replaced by the export doc 2026-11-01");
+
+    const sorted = search("widget export timeout", { sort: "newest" }, 10);
+    expect(sorted.length).toBeGreaterThan(0);
+    expect(sorted.find((r) => r.id === full.id)!.matchedTerms).toBe("3/3");
+    expect(sorted.every((r) => /^\d+\/3$/.test(r.matchedTerms ?? ""))).toBe(true);
+
+    const stacked = await babSearch("widget export timeout", { stack: ["dotnet"], limit: 10 });
+    expect(stacked.results.find((r: { id: string }) => r.id === full.id).matchedTerms).toBe("3/3");
+
+    const all = await babSearch("widget export timeout", { status: "all", limit: 10 });
+    expect(all.results.find((r: { id: string }) => r.id === gone.id).matchedTerms).toBe("2/3");
+    expect(all.results.find((r: { id: string }) => r.id === full.id).matchedTerms).toBe("3/3");
+    expect(all.weak).toBeUndefined();
   });
 
   it("is absent on a listing with no text and on the house rules digest", async () => {
@@ -152,6 +212,26 @@ describe("weak answers", () => {
     expect(weak.weak).toBe(true);
     // The better of 1/5 and 1/4.
     expect(weak.results.every((r: { matchedTerms: string }) => r.matchedTerms === "1/4")).toBe(true);
+  });
+
+  it("keeps a hit of a one-term phrasing good, though a longer phrasing holds a smaller share", async () => {
+    const { full } = await seed();
+    // "export" alone is 1/1 (good); the long phrasing gives the same row 1/5. Good wins over ratio.
+    const answer = await babSearch("payroll ledger quarterly rounding export", { queries: ["export"] });
+    const hit = answer.results.find((r: { id: string }) => r.id === full.id);
+    expect(hit.matchedTerms).toBe("1/1");
+    expect(answer.weak).toBeUndefined();
+  });
+
+  it("ignores a stop-word-only phrasing: still weak, every result counted", async () => {
+    await seed();
+    const answer = await babSearch("payroll rounding quarterly widget ledger", { queries: ["how is it"] });
+    expect(answer.results.length).toBeGreaterThan(0);
+    expect(answer.results.every((r: { matchedTerms?: string }) => r.matchedTerms === "1/5")).toBe(true);
+    expect(answer.weak).toBe(true);
+    // Only stop words everywhere: a listing, never weak.
+    const listing = await babSearch("how is it", { queries: ["what are they"] });
+    expect(listing.weak).toBeUndefined();
   });
 
   it("is not weak on an empty answer (that one has no results)", async () => {

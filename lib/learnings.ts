@@ -277,8 +277,9 @@ export interface LearningSearchResult extends LearningRow, AgeInfo {
   stackHint?: string;
   snippet: string;
   /**
-   * How many of the query's terms (after stop words and short tokens drop out, at most
-   * MATCH_TERMS_MAX) this memory's indexed text holds, as "3/7". Only on a text search.
+   * How many of the query's terms (matchTerms: plain words after stop words and short tokens drop
+   * out, one term per identifier such as KeyError or order_id) this memory's indexed text holds, as
+   * "3/7". Only the first MATCH_TERMS_MAX terms are counted, in both numbers. Only on a text search.
    */
   matchedTerms?: string;
   authorName: string | null;
@@ -885,29 +886,68 @@ function buildFtsQuery(query: string): string {
 /** The most query terms matchedTerms counts: one FTS lookup per term, so the cost stays bounded. */
 export const MATCH_TERMS_MAX = 16;
 
-/** The distinct terms buildFtsQuery matches on, in order, at most MATCH_TERMS_MAX. */
-export function queryTerms(query: string): string[] {
-  return [...new Set(normalizeTokens(query))].slice(0, MATCH_TERMS_MAX);
+/**
+ * The terms matchedTerms counts, as FTS5 MATCH expressions, in query order, at most MATCH_TERMS_MAX
+ * (later terms are not counted). A plain word is one term, filtered like buildFtsQuery (stop words
+ * and tokens under 3 characters drop out). An identifier chunk with two or more parts (`KeyError`,
+ * `order_id`, `parse_config`, `2.67`) is ONE term that matches either form: its plain tokens, or the
+ * parts phrase buildFtsAnyQuery adds (`"key error"`, `"2 67"`). So a memory that writes "key error"
+ * holds the term `KeyError`, and a version string counts as a term although its tokens are short.
+ * Terms are de-duplicated as written, not on their stem: "retry" and "retries" count as two terms.
+ */
+export function matchTerms(query: string): string[] {
+  const terms = new Set<string>();
+  for (const chunk of query.match(/[\p{L}\p{N}]+(?:[._\-:/][\p{L}\p{N}]+)*/gu) ?? []) {
+    const plain = normalizeTokens(chunk);
+    const parts = identifierParts(chunk);
+    if (parts.length >= 2) {
+      const phrase = `"${parts.join(" ")}"`;
+      const both = plain.length === 0 ? null : plain.length === 1 ? quoteFtsToken(plain[0]) : `(${plain.map(quoteFtsToken).join(" AND ")})`;
+      terms.add(both && both !== phrase ? `${both} OR ${phrase}` : phrase);
+    } else {
+      for (const token of plain) terms.add(quoteFtsToken(token));
+    }
+    if (terms.size >= MATCH_TERMS_MAX) break;
+  }
+  return [...terms].slice(0, MATCH_TERMS_MAX);
 }
 
 /**
- * For each id, how many of `terms` its indexed text holds. Counted with the FTS index itself (one
- * MATCH per term, restricted to these rows), so stemming and tokenizing agree with search.
+ * For each id, how many of `terms` (MATCH expressions) its indexed text holds. The page's rows are
+ * copied into a small TEMP FTS5 table with the same columns and tokenizer as learnings_fts, and each
+ * term is matched there, so stemming and tokenizing agree with search. Matching on learnings_fts
+ * itself walks a common term's whole posting list once per term (about 3 ms each at 20k rows, also
+ * when restricted by rowid); on the page-sized table a term costs microseconds. The table lives on
+ * this connection only and is emptied after each count.
  */
 function countMatchedTerms(ids: string[], terms: string[]): Map<string, number> {
   const counts = new Map<string, number>(ids.map((id) => [id, 0]));
   if (ids.length === 0 || terms.length === 0) return counts;
-  const statement = getDb().prepare(
-    `SELECT learnings.id AS id
-     FROM learnings_fts
-     CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
-     WHERE learnings_fts MATCH ? AND learnings.id IN (SELECT value FROM json_each(?))`,
+  const db = getDb();
+  // Keep the tokenizer and columns in step with learnings_fts (lib/db.ts).
+  db.exec(
+    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.match_page USING fts5(title, body, tags, aliases, tokenize='porter unicode61')",
   );
-  const idList = JSON.stringify(ids);
-  for (const term of terms) {
-    for (const row of statement.all(quoteFtsToken(term), idList) as Array<{ id: string }>) {
-      counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+  db.exec("DELETE FROM temp.match_page");
+  try {
+    db.prepare(
+      "INSERT INTO temp.match_page(rowid, title, body, tags, aliases) SELECT rowid, title, body, tags, aliases FROM learnings WHERE id IN (SELECT value FROM json_each(?))",
+    ).run(JSON.stringify(ids));
+    const idByRowid = new Map(
+      (db.prepare("SELECT rowid AS r, id FROM learnings WHERE id IN (SELECT value FROM json_each(?))").all(JSON.stringify(ids)) as Array<{
+        r: number;
+        id: string;
+      }>).map((row) => [Number(row.r), row.id]),
+    );
+    const statement = db.prepare("SELECT rowid AS r FROM temp.match_page WHERE match_page MATCH ?");
+    for (const term of terms) {
+      for (const hit of statement.all(term) as Array<{ r: number }>) {
+        const id = idByRowid.get(Number(hit.r));
+        if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
     }
+  } finally {
+    db.exec("DELETE FROM temp.match_page");
   }
   return counts;
 }
@@ -918,12 +958,18 @@ function parseMatchedTerms(value: string | undefined): { matched: number; total:
   return m ? { matched: Number(m[1]), total: Number(m[2]) } : null;
 }
 
-/** true when `a` holds a larger share of its query's terms than `b` (a missing value loses). */
+/** A good match: a one-term phrasing (never weak), or at least half the terms held. */
+function isGoodMatch(c: { matched: number; total: number }): boolean {
+  return c.total < 2 || c.matched * 2 >= c.total;
+}
+
+/** true when `a` is a better match than `b`: a good match first, then a larger share (a missing value loses). */
 function betterMatch(a: string | undefined, b: string | undefined): boolean {
   const x = parseMatchedTerms(a);
   const y = parseMatchedTerms(b);
   if (!x) return false;
   if (!y) return true;
+  if (isGoodMatch(x) !== isGoodMatch(y)) return isGoodMatch(x);
   if (x.total === 0 || y.total === 0) return y.total === 0 && x.total > 0;
   return x.matched * y.total > y.matched * x.total;
 }
@@ -933,15 +979,16 @@ export const WEAK_SEARCH_HINT =
   "No memory holds most of your terms. These share a few words and may be unrelated. Rephrase once, or treat BAB as having nothing on this.";
 
 /**
- * A weak answer: the first page of a text search with results, where no result holds at least half
- * the terms of the phrasing it matched best. A result of a one-term phrasing always counts as a
- * good match, so a one-term query is never weak. A page without matchedTerms (a listing) is not weak.
+ * A weak answer: the first page of a text search with results, where no result is a good match
+ * (isGoodMatch on its matchedTerms, the best over its phrasings). A result of a one-term phrasing
+ * always counts as good, so a one-term query is never weak. Results without matchedTerms are left
+ * out; a page with none (a listing) is not weak.
  */
 export function searchIsWeak(results: Array<{ matchedTerms?: string }>, offset = 0): boolean {
   if (offset !== 0 || results.length === 0) return false;
-  const counts = results.map((r) => parseMatchedTerms(r.matchedTerms));
-  if (counts.some((c) => c === null)) return false;
-  return counts.every((c) => c!.total >= 2 && c!.matched * 2 < c!.total);
+  const counts = results.map((r) => parseMatchedTerms(r.matchedTerms)).filter((c) => c !== null);
+  if (counts.length === 0) return false;
+  return counts.every((c) => !isGoodMatch(c));
 }
 
 /**
@@ -1191,7 +1238,7 @@ export function search(
   const retires = lastRetiresFor(rows);
   const trust = trustFor(rows);
   // How well each row matched: counted on the returned page only, at most MATCH_TERMS_MAX terms.
-  const terms = queryTerms(query);
+  const terms = matchTerms(query);
   const matched = countMatchedTerms(
     rows.map((r) => r.id),
     terms,
@@ -1554,8 +1601,14 @@ export function searchFused(
   limit = 20,
   offset = 0,
 ): { results: LearningSearchResult[]; total: number } {
-  const lists = phrasings.map((q) => search(q, filters, MULTI_QUERY_DEPTH, 0));
-  // Each hit shows its best share of terms over the phrasings, not only the one fuseRankings kept.
+  // A phrasing with no searchable word (only stop words or short tokens) would be a plain listing:
+  // it would add unrelated rows without matchedTerms and hide a weak answer. Leave it out when another
+  // phrasing has words; when none has, the call stays a listing.
+  const searchable = phrasings.filter((q) => normalizeTokens(q).length > 0);
+  const used = searchable.length > 0 ? searchable : phrasings;
+  const lists = used.map((q) => search(q, filters, MULTI_QUERY_DEPTH, 0));
+  // Each hit shows its best match over the phrasings (a good match first, then the larger share),
+  // not only the one fuseRankings kept, so weakness is decided per hit from every phrasing.
   const best = new Map<string, string | undefined>();
   for (const hits of lists) {
     for (const hit of hits) {
