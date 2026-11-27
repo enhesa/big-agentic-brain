@@ -914,43 +914,56 @@ export function matchTerms(query: string): string[] {
 
 /**
  * For each id, how many of `terms` (MATCH expressions) its indexed text holds. The page's rows are
- * copied into a small TEMP FTS5 table with the same columns and tokenizer as learnings_fts, and each
+ * copied into a small FTS5 table with the same columns and tokenizer as learnings_fts, and each
  * term is matched there, so stemming and tokenizing agree with search. Matching on learnings_fts
  * itself walks a common term's whole posting list once per term (about 3 ms each at 20k rows, also
- * when restricted by rowid); on the page-sized table a term costs microseconds. The table lives on
- * this connection only and is emptied after each count.
+ * when restricted by rowid); on the page-sized table a term costs microseconds.
+ *
+ * The table lives in an in-memory database attached to this connection (MATCH_PAGE_SCHEMA), not in
+ * the TEMP schema: a TEMP table needs a writable temp folder, and a read-only container has none.
+ * It is emptied after each count. Counting is an extra on top of search, so it never fails one:
+ * on any error it returns null and the results go out without matchedTerms.
  */
-function countMatchedTerms(ids: string[], terms: string[]): Map<string, number> {
+function countMatchedTerms(ids: string[], terms: string[]): Map<string, number> | null {
   const counts = new Map<string, number>(ids.map((id) => [id, 0]));
   if (ids.length === 0 || terms.length === 0) return counts;
-  const db = getDb();
-  // Keep the tokenizer and columns in step with learnings_fts (lib/db.ts).
-  db.exec(
-    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.match_page USING fts5(title, body, tags, aliases, tokenize='porter unicode61')",
-  );
-  db.exec("DELETE FROM temp.match_page");
+  const table = `${MATCH_PAGE_SCHEMA}.match_page`;
   try {
-    db.prepare(
-      "INSERT INTO temp.match_page(rowid, title, body, tags, aliases) SELECT rowid, title, body, tags, aliases FROM learnings WHERE id IN (SELECT value FROM json_each(?))",
-    ).run(JSON.stringify(ids));
-    const idByRowid = new Map(
-      (db.prepare("SELECT rowid AS r, id FROM learnings WHERE id IN (SELECT value FROM json_each(?))").all(JSON.stringify(ids)) as Array<{
-        r: number;
-        id: string;
-      }>).map((row) => [Number(row.r), row.id]),
-    );
-    const statement = db.prepare("SELECT rowid AS r FROM temp.match_page WHERE match_page MATCH ?");
-    for (const term of terms) {
-      for (const hit of statement.all(term) as Array<{ r: number }>) {
-        const id = idByRowid.get(Number(hit.r));
-        if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
+    const db = getDb();
+    const attached = (db.prepare("PRAGMA database_list").all() as Array<{ name: string }>).some((d) => d.name === MATCH_PAGE_SCHEMA);
+    if (!attached) db.exec(`ATTACH DATABASE ':memory:' AS ${MATCH_PAGE_SCHEMA}`);
+    // Keep the tokenizer and columns in step with learnings_fts (lib/db.ts).
+    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${table} USING fts5(title, body, tags, aliases, tokenize='porter unicode61')`);
+    db.exec(`DELETE FROM ${table}`);
+    try {
+      db.prepare(
+        `INSERT INTO ${table}(rowid, title, body, tags, aliases) SELECT rowid, title, body, tags, aliases FROM learnings WHERE id IN (SELECT value FROM json_each(?))`,
+      ).run(JSON.stringify(ids));
+      const idByRowid = new Map(
+        (db.prepare("SELECT rowid AS r, id FROM learnings WHERE id IN (SELECT value FROM json_each(?))").all(JSON.stringify(ids)) as Array<{
+          r: number;
+          id: string;
+        }>).map((row) => [Number(row.r), row.id]),
+      );
+      const statement = db.prepare(`SELECT rowid AS r FROM ${table} WHERE match_page MATCH ?`);
+      for (const term of terms) {
+        for (const hit of statement.all(term) as Array<{ r: number }>) {
+          const id = idByRowid.get(Number(hit.r));
+          if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
+        }
       }
+    } finally {
+      db.exec(`DELETE FROM ${table}`);
     }
-  } finally {
-    db.exec("DELETE FROM temp.match_page");
+  } catch (err) {
+    console.error("countMatchedTerms failed; search results go out without matchedTerms", err);
+    return null;
   }
   return counts;
 }
+
+/** The in-memory database countMatchedTerms attaches for its page-sized table. */
+export const MATCH_PAGE_SCHEMA = "matchmem";
 
 /** "3/7" as numbers, or null. */
 function parseMatchedTerms(value: string | undefined): { matched: number; total: number } | null {
@@ -1249,7 +1262,7 @@ export function search(
     ...ageInfo(r),
     ...appliesToFields(r, filters.stack),
     snippet: renderSnippetHtml(r.snippet),
-    matchedTerms: `${matched.get(r.id) ?? 0}/${terms.length}`,
+    ...(matched ? { matchedTerms: `${matched.get(r.id) ?? 0}/${terms.length}` } : {}),
     authorName: authorNames.get(r.author_id) ?? null,
     supersededBy: supersededByIds.get(r.id),
     ...standingFields(standings.get(r.id)!),

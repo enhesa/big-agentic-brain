@@ -133,9 +133,11 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    tokens, or the parts phrase the any-term query adds (`"key error"`, `"2 67"`), so a memory that
    writes "key error" holds `KeyError`. Terms are de-duplicated as written, not on their stem, so
    "retry" and "retries" count as two terms. Only the first `MATCH_TERMS_MAX` = 16 terms are
-   counted, in both numbers. The page's rows are copied into a small TEMP FTS5 table with the same
+   counted, in both numbers. The page's rows are copied into a small FTS5 table with the same
    columns and tokenizer, and each term is matched there, so stemming agrees with search and a
-   common term does not walk its whole posting list. With several phrasings a result shows its best
+   common term does not walk its whole posting list. That table lives in an in-memory database
+   attached to the connection, not in the TEMP schema, so it needs no writable temp folder.
+   Counting never fails a search: on an error the results go out without `matchedTerms`. With several phrasings a result shows its best
    match over them: a good match first (a one-term phrasing, or at least half the terms), then the
    larger share. A phrasing with no searchable word (only stop words) is left out when another
    phrasing has words. A first page (offset 0)

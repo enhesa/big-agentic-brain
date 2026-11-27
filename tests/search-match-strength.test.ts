@@ -138,6 +138,40 @@ describe("matchedTerms", () => {
     expect(all.weak).toBeUndefined();
   });
 
+  it("counts in an attached in-memory database, never in the TEMP schema (a read-only container has no temp folder)", async () => {
+    const { full } = await seed();
+    const answer = await babSearch("widget export retrying timeouts");
+    expect(answer.results.find((r: { id: string }) => r.id === full.id).matchedTerms).toBe("4/4");
+    const { getDb } = await import("../lib/db");
+    const { MATCH_PAGE_SCHEMA } = await import("../lib/learnings");
+    const schemas = (getDb().prepare("PRAGMA database_list").all() as Array<{ name: string }>).map((d) => d.name);
+    expect(schemas).toContain(MATCH_PAGE_SCHEMA);
+    const temp = getDb().prepare("SELECT COUNT(*) AS n FROM sqlite_temp_master").get() as { n: number };
+    expect(Number(temp.n)).toBe(0);
+    // The page copy is emptied after each count.
+    const left = getDb().prepare(`SELECT COUNT(*) AS n FROM ${MATCH_PAGE_SCHEMA}.match_page`).get() as { n: number };
+    expect(Number(left.n)).toBe(0);
+  });
+
+  it("never fails a search when counting fails: results go out without matchedTerms and are not weak", async () => {
+    await seed();
+    const { getDb } = await import("../lib/db");
+    const { MATCH_PAGE_SCHEMA } = await import("../lib/learnings");
+    // A table of the wrong shape in the counting database makes every count throw.
+    getDb().exec(`ATTACH DATABASE ':memory:' AS ${MATCH_PAGE_SCHEMA}`);
+    getDb().exec(`CREATE TABLE ${MATCH_PAGE_SCHEMA}.match_page(x)`);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const answer = await babSearch("payroll rounding quarterly widget ledger");
+      expect(answer.results.length).toBeGreaterThan(0);
+      expect(answer.results.every((r: { matchedTerms?: string }) => r.matchedTerms === undefined)).toBe(true);
+      expect(answer.weak).toBeUndefined();
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("is absent on a listing with no text and on the house rules digest", async () => {
     await seed();
     const listing = await babSearch("");
