@@ -38,7 +38,12 @@ export const IDENTIFY_LOOP_THRESHOLD = 3;
 export const USAGE_COLLECTING_SINCE = "2026-10-06";
 /** The day search audit rows started to carry their result count (details.results) and redacted query (details.q). */
 export const SEARCH_RESULTS_SINCE = "2026-10-27";
-/** How many zero-result queries the maintainer list shows. */
+/**
+ * The day search audit rows started to say whether the answer was weak (details.weak 0 or 1): results,
+ * but none held half the query's terms. Older rows lack it, so the "no good match" share starts here.
+ */
+export const SEARCH_WEAK_SINCE = "2026-11-27";
+/** How many queries with no good match (nothing, or only weak matches) the maintainer list shows. */
 export const ZERO_QUERIES_SHOWN = 10;
 /** A memory younger than this has not had a fair chance to be used yet. */
 export const UNUSED_MIN_AGE_DAYS = 14;
@@ -267,7 +272,7 @@ export interface Upkeep {
 }
 
 /** One week of the Clean-up card (swarm garbage collection, docs/spec.md), from audit_log. */
-/** Searches recorded with a result count (since SEARCH_RESULTS_SINCE) in the window, for the maintainers' "Searches that found nothing" card. */
+/** Searches recorded with a result count (since SEARCH_RESULTS_SINCE) in the window, for the maintainers' "Searches with no good match" card. */
 export interface SearchOutcomes {
   /** The first day with a recorded count in the window (YYYY-MM-DD), or null when there is none yet. */
   since: string | null;
@@ -275,12 +280,24 @@ export interface SearchOutcomes {
   recorded: number;
   /** Of those, the ones that found nothing. */
   zero: number;
+  /** The first day with a recorded weak flag in the window (YYYY-MM-DD, never before SEARCH_WEAK_SINCE), or null. */
+  weakSince: string | null;
+  /** Searches with a recorded weak flag. */
+  weakRecorded: number;
+  /** Of those, the ones whose answer was weak. */
+  weak: number;
+  /** Of those, the ones with no good match: nothing found, or only weak matches. */
+  noGood: number;
   /**
-   * The most repeated zero-result queries (lowercased, redacted when stored), most recent first on a
-   * tie, at most ZERO_QUERIES_SHOWN. Maintainers only: the page never shows these to anyone else.
+   * The most repeated queries that found nothing or only weak matches (lowercased, redacted when
+   * stored), most recent first on a tie, at most ZERO_QUERIES_SHOWN. `kind` is what the latest
+   * search with that query got. Maintainers only: the page never shows these to anyone else.
    */
-  zeroQueries: Array<{ query: string; n: number; last: string }>;
+  noGoodQueries: Array<{ query: string; n: number; last: string; kind: NoGoodKind }>;
 }
+
+/** What a search with no good match got: no result at all, or only weak ones. */
+export type NoGoodKind = "nothing" | "weak";
 
 /** Live learnings and practices older than UNUSED_MIN_AGE_DAYS that nobody else has used. */
 export interface Unused {
@@ -738,11 +755,16 @@ export interface SearchPart {
   recorded: number;
   zero: number;
   first: string | null;
-  /** Zero-result queries: lowercased query to how often and when last. */
-  zeroQueries: Map<string, { n: number; last: string }>;
+  /** Rows with a weak flag (since SEARCH_WEAK_SINCE), the weak ones, and those with no good match. */
+  weakRecorded: number;
+  weak: number;
+  noGood: number;
+  weakFirst: string | null;
+  /** Queries that found nothing or only weak matches: lowercased query to how often, when last and what it got then. */
+  noGoodQueries: Map<string, { n: number; last: string; kind: NoGoodKind }>;
 }
 
-/** Two queries on idx_audit_path_at for `from` to `to`, never before SEARCH_RESULTS_SINCE. */
+/** Three queries on idx_audit_path_at for `from` to `to`, never before SEARCH_RESULTS_SINCE. */
 export function searchPart(from: string, to: string): SearchPart {
   const db = getDb();
   const start = from > sqlDate(SEARCH_RESULTS_SINCE) ? from : sqlDate(SEARCH_RESULTS_SINCE);
@@ -751,41 +773,82 @@ export function searchPart(from: string, to: string): SearchPart {
   const share = db
     .prepare(`SELECT COUNT(*) AS recorded, SUM(json_extract(details, '$.results') = 0) AS zero, MIN(at) AS first FROM audit_log WHERE ${where}`)
     .get(...args) as { recorded: number; zero: number | null; first: string | null };
-  const zeroQueries = db
+  // Older rows have no weak flag: only rows that carry one count toward the "no good match" share.
+  const weakStart = from > sqlDate(SEARCH_WEAK_SINCE) ? from : sqlDate(SEARCH_WEAK_SINCE);
+  const weakShare = db
     .prepare(
-      `SELECT lower(json_extract(details, '$.q')) AS query, COUNT(*) AS n, MAX(at) AS last
-       FROM audit_log WHERE ${where} AND json_extract(details, '$.results') = 0 AND json_extract(details, '$.q') != ''
+      `SELECT COUNT(*) AS recorded, SUM(json_extract(details, '$.weak') = 1) AS weak,
+              SUM(json_extract(details, '$.results') = 0 OR json_extract(details, '$.weak') = 1) AS noGood, MIN(at) AS first
+       FROM audit_log WHERE ${where} AND json_extract(details, '$.weak') IS NOT NULL`,
+    )
+    .get(SEARCH_TOOL_PATH, SEARCH_API_PATH, weakStart, to, SEARCH_TOOL_PATH) as {
+    recorded: number;
+    weak: number | null;
+    noGood: number | null;
+    first: string | null;
+  };
+  // With one MAX() in the select, SQLite takes the bare `weak` column from the row with the latest
+  // time: the kind a query got the last time it was searched.
+  const noGoodQueries = db
+    .prepare(
+      `SELECT lower(json_extract(details, '$.q')) AS query, COUNT(*) AS n, MAX(at) AS last,
+              COALESCE(json_extract(details, '$.weak'), 0) AS weak
+       FROM audit_log WHERE ${where} AND (json_extract(details, '$.results') = 0 OR json_extract(details, '$.weak') = 1)
+         AND json_extract(details, '$.q') != ''
        GROUP BY query`,
     )
-    .all(...args) as Array<{ query: string; n: number; last: string }>;
+    .all(...args) as Array<{ query: string; n: number; last: string; weak: number }>;
   return {
     recorded: num(share.recorded),
     zero: num(share.zero),
     first: share.first,
-    zeroQueries: new Map(zeroQueries.map((q) => [String(q.query), { n: num(q.n), last: q.last }])),
+    weakRecorded: num(weakShare.recorded),
+    weak: num(weakShare.weak),
+    noGood: num(weakShare.noGood),
+    weakFirst: weakShare.first,
+    noGoodQueries: new Map(
+      noGoodQueries.map((q) => [String(q.query), { n: num(q.n), last: q.last, kind: num(q.weak) === 1 ? ("weak" as const) : ("nothing" as const) }]),
+    ),
   };
 }
 
 /** The search outcomes from the parts of adjacent ranges. */
 export function searchOutcomesFromParts(parts: SearchPart[]): SearchOutcomes {
-  const queries = new Map<string, { n: number; last: string }>();
+  const queries = new Map<string, { n: number; last: string; kind: NoGoodKind }>();
   let recorded = 0;
   let zero = 0;
+  let weakRecorded = 0;
+  let weak = 0;
+  let noGood = 0;
   let first: string | null = null;
+  let weakFirst: string | null = null;
   for (const p of parts) {
     recorded += p.recorded;
     zero += p.zero;
+    weakRecorded += p.weakRecorded;
+    weak += p.weak;
+    noGood += p.noGood;
     if (p.first && (first === null || p.first < first)) first = p.first;
-    for (const [q, c] of p.zeroQueries) {
+    if (p.weakFirst && (weakFirst === null || p.weakFirst < weakFirst)) weakFirst = p.weakFirst;
+    for (const [q, c] of p.noGoodQueries) {
       const a = queries.get(q);
-      queries.set(q, a ? { n: a.n + c.n, last: a.last > c.last ? a.last : c.last } : { ...c });
+      queries.set(q, a ? { n: a.n + c.n, ...(a.last > c.last ? { last: a.last, kind: a.kind } : { last: c.last, kind: c.kind }) } : { ...c });
     }
   }
-  const zeroQueries = [...queries.entries()]
+  const noGoodQueries = [...queries.entries()]
     .sort(([qa, a], [qb, b]) => b.n - a.n || (a.last < b.last ? 1 : a.last > b.last ? -1 : qa < qb ? -1 : qa > qb ? 1 : 0))
     .slice(0, ZERO_QUERIES_SHOWN)
-    .map(([query, c]) => ({ query, n: c.n, last: c.last }));
-  return { since: first ? first.slice(0, 10) : null, recorded, zero, zeroQueries };
+    .map(([query, c]) => ({ query, n: c.n, last: c.last, kind: c.kind }));
+  return {
+    since: first ? first.slice(0, 10) : null,
+    recorded,
+    zero,
+    weakSince: weakFirst ? weakFirst.slice(0, 10) : null,
+    weakRecorded,
+    weak,
+    noGood,
+    noGoodQueries,
+  };
 }
 
 /**
@@ -1192,6 +1255,8 @@ export function auditDataSince(): string | null {
  * here: their conversation count joins the messages table, which changes when a message is deleted.
  */
 export interface AuditPart {
+  /** AUDIT_PART_VERSION when the part was read: a kept part of another shape is read again. */
+  version: number;
   activity: ActivityPart;
   helpful: HelpfulPart;
   search: SearchPart;
@@ -1204,8 +1269,15 @@ export interface AuditPart {
   reminders: ReturnType<typeof reminderRows>;
 }
 
+/**
+ * The shape of AuditPart. Raise it whenever a part gains or changes a field (2: weak searches), so a
+ * kept closed week of the old shape is read again instead of counting the new field as zero.
+ */
+export const AUDIT_PART_VERSION = 2;
+
 export function auditPart(from: string, to: string): AuditPart {
   return {
+    version: AUDIT_PART_VERSION,
     activity: activityPart(from, to),
     helpful: helpfulPart(from, to),
     search: searchPart(from, to),
@@ -1330,7 +1402,9 @@ function closedStore(from: string): Map<string, AuditPart> {
     }
     closed.oldest = oldest;
   }
-  for (const w of [...closed.weeks.keys()]) if (sqlDate(w) < from) closed.weeks.delete(w);
+  for (const [w, part] of [...closed.weeks.entries()]) {
+    if (sqlDate(w) < from || part.version !== AUDIT_PART_VERSION) closed.weeks.delete(w);
+  }
   return closed.weeks;
 }
 
@@ -1412,6 +1486,11 @@ export function cachedUsageReport(now: Date = new Date()): UsageReport {
   const report = usageReportIncremental(now);
   cached = { db, at: now.getTime(), report };
   return report;
+}
+
+/** Test-only: the kept closed weeks, to age a part to an older shape. */
+export function _closedWeeksForTests(): Map<string, AuditPart> | null {
+  return closed?.weeks ?? null;
 }
 
 /** Test-only: forget the cached report and the closed weeks. */

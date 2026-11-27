@@ -85,7 +85,9 @@ If BAB has no answer and a colleague is the named contact for the area (the sear
 that person the question with `bab_send`. When the answer comes back and others could reuse it,
 save it with `bab_learn`.
 Search matches words, not meaning. Pass the literal error or wording as `query` and one or two
-rephrasings (synonyms, or system plus symptom) as `queries` in the same call. When you record a
+rephrasings (synonyms, or system plus symptom) as `queries` in the same call.
+Each result's `matchedTerms` (`"3/7"`) says how many of your terms it holds. `weak: true` means no
+result holds half of them: rephrase once, or treat BAB as having nothing on this. When you record a
 learning, pass 2 to 4 `aliases`: other wordings, symptoms and error strings someone would search for.
 
 **Record a learning** when the session produced knowledge that passes all three tests:

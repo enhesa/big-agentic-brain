@@ -276,6 +276,11 @@ export interface LearningSearchResult extends LearningRow, AgeInfo {
   stackMismatch?: true;
   stackHint?: string;
   snippet: string;
+  /**
+   * How many of the query's terms (after stop words and short tokens drop out, at most
+   * MATCH_TERMS_MAX) this memory's indexed text holds, as "3/7". Only on a text search.
+   */
+  matchedTerms?: string;
   authorName: string | null;
   /** Derived from the votes on read (lib/standing.ts); never stored, never ranks the search. */
   standing: StandingLevel;
@@ -877,6 +882,68 @@ function buildFtsQuery(query: string): string {
   return tokens.map(quoteFtsToken).join(" ");
 }
 
+/** The most query terms matchedTerms counts: one FTS lookup per term, so the cost stays bounded. */
+export const MATCH_TERMS_MAX = 16;
+
+/** The distinct terms buildFtsQuery matches on, in order, at most MATCH_TERMS_MAX. */
+export function queryTerms(query: string): string[] {
+  return [...new Set(normalizeTokens(query))].slice(0, MATCH_TERMS_MAX);
+}
+
+/**
+ * For each id, how many of `terms` its indexed text holds. Counted with the FTS index itself (one
+ * MATCH per term, restricted to these rows), so stemming and tokenizing agree with search.
+ */
+function countMatchedTerms(ids: string[], terms: string[]): Map<string, number> {
+  const counts = new Map<string, number>(ids.map((id) => [id, 0]));
+  if (ids.length === 0 || terms.length === 0) return counts;
+  const statement = getDb().prepare(
+    `SELECT learnings.id AS id
+     FROM learnings_fts
+     CROSS JOIN learnings ON learnings.rowid = learnings_fts.rowid
+     WHERE learnings_fts MATCH ? AND learnings.id IN (SELECT value FROM json_each(?))`,
+  );
+  const idList = JSON.stringify(ids);
+  for (const term of terms) {
+    for (const row of statement.all(quoteFtsToken(term), idList) as Array<{ id: string }>) {
+      counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/** "3/7" as numbers, or null. */
+function parseMatchedTerms(value: string | undefined): { matched: number; total: number } | null {
+  const m = /^(\d+)\/(\d+)$/.exec(value ?? "");
+  return m ? { matched: Number(m[1]), total: Number(m[2]) } : null;
+}
+
+/** true when `a` holds a larger share of its query's terms than `b` (a missing value loses). */
+function betterMatch(a: string | undefined, b: string | undefined): boolean {
+  const x = parseMatchedTerms(a);
+  const y = parseMatchedTerms(b);
+  if (!x) return false;
+  if (!y) return true;
+  if (x.total === 0 || y.total === 0) return y.total === 0 && x.total > 0;
+  return x.matched * y.total > y.matched * x.total;
+}
+
+/** Sent with a weak search answer (searchIsWeak). */
+export const WEAK_SEARCH_HINT =
+  "No memory holds most of your terms. These share a few words and may be unrelated. Rephrase once, or treat BAB as having nothing on this.";
+
+/**
+ * A weak answer: the first page of a text search with results, where no result holds at least half
+ * the terms of the phrasing it matched best. A result of a one-term phrasing always counts as a
+ * good match, so a one-term query is never weak. A page without matchedTerms (a listing) is not weak.
+ */
+export function searchIsWeak(results: Array<{ matchedTerms?: string }>, offset = 0): boolean {
+  if (offset !== 0 || results.length === 0) return false;
+  const counts = results.map((r) => parseMatchedTerms(r.matchedTerms));
+  if (counts.some((c) => c === null)) return false;
+  return counts.every((c) => c!.total >= 2 && c!.matched * 2 < c!.total);
+}
+
 /**
  * Splits an identifier-like chunk (`KeyError`, `order_id`, `2.67`, `a.b.c`) into the
  * parts an indexed text may carry separately. The index splits on punctuation, so a body that
@@ -1123,12 +1190,19 @@ export function search(
   const standings = standingsFor(rows, Date.now(), fresh);
   const retires = lastRetiresFor(rows);
   const trust = trustFor(rows);
+  // How well each row matched: counted on the returned page only, at most MATCH_TERMS_MAX terms.
+  const terms = queryTerms(query);
+  const matched = countMatchedTerms(
+    rows.map((r) => r.id),
+    terms,
+  );
 
   return rows.map((r) => ({
     ...r,
     ...ageInfo(r),
     ...appliesToFields(r, filters.stack),
     snippet: renderSnippetHtml(r.snippet),
+    matchedTerms: `${matched.get(r.id) ?? 0}/${terms.length}`,
     authorName: authorNames.get(r.author_id) ?? null,
     supersededBy: supersededByIds.get(r.id),
     ...standingFields(standings.get(r.id)!),
@@ -1481,8 +1555,19 @@ export function searchFused(
   offset = 0,
 ): { results: LearningSearchResult[]; total: number } {
   const lists = phrasings.map((q) => search(q, filters, MULTI_QUERY_DEPTH, 0));
+  // Each hit shows its best share of terms over the phrasings, not only the one fuseRankings kept.
+  const best = new Map<string, string | undefined>();
+  for (const hits of lists) {
+    for (const hit of hits) {
+      if (!best.has(hit.id) || betterMatch(hit.matchedTerms, best.get(hit.id))) best.set(hit.id, hit.matchedTerms);
+    }
+  }
   const fused = fuseRankings(lists);
-  return { results: fused.slice(offset, offset + limit), total: fused.length };
+  const results = fused.slice(offset, offset + limit).map((hit) => {
+    const terms = best.get(hit.id);
+    return terms === undefined || terms === hit.matchedTerms ? hit : { ...hit, matchedTerms: terms };
+  });
+  return { results, total: fused.length };
 }
 
 export interface ProjectSummary {

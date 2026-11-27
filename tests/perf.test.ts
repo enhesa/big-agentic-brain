@@ -423,6 +423,18 @@ describe("latency at seeded scale (40ms nominal, scaled by machine speed)", () =
     expectWithinBudget(t, 40, "FTS search top 20", await dbFactor());
   });
 
+  // matchedTerms runs one FTS lookup per query term on the returned page, capped at MATCH_TERMS_MAX.
+  // A long, widened query is the worst case: 20 rows and every term counted.
+  it("FTS search top 20 with many terms (matchedTerms)", async () => {
+    const { search, MATCH_TERMS_MAX } = await import("../lib/learnings");
+    const words = Array.from({ length: MATCH_TERMS_MAX + 8 }, (_, i) => (i === 0 ? "widget" : `kafka${i}`));
+    const query = words.join(" ");
+    expect(search(query, {}, 20)[0]?.matchedTerms).toMatch(new RegExp(`/${MATCH_TERMS_MAX}$`));
+    const t = p95(() => search(query, {}, 20));
+    TIMINGS["FTS search top 20 with many terms"] = t;
+    expectWithinBudget(t, 40, "FTS search top 20 with many terms", await dbFactor());
+  });
+
   it("list by status", async () => {
     const { list } = await import("../lib/learnings");
     const t = p95(() => list({ status: "active" }));
