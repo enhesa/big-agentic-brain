@@ -19,6 +19,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-28",
+    title: "A changed value is no longer refused as a duplicate",
+    changes: [
+      "A memory worded like an old one but stating another number is saved, and the old one is named.",
+      "A duplicate refusal now says nothing was saved, quotes the match and names the three ways on.",
+      "Close matches come back with their text and one call that replaces the old memory.",
+      "Search shows the newer of two memories that say the same with another number first.",
+    ],
+  },
+  {
     date: "2026-11-26",
     title: "Allowing BAB tools in auto mode",
     changes: [

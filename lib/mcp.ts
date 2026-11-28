@@ -56,6 +56,7 @@ import {
   LEARNINGS_LIST_LIMIT_MAX,
   LEARNINGS_SEARCH_LIMIT_MAX,
   nearMatches,
+  similarHint,
   type SimilarLearning,
 } from "./learnings";
 import { inboxCounts, inboxFor, send, validateRequest, requireThreadForActor, markRead, participantsOf, toArgument, hasTo, MAX_RECIPIENTS, NEW_THREAD_NEEDS_TO } from "./messages";
@@ -485,22 +486,41 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
     url: memoryUrl(ctx, created.id),
     ...(similar.length > 0
       ? {
-          similar: similar.map((m) => ({ id: m.id, title: m.title, url: memoryUrl(ctx, m.id) })),
-          similarHint: "Close matches exist. If yours updates one of them, retire yours and write it again with supersedes: <id>.",
+          similar: similar.map((m) => ({
+            id: m.id,
+            title: m.title,
+            url: memoryUrl(ctx, m.id),
+            ...(m.excerpt ? { excerpt: m.excerpt } : {}),
+            ...(m.differs ? { differs: m.differs } : {}),
+          })),
+          similarHint: similarHint(created.id, similar),
         }
       : {}),
   });
 }
 
+/** How many refused candidates are named with the start of their text; the rest get id and title. */
+const DUPLICATE_EXCERPTS = 3;
+
 /**
- * The text an agent gets when bab_learn refuses a duplicate: the candidates, and the two ways on.
- * A candidate the team archived with flags is named as such, so the agent reads why first.
+ * The text an agent gets when bab_learn refuses a duplicate: that nothing was saved, the
+ * candidates with the start of their text (so the agent can compare without a search), and the
+ * three ways on. A candidate the team archived with flags is named as such, so the agent reads why first.
  */
 export function duplicateMessage(candidates: SimilarLearning[]): string {
   const named = candidates
-    .map((c) => `${c.id} (${c.title})${c.status === "archived" ? " [archived after flags: read why before writing it again]" : ""}`)
+    .map(
+      (c, i) =>
+        `${c.id} (${c.title})${c.status === "archived" ? " [archived after flags: read why before writing it again]" : ""}` +
+        (i < DUPLICATE_EXCERPTS && c.excerpt ? ` says: "${c.excerpt}"` : ""),
+    )
     .join(", ");
-  return `Looks like a duplicate of: ${named}. To update one, pass supersedes: <id> with the evidence. confirmNotDuplicate: true only if yours is genuinely different.`;
+  return (
+    `Not saved. Looks like a duplicate of: ${named}. Compare the two texts, then pick one. ` +
+    "The same fact: nothing to save, react helpful or confirm on it. " +
+    "Yours replaces it (a changed value, a correction): send it again with supersedes: <id> and the evidence in the body. " +
+    "A different fact that only reads alike: send it again with confirmNotDuplicate: true."
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1119,7 +1139,7 @@ export const TOOLS: Tool[] = [
         checkBy: { type: "string", enum: ["agent", "person"], description: "agent: an agent can test it (command, path, setting, code). person: only a person can say (price, policy, owner, decision). Default: person for decision and standard." },
         checkEveryDays: { type: "number", description: "person only: days between checks, 30 to 365." },
         evidence: { type: "object", description: "With supersedes: like bab_react flag evidence." },
-        confirmNotDuplicate: { type: "boolean", description: "true: write anyway after seeing similar ones." },
+        confirmNotDuplicate: { type: "boolean", description: "true: a different fact from the ones named." },
         kind: { type: "string", enum: ["learning", "practice", "standard", "decision"], description: "learning (default), practice (should), decision (an ADR, needs the user's yes), standard (posted and changed by BAB maintainers only). A correction keeps the replaced kind unless you pass one." },
         source: { type: "string", enum: ["native", "confluence"], description: "confluence only for a mirror of a Confluence page (needs source_url and source_version)." },
         source_url: {

@@ -34,6 +34,10 @@ import {
   jaccard,
   similarityScore,
   quoteFtsToken,
+  precomputeTokens,
+  similarityScoreFromTokens,
+  titlesStateDifferentNumbers,
+  numbersIn,
   DUPLICATE_THRESHOLD,
   SIMILAR_THRESHOLD,
 } from "./similarity";
@@ -1124,7 +1128,7 @@ export function search(
   const retires = lastRetiresFor(rows);
   const trust = trustFor(rows);
 
-  return rows.map((r) => ({
+  const results = rows.map((r) => ({
     ...r,
     ...ageInfo(r),
     ...appliesToFields(r, filters.stack),
@@ -1136,6 +1140,93 @@ export function search(
     ...trustFields(trust.get(r.id)!),
     ...freshnessFields(fresh.get(r.id)),
   }));
+  // An explicit sort is the caller's order over the whole result: leave it alone.
+  return filters.sort ? results : newerValueFirst(results, [query]);
+}
+
+/** The words and numbers of a text, for telling which of two results a query points at. */
+function termsOf(text: string): Set<string> {
+  return new Set([...normalizeTokens(text), ...numbersIn(text)]);
+}
+
+/**
+ * Of two results that say the same with another number in the title (the pair the duplicate
+ * guard lets through, see findSimilar), the one written later goes first: it is far more often
+ * the current value, and both stay in the answer. Not when the query holds a word or number
+ * that only the older one has ("tier 3" against a newer "tier 2" memory): then the question is
+ * about the older one, and the two are different facts, not two values of one. Only rows of this
+ * page move, and only within their stack group, so paging and "other stacks last" hold.
+ */
+export function newerValueFirst<
+  T extends Pick<LearningSearchResult, "id" | "title" | "body" | "tags" | "aliases" | "created_at" | "stackMismatch">,
+>(results: T[], phrasings: string[]): T[] {
+  if (results.length < 2) return results;
+  const tokens = new Map(
+    results.map((r) => [r.id, precomputeTokens({ title: r.title, body: r.body, tags: JSON.parse(r.tags) as string[] })]),
+  );
+  const pairs = new Set<string>();
+  for (let i = 0; i < results.length; i++) {
+    for (let j = i + 1; j < results.length; j++) {
+      const a = results[i];
+      const b = results[j];
+      if (
+        a.stackMismatch === b.stackMismatch &&
+        titlesStateDifferentNumbers(a.title, b.title) &&
+        similarityScoreFromTokens(tokens.get(a.id)!, tokens.get(b.id)!) >= DUPLICATE_THRESHOLD
+      ) {
+        pairs.add(`${a.id}|${b.id}`).add(`${b.id}|${a.id}`);
+      }
+    }
+  }
+  if (pairs.size === 0) return results;
+
+  // created_at has one-second steps: the rowid settles two writes within the same second.
+  const ids = results.map((r) => r.id);
+  const rowids = new Map(
+    (
+      getDb()
+        .prepare(`SELECT id, rowid AS n FROM learnings WHERE id IN (${ids.map(() => "?").join(",")})`)
+        .all(...ids) as unknown as { id: string; n: number | bigint }[]
+    ).map((r) => [r.id, Number(r.n)]),
+  );
+  const writtenAfter = (a: T, b: T) =>
+    a.created_at !== b.created_at ? a.created_at > b.created_at : (rowids.get(a.id) ?? 0) > (rowids.get(b.id) ?? 0);
+
+  const asked = termsOf(phrasings.join(" "));
+  const terms = new Map<string, Set<string>>();
+  const termsFor = (r: T) => {
+    let t = terms.get(r.id);
+    if (!t) terms.set(r.id, (t = termsOf(`${r.title} ${r.body} ${r.tags} ${r.aliases ?? ""}`)));
+    return t;
+  };
+  /** The query names something only the older row has. */
+  const asksForOlder = (older: T, newer: T) => {
+    const inNewer = termsFor(newer);
+    for (const term of termsFor(older)) if (asked.has(term) && !inNewer.has(term)) return true;
+    return false;
+  };
+
+  const out = results.slice();
+  for (let i = 0; i < out.length; i++) {
+    // The newest later version below this row, if any, moves to just above it; then this
+    // position is checked again, so a chain of three values ends newest first.
+    let newest = -1;
+    for (let k = i + 1; k < out.length; k++) {
+      if (
+        pairs.has(`${out[i].id}|${out[k].id}`) &&
+        writtenAfter(out[k], out[i]) &&
+        !asksForOlder(out[i], out[k]) &&
+        (newest < 0 || writtenAfter(out[k], out[newest]))
+      ) {
+        newest = k;
+      }
+    }
+    if (newest > 0) {
+      out.splice(i, 0, ...out.splice(newest, 1));
+      i--;
+    }
+  }
+  return out;
 }
 
 export interface VoteNote {
@@ -1481,7 +1572,8 @@ export function searchFused(
   offset = 0,
 ): { results: LearningSearchResult[]; total: number } {
   const lists = phrasings.map((q) => search(q, filters, MULTI_QUERY_DEPTH, 0));
-  const fused = fuseRankings(lists);
+  // Fusing can put an older value back above its newer one: order them again.
+  const fused = filters.sort ? fuseRankings(lists) : newerValueFirst(fuseRankings(lists), phrasings);
   return { results: fused.slice(offset, offset + limit), total: fused.length };
 }
 
@@ -1533,6 +1625,21 @@ export interface SimilarLearning {
   created_at: string;
   status: LearningStatus;
   verdict: "duplicate" | "similar";
+  /** The start of the match's body, so the caller can compare the two texts without a second read. */
+  excerpt?: string;
+  /**
+   * "numbers": worded like the draft, but the two titles state different numbers. A different
+   * fact, so never a duplicate: it may be the old value of what the draft says now.
+   */
+  differs?: "numbers";
+}
+
+export const SIMILAR_EXCERPT_CHARS = 200;
+
+/** One line of a stored body, for the list of matches an author gets back. */
+function excerptOf(body: string): string {
+  const line = body.replace(/\s+/g, " ").trim();
+  return line.length > SIMILAR_EXCERPT_CHARS ? `${line.slice(0, SIMILAR_EXCERPT_CHARS)}...` : line;
 }
 
 const FTS_TOKEN_CAP = 20;
@@ -1555,6 +1662,7 @@ const DEDUP_CANDIDATE_STATUS = `(learnings.status = 'active' OR (learnings.statu
 /**
  * Close but not duplicate matches of a memory that was just written, for the reply to its
  * author: they may have meant to update one of them (supersedes) rather than add another.
+ * A match worded like it that states another number (differs) comes first: it scores highest.
  * The write already happened, so a failure here gives no matches rather than an error.
  */
 export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "tags" | "repo" | "project">, limit = 3): SimilarLearning[] {
@@ -1569,6 +1677,18 @@ export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "ta
   } catch {
     return [];
   }
+}
+
+/**
+ * What the author of a new memory is told about its close matches (nearMatches): how to turn
+ * the write into an update with one call. Superseding the match and the copy just saved
+ * archives both, so nothing is retired by hand.
+ */
+export function similarHint(createdId: string, similar: SimilarLearning[]): string {
+  const numbers = similar.some((m) => m.differs === "numbers")
+    ? " A match marked differs says the same with another number: check whether it is the old value."
+    : "";
+  return `Close matches exist.${numbers} If yours replaces one of them, send it again with supersedes: ["<its id>", "${createdId}"], which archives that one and this copy. If both hold, do nothing.`;
 }
 
 const FTS_CANDIDATE_LIMIT = 20;
@@ -1602,6 +1722,7 @@ function findSimilarByTagsOnly(draftTags: string[], limit: number): SimilarLearn
       created_at: r.created_at,
       status: r.status,
       verdict: score >= DUPLICATE_THRESHOLD ? "duplicate" : "similar",
+      excerpt: excerptOf(r.body),
     };
   });
 
@@ -1670,6 +1791,9 @@ export function findSimilar(
       { title: r.title, body: r.body, tags: candidateTags },
       { title: draft.title, body: draft.body, tags: draftTags },
     );
+    // Same wording, another number ("Python 3.10" against "Python 3.11"): a different fact,
+    // often the old value of the draft's own. Refusing it would lose the new value.
+    const otherNumbers = score >= DUPLICATE_THRESHOLD && titlesStateDifferentNumbers(r.title, draft.title);
     return {
       id: r.id,
       title: r.title,
@@ -1679,7 +1803,9 @@ export function findSimilar(
       tags: candidateTags,
       created_at: r.created_at,
       status: r.status,
-      verdict: score >= DUPLICATE_THRESHOLD ? "duplicate" : "similar",
+      verdict: score >= DUPLICATE_THRESHOLD && !otherNumbers ? "duplicate" : "similar",
+      excerpt: excerptOf(r.body),
+      ...(otherNumbers ? { differs: "numbers" as const } : {}),
     };
   });
 

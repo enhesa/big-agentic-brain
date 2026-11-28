@@ -3,6 +3,8 @@ import {
   normalizeTokens,
   jaccard,
   similarityScore,
+  numbersIn,
+  titlesStateDifferentNumbers,
   DUPLICATE_THRESHOLD,
   SIMILAR_THRESHOLD,
 } from "../lib/similarity";
@@ -121,5 +123,37 @@ describe("similarityScore", () => {
     const a = { title: "Use runTest.sh instead of dotnet test", body, tags: ["engineering"] };
     const b = { title: "Kafka consumer offset reset guidance", body, tags: ["engineering"] };
     expect(similarityScore(a, b)).toBeLessThan(DUPLICATE_THRESHOLD);
+  });
+});
+
+describe("numbersIn", () => {
+  it("keeps versions and decimals as written and drops thousands commas", () => {
+    expect([...numbersIn("Builds with 1.95.0, costs $5,000 and runs on AlmaLinux8, levels 2-4")].sort()).toEqual(
+      ["1.95.0", "2", "4", "5000", "8"].sort(),
+    );
+  });
+
+  it("finds nothing in a text without digits", () => {
+    expect(numbersIn("no digits here").size).toBe(0);
+    expect(numbersIn("").size).toBe(0);
+  });
+});
+
+describe("titlesStateDifferentNumbers", () => {
+  it("is true when each title states a number the other does not", () => {
+    expect(titlesStateDifferentNumbers("Linter assumes Python 3.10 by default", "Linter assumes Python 3.11 by default")).toBe(true);
+    expect(titlesStateDifferentNumbers("A new tier 2 target needs team approval", "A new tier 3 target needs team approval")).toBe(true);
+    expect(titlesStateDifferentNumbers("Travel budget is $5,000 a year", "Travel budget is $1,850 a year")).toBe(true);
+  });
+
+  it("is false for the same numbers, however they are worded around", () => {
+    expect(titlesStateDifferentNumbers("Alert after 15 minutes of lag", "Lag alert fires after 15 minutes")).toBe(false);
+    expect(titlesStateDifferentNumbers("Budget is 5,000", "Budget is 5000")).toBe(false);
+  });
+
+  it("is false when only one title adds a number, or neither has one", () => {
+    expect(titlesStateDifferentNumbers("Use the test script", "Use the test script on port 8443")).toBe(false);
+    expect(titlesStateDifferentNumbers("Use the test script on port 8443", "Use the test script")).toBe(false);
+    expect(titlesStateDifferentNumbers("Use the test script", "Always use the test script")).toBe(false);
   });
 });

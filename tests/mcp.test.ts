@@ -1003,7 +1003,39 @@ it("bab_learn's duplicate refusal names supersedes as the way to update", async 
   const out = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
   expect(out.result.isError).toBe(true);
   expect(out.result.content[0].text).toMatch(/supersedes: <id>/);
-  expect(out.result.content[0].text).toMatch(/confirmNotDuplicate: true only if/);
+  expect(out.result.content[0].text).toMatch(/A different fact that only reads alike: send it again with confirmNotDuplicate: true/);
+});
+
+it("bab_learn's duplicate refusal says nothing was saved and quotes the match", async () => {
+  const args = { title: "Grafana alert folder naming convention", body: "team-service-alerts,\nalways lowercase." };
+  await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const text = out.result.content[0].text as string;
+  expect(text.startsWith("Not saved. Looks like a duplicate of: ")).toBe(true);
+  expect(text).toContain('says: "team-service-alerts, always lowercase."');
+  expect(text).toMatch(/The same fact: nothing to save/);
+});
+
+it("bab_learn saves a near-copy that states another number and names it as a close match", async () => {
+  const old = { title: "The build image pins compiler version 1.92.0", body: "The toolchain file pins compiler version 1.92.0 for every build.", tags: ["build"] };
+  const base = await rpc("tools/call", { name: "bab_learn", arguments: old }, ACTOR);
+  const baseId = JSON.parse(base.result.content[0].text).learning.id;
+
+  const next = { title: "The build image pins compiler version 1.95.0", body: "The toolchain file pins compiler version 1.95.0 for every build.", tags: ["build"] };
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: next }, ACTOR);
+  expect(out.result.isError).toBeFalsy();
+  const reply = JSON.parse(out.result.content[0].text);
+  expect(reply.similar).toEqual([
+    expect.objectContaining({ id: baseId, differs: "numbers", excerpt: old.body }),
+  ]);
+  expect(reply.similarHint).toContain(`supersedes: ["<its id>", "${reply.learning.id}"]`);
+
+  // The one call the hint names replaces the old value and the copy just saved.
+  const fix = await rpc("tools/call", { name: "bab_learn", arguments: { ...next, supersedes: [baseId, reply.learning.id] } }, ACTOR);
+  expect(fix.result.isError).toBeFalsy();
+  const { getById } = await import("../lib/learnings");
+  expect(getById(baseId)?.status).toBe("archived");
+  expect(getById(reply.learning.id)?.status).toBe("archived");
 });
 
 it("bab_learn refuses a lesson the team just archived with flags, and says so", async () => {

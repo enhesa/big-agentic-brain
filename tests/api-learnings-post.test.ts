@@ -290,6 +290,44 @@ describe("POST /api/learnings", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.similar.map((m: { id: string }) => m.id)).toEqual([firstId]);
+    expect(body.similar[0].excerpt).toMatch(/^Alert when consumer lag stays above 10000/);
+    expect(body.similar[0].differs).toBeUndefined();
+    expect(body.similarHint).toContain(`supersedes: ["<its id>", "${body.learning.id}"]`);
+  });
+
+  it("201s a near-copy that states another number, and marks the old one as differing", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const first = await POST(
+      postReq({
+        title: "Mileage is reimbursed at 0.56 per mile",
+        body: "Personal vehicle mileage on work trips is reimbursed at 0.56 per mile.",
+        tags: ["expenses"],
+      }) as never,
+    );
+    const firstId = (await first.json()).learning.id;
+
+    const res = await POST(
+      postReq({
+        title: "Mileage is reimbursed at 0.62 per mile",
+        body: "Personal vehicle mileage on work trips is reimbursed at 0.62 per mile.",
+        tags: ["expenses"],
+      }) as never,
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.similar).toEqual([expect.objectContaining({ id: firstId, differs: "numbers" })]);
+    expect(body.similarHint).toContain("another number");
+  });
+
+  it("409 candidates carry the start of their text", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const draft = { title: "Rotate the signing key every quarter", body: "The signing key is rotated on the first working day of each quarter.", tags: ["security"] };
+    await POST(postReq(draft) as never);
+    const res = await POST(postReq(draft) as never);
+    expect(res.status).toBe(409);
+    expect((await res.json()).candidates[0].excerpt).toBe(draft.body);
   });
 
   it("201s when confirmNotDuplicate is set on an otherwise-duplicate draft", async () => {

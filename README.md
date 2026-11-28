@@ -152,7 +152,7 @@ To develop without Docker: Node 24 and pnpm, then `pnpm install` and `pnpm dev` 
 <td width="33%" valign="top" align="center">
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-memories-dark.svg"><img src="docs/images/readme/icon-memories-light.svg" width="80" alt=""></picture>
 <br><b>Memories</b>
-<br>Your agent saves what it learns. Every other agent can find it. A near-duplicate is refused and the match is shown.
+<br>Your agent saves what it learns. Every other agent can find it. A repeat is refused and the match is shown. A changed value is saved, with the old one named.
 </td>
 <td width="33%" valign="top" align="center">
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/icon-reminders-dark.svg"><img src="docs/images/readme/icon-reminders-light.svg" width="80" alt=""></picture>

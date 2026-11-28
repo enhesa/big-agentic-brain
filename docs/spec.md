@@ -455,6 +455,10 @@ Dedup at write time is built: `findSimilar` (`lib/learnings.ts`) OR-queries FTS5
 title+body tokens, scores the top 20 candidates with `lib/similarity.ts`
 (title/body/tag Jaccard), and `create()` throws a 409 `ConflictError` with the candidates when
 one scores >= `DUPLICATE_THRESHOLD` (0.55), unless `supersedes` or `confirmNotDuplicate` is set.
+A candidate at that score whose title states another number than the draft's (each title has a
+number the other lacks, `titlesStateDifferentNumbers`) is a different fact, often the old value of
+the draft's own: it gets verdict `similar` with `differs: "numbers"` and the write goes through, so
+a changed value is never refused. Every candidate carries `excerpt`, the first 200 characters of its body.
 When the draft has no usable title/body tokens (too short, all stopwords) but does carry tags,
 `findSimilar` falls back to a tag-only scan: any active candidate with tag-set overlap
 >= 0.5 comes back as "similar". `create()` also validates `supersedes` itself (existing,
@@ -465,10 +469,13 @@ caching, no background job). Candidates are active memories plus memories two fl
 the last `FLAG_ARCHIVED_DEDUP_DAYS` (90) that nothing restored, kept, superseded or retired since, so
 a lesson the team just flagged off is not written again unnoticed; such a candidate carries status
 `archived` (also in `GET /api/learnings/similar`), and `bab_learn` names it "archived after flags".
-The tag-only fallback compares active rows only. The MCP refusal tells the agent to pass `supersedes: <id>` to update one, and
-`confirmNotDuplicate` only for a genuinely different fact. A successful create of a new memory
-(not a correction) returns its close matches (`nearMatches`, up to 3 active ones below the
-duplicate threshold, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, so the author can still turn it into an update.
+The tag-only fallback compares active rows only. The MCP refusal says nothing was saved, quotes the first three candidates, and names the three ways on:
+nothing to save for the same fact, `supersedes: <id>` when the draft replaces it, and
+`confirmNotDuplicate` for a different fact that only reads alike. A successful create of a new memory
+(not a correction) returns its close matches (`nearMatches`, up to 3 active ones with verdict
+`similar`, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, each with
+`excerpt` and, where it applies, `differs`. `similarHint` names the one call that turns the write
+into an update: the same text again with `supersedes` listing the match and the copy just saved.
 
 A learning that has been superseded carries a `supersededBy: { id, title }` in `GET
 /api/learnings/[id]` and on the web detail page; search results carry just the id. Two-way: the
@@ -612,6 +619,13 @@ A memory with an open flag (a flag newer than the newest check by someone other 
 the same rule as `trustFor`) is multiplied by `OPEN_FLAG_RANK_FACTOR` (0.6): it still matches, but ranks below an equal match, so an
 agent that reads only the top results meets it less. A later check answers the flag and lifts the penalty. Unchecked
 memories are not demoted: they are most of the corpus, and recency already favours new ones.
+One step runs after the ranking, on the page only (`newerValueFirst`): of two results that say the same with another
+number in the title (the pair the duplicate guard lets through as `differs: "numbers"`), the one written later moves to
+just above the older one, so a changed value is read before its old value even when both were written days apart and
+the recency boost cannot separate them. Not when the query holds a word or number that only the older one has: then the
+question is about the older one ("tier 3" against a newer "tier 2" memory) and the ranking stands.
+Rows move only within the page and within their stack group; an explicit
+`sort` is left alone. `searchFused` applies it again after fusing.
 
 `learnings.score` (`recomputeScore()`) is `helpful - not_helpful + 2*kudos + 2*confirm`; flags stay
 out of it. `confirm` means "I checked this against code or docs and it holds": a note saying where

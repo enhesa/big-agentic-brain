@@ -148,6 +148,33 @@ export function similarityScore(candidate: SimilarityInput, draft: SimilarityInp
   return similarityScoreFromTokens(precomputeTokens(candidate), precomputeTokens(draft));
 }
 
+/**
+ * The numbers a text states, as written: "3.10", "1.95.0", "5000" (thousands commas dropped),
+ * and the digits inside a word ("AlmaLinux8" gives "8"). Compared as text, so 3.1 is not 3.10.
+ */
+export function numbersIn(text: string): Set<string> {
+  const found = new Set<string>();
+  if (!text) return found;
+  for (const m of text.replace(/(\d),(?=\d{3}(?!\d))/g, "$1").matchAll(/\d+(?:\.\d+)*/g)) found.add(m[0]);
+  return found;
+}
+
+/**
+ * True when each title states a number the other does not ("Python 3.10" against "Python 3.11",
+ * "tier 2" against "tier 3"). Two memories that differ like this state different facts, however
+ * alike the rest of the wording is, so the duplicate guard must not refuse the second one.
+ * A number on one side only is extra detail, not a different value.
+ */
+export function titlesStateDifferentNumbers(a: string, b: string): boolean {
+  const inA = numbersIn(a);
+  const inB = numbersIn(b);
+  let onlyA = false;
+  for (const n of inA) if (!inB.has(n)) onlyA = true;
+  if (!onlyA) return false;
+  for (const n of inB) if (!inA.has(n)) return true;
+  return false;
+}
+
 /** Quotes a token for FTS5 MATCH (escape embedded quotes by doubling them). */
 export function quoteFtsToken(token: string): string {
   return `"${token.replace(/"/g, '""')}"`;
