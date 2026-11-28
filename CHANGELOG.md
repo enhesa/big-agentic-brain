@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.46.0](https://github.com/enhesa/big-agentic-brain/compare/v2.45.2...v2.46.0) (2026-11-28)
+
+
+### Features
+
+* show search match strength and searches with no good match ([#221](https://github.com/enhesa/big-agentic-brain/issues/221)) ([1b81bcc](https://github.com/enhesa/big-agentic-brain/commit/1b81bcce87601dc52b32678732f88fb62fa2baf1))
+
+
+### Bug Fixes
+
+* **SOFTARCH-71:** save a changed value the duplicate guard refused ([#222](https://github.com/enhesa/big-agentic-brain/issues/222)) ([f8687aa](https://github.com/enhesa/big-agentic-brain/commit/f8687aa580b3c24df3c9668062beb6ec8083de78))
+
 ## [2.45.2](https://github.com/enhesa/big-agentic-brain/compare/v2.45.1...v2.45.2) (2026-11-26)
 
 
