@@ -1026,6 +1026,42 @@ it("bab_learn's duplicate refusal escapes a quote mark in the match's text", asy
   expect(text).toContain('\\"branch-os\\"');
 });
 
+it("bab_learn lists the related memory when nothing reads like the new one, and one call replaces it", async () => {
+  const old = {
+    title: "Integration tests need the shared staging database",
+    body: "The integration suite connects to the shared staging database. Export DB_HOST before you start the suite, or every test fails at setup.",
+    tags: ["testing"],
+  };
+  const base = await rpc("tools/call", { name: "bab_learn", arguments: old }, ACTOR);
+  const baseId = JSON.parse(base.result.content[0].text).learning.id;
+
+  const next = {
+    title: "Integration suite runs against a throwaway container now",
+    body: "The staging database is no longer used by the integration tests. DB_HOST is ignored; the suite starts Postgres itself.",
+    tags: ["testing"],
+  };
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: next }, ACTOR);
+  expect(out.result.isError).toBeFalsy();
+  const reply = JSON.parse(out.result.content[0].text);
+  expect(reply.similar).toEqual([expect.objectContaining({ id: baseId, related: true, excerpt: old.body })]);
+  expect(reply.similarHint).toMatch(/^Nothing reads like yours\./);
+  expect(reply.similarHint).toContain("cannot both be true");
+
+  // The one call the hint names replaces the old memory and the copy just saved.
+  const fix = await rpc("tools/call", { name: "bab_learn", arguments: { ...next, supersedes: [baseId, reply.learning.id] } }, ACTOR);
+  expect(fix.result.isError).toBeFalsy();
+  const list = await rpc("tools/call", { name: "bab_search", arguments: { query: "integration suite staging database" } }, ACTOR);
+  const ids = JSON.parse(list.result.content[0].text).results.map((r: { id: string }) => r.id);
+  expect(ids).not.toContain(baseId);
+  expect(ids).not.toContain(reply.learning.id);
+});
+
+it("bab_learn names the rule for replacing a memory the verified fact contradicts", async () => {
+  const list = await rpc("tools/list", {}, ACTOR);
+  const learn = list.result.tools.find((t: { name: string }) => t.name === "bab_learn");
+  expect(learn.description).toContain("or that cannot be true together with the fact you just verified");
+});
+
 it("bab_learn saves a near-copy that states another number and names it as a close match", async () => {
   const old = { title: "The build image pins compiler version 1.92.0", body: "The toolchain file pins compiler version 1.92.0 for every build.", tags: ["build"] };
   const base = await rpc("tools/call", { name: "bab_learn", arguments: old }, ACTOR);

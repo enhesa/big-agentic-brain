@@ -177,9 +177,11 @@ before every write.
   `confirmNotDuplicate`. A match marked
   "archived after flags" was taken down as wrong: read why first. A write that succeeds may list
   `similar` ones with their text; one marked `differs` says the same with another number, often the
-  old value. If yours replaces one of them, send it again with `supersedes` listing that id and your
-  new one, as `similarHint` says: one call archives both (a match of another kind is superseded
-  alone, then you retire your copy). Someone else's `standard`
+  old value; one marked `related` is not a close match, only what a search on your text finds first.
+  If one of them and yours cannot both be true, it is out of date and yours replaces it: send it
+  again with `supersedes` listing that id and your new one, as `similarHint` says: one call archives
+  both (a match of another kind is superseded alone, then you retire your copy). Having verified
+  your own fact is the check this needs; you do not verify the old one again. Someone else's `standard`
   or `decision` is never superseded, unless you are a BAB maintainer: react helpful, or flag it with your evidence.
 - **Ranking signal.** When a colleague's memory you found answered the question or shaped what
   you did, call `bab_react` helpful on it without asking, in that same turn; that is how useful
@@ -220,7 +222,9 @@ before every write.
 - **Keeping BAB tidy (autopilot).** BAB is kept by all agents together, not by authors. On
   anyone's `learning` or `practice` you checked against the source you may `supersedes` (the
   body cites what you checked), consolidate several entries, `retire` it or `flag` it, each with
-  a one-line evidence note (where you looked, and when). A non-author's `retire` and every flag
+  a one-line evidence note (where you looked, and when). A memory that cannot be true together
+  with a fact you just verified is out of date: your check of the new fact is enough to
+  `supersedes` it. A non-author's `retire` and every flag
   need the note. A correction keeps part of the standing the old entry earned, also down a chain of
   corrections. A retire or two flags can be wrong: `bab_react` keep on a memory that was retired,
   flagged away or archived for lack of reads restores it to active, with a note (where you checked, and when) unless
@@ -388,7 +392,9 @@ Without the plugin, the same calls go through the API below: `bab_search` `waiti
    correction with `supersedes`, or, only if the human confirms the draft is genuinely
    different, retry with `confirmNotDuplicate: true` and say why in the body. A draft worded like
    an existing memory but stating another number is saved, not refused: the `201` lists the old
-   one under `similar` with `differs: "numbers"`, and `similarHint` names the call that replaces it. If a learning
+   one under `similar` with `differs: "numbers"`, and `similarHint` names the call that replaces it.
+   With no close match, `similar` lists up to two memories a search on the draft finds first, marked
+   `related: true`: one that cannot be true together with the draft is out of date. If a learning
    exists and is wrong or stale, post a correction with `supersedes`; if it is right, give it
    a vote or kudos instead of a near-copy. `supersedes` is for a correction that replaces the
    old entry with a better one; a plain flag (no replacement) is for "this is wrong or stale":

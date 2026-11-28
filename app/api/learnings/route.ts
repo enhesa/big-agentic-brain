@@ -198,7 +198,8 @@ export async function POST(req: NextRequest) {
         ...provenance,
       }, supersedesIds, "mcp", (payload as Record<string, unknown>).evidence);
 
-      // Close matches of a new memory (not a correction), so the caller can still make it an update.
+      // Close matches of a new memory (not a correction), or with none the related memories, so
+      // the caller can still make it an update.
       const similar = supersedesIds.length > 0 ? [] : nearMatches(created);
       return {
         status: 201,
@@ -212,6 +213,7 @@ export async function POST(req: NextRequest) {
                   score: m.score,
                   ...(m.excerpt ? { excerpt: m.excerpt } : {}),
                   ...(m.differs ? { differs: m.differs } : {}),
+                  ...(m.related ? { related: true } : {}),
                 })),
                 similarHint: similarHint(created, similar),
               }

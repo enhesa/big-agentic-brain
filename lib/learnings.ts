@@ -1783,6 +1783,31 @@ export interface SimilarLearning {
    * fact, so never a duplicate: it may be the old value of what the draft says now.
    */
   differs?: "numbers";
+  /**
+   * true: not a close match. A search on the new memory's own text ranks it first (relatedOnSave).
+   * A changed fact is often worded unlike the memory it replaces, so the duplicate check misses it.
+   */
+  related?: boolean;
+}
+
+/** The most related memories a save lists when it has no close match. */
+export const RELATED_ON_SAVE_MAX = 2;
+/** How much of the new memory's title and body the related search reads. */
+const RELATED_QUERY_CHARS = 600;
+/** Only a learning or a practice is listed as related: any agent may replace those. */
+const RELATED_KINDS: readonly LearningKind[] = ["learning", "practice"];
+
+/**
+ * A related memory holds at least a third of the search terms of the new one (matchedTerms, at
+ * most MATCH_TERMS_MAX terms from the start of its text). Without this floor nearly every save
+ * lists two memories that only share a few words. Measured on 640 test memories from ten public
+ * repositories: the floor keeps the replaced memory for 15 of the 17 changed facts that have no
+ * close match, and lists something on one ordinary save in four. A result without a count (a
+ * text with no usable search terms gets the plain list) is never related.
+ */
+export function holdsEnoughTerms(matchedTerms: string | undefined): boolean {
+  const c = parseMatchedTerms(matchedTerms);
+  return c !== null && c.total > 0 && c.matched * 3 >= c.total;
 }
 
 export const SIMILAR_EXCERPT_CHARS = 200;
@@ -1814,20 +1839,54 @@ const DEDUP_CANDIDATE_STATUS = `(learnings.status = 'active' OR (learnings.statu
  * Close but not duplicate matches of a memory that was just written, for the reply to its
  * author: they may have meant to update one of them (supersedes) rather than add another.
  * A match worded like it that states another number (differs) comes first: it scores highest.
+ * With no close match, the related memories instead (relatedOnSave).
  * The write already happened, so a failure here gives no matches rather than an error.
  */
 export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "tags" | "repo" | "project">, limit = 3): SimilarLearning[] {
   // Over-fetched: the row itself, archived and duplicate candidates are dropped below.
   try {
-    return findSimilar(
+    const near = findSimilar(
       { title: row.title, body: row.body, tags: JSON.parse(row.tags) as string[], repo: row.repo, project: row.project },
       { limit: limit + 6 },
     )
       .filter((m) => m.id !== row.id && m.status === "active" && m.verdict === "similar")
       .slice(0, limit);
+    return near.length > 0 ? near : relatedOnSave(row);
   } catch {
     return [];
   }
+}
+
+/**
+ * For a memory that was just written and has no close match: the active memories a search on
+ * its own text ranks first, at most RELATED_ON_SAVE_MAX, each marked `related`. Agents rarely
+ * search before they save, so the reply to the save is where they learn that an older memory
+ * says something else. A changed fact worded unlike the old one scores under SIMILAR_THRESHOLD,
+ * but the old one still ranks at the top of a search on the new text. Only learnings and
+ * practices that hold enough of the terms (holdsEnoughTerms) are listed.
+ */
+function relatedOnSave(row: Pick<LearningRow, "id" | "title" | "body" | "tags">): SimilarLearning[] {
+  const draft = { title: row.title, body: row.body, tags: (JSON.parse(row.tags) as string[]).map((t) => t.toLowerCase()) };
+  // Over-fetched: the row itself and matches of another kind are dropped below.
+  return search(`${row.title} ${row.body}`.slice(0, RELATED_QUERY_CHARS), {}, RELATED_ON_SAVE_MAX + 4)
+    .filter((r) => r.id !== row.id && r.status === "active" && RELATED_KINDS.includes(r.kind) && holdsEnoughTerms(r.matchedTerms))
+    .slice(0, RELATED_ON_SAVE_MAX)
+    .map((r) => {
+      const tags = JSON.parse(r.tags) as string[];
+      return {
+        id: r.id,
+        title: r.title,
+        score: similarityScore({ title: r.title, body: r.body, tags }, draft),
+        author_id: r.author_id,
+        authorName: r.authorName ?? null,
+        tags,
+        created_at: r.created_at,
+        status: r.status,
+        verdict: "similar" as const,
+        excerpt: excerptOf(r.body),
+        related: true,
+      };
+    });
 }
 
 /**
@@ -1835,20 +1894,46 @@ export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "ta
  * the write into an update with one call. Superseding the match and the copy just saved
  * archives both, so nothing is retired by hand. That call merges two memories, which must be
  * of one kind (createWithSupersedes): a match of another kind is superseded alone instead.
+ *
+ * The rule it states: a match that cannot be true together with the new memory is out of date,
+ * and the author's check of their own fact is all the evidence the replacement needs. Told only
+ * that close matches exist, agents left a contradiction in place because they had not checked
+ * the old memory against the source. Two exceptions, as in the bab_learn tool text: someone
+ * else's standard or decision is flagged, never replaced, and the author's own decision needs
+ * the user's yes. With only related memories (relatedOnSave) the lead says so.
+ *
+ * The hint adds no duty of its own: the bab_learn tool text already asks for the evidence. A
+ * version that also said "say in the body what you checked" did worse in one benchmark pass
+ * (59 of 72 contradicted memories replaced, against 67 without that sentence).
  */
-export function similarHint(created: Pick<LearningRow, "id" | "kind">, similar: SimilarLearning[]): string {
+export function similarHint(created: Pick<LearningRow, "id" | "kind"> & { author_id?: string }, similar: SimilarLearning[]): string {
   const numbers = similar.some((m) => m.differs === "numbers")
     ? " A match marked differs says the same with another number: check whether it is the old value."
     : "";
-  const otherKind = similar.filter((m) => getById(m.id)?.kind !== created.kind).map((m) => m.id);
+  const kinds = new Map(similar.map((m) => [m.id, getById(m.id)?.kind]));
+  const isNotYours = (m: SimilarLearning) => ["standard", "decision"].includes(kinds.get(m.id) ?? "") && m.author_id !== created.author_id;
+  const isOwnDecision = (m: SimilarLearning) => kinds.get(m.id) === "decision" && !isNotYours(m);
+  const notYours = similar.filter(isNotYours).map((m) => m.id);
+  const ownDecisions = similar.filter(isOwnDecision).map((m) => m.id);
+  const replaceable = similar.filter((m) => !isNotYours(m) && !isOwnDecision(m));
+  const flagInstead =
+    (notYours.length > 0
+      ? ` ${notYours.join(", ")} is someone else's standard or decision: if yours contradicts it, flag it with your evidence. Do not replace it, unless you are a BAB maintainer.`
+      : "") + (ownDecisions.length > 0 ? ` ${ownDecisions.join(", ")} is your own decision: replacing it needs the user's yes.` : "");
+  const lead = similar.every((m) => m.related) ? RELATED_LEAD : "Close matches exist.";
+  if (replaceable.length === 0) return `${lead}${numbers}${flagInstead}`;
+  const otherKind = replaceable.filter((m) => kinds.get(m.id) !== created.kind).map((m) => m.id);
   const alone = `send it again with supersedes: "<its id>", then retire this copy (${created.id})`;
   const merged = `send it again with supersedes: ["<its id>", "${created.id}"], which archives that one and this copy`;
   const how =
-    otherKind.length === similar.length
+    otherKind.length === replaceable.length
       ? `${alone}.`
       : `${merged}.${otherKind.length > 0 ? ` For ${otherKind.join(", ")}, of another kind: ${alone}.` : ""}`;
-  return `Close matches exist.${numbers} If yours replaces one of them, ${how} If both hold, do nothing.`;
+  return `${lead}${numbers} If one of them and yours cannot both be true, it is out of date and yours replaces it: ${how}${flagInstead} Having verified your own fact is the check this needs; you do not have to verify the old one again. If both hold, do nothing.`;
 }
+
+/** Opens similarHint when the save lists only related memories, none of them a close match. */
+export const RELATED_LEAD = "Nothing reads like yours. These are the memories a search on your text finds first.";
 
 const FTS_CANDIDATE_LIMIT = 20;
 

@@ -26,6 +26,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A duplicate refusal now says nothing was saved, quotes the match and names the three ways on.",
       "Close matches come back with their text and one call that replaces the old memory.",
       "Search shows the newer of two memories that say the same with another number first.",
+      "A save with no close match lists up to two related memories, so an out-of-date one gets replaced.",
+      "The save hint says a memory your verified fact contradicts is out of date, and yours replaces it.",
     ],
   },
   {

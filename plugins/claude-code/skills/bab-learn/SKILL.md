@@ -58,6 +58,8 @@ those with the evidence; your own decision needs the user's yes), or post with
 marked "archived after flags" was taken down as wrong: read why before writing it again. A
 refusal saved nothing and quotes the existing text, so compare before you choose. If a
 write succeeds with `similar` (one marked `differs` says the same with another number, often the
-old value) and yours replaces one of them, send it again with `supersedes` listing that id and
-your new one, as `similarHint` says: one call archives both (a match of another kind is
-superseded alone, then you retire your copy).
+old value; one marked `related` is not a close match, only what a search on your text finds
+first) and one of them cannot be true together with yours, it is out of date: send yours again
+with `supersedes` listing that id and your new one, as `similarHint` says: one call archives
+both (a match of another kind is superseded alone, then you retire your copy). Having verified
+your own fact is the check this needs; you do not verify the old one again.

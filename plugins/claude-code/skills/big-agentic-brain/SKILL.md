@@ -332,7 +332,10 @@ recognition is best effort; the responsibility is yours. Colleague emails
      turn you used the memory; `keep` on any memory you checked is still
      true. On anyone's `learning` or `practice`, yours or a colleague's, once you checked
      the source: `supersedes` (the body cites what you checked), `retire` with a one-line
-     evidence note, `flag` with a note, and a consolidation (report it afterwards).
+     evidence note, `flag` with a note, and a consolidation (report it afterwards). A memory
+     that cannot be true together with a fact you just verified is out of date: your check of
+     the new fact is enough to `supersedes` it. `bab_learn` lists such candidates under
+     `similar` when it saves.
    - **Ask first, once, showing what and why:** `bab_learn` with kind `decision`, new or as
      a correction of your own (`supersedes`); `retire` of your own `decision`; a `standard`,
      new, corrected or retired, only when the user is a BAB maintainer;

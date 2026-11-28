@@ -445,6 +445,25 @@ describe("latency at seeded scale (40ms nominal, scaled by machine speed)", () =
     expectWithinBudget(t, 40, "FTS search top 20 with many common terms", await dbFactor());
   });
 
+  // A save with no close match searches on the new memory's own text (relatedOnSave): a long
+  // query of words the corpus holds in many rows, which widens to one any-term match.
+  it("related memories for a saved memory (nearMatches, long text)", async () => {
+    const { nearMatches } = await import("../lib/learnings");
+    const row = {
+      id: "not-stored",
+      title: "Rotate the dashboard secret before the cluster deploy",
+      body: `${COMMON.join(" ")}. Provision the pipeline service first, then configure postgres and kafka for the azure cluster. `.repeat(6),
+      tags: "[]",
+      repo: null,
+      project: null,
+    };
+    expect(`${row.title} ${row.body}`.length).toBeGreaterThan(600);
+    nearMatches(row);
+    const t = p95(() => nearMatches(row));
+    TIMINGS["related memories for a saved memory"] = t;
+    expectWithinBudget(t, 60, "related memories for a saved memory", await dbFactor());
+  });
+
   it("fused search, three phrasings of many common terms (matchedTerms)", async () => {
     const { searchFused, MATCH_TERMS_MAX } = await import("../lib/learnings");
     const phrasings = [0, 5, 11].map((k) => [...COMMON.slice(k), ...COMMON.slice(0, k)].join(" "));
