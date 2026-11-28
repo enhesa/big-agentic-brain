@@ -944,7 +944,7 @@ describe("closed weeks are read once", () => {
     const { usageReport, usageReportIncremental } = await import("../lib/usage");
     const inc = usageReportIncremental(LATER);
     expect(inc).toEqual(usageReport(LATER));
-    expect(inc.searchOutcomes).toMatchObject({ recorded: 3, zero: 2, zeroQueries: [{ query: "kafka lag", n: 2, last: "2026-11-03 09:00:00" }] });
+    expect(inc.searchOutcomes).toMatchObject({ recorded: 3, zero: 2, noGoodQueries: [{ query: "kafka lag", n: 2, last: "2026-11-03 09:00:00", kind: "nothing" }] });
   });
 
   it("warms the closed weeks a week at a time, at most once a minute, and gives the same report", async () => {
@@ -1409,7 +1409,7 @@ describe("/usage page", () => {
       const { usageReport } = await import("../lib/usage");
       const s = usageReport(LATER).searchOutcomes;
       expect(s).toMatchObject({ since: "2026-11-02", recorded: 5, zero: 4 });
-      expect(s.zeroQueries.map((q) => [q.query, q.n])).toEqual([
+      expect(s.noGoodQueries.map((q) => [q.query, q.n])).toEqual([
         ["vault path", 2],
         ["argo sync", 1],
       ]);
@@ -1424,12 +1424,87 @@ describe("/usage page", () => {
       const asMember = await render(B);
       expect(asMember).not.toContain("tile-found-nothing");
       expect(asMember).not.toContain("qqvv");
-      expect(asMember).not.toContain("Searches that found nothing");
+      expect(asMember).not.toContain("Searches with no good match");
       (await import("../lib/db"))._resetDbForTests();
       vi.resetModules();
       const asMaint = await render(MAINT);
-      expect(asMaint).toContain("Searches that found nothing");
+      expect(asMaint).toContain("Searches with no good match");
       expect(asMaint).toContain("secret project qqvv");
+    });
+
+    // After SEARCH_WEAK_SINCE, so rows carry the weak flag. Monday is 2026-11-30.
+    const WEAK_LATER = new Date("2026-12-02T12:00:00Z");
+
+    it("recordSearchOutcome stores weak as 0 or 1, keeps the query only for an empty or weak answer, and writes no flag when none is given", async () => {
+      await people(A);
+      const { audit } = await import("../lib/audit");
+      const { getDb } = await import("../lib/db");
+      const { recordSearchOutcome } = await import("../lib/request-audit");
+      const ids = [1, 2, 3, 4].map(() => audit(getDb(), { id: A, name: null, email: A }, "POST", "request", SEARCH, "mcp", { path: SEARCH }));
+      recordSearchOutcome(ids[0], { results: 4, query: "widget export", weak: false });
+      recordSearchOutcome(ids[1], { results: 4, query: "payroll ledger widget", weak: true });
+      recordSearchOutcome(ids[2], { results: 0, query: "nothing here", weak: true }); // no results: never weak
+      recordSearchOutcome(ids[3], { results: 2, query: "older caller" });
+      const d = ids.map((id) => JSON.parse((getDb().prepare("SELECT details FROM audit_log WHERE id = ?").get(id) as { details: string }).details));
+      expect(d[0]).toEqual({ results: 4, weak: 0 });
+      expect(d[1]).toEqual({ results: 4, weak: 1, q: "payroll ledger widget" });
+      expect(d[2]).toEqual({ results: 0, weak: 0, q: "nothing here" });
+      expect(d[3]).toEqual({ results: 2 });
+    });
+
+    it("counts weak searches since SEARCH_WEAK_SINCE and lists empty and weak queries with their latest kind", async () => {
+      await row(A, "POST", "2026-11-20 09:00:00", { path: SEARCH, details: { results: 0, q: "old empty" } }); // before weak: in the list, not in the weak share
+      await row(A, "POST", "2026-11-30 09:00:00", { path: SEARCH, details: { results: 5, weak: 0 } });
+      await row(A, "POST", "2026-11-30 09:01:00", { path: SEARCH, details: { results: 5, weak: 1, q: "Payroll Ledger" } });
+      await row(B, "GET", "2026-12-01 09:02:00", { path: "/api/learnings", details: { results: 3, weak: 1, q: "payroll ledger" } });
+      await row(B, "POST", "2026-12-01 09:03:00", { path: SEARCH, details: { results: 0, weak: 0, q: "acme invoices" } });
+      await row(B, "POST", "2026-12-01 09:04:00", { path: SEARCH, details: { results: 0, weak: 0, q: "old empty" } });
+      await row(B, "POST", "2026-12-01 09:05:00", { path: SEARCH, details: { results: 2, weak: 1, q: "old empty" } }); // now weak
+      const { usageReport, usageReportIncremental } = await import("../lib/usage");
+      const s = usageReport(WEAK_LATER).searchOutcomes;
+      expect(s).toMatchObject({ recorded: 7, zero: 3, weakSince: "2026-11-30", weakRecorded: 6, weak: 3, noGood: 5 });
+      expect(s.noGoodQueries.map((q) => [q.query, q.n, q.kind])).toEqual([
+        ["old empty", 3, "weak"],
+        ["payroll ledger", 2, "weak"],
+        ["acme invoices", 1, "nothing"],
+      ]);
+      expect(usageReportIncremental(WEAK_LATER).searchOutcomes).toEqual(s);
+    });
+
+    it("reads a kept closed week of an older shape again instead of counting its weak searches as zero", async () => {
+      await row(A, "POST", "2026-11-30 09:01:00", { path: SEARCH, details: { results: 5, weak: 1, q: "payroll ledger" } });
+      await row(A, "POST", "2026-12-08 09:01:00", { path: SEARCH, details: { results: 0, weak: 0, q: "acme invoices" } });
+      const LATER2 = new Date("2026-12-09T12:00:00Z");
+      const { usageReport, usageReportIncremental, _closedWeeksForTests, AUDIT_PART_VERSION } = await import("../lib/usage");
+      const want = usageReport(LATER2).searchOutcomes;
+      expect(want).toMatchObject({ weak: 1, noGood: 2 });
+      expect(usageReportIncremental(LATER2).searchOutcomes).toEqual(want);
+      // Age the kept week of 30 Nov to the shape before weak searches existed.
+      const kept = _closedWeeksForTests()!.get("2026-11-30")!;
+      expect(kept.version).toBe(AUDIT_PART_VERSION);
+      const old = kept.search as unknown as Record<string, unknown>;
+      for (const k of ["weakRecorded", "weak", "noGood", "weakFirst", "noGoodQueries"]) delete old[k];
+      old.zeroQueries = new Map();
+      _closedWeeksForTests()!.set("2026-11-30", { ...kept, version: AUDIT_PART_VERSION - 1 });
+      expect(usageReportIncremental(LATER2).searchOutcomes).toEqual(want);
+      expect(_closedWeeksForTests()!.get("2026-11-30")!.version).toBe(AUDIT_PART_VERSION);
+    });
+
+    it("shows maintainers each query marked nothing or weak, and the shares, as text", async () => {
+      await people(A, B);
+      const { getDb } = await import("../lib/db");
+      const now = getDb().prepare("SELECT datetime('now') AS t").get() as { t: string };
+      await row(A, "POST", now.t, { path: SEARCH, details: { results: 0, weak: 0, q: "acme invoices qqnn" } });
+      await row(A, "POST", now.t, { path: SEARCH, details: { results: 4, weak: 1, q: "<b>payroll</b> ledger qqww" } });
+      await row(A, "POST", now.t, { path: SEARCH, details: { results: 4, weak: 0 } });
+      const asMaint = await render(MAINT);
+      expect(asMaint).toContain("acme invoices qqnn");
+      expect(asMaint).toContain("&lt;b&gt;payroll&lt;/b&gt; ledger qqww");
+      expect(asMaint).not.toContain("<b>payroll</b>");
+      expect(asMaint).toMatch(/data-kind="nothing"[^>]*>nothing, /);
+      expect(asMaint).toMatch(/data-kind="weak"[^>]*>weak, /);
+      expect(asMaint).toContain("33% found nothing");
+      expect(asMaint).toContain("67% no good match since");
     });
   });
 

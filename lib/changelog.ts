@@ -19,6 +19,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-27",
+    title: "How well a search matched",
+    changes: [
+      "Search results show how many query terms they hold and flag weak answers. Usage lists searches with no good match.",
+    ],
+  },
+  {
     date: "2026-11-26",
     title: "Allowing BAB tools in auto mode",
     changes: [

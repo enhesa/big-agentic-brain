@@ -423,6 +423,39 @@ describe("latency at seeded scale (40ms nominal, scaled by machine speed)", () =
     expectWithinBudget(t, 40, "FTS search top 20", await dbFactor());
   });
 
+  // matchedTerms runs one FTS lookup per query term on the returned page, capped at MATCH_TERMS_MAX.
+  // The worst case is MATCH_TERMS_MAX terms that the seeded corpus holds in hundreds or thousands of
+  // rows each ("case" is in every row): each lookup is then restricted to the page, not the term's
+  // whole posting list. A fused call runs that for three such phrasings, each MULTI_QUERY_DEPTH deep;
+  // most of its time is the three widened searches themselves (about 90 ms here without any counting).
+  const COMMON = [
+    "case", "widget", "kafka", "postgres", "kubernetes", "azure", "dotnet", "configure",
+    "deploy", "integrate", "provision", "cluster", "pipeline", "service", "dashboard", "secret",
+  ];
+
+  it("FTS search top 20 with many common terms (matchedTerms)", async () => {
+    const { search, MATCH_TERMS_MAX } = await import("../lib/learnings");
+    expect(COMMON).toHaveLength(MATCH_TERMS_MAX);
+    const query = COMMON.join(" ");
+    const first = search(query, {}, 20);
+    expect(first).toHaveLength(20);
+    expect(first[0].matchedTerms).toMatch(new RegExp(`^[1-9]\\d*/${MATCH_TERMS_MAX}$`));
+    const t = p95(() => search(query, {}, 20));
+    TIMINGS["FTS search top 20 with many common terms"] = t;
+    expectWithinBudget(t, 40, "FTS search top 20 with many common terms", await dbFactor());
+  });
+
+  it("fused search, three phrasings of many common terms (matchedTerms)", async () => {
+    const { searchFused, MATCH_TERMS_MAX } = await import("../lib/learnings");
+    const phrasings = [0, 5, 11].map((k) => [...COMMON.slice(k), ...COMMON.slice(0, k)].join(" "));
+    const first = searchFused(phrasings, {}, 20);
+    expect(first.results).toHaveLength(20);
+    expect(first.results.every((r) => new RegExp(`/${MATCH_TERMS_MAX}$`).test(r.matchedTerms ?? ""))).toBe(true);
+    const t = p95(() => searchFused(phrasings, {}, 20));
+    TIMINGS["fused search, three phrasings of many common terms"] = t;
+    expectWithinBudget(t, 160, "fused search, three phrasings of many common terms", await dbFactor());
+  });
+
   it("list by status", async () => {
     const { list } = await import("../lib/learnings");
     const t = p95(() => list({ status: "active" }));
