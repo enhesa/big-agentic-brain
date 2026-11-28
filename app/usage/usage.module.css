@@ -717,7 +717,7 @@
 
 .zeroItem {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: baseline;
   gap: 12px;
   padding: 7px 0;
@@ -731,6 +731,12 @@
 .zeroQuery {
   font-size: 0.9rem;
   overflow-wrap: anywhere;
+}
+
+.zeroMeta {
+  font-size: 0.75rem;
+  color: var(--u-muted);
+  white-space: nowrap;
 }
 
 .zeroCount {

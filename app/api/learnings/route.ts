@@ -3,6 +3,8 @@ import { requireActorForApi } from "@/lib/session";
 import { auditRequest, recordSearchOutcome } from "@/lib/request-audit";
 import {
   search,
+  searchIsWeak,
+  WEAK_SEARCH_HINT,
   recordSearchRead,
   parseSupersedes,
   parseTags,
@@ -93,7 +95,7 @@ export async function GET(req: NextRequest) {
       try {
         project = normalizeProjectKey(projectRaw) ?? undefined;
       } catch {
-        if (q.trim()) recordSearchOutcome(auditId, { results: 0, query: q });
+        if (q.trim()) recordSearchOutcome(auditId, { results: 0, query: q, weak: false });
         return Response.json({ results: [], limit });
       }
     }
@@ -102,15 +104,18 @@ export async function GET(req: NextRequest) {
   const results = search(q, { tag, repo, author, status, project, kind, flagged, model, appliesTo, stack }, limit);
   // An agent got these memories: that is a read (lib/learnings.ts touchRead). The web pages never come through here.
   recordSearchRead(results, { status, flagged });
-  // What a search with text found, on its own audit row, for "Searches that found nothing" on /usage.
-  if (q.trim()) recordSearchOutcome(auditId, { results: results.length, query: q });
+  // Weak, like bab_search: no result holds half the query's terms (never on a listing).
+  const weak = Boolean(q.trim()) && searchIsWeak(results);
+  // What a search with text found, on its own audit row, for "Searches with no good match" on /usage.
+  if (q.trim()) recordSearchOutcome(auditId, { results: results.length, query: q, weak });
 
   // verifyHint only when a result is marked verify: true, like bab_search.
-  // Nothing found for a real query: name the area contacts, like bab_search.
-  const contacts = results.length === 0 && (q.trim() || tag) ? contactsForSearch(q, tag) : [];
+  // Nothing found, or only weak matches, for a real query: name the area contacts, like bab_search.
+  const contacts = (results.length === 0 || weak) && (q.trim() || tag) ? contactsForSearch(q, tag) : [];
   return Response.json({
     results,
     limit,
+    ...(weak ? { weak: true, weakHint: WEAK_SEARCH_HINT } : {}),
     ...(contacts.length > 0 ? { contacts, contactsHint: CONTACTS_HINT } : {}),
     ...(results.some((r) => r.verify) ? { verifyHint: VERIFY_HINT } : {}),
   });

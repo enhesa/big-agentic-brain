@@ -191,7 +191,7 @@ To develop without Docker: Node 24 and pnpm, then `pnpm install` and `pnpm dev` 
 <a id="insight-and-upkeep"></a>
 <a id="use-cases-by-team"></a>
 
-- **Search before debugging.** An agent that hits an error searches BAB for the error text first. Up to three phrasings in one call, stemming, and ranking for the repo's stack. Full-text search in SQLite, no vector database.
+- **Search before debugging.** An agent that hits an error searches BAB for the error text first. Up to three phrasings in one call, stemming, and ranking for the repo's stack. Each result says how many query terms it holds, and an answer with no good match says so. Full-text search in SQLite, no vector database.
 - **Memory that stays healthy.** Agents mark memories helpful, confirm them with evidence, flag them, comment, correct them (supersede) or retire them. Old ones carry a stale warning, and unread ones are archived. See [Memory lifecycle](docs/lifecycle.md).
 - **Four kinds.** A learning is a fact or gotcha, a practice is a should, a standard is a must, and a decision records what was chosen and why.
 - **Structured requests.** A message can carry a request, such as a pull request review, with repo, branch and links. Group threads hold up to 10 people.

@@ -72,27 +72,39 @@ const SEARCH_QUERY_RAW_MAX = 4000;
 /**
  * Adds what a search found to its own audit row (written before the search ran): `results`, the
  * number of matches, and `q`, the query text after redact(), cut to SEARCH_QUERY_MAX characters.
- * The query is never stored unredacted. Other details on the row (source, cx) are kept.
- * /usage reads these for "Searches that found nothing". Never throws.
+ * The query is never stored unredacted. `weak`, when given, is stored as 0 or 1 (since
+ * SEARCH_WEAK_SINCE in lib/usage.ts): the answer had results, but none held half the query's terms.
+ * Other details on the row (source, cx) are kept.
+ * /usage reads these for "Searches with no good match". Never throws.
  */
-export function recordSearchOutcome(auditId: number | null | undefined, outcome: { results: number; query?: string }): void {
+export function recordSearchOutcome(
+  auditId: number | null | undefined,
+  outcome: { results: number; query?: string; weak?: boolean },
+): void {
   if (auditId == null) return;
   try {
+    const results = Math.max(0, Math.trunc(outcome.results));
+    const weak = outcome.weak === undefined ? null : outcome.weak && results > 0 ? 1 : 0;
     // Redact the text as it came, line breaks included (a "key: value" line is masked only on its
     // own line), and only then tidy the spaces and cut it.
-    // The query text is kept only when nothing was found: that is all /usage reads, and it keeps
-    // ordinary queries (which may name a client or a colleague) out of the audit log.
-    const raw = outcome.results === 0 ? (outcome.query ?? "") : "";
+    // The query text is kept only when nothing or only weak matches were found: that is all /usage
+    // reads, and it keeps ordinary queries (which may name a client or a colleague) out of the audit log.
+    const raw = results === 0 || weak === 1 ? (outcome.query ?? "") : "";
     const q =
       raw.trim() && raw.length <= SEARCH_QUERY_RAW_MAX ? redact(raw).replace(/\s+/g, " ").trim().slice(0, SEARCH_QUERY_MAX).trim() : "";
-    const results = Math.max(0, Math.trunc(outcome.results));
+    const sets = ["'$.results', ?"];
+    const args: Array<number | string> = [results];
+    if (weak !== null) {
+      sets.push("'$.weak', ?");
+      args.push(weak);
+    }
+    if (q) {
+      sets.push("'$.q', ?");
+      args.push(q);
+    }
     getDb()
-      .prepare(
-        q
-          ? "UPDATE audit_log SET details = json_set(COALESCE(details, '{}'), '$.results', ?, '$.q', ?) WHERE id = ?"
-          : "UPDATE audit_log SET details = json_set(COALESCE(details, '{}'), '$.results', ?) WHERE id = ?",
-      )
-      .run(...(q ? [results, q, auditId] : [results, auditId]));
+      .prepare(`UPDATE audit_log SET details = json_set(COALESCE(details, '{}'), ${sets.join(", ")}) WHERE id = ?`)
+      .run(...args, auditId);
   } catch (err) {
     console.error("recordSearchOutcome failed", err);
   }

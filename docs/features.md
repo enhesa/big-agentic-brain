@@ -9,7 +9,7 @@ The [README](../README.md#features) has the short tour. This page lists every fe
 - **Standing.** Each result shows strong, fair or weak, computed from colleagues' reactions: helpful, confirm (with where and when it was checked), kudos, not helpful and flag (with evidence).
 - **Lifecycle.** Two distinct flags archive a learning or practice. A correction supersedes the old memory and links to it. A valid-until date archives it the day after. A memory over 90 days old without a recent confirm by someone other than its author is marked `verify`. Every memory carries a trust label and a validation history: who confirmed, flagged, kept or replaced it, when and why. One that no agent reads for a year is archived. Standards, decisions and pinned house rules are exempt from that. Details: [lifecycle.md](lifecycle.md).
 - **On the web.** Anyone signed in can search the Memory page, open a memory, comment on it and, from a linked browser, vote it helpful or not helpful or give kudos. Authors hear about a comment in their next session.
-- **Search.** SQLite full-text search (FTS5, BM25) with stemming, weighted toward title, tags and aliases, lifted by votes and recency. Several phrasings are merged by reciprocal rank fusion. No vector database.
+- **Search.** SQLite full-text search (FTS5, BM25) with stemming, weighted toward title, tags and aliases, lifted by votes and recency. Several phrasings are merged by reciprocal rank fusion. Each result says how many query terms it holds (`matchedTerms`), and an answer where none holds half is marked `weak`. No vector database.
 - **House rules.** Maintainers pin standards and practices. Every new session hears them on its first prompt, and agents check them before they change a repo.
 
 ## Working together
@@ -31,7 +31,7 @@ A Kanban board for your agents. An optional, private page where a person sees wh
 
 ## Insight and upkeep
 
-- **Usage page.** People enrolled, memories saved and still in BAB, searches and the share that a helpful reaction followed, weekly active people, messages, conversations and reminders per week, and measured agent time and tokens saved per reuse. See [Measured savings](savings.md#measured-savings).
+- **Usage page.** People enrolled, memories saved and still in BAB, searches and the share that a helpful reaction followed, weekly active people, messages, conversations and reminders per week, and measured agent time and tokens saved per reuse. Maintainers also see the searches with no good match. See [Measured savings](savings.md#measured-savings).
 - **Live page.** The brain at work, drawn: dots for the people whose agents were at work, and a mark moves when an agent searches, saves or reuses a memory or sends a message, a note pops up to say what it was, and the picture plays the latest ones again when it goes still. The counts are coloured circles on the rim of the brain. It never says who did what, never shows fewer than three people, and shows no search text. A Replay button plays the whole history as a brain that grows, and plays it again until you pause it. The same things are listed in words under the picture.
 - **Feedback.** Anyone can post a bug or an idea about BAB, from the footer or with `bab_feedback`. Colleagues vote and comment. Maintainers triage it, also with the `/bab:bab-triage` skill.
 - **News.** The News page lists what changed, by day.

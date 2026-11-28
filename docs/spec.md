@@ -123,6 +123,28 @@ are posted on autopilot (the agent posts, then tells the user what it posted); m
    react before its reply ends to a result it used (helpful, or confirm when it checked the claim
    itself; kudos only for the user's praise; flag with evidence), and marks the caller's own
    entries `own: true`, since BAB refuses votes, confirms and kudos from the author.
+   **Match strength.** Search returns all-terms matches first, then fills the page with any-term
+   matches, so a query on a topic BAB does not know still returns rows that share one common word.
+   Every text search result (`bab_search` and `GET /api/learnings`) carries `matchedTerms`, for
+   example `"3/7"`: how many of the query's terms (`matchTerms`) the memory's indexed text holds.
+   A plain word is one term, filtered like `buildFtsQuery` (stop words and tokens under 3
+   characters drop out). An identifier with two or more parts (`KeyError`, `order_id`,
+   `parse_config`, a version such as `2.67`) is one term that matches either form: its plain
+   tokens, or the parts phrase the any-term query adds (`"key error"`, `"2 67"`), so a memory that
+   writes "key error" holds `KeyError`. Terms are de-duplicated as written, not on their stem, so
+   "retry" and "retries" count as two terms. Only the first `MATCH_TERMS_MAX` = 16 terms are
+   counted, in both numbers. The page's rows are copied into a small FTS5 table with the same
+   columns and tokenizer, and each term is matched there, so stemming agrees with search and a
+   common term does not walk its whole posting list. That table lives in an in-memory database
+   attached to the connection, not in the TEMP schema, so it needs no writable temp folder.
+   Counting never fails a search: on an error the results go out without `matchedTerms`. With several phrasings a result shows its best
+   match over them: a good match first (a one-term phrasing, or at least half the terms), then the
+   larger share. A phrasing with no searchable word (only stop words) is left out when another
+   phrasing has words. A first page (offset 0)
+   of a text search with results where no result is a good match is weak: the answer carries `weak: true`, a fixed `weakHint` (rephrase once, or treat
+   BAB as having nothing) and the area `contacts`. A result of a one-term phrasing always counts as
+   a good match, so a one-term query is never weak. Listings, the house rules digest and
+   `waitingForMe` carry neither field. Ranking is unchanged.
 - **Project keys.** One canonical key per project, so `acme.bab` (repo slug) and `bab`
    (checkout folder) are the same project. `normalizeProjectKey()` (`lib/project-key.ts`)
    also strips a leading company prefix (`BAB_PROJECT_KEY_PREFIXES`, e.g. `acme.` or `acmecorp.`) and a trailing `.git` (`acme.widgets`
@@ -401,7 +423,7 @@ a maintainer may also remove anyone from an area, never add one. Every change is
 `area` lists the contacts for one area; `action` `set_home_team`, `add_contact` or
 `remove_contact` changes the caller's own profile. `GET /api/people` (`?area=`), `POST /api/me/team`,
 `GET`, `POST` and `DELETE /api/me/areas` mirror them, and `/me/devices` has a form for the signed-in person.
-When `bab_search` (or `GET /api/learnings`) finds nothing, `contacts` (at most 3) holds the contacts whose
+When `bab_search` (or `GET /api/learnings`) finds nothing, or only weak matches, `contacts` (at most 3) holds the contacts whose
 area is a query word or the `tag` filter, whole or as one hyphen-separated part, with a
 `contactsHint`: suggest one, or with the user's yes send only that person the question with
 `bab_send`, and save the reusable answer with `bab_learn`. Ranking is untouched.
@@ -1565,8 +1587,13 @@ every time.
      At 52 weeks the bars thin out (no gap between them) and only about eight week labels are drawn
      (four on a phone); every week keeps its bars and its tooltip. Below it, weekly active people as
      grouped bars: returning (people minus new) and new (first active that week in the window).
-     Maintainers also see "Searches that found nothing": the 10 most repeated zero-result queries,
-     grouped case-insensitively, most recent first on a tie. Nobody else sees query text.
+     Maintainers also see "Searches with no good match": the 10 most repeated queries that found
+     nothing or only weak matches, grouped case-insensitively, most recent first on a tie, each
+     marked "nothing" or "weak" (what its latest search got) with its count and last date. The
+     subtitle gives the share of searches that found nothing and the share with no good match
+     (nothing or weak; weak is recorded since `SEARCH_WEAK_SINCE`, 27 Nov). Nobody else sees query text.
+     Closed weeks are kept per process as audit parts tagged with `AUDIT_PART_VERSION`; a kept part
+     of another version is read again, so a changed part shape never reads as zero.
      Then "Messages and reminders" (`#messages`), counts only, never a subject, body, title or name.
      Messages per week: messages sent (audit `send` on a message, by agents or in the browser) and
      conversations (distinct threads with a message that week, from the message row by primary
@@ -1643,7 +1670,8 @@ every time.
   `redact()` (on the text as sent, line breaks included), cut to 120 characters. Never the raw
   query. Only a search with text: a `bab_search` first page (not a later page, not the house
   rules digest) and a `GET /api/learnings` with `q`. A listing by kind, project or tag is not
-  recorded, so it is not in the share. "Never used" counts any agent read, listings included.
+  recorded, so it is not in the share. Since 27 Nov (`SEARCH_WEAK_SINCE`) the row also carries
+  `weak` (0 or 1, never 1 without results), and `q` is kept for a weak answer as well as an empty one. "Never used" counts any agent read, listings included.
 
 ## Live Brain page
 

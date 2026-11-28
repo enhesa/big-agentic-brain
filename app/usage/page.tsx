@@ -18,8 +18,10 @@ import {
   STANDING_SAMPLE_MAX,
   USAGE_COLLECTING_SINCE,
   UNUSED_MIN_AGE_DAYS,
+  SEARCH_WEAK_SINCE,
   cachedUsageReport,
   weekStart,
+  type UsageReport,
 } from "@/lib/usage";
 import { INACTIVITY_CLOCK_START } from "@/lib/learnings";
 import { AreaLine, GroupedBars, HBars, MiniBars, Sparkline, StackedBar, formatCount, type BarRow, type MiniBarRow } from "./charts";
@@ -49,6 +51,19 @@ function dayMonth(day: string | Date): string {
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;
+}
+
+/**
+ * The no-good-match card's subtitle: since when, who sees it, the share that found nothing and the
+ * share with no good match (nothing or only weak matches; weak is recorded since SEARCH_WEAK_SINCE).
+ */
+function searchSub(o: UsageReport["searchOutcomes"]): string {
+  const parts = [o.since ? `Since ${dayMonth(o.since)}, maintainers only` : "Maintainers only"];
+  const nothing = pct(o.zero, o.recorded);
+  if (nothing) parts.push(`${nothing} found nothing`);
+  const noGood = pct(o.noGood, o.weakRecorded);
+  parts.push(noGood ? `${noGood} no good match since ${dayMonth(o.weakSince ?? SEARCH_WEAK_SINCE)}` : `weak counted since ${dayMonth(SEARCH_WEAK_SINCE)}`);
+  return parts.join(". ");
 }
 
 function pct(part: number, whole: number): string | null {
@@ -620,7 +635,7 @@ export default async function UsagePage({
           </Card>
         </div>
 
-        {/* 3b. Weekly active people and the searches that found nothing */}
+        {/* 3b. Weekly active people and the searches with no good match */}
         <div className={styles.grid}>
           <Card
             title="Weekly active people"
@@ -652,14 +667,17 @@ export default async function UsagePage({
             )}
           </Card>
           {maintainer && (
-            <Card title="Searches that found nothing" span="s5" sub={outcomes.since ? `Since ${dayMonth(outcomes.since)}, maintainers only` : "Maintainers only"}>
-              {outcomes.zeroQueries.length === 0 ? (
-                <Empty>No search with text has come back empty yet.</Empty>
+            <Card title="Searches with no good match" span="s5" sub={searchSub(outcomes)}>
+              {outcomes.noGoodQueries.length === 0 ? (
+                <Empty>No search with text has come back empty or weak yet.</Empty>
               ) : (
                 <ol className={styles.zeroList} data-testid="zero-queries">
-                  {outcomes.zeroQueries.map((q) => (
-                    <li key={q.query} className={styles.zeroItem} title={`${plural(q.n, "time")}, last ${dayMonth(parseDbTime(q.last))}`}>
+                  {outcomes.noGoodQueries.map((q) => (
+                    <li key={q.query} className={styles.zeroItem} title={`${plural(q.n, "time")}, last ${dayMonth(parseDbTime(q.last))}: ${q.kind === "weak" ? "only weak matches" : "nothing found"}`}>
                       <span className={styles.zeroQuery}>{q.query}</span>
+                      <span className={styles.zeroMeta} data-kind={q.kind}>
+                        {q.kind}, {dayMonth(parseDbTime(q.last))}
+                      </span>
                       <span className={styles.zeroCount}>{formatCount(q.n)}</span>
                     </li>
                   ))}
