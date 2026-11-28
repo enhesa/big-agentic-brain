@@ -59,4 +59,5 @@ marked "archived after flags" was taken down as wrong: read why before writing i
 refusal saved nothing and quotes the existing text, so compare before you choose. If a
 write succeeds with `similar` (one marked `differs` says the same with another number, often the
 old value) and yours replaces one of them, send it again with `supersedes` listing that id and
-your new one, as `similarHint` says: one call archives both.
+your new one, as `similarHint` says: one call archives both (a match of another kind is
+superseded alone, then you retire your copy).

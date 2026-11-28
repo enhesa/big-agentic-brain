@@ -1016,6 +1016,16 @@ it("bab_learn's duplicate refusal says nothing was saved and quotes the match", 
   expect(text).toMatch(/The same fact: nothing to save/);
 });
 
+it("bab_learn's duplicate refusal escapes a quote mark in the match's text", async () => {
+  const args = { title: "Runner cache key naming convention", body: 'Use the key "branch-os". Never share one across runners.' };
+  await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const out = await rpc("tools/call", { name: "bab_learn", arguments: args }, ACTOR);
+  const text = out.result.content[0].text as string;
+  // The quotation stays one JSON string: the text's own quote marks cannot end it.
+  expect(text).toContain(`says: ${JSON.stringify(args.body)}`);
+  expect(text).toContain('\\"branch-os\\"');
+});
+
 it("bab_learn saves a near-copy that states another number and names it as a close match", async () => {
   const old = { title: "The build image pins compiler version 1.92.0", body: "The toolchain file pins compiler version 1.92.0 for every build.", tags: ["build"] };
   const base = await rpc("tools/call", { name: "bab_learn", arguments: old }, ACTOR);

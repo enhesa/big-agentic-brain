@@ -365,7 +365,7 @@ describe("a near-copy that states another number", () => {
     expect(similar.map((m) => m.id)).toEqual([old.id]);
     expect(similar[0].differs).toBe("numbers");
     expect(similar[0].excerpt).toBe(OLD.body);
-    const hint = similarHint(created.id, similar);
+    const hint = similarHint(created, similar);
     expect(hint).toContain(`supersedes: ["<its id>", "${created.id}"]`);
     expect(hint).toContain("another number");
 
@@ -374,6 +374,53 @@ describe("a near-copy that states another number", () => {
     expect(getById(old.id)?.status).toBe("archived");
     expect(getById(created.id)?.status).toBe("archived");
     expect(getById(final.id)?.status).toBe("active");
+  });
+
+  it("names the single supersede for a match of another kind, where the merge of two is refused", async () => {
+    await seedUsers();
+    const { create, nearMatches, similarHint, createWithSupersedes, getById } = await import("../lib/learnings");
+    const { ValidationError } = await import("../lib/errors");
+    const old = create({ authorId: "author-1", ...OLD, kind: "practice" });
+    const created = create({ authorId: "author-2", ...NEW });
+    expect(created.kind).toBe("learning");
+
+    const similar = nearMatches(created);
+    expect(similar.map((m) => m.id)).toEqual([old.id]);
+    const hint = similarHint(created, similar);
+    expect(hint).toContain('supersedes: "<its id>"');
+    expect(hint).toContain(`retire this copy (${created.id})`);
+    expect(hint).not.toContain("[");
+
+    // Why: a merge keeps one kind, so the call for two would fail here.
+    expect(() => createWithSupersedes({ authorId: "author-2", ...NEW }, [old.id, created.id], "mcp")).toThrow(ValidationError);
+    const final = createWithSupersedes({ authorId: "author-2", ...NEW }, [old.id], "mcp");
+    expect(getById(old.id)?.status).toBe("archived");
+    expect(final.kind).toBe("practice");
+  });
+
+  it("names both calls when the matches are of mixed kinds", async () => {
+    await seedUsers();
+    const { create, similarHint } = await import("../lib/learnings");
+    const practice = create({ authorId: "author-1", ...OLD, kind: "practice" });
+    const learning = create({ authorId: "author-1", ...NEW });
+    const hint = similarHint({ id: "new-id", kind: "learning" }, [
+      { id: practice.id, title: practice.title, score: 0.9, verdict: "similar" },
+      { id: learning.id, title: learning.title, score: 0.8, verdict: "similar" },
+    ] as never);
+    expect(hint).toContain('supersedes: ["<its id>", "new-id"]');
+    expect(hint).toContain(`For ${practice.id}, of another kind: send it again with supersedes: "<its id>"`);
+  });
+
+  it("applies the number rule on the tag-only path too", async () => {
+    await seedUsers();
+    const { create, findSimilar } = await import("../lib/learnings");
+    const old = create({ authorId: "author-1", title: "The daily request limit is 5", body: "Five requests a day for each key.", tags: ["limits", "api"] });
+    // No usable words in the draft (all short): only the tags can match.
+    const same = findSimilar({ title: "It is 5", body: "", tags: ["limits", "api"] });
+    expect(same[0]).toMatchObject({ id: old.id, verdict: "duplicate" });
+    expect(same[0].differs).toBeUndefined();
+    const other = findSimilar({ title: "It is 6", body: "", tags: ["limits", "api"] });
+    expect(other[0]).toMatchObject({ id: old.id, verdict: "similar", differs: "numbers" });
   });
 
   it("still refuses a repeat that states the same number", async () => {
@@ -406,6 +453,6 @@ describe("a near-copy that states another number", () => {
     expect(found[0].id).toBe(long.id);
     expect(found[0].excerpt).toHaveLength(SIMILAR_EXCERPT_CHARS + 3);
     expect(found[0].excerpt).not.toContain("\n");
-    expect(similarHint("new-id", found)).not.toContain("another number");
+    expect(similarHint({ id: "new-id", kind: "learning" }, found)).not.toContain("another number");
   });
 });

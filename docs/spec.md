@@ -461,7 +461,7 @@ the draft's own: it gets verdict `similar` with `differs: "numbers"` and the wri
 a changed value is never refused. Every candidate carries `excerpt`, the first 200 characters of its body.
 When the draft has no usable title/body tokens (too short, all stopwords) but does carry tags,
 `findSimilar` falls back to a tag-only scan: any active candidate with tag-set overlap
->= 0.5 comes back as "similar". `create()` also validates `supersedes` itself (existing,
+>= 0.5 comes back as "similar" (the number rule holds there too). `create()` also validates `supersedes` itself (existing,
 non-deleted) rather than trusting the caller, so a bogus id can't bypass the guard. `GET
 /api/learnings/similar` exposes the same check pre-write; `GET /api/learnings/duplicates` finds
 duplicate pairs among the newest 300 active learnings, computed fresh on every request (no
@@ -623,7 +623,9 @@ One step runs after the ranking, on the page only (`newerValueFirst`): of two re
 number in the title (the pair the duplicate guard lets through as `differs: "numbers"`), the one written later moves to
 just above the older one, so a changed value is read before its old value even when both were written days apart and
 the recency boost cannot separate them. Not when the query holds a word or number that only the older one has: then the
-question is about the older one ("tier 3" against a newer "tier 2" memory) and the ranking stands.
+question is about the older one ("tier 3" against a newer "tier 2" memory) and the ranking stands. It runs in `search`
+and `searchFused`, so every surface that searches by text gets it: `bab_search`, `GET /api/learnings`, the memory page
+and the hook's retrieval. A pair split over two pages is not moved.
 Rows move only within the page and within their stack group; an explicit
 `sort` is left alone. `searchFused` applies it again after fusing.
 

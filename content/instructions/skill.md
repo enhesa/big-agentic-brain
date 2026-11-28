@@ -176,7 +176,8 @@ before every write.
   "archived after flags" was taken down as wrong: read why first. A write that succeeds may list
   `similar` ones with their text; one marked `differs` says the same with another number, often the
   old value. If yours replaces one of them, send it again with `supersedes` listing that id and your
-  new one, as `similarHint` says: one call archives both. Someone else's `standard`
+  new one, as `similarHint` says: one call archives both (a match of another kind is superseded
+  alone, then you retire your copy). Someone else's `standard`
   or `decision` is never superseded, unless you are a BAB maintainer: react helpful, or flag it with your evidence.
 - **Ranking signal.** When a colleague's memory you found answered the question or shaped what
   you did, call `bab_react` helpful on it without asking, in that same turn; that is how useful

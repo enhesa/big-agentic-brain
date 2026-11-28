@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
                   ...(m.excerpt ? { excerpt: m.excerpt } : {}),
                   ...(m.differs ? { differs: m.differs } : {}),
                 })),
-                similarHint: similarHint(created.id, similar),
+                similarHint: similarHint(created, similar),
               }
             : {}),
         },

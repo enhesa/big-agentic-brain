@@ -1682,13 +1682,21 @@ export function nearMatches(row: Pick<LearningRow, "id" | "title" | "body" | "ta
 /**
  * What the author of a new memory is told about its close matches (nearMatches): how to turn
  * the write into an update with one call. Superseding the match and the copy just saved
- * archives both, so nothing is retired by hand.
+ * archives both, so nothing is retired by hand. That call merges two memories, which must be
+ * of one kind (createWithSupersedes): a match of another kind is superseded alone instead.
  */
-export function similarHint(createdId: string, similar: SimilarLearning[]): string {
+export function similarHint(created: Pick<LearningRow, "id" | "kind">, similar: SimilarLearning[]): string {
   const numbers = similar.some((m) => m.differs === "numbers")
     ? " A match marked differs says the same with another number: check whether it is the old value."
     : "";
-  return `Close matches exist.${numbers} If yours replaces one of them, send it again with supersedes: ["<its id>", "${createdId}"], which archives that one and this copy. If both hold, do nothing.`;
+  const otherKind = similar.filter((m) => getById(m.id)?.kind !== created.kind).map((m) => m.id);
+  const alone = `send it again with supersedes: "<its id>", then retire this copy (${created.id})`;
+  const merged = `send it again with supersedes: ["<its id>", "${created.id}"], which archives that one and this copy`;
+  const how =
+    otherKind.length === similar.length
+      ? `${alone}.`
+      : `${merged}.${otherKind.length > 0 ? ` For ${otherKind.join(", ")}, of another kind: ${alone}.` : ""}`;
+  return `Close matches exist.${numbers} If yours replaces one of them, ${how} If both hold, do nothing.`;
 }
 
 const FTS_CANDIDATE_LIMIT = 20;
@@ -1699,7 +1707,7 @@ const FTS_CANDIDATE_LIMIT = 20;
  * scoring by raw tag-set Jaccard overlap rather than the weighted formula (which
  * would otherwise cap out at 0.15 and never surface anything).
  */
-function findSimilarByTagsOnly(draftTags: string[], limit: number): SimilarLearning[] {
+function findSimilarByTagsOnly(draftTags: string[], draftTitle: string, limit: number): SimilarLearning[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1712,6 +1720,7 @@ function findSimilarByTagsOnly(draftTags: string[], limit: number): SimilarLearn
   const scored: SimilarLearning[] = rows.map((r) => {
     const candidateTags = (JSON.parse(r.tags) as string[]).map((t) => t.toLowerCase());
     const score = jaccard(candidateTags, draftTags);
+    const otherNumbers = score >= DUPLICATE_THRESHOLD && titlesStateDifferentNumbers(r.title, draftTitle);
     return {
       id: r.id,
       title: r.title,
@@ -1721,8 +1730,9 @@ function findSimilarByTagsOnly(draftTags: string[], limit: number): SimilarLearn
       tags: candidateTags,
       created_at: r.created_at,
       status: r.status,
-      verdict: score >= DUPLICATE_THRESHOLD ? "duplicate" : "similar",
+      verdict: score >= DUPLICATE_THRESHOLD && !otherNumbers ? "duplicate" : "similar",
       excerpt: excerptOf(r.body),
+      ...(otherNumbers ? { differs: "numbers" as const } : {}),
     };
   });
 
@@ -1752,7 +1762,7 @@ export function findSimilar(
   );
   const draftTagsEarly = (draft.tags ?? []).map((t) => t.toLowerCase());
   if (tokens.length === 0) {
-    return draftTagsEarly.length > 0 ? findSimilarByTagsOnly(draftTagsEarly, limit) : [];
+    return draftTagsEarly.length > 0 ? findSimilarByTagsOnly(draftTagsEarly, draft.title, limit) : [];
   }
 
   // Title, body and tags only: the duplicate guard ignores aliases, which are other wordings of the same fact.

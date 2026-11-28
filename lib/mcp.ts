@@ -493,7 +493,7 @@ function runLearn(actor: SessionUser, args: Record<string, unknown>, ctx?: ToolC
             ...(m.excerpt ? { excerpt: m.excerpt } : {}),
             ...(m.differs ? { differs: m.differs } : {}),
           })),
-          similarHint: similarHint(created.id, similar),
+          similarHint: similarHint(created, similar),
         }
       : {}),
   });
@@ -512,7 +512,8 @@ export function duplicateMessage(candidates: SimilarLearning[]): string {
     .map(
       (c, i) =>
         `${c.id} (${c.title})${c.status === "archived" ? " [archived after flags: read why before writing it again]" : ""}` +
-        (i < DUPLICATE_EXCERPTS && c.excerpt ? ` says: "${c.excerpt}"` : ""),
+        // Quoted as a JSON string: a quote mark in the memory's text cannot end the quotation.
+        (i < DUPLICATE_EXCERPTS && c.excerpt ? ` says: ${JSON.stringify(c.excerpt)}` : ""),
     )
     .join(", ");
   return (
