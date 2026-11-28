@@ -326,3 +326,133 @@ describe("findSimilar candidate selection", () => {
     expect(found[0]?.id).toBe(dup.id);
   });
 });
+
+describe("a near-copy that states another number", () => {
+  const OLD = {
+    title: "The linter assumes Python 3.10 when no target version is set",
+    body: "With no target version in the config the linter parses files as Python 3.10.",
+    tags: ["python", "linter"],
+  };
+  const NEW = {
+    title: "The linter assumes Python 3.11 when no target version is set",
+    body: "With no target version in the config the linter parses files as Python 3.11.",
+    tags: ["python", "linter"],
+  };
+
+  it("is saved, not refused: the new value is never lost", async () => {
+    await seedUsers();
+    const { create, list, findSimilar } = await import("../lib/learnings");
+    const { DUPLICATE_THRESHOLD } = await import("../lib/similarity");
+    const old = create({ authorId: "author-1", ...OLD });
+
+    const found = findSimilar(NEW);
+    expect(found[0]?.id).toBe(old.id);
+    expect(found[0]?.score).toBeGreaterThanOrEqual(DUPLICATE_THRESHOLD);
+    expect(found[0]?.verdict).toBe("similar");
+    expect(found[0]?.differs).toBe("numbers");
+
+    const created = create({ authorId: "author-2", ...NEW });
+    expect(list().map((l) => l.id).sort()).toEqual([old.id, created.id].sort());
+  });
+
+  it("comes back as a close match with its text, and the hint names the one call that replaces it", async () => {
+    await seedUsers();
+    const { create, nearMatches, similarHint, createWithSupersedes, getById } = await import("../lib/learnings");
+    const old = create({ authorId: "author-1", ...OLD });
+    const created = create({ authorId: "author-2", ...NEW });
+
+    const similar = nearMatches(created);
+    expect(similar.map((m) => m.id)).toEqual([old.id]);
+    expect(similar[0].differs).toBe("numbers");
+    expect(similar[0].excerpt).toBe(OLD.body);
+    const hint = similarHint(created, similar);
+    expect(hint).toContain(`supersedes: ["<its id>", "${created.id}"]`);
+    expect(hint).toContain("another number");
+
+    // The call the hint names: the same text again, replacing the old value and the copy just saved.
+    const final = createWithSupersedes({ authorId: "author-2", ...NEW }, [old.id, created.id], "mcp");
+    expect(getById(old.id)?.status).toBe("archived");
+    expect(getById(created.id)?.status).toBe("archived");
+    expect(getById(final.id)?.status).toBe("active");
+  });
+
+  it("names the single supersede for a match of another kind, where the merge of two is refused", async () => {
+    await seedUsers();
+    const { create, nearMatches, similarHint, createWithSupersedes, getById } = await import("../lib/learnings");
+    const { ValidationError } = await import("../lib/errors");
+    const old = create({ authorId: "author-1", ...OLD, kind: "practice" });
+    const created = create({ authorId: "author-2", ...NEW });
+    expect(created.kind).toBe("learning");
+
+    const similar = nearMatches(created);
+    expect(similar.map((m) => m.id)).toEqual([old.id]);
+    const hint = similarHint(created, similar);
+    expect(hint).toContain('supersedes: "<its id>"');
+    expect(hint).toContain(`retire this copy (${created.id})`);
+    expect(hint).not.toContain("[");
+
+    // Why: a merge keeps one kind, so the call for two would fail here.
+    expect(() => createWithSupersedes({ authorId: "author-2", ...NEW }, [old.id, created.id], "mcp")).toThrow(ValidationError);
+    const final = createWithSupersedes({ authorId: "author-2", ...NEW }, [old.id], "mcp");
+    expect(getById(old.id)?.status).toBe("archived");
+    expect(final.kind).toBe("practice");
+  });
+
+  it("names both calls when the matches are of mixed kinds", async () => {
+    await seedUsers();
+    const { create, similarHint } = await import("../lib/learnings");
+    const practice = create({ authorId: "author-1", ...OLD, kind: "practice" });
+    const learning = create({ authorId: "author-1", ...NEW });
+    const hint = similarHint({ id: "new-id", kind: "learning" }, [
+      { id: practice.id, title: practice.title, score: 0.9, verdict: "similar" },
+      { id: learning.id, title: learning.title, score: 0.8, verdict: "similar" },
+    ] as never);
+    expect(hint).toContain('supersedes: ["<its id>", "new-id"]');
+    expect(hint).toContain(`For ${practice.id}, of another kind: send it again with supersedes: "<its id>"`);
+  });
+
+  it("applies the number rule on the tag-only path too", async () => {
+    await seedUsers();
+    const { create, findSimilar } = await import("../lib/learnings");
+    const old = create({ authorId: "author-1", title: "The daily request limit is 5", body: "Five requests a day for each key.", tags: ["limits", "api"] });
+    // No usable words in the draft (all short): only the tags can match.
+    const same = findSimilar({ title: "It is 5", body: "", tags: ["limits", "api"] });
+    expect(same[0]).toMatchObject({ id: old.id, verdict: "duplicate" });
+    expect(same[0].differs).toBeUndefined();
+    const other = findSimilar({ title: "It is 6", body: "", tags: ["limits", "api"] });
+    expect(other[0]).toMatchObject({ id: old.id, verdict: "similar", differs: "numbers" });
+  });
+
+  it("still refuses a repeat that states the same number", async () => {
+    await seedUsers();
+    const { create } = await import("../lib/learnings");
+    const { ConflictError } = await import("../lib/errors");
+    create({ authorId: "author-1", ...OLD });
+    let thrown: unknown;
+    try {
+      create({ authorId: "author-2", ...OLD, title: "Linter assumes Python 3.10 when no target version is set" });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(ConflictError);
+    const candidate = (thrown as InstanceType<typeof ConflictError>).candidates[0];
+    expect(candidate.verdict).toBe("duplicate");
+    expect(candidate.differs).toBeUndefined();
+    expect(candidate.excerpt).toBe(OLD.body);
+  });
+
+  it("cuts a long body to an excerpt and leaves no hint about numbers on an ordinary close match", async () => {
+    await seedUsers();
+    const { create, findSimilar, similarHint, SIMILAR_EXCERPT_CHARS } = await import("../lib/learnings");
+    const long = create({
+      authorId: "author-1",
+      title: "Deploy needs the vault token refreshed first",
+      body: `Refresh the vault token before every deploy.\n\n${"The pod fails to start without it. ".repeat(20)}`,
+    });
+    const found = findSimilar({ title: "Deploy needs the vault token refreshed first", body: "Refresh the vault token before every deploy." });
+    expect(found[0].id).toBe(long.id);
+    expect(found[0].excerpt).toHaveLength(SIMILAR_EXCERPT_CHARS + 3);
+    expect(found[0].excerpt).not.toContain("\n");
+    expect(similarHint({ id: "new-id", kind: "learning" }, found)).not.toContain("another number");
+  });
+});

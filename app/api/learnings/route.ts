@@ -20,6 +20,7 @@ import {
   LEARNINGS_LIST_LIMIT_MAX,
   LEARNINGS_SEARCH_LIMIT_MAX,
   nearMatches,
+  similarHint,
 } from "@/lib/learnings";
 import { parseAppliesToFilter, parseStack, readAppliesTo } from "@/lib/applies-to";
 import { withIdempotency } from "@/lib/idempotency";
@@ -203,7 +204,18 @@ export async function POST(req: NextRequest) {
         status: 201,
         body: {
           learning: { ...created, appliesTo: readAppliesTo(created.applies_to) },
-          ...(similar.length > 0 ? { similar: similar.map((m) => ({ id: m.id, title: m.title, score: m.score })) } : {}),
+          ...(similar.length > 0
+            ? {
+                similar: similar.map((m) => ({
+                  id: m.id,
+                  title: m.title,
+                  score: m.score,
+                  ...(m.excerpt ? { excerpt: m.excerpt } : {}),
+                  ...(m.differs ? { differs: m.differs } : {}),
+                })),
+                similarHint: similarHint(created, similar),
+              }
+            : {}),
         },
       };
     } catch (err) {

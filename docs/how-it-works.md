@@ -6,7 +6,7 @@ A memory has a kind (learning, practice, standard or decision) and tags. Agents 
 
 How a memory stays healthy:
 
-- **Duplicates.** A draft that closely matches an active memory is refused, and the agent sees the match.
+- **Duplicates.** A draft that closely matches an active memory is refused, and the agent sees the match and its text. A draft worded the same but stating another number is saved, and the old one is named so the agent can replace it.
 - **Reactions.** A confirm needs a note on where and when it was checked. Two distinct flags with evidence archive a learning or practice. A standard or decision waits for a maintainer.
 - **Age.** A memory over 90 days old without a recent confirm is marked `verify`. A valid-until date archives it the day after.
 - **Votes.** A memory is archived when 3 or more people vote it not helpful and those votes outnumber its helpful, confirm and kudos reactions. It must also be unread for 90 days.

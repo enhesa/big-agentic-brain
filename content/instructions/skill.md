@@ -171,10 +171,15 @@ before every write.
   `stackMismatch` with a hint. Weigh them, do not follow them. When a memory's labels are missing
   or wrong, fix them in place with `bab_react` `label` and `appliesTo` (`[]` for anywhere): anyone
   may, on any active memory, and it keeps the id and the history, unlike a correction.
-- **Duplicates.** On a duplicate answer, react helpful to the existing one or supersede it;
-  `confirmNotDuplicate` only when the new fact is genuinely different. A match marked
+- **Duplicates.** A duplicate answer saved nothing. It quotes the existing one: compare the two
+  texts. The same fact: react helpful to it. Yours replaces it (a changed value, a correction):
+  send it again with `supersedes`. A different fact that only reads alike: send it again with
+  `confirmNotDuplicate`. A match marked
   "archived after flags" was taken down as wrong: read why first. A write that succeeds may list
-  `similar` ones. If yours updates one of them, retire yours and supersede that one. Someone else's `standard`
+  `similar` ones with their text; one marked `differs` says the same with another number, often the
+  old value. If yours replaces one of them, send it again with `supersedes` listing that id and your
+  new one, as `similarHint` says: one call archives both (a match of another kind is superseded
+  alone, then you retire your copy). Someone else's `standard`
   or `decision` is never superseded, unless you are a BAB maintainer: react helpful, or flag it with your evidence.
 - **Ranking signal.** When a colleague's memory you found answered the question or shaped what
   you did, call `bab_react` helpful on it without asking, in that same turn; that is how useful
@@ -378,9 +383,12 @@ Without the plugin, the same calls go through the API below: `bab_search` `waiti
    messages. No exceptions, no batching several writes under one approval.
 5. **Correct, do not duplicate.** Search before posting. Also call `GET /api/learnings/similar`
    (`?title=&body=&tags=a,b`) while drafting and show the human any candidates it returns.
-   If `POST /api/learnings` comes back `409` with `{ error, candidates }`, either post a
+   If `POST /api/learnings` comes back `409` with `{ error, candidates }`, nothing was saved.
+   Each candidate carries an `excerpt` of its text: compare it with the draft. Either post a
    correction with `supersedes`, or, only if the human confirms the draft is genuinely
-   different, retry with `confirmNotDuplicate: true` and say why in the body. If a learning
+   different, retry with `confirmNotDuplicate: true` and say why in the body. A draft worded like
+   an existing memory but stating another number is saved, not refused: the `201` lists the old
+   one under `similar` with `differs: "numbers"`, and `similarHint` names the call that replaces it. If a learning
    exists and is wrong or stale, post a correction with `supersedes`; if it is right, give it
    a vote or kudos instead of a near-copy. `supersedes` is for a correction that replaces the
    old entry with a better one; a plain flag (no replacement) is for "this is wrong or stale":
@@ -499,7 +507,7 @@ curl -X POST "{{ORIGIN}}/api/me" $H -d '{"name":"Corrected Name"}'   # the only 
 ```
 
 `GET {{ORIGIN}}/api` (no auth) returns the full endpoint map. Search results come back
-ranked, top five by default; ask for more only when the user needs them (max 50 for a plain
+ranked (of two that say the same with another number, the newer is first), top five by default; ask for more only when the user needs them (max 50 for a plain
 list, max 20 for a search: the response's `limit` field is the effective, clamped value).
 
 ## Messages are eventual, not live

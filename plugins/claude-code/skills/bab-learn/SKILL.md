@@ -55,5 +55,9 @@ to one that already says it, supersede one that is wrong or stale, whoever wrote
 (except someone else's `standard` or `decision`, unless the user is a BAB maintainer: flag
 those with the evidence; your own decision needs the user's yes), or post with
 `confirmNotDuplicate` when the new fact is genuinely different. Say which you did. A match
-marked "archived after flags" was taken down as wrong: read why before writing it again. If a
-write succeeds with `similar` and yours updates one of them, retire yours and supersede that one.
+marked "archived after flags" was taken down as wrong: read why before writing it again. A
+refusal saved nothing and quotes the existing text, so compare before you choose. If a
+write succeeds with `similar` (one marked `differs` says the same with another number, often the
+old value) and yours replaces one of them, send it again with `supersedes` listing that id and
+your new one, as `similarHint` says: one call archives both (a match of another kind is
+superseded alone, then you retire your copy).
