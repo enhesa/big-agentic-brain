@@ -295,6 +295,33 @@ describe("POST /api/learnings", () => {
     expect(body.similarHint).toContain(`supersedes: ["<its id>", "${body.learning.id}"]`);
   });
 
+  it("201s with the related memory when nothing reads like the new one", async () => {
+    mockAgentIdentity("ada.t@example.com", "Ada");
+    const { POST } = await import("../app/api/learnings/route");
+    const first = await POST(
+      postReq({
+        title: "Integration tests need the shared staging database",
+        body: "The integration suite connects to the shared staging database. Export DB_HOST before you start the suite, or every test fails at setup.",
+        tags: ["testing"],
+      }) as never,
+    );
+    const firstId = (await first.json()).learning.id;
+
+    const res = await POST(
+      postReq({
+        title: "Integration suite runs against a throwaway container now",
+        body: "The staging database is no longer used by the integration tests. DB_HOST is ignored; the suite starts Postgres itself.",
+        tags: ["testing"],
+      }) as never,
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.similar).toEqual([expect.objectContaining({ id: firstId, related: true })]);
+    expect(body.similar[0].excerpt).toMatch(/^The integration suite connects/);
+    expect(body.similarHint).toMatch(/^Nothing reads like yours\./);
+    expect(body.similarHint).toContain(`supersedes: ["<its id>", "${body.learning.id}"]`);
+  });
+
   it("201s a near-copy that states another number, and marks the old one as differing", async () => {
     mockAgentIdentity("ada.t@example.com", "Ada");
     const { POST } = await import("../app/api/learnings/route");

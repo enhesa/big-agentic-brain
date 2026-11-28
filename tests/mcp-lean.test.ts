@@ -153,5 +153,7 @@ describe("tool description size", () => {
 // reaches every participant. 130 characters, the limit and errors left to the server: the list is 24616.
 // Self-healing memory (2026-11-24) adds recheck, check_by, checkBy, checkEveryDays, evidence and
 // waitingForMe to the existing tools, no new tool. Full is 25979; leave a small margin.
+// Related memories on save (2026-11-28): bab_learn says when a memory is replaced, 67 characters, paid for by
+// shorter bab_inbox and bab_identify field texts (94 fewer).
 const CEILING_FULL = 26000;
 const CEILING_LEAN = 12600;

@@ -498,6 +498,21 @@ nothing to save for the same fact, `supersedes: <id>` when the draft replaces it
 `similar`, so not the duplicates a `confirmNotDuplicate` write declined) as `similar`, each with
 `excerpt` and, where it applies, `differs`. `similarHint` names the one call that turns the write
 into an update: the same text again with `supersedes` listing the match and the copy just saved.
+It states the rule: a match that cannot be true together with the new memory is out of date, and
+the author's check of their own fact is the evidence the replacement needs. Someone else's standard
+or decision in the list is named as one to flag with evidence, not to replace, and the author's own
+decision as one that needs the user's yes. The hint adds no duty of its own: the tool text
+already asks for the evidence, and a hint that asked for it again did worse in one benchmark pass.
+
+When a new memory has no close match, `similar` lists its related memories instead
+(`relatedOnSave`): the active learnings and practices a search on its title and body (the first
+600 characters) ranks first, at most `RELATED_ON_SAVE_MAX` (2), each with `related: true`, its
+`excerpt` and its real similarity `score` (below `SIMILAR_THRESHOLD`). A changed fact is often worded
+unlike the memory it replaces, so the duplicate check misses the pair, and agents rarely search
+before they save: the reply to the save is where they see the old memory. A related memory must
+hold at least a third of the new memory's search terms (the `matchedTerms` count search results carry), so a save
+does not list memories that only share a few words. `similarHint` then opens with "Nothing reads
+like yours" instead of "Close matches exist".
 
 A learning that has been superseded carries a `supersededBy: { id, title }` in `GET
 /api/learnings/[id]` and on the web detail page; search results carry just the id. Two-way: the
